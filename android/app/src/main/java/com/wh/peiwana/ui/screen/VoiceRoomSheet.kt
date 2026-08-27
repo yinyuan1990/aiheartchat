@@ -3,7 +3,13 @@ package com.wh.peiwana.ui.screen
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -44,6 +50,7 @@ fun VoiceRoomDialog(groupId: String, groupName: String, onDismiss: () -> Unit) {
     val joining by VoiceRoomManager.joining.collectAsState()
     val toast by VoiceRoomManager.toastMsg.collectAsState()
 
+    val speakingIds by VoiceRoomManager.speakingIds.collectAsState()
     val inRoom = joinedGid == groupId
     val roomMembers = if (inRoom) liveMembers else preview[groupId] ?: emptyList()
     val isFull = roomMembers.size >= max
@@ -85,8 +92,18 @@ fun VoiceRoomDialog(groupId: String, groupName: String, onDismiss: () -> Unit) {
                     row.forEach { slot ->
                         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(72.dp)) {
                             if (slot is com.wh.peiwana.rtc.VRMember) {
+                                val speaking = speakingIds.contains(slot.id)
+                                val isMuted = slot.muted == true
+                                val green = Color(0xFF21C759)
                                 Box {
-                                    Box(Modifier.size(52.dp).clip(CircleShape).background(Bg3)) {
+                                    Box(
+                                        Modifier.size(52.dp).clip(CircleShape).background(Bg3)
+                                            .border(
+                                                2.dp,
+                                                if (speaking) green else if (slot.id == Session.uid) Accent else Color.Transparent,
+                                                CircleShape,
+                                            ),
+                                    ) {
                                         if (!slot.avatar.isNullOrEmpty()) {
                                             AsyncImage(
                                                 model = Api.fullUrl(slot.avatar!!), contentDescription = null,
@@ -94,18 +111,22 @@ fun VoiceRoomDialog(groupId: String, groupName: String, onDismiss: () -> Unit) {
                                             )
                                         }
                                     }
-                                    if (slot.id == Session.uid && muted) {
+                                    if (isMuted) {
+                                        // 静音角标
                                         Text(
-                                            "静", color = Color.White, fontSize = 9.sp,
+                                            "🔇", fontSize = 9.sp,
                                             modifier = Modifier.align(Alignment.BottomEnd)
-                                                .clip(CircleShape).background(Danger).padding(3.dp),
+                                                .clip(CircleShape).background(Color(0xFF666670)).padding(3.dp),
                                         )
+                                    } else if (speaking) {
+                                        // 说话中声纹动画角标
+                                        SpeakingBars(Modifier.align(Alignment.BottomEnd))
                                     }
                                 }
                                 Spacer(Modifier.height(4.dp))
                                 Text(
                                     if (slot.id == Session.uid) "我" else (slot.nickname ?: ""),
-                                    color = if (slot.id == Session.uid) Accent else TextSub,
+                                    color = if (speaking) green else if (slot.id == Session.uid) Accent else TextSub,
                                     fontSize = 11.sp, maxLines = 1, textAlign = TextAlign.Center,
                                 )
                             } else {
@@ -168,6 +189,31 @@ fun VoiceRoomDialog(groupId: String, groupName: String, onDismiss: () -> Unit) {
                 if (inRoom) "关闭面板不会退出，可回聊天页继续说话" else "加入后房内成员可实时语音",
                 color = TextDim, fontSize = 11.sp,
             )
+        }
+    }
+}
+
+/** 说话中角标：绿色圆底 + 三根跳动的声纹条 */
+@Composable
+fun SpeakingBars(modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "speaking")
+    val phase by transition.animateFloat(
+        initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(320), RepeatMode.Reverse), label = "phase",
+    )
+    Box(
+        modifier.size(18.dp).clip(CircleShape).background(Color(0xFF21C759)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            val base = listOf(5f, 9f, 6f)
+            base.forEachIndexed { i, b ->
+                val f = if (i % 2 == 0) phase else 1f - phase
+                Box(
+                    Modifier.width(2.dp).height((b * (0.45f + 0.55f * f)).dp)
+                        .clip(RoundedCornerShape(1.dp)).background(Color.White),
+                )
+            }
         }
     }
 }

@@ -32,7 +32,13 @@ import java.util.Date
 import java.util.Locale
 
 @Serializable
-data class VRMember(val id: String, val nickname: String? = "", val avatar: String? = "")
+data class VRMember(
+    val id: String,
+    val nickname: String? = "",
+    val avatar: String? = "",
+    /** 静音状态（服务端同步，所有人可见） */
+    val muted: Boolean? = false,
+)
 
 /**
  * 群聊语音房：每人推一路音频（WHIP），拉房内其他成员音频（WHEP），流名 vr_{groupId}_{userId}。
@@ -56,6 +62,8 @@ object VoiceRoomManager {
     val toastMsg = MutableStateFlow<String?>(null)
     /** 当前场次的二维码 token（房内成员可分享，扫码免密进房） */
     val qrToken = MutableStateFlow("")
+    /** 正在说话的成员 id（每 0.5 秒经 WebRTC 音量统计刷新，驱动声纹动画） */
+    val speakingIds = MutableStateFlow<Set<String>>(emptySet())
 
     private var whipUrl = ""
     private var whepUrl = ""
@@ -179,6 +187,7 @@ object VoiceRoomManager {
                 members.value.filter { it.id != myUserId }.forEach { subscribe(it.id) }
                 startHeartbeat(groupId)
                 startLogFlush(groupId)
+                startSpeakingMonitor()
             } catch (e: Exception) {
                 vlog("join FAIL: ${e.message}")
                 toastMsg.value = e.message ?: "加入失败"
@@ -199,7 +208,54 @@ object VoiceRoomManager {
         muted.value = !muted.value
         localAudioTrack?.setEnabled(!muted.value)
         vlog("mute=${muted.value}")
+        // 本地立即更新自己的静音图标，同时上报服务端广播给其他人
+        members.value = members.value.map { if (it.id == myUserId) it.copy(muted = muted.value) else it }
+        joinedGroupId.value?.let { gid ->
+            val m = muted.value
+            scope.launch {
+                runCatching {
+                    Api.request("/im/group/$gid/voiceroom/mute", "POST", buildJsonObject { put("muted", m) })
+                }
+            }
+        }
     }
+
+    // ---------- 说话检测（音量统计驱动声纹动画） ----------
+
+    private var speakJob: Job? = null
+
+    private fun startSpeakingMonitor() {
+        speakJob?.cancel()
+        speakJob = scope.launch {
+            while (true) {
+                delay(500)
+                if (joinedGroupId.value == null) return@launch
+                val speaking = mutableSetOf<String>()
+                pushPc?.let { if (!muted.value && audioLevel(it, local = true) > 0.03) speaking.add(myUserId) }
+                pullPcs.toMap().forEach { (uid, pc) ->
+                    if (audioLevel(pc, local = false) > 0.03) speaking.add(uid)
+                }
+                if (speaking != speakingIds.value) speakingIds.value = speaking
+            }
+        }
+    }
+
+    /** 读取连接的音量（0~1）：本端取 media-source，远端取 inbound-rtp */
+    private suspend fun audioLevel(pc: PeerConnection, local: Boolean): Double =
+        kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+            runCatching {
+                pc.getStats { report ->
+                    var level = 0.0
+                    report.statsMap.values.forEach { s ->
+                        val match = if (local) s.type == "media-source" else s.type == "inbound-rtp"
+                        if (match) {
+                            ((s.members["audioLevel"] as? Number)?.toDouble())?.let { if (it > level) level = it }
+                        }
+                    }
+                    cont.resume(level) {}
+                }
+            }.onFailure { cont.resume(0.0) {} }
+        }
 
     // ---------- 媒体 ----------
 
@@ -350,6 +406,8 @@ object VoiceRoomManager {
         val gid = joinedGroupId.value
         heartbeatJob?.cancel()
         logJob?.cancel()
+        speakJob?.cancel()
+        speakingIds.value = emptySet()
         pushPc?.close()
         pushPc = null
         pullPcs.values.forEach { it.close() }

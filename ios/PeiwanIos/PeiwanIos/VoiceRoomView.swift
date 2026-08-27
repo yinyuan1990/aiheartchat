@@ -30,19 +30,34 @@ struct VoiceRoomSheet: View {
             let cols = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
             LazyVGrid(columns: cols, spacing: 18) {
                 ForEach(roomMembers) { m in
+                    let speaking = manager.speakingIds.contains(m.id)
+                    let isMuted = m.muted == true
                     VStack(spacing: 6) {
                         ZStack(alignment: .bottomTrailing) {
                             AvatarView(url: m.avatar, size: 56)
-                                .overlay(Circle().stroke(m.id == state.user?.id ? Theme.accent : .clear, lineWidth: 2))
-                            if m.id == state.user?.id, manager.muted {
+                                .overlay(
+                                    Circle().stroke(
+                                        speaking ? Color(red: 0.13, green: 0.78, blue: 0.35) : (m.id == state.user?.id ? Theme.accent : .clear),
+                                        lineWidth: 2
+                                    )
+                                )
+                            if isMuted {
+                                // 静音角标
                                 Image(systemName: "mic.slash.fill")
-                                    .font(.system(size: 10)).foregroundStyle(.white)
+                                    .font(.system(size: 9, weight: .semibold)).foregroundStyle(.white)
                                     .frame(width: 18, height: 18)
-                                    .background(Circle().fill(Theme.danger))
+                                    .background(Circle().fill(Color(white: 0.4)))
+                                    .overlay(Circle().stroke(Theme.bg2, lineWidth: 1.5))
+                            } else if speaking {
+                                // 说话中声纹动画角标
+                                SpeakingIndicator()
+                                    .overlay(Circle().stroke(Theme.bg2, lineWidth: 1.5))
                             }
                         }
                         Text(m.id == state.user?.id ? "我" : (m.nickname ?? ""))
-                            .font(.system(size: 11)).foregroundStyle(Theme.textSub).lineLimit(1)
+                            .font(.system(size: 11))
+                            .foregroundStyle(speaking ? Color(red: 0.13, green: 0.78, blue: 0.35) : Theme.textSub)
+                            .lineLimit(1)
                     }
                 }
                 ForEach(0 ..< max(0, manager.maxMembers - roomMembers.count), id: \.self) { _ in
@@ -124,6 +139,29 @@ struct VoiceRoomSheet: View {
         .fullScreenCover(isPresented: $showShare) {
             VoiceRoomShareView(groupId: groupId, groupName: groupName)
         }
+    }
+}
+
+/// 说话中角标：绿色圆底 + 三根跳动的声纹条
+struct SpeakingIndicator: View {
+    @State private var animate = false
+    private let heights: [CGFloat] = [6, 10, 7]
+
+    var body: some View {
+        HStack(spacing: 1.5) {
+            ForEach(0 ..< 3, id: \.self) { i in
+                Capsule()
+                    .fill(.white)
+                    .frame(width: 2, height: animate ? heights[i] : heights[(i + 1) % 3] * 0.5)
+                    .animation(
+                        .easeInOut(duration: 0.3).repeatForever(autoreverses: true).delay(Double(i) * 0.1),
+                        value: animate
+                    )
+            }
+        }
+        .frame(width: 18, height: 18)
+        .background(Circle().fill(Color(red: 0.13, green: 0.78, blue: 0.35)))
+        .onAppear { animate = true }
     }
 }
 

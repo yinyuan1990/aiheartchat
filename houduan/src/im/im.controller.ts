@@ -158,6 +158,12 @@ export class ImController {
     return this.voiceRoom.heartbeat(userId, BigInt(id));
   }
 
+  /** 静音状态同步：广播全群刷新静音图标 */
+  @Post('group/:id/voiceroom/mute')
+  voiceRoomMute(@CurrentUser() userId: bigint, @Param('id') id: string, @Body() dto: { muted: boolean }) {
+    return this.voiceRoom.setMuted(userId, BigInt(id), !!dto.muted);
+  }
+
   /** 客户端日志上报：按房间场次汇总（管理端「通话日志-语音房」查看） */
   @Post('group/:id/voiceroom/log')
   voiceRoomLog(

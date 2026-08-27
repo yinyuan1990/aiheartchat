@@ -8,6 +8,8 @@ struct VRMember: Codable, Identifiable, Equatable {
     let id: String
     var nickname: String? = ""
     var avatar: String? = ""
+    /// 静音状态（服务端同步，所有人可见）
+    var muted: Bool? = false
 }
 
 /**
@@ -31,6 +33,8 @@ final class VoiceRoomManager: ObservableObject {
     @Published var toastMsg: String?
     /// 当前场次的二维码 token（房内成员可分享，扫码免密进房）
     @Published var qrToken = ""
+    /// 正在说话的成员 id（每 0.5 秒经 WebRTC 音量统计刷新，驱动声纹动画）
+    @Published var speakingIds: Set<String> = []
 
     private var whipUrl = ""
     private var whepUrl = ""
@@ -143,6 +147,7 @@ final class VoiceRoomManager: ObservableObject {
                 for m in members where m.id != myUserId { subscribe(m.id) }
                 startHeartbeat(groupId: groupId)
                 startLogFlush(groupId: groupId)
+                startSpeakingMonitor()
             } catch {
                 vlog("join FAIL: \(error.localizedDescription)")
                 toastMsg = error.localizedDescription
@@ -166,6 +171,15 @@ final class VoiceRoomManager: ObservableObject {
         muted.toggle()
         localAudioTrack?.isEnabled = !muted
         vlog("mute=\(muted)")
+        // 本地立即更新自己的静音图标，同时上报服务端广播给其他人
+        if let idx = members.firstIndex(where: { $0.id == myUserId }) { members[idx].muted = muted }
+        if let gid = joinedGroupId {
+            let m = muted
+            Task {
+                struct Ok: Codable { var ok: Bool? }
+                let _: Ok? = try? await Api.request("/im/group/\(gid)/voiceroom/mute", method: "POST", body: ["muted": m])
+            }
+        }
     }
 
     // MARK: - 媒体
@@ -272,6 +286,44 @@ final class VoiceRoomManager: ObservableObject {
         pullPcs.removeValue(forKey: uid)
     }
 
+    // MARK: - 说话检测（音量统计驱动声纹动画）
+
+    private var speakTask: Task<Void, Never>?
+
+    private func startSpeakingMonitor() {
+        speakTask?.cancel()
+        speakTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                guard let self, self.joinedGroupId != nil, !Task.isCancelled else { return }
+                var speaking: Set<String> = []
+                if !self.muted, let push = self.pushPc, await Self.audioLevel(push, local: true) > 0.03 {
+                    speaking.insert(self.myUserId)
+                }
+                for (uid, pc) in self.pullPcs {
+                    if await Self.audioLevel(pc, local: false) > 0.03 { speaking.insert(uid) }
+                }
+                if speaking != self.speakingIds { self.speakingIds = speaking }
+            }
+        }
+    }
+
+    /// 读取连接的音量（0~1）：本端取 media-source，远端取 inbound-rtp
+    private static func audioLevel(_ pc: RTCPeerConnection, local: Bool) async -> Double {
+        await withCheckedContinuation { cont in
+            pc.statistics { report in
+                var level = 0.0
+                for stat in report.statistics.values {
+                    let match = local ? stat.type == "media-source" : stat.type == "inbound-rtp"
+                    if match, let v = stat.values["audioLevel"] as? NSNumber {
+                        level = max(level, v.doubleValue)
+                    }
+                }
+                cont.resume(returning: level)
+            }
+        }
+    }
+
     // MARK: - 心跳 / 日志上报
 
     private func startHeartbeat(groupId: String) {
@@ -316,6 +368,8 @@ final class VoiceRoomManager: ObservableObject {
         let gid = joinedGroupId
         heartbeatTask?.cancel()
         logFlushTask?.cancel()
+        speakTask?.cancel()
+        speakingIds = []
         pushPc?.close()
         pushPc = nil
         pullPcs.values.forEach { $0.close() }

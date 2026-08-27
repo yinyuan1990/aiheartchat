@@ -80,25 +80,41 @@ export class VoiceRoomService {
       .catch(() => {});
   }
 
-  /** 读取当前成员并惰性剔除心跳超时者，返回是否有剔除 */
-  private async liveMembers(groupId: bigint): Promise<{ ids: string[]; pruned: boolean }> {
+  /** 成员哈希值编码：{心跳时间戳}:{是否静音 0/1} */
+  private encodeVal(ts: number, muted: boolean) {
+    return `${ts}:${muted ? 1 : 0}`;
+  }
+
+  private decodeVal(raw: string): { ts: number; muted: boolean } {
+    const [ts, muted] = String(raw).split(':');
+    return { ts: Number(ts) || 0, muted: muted === '1' };
+  }
+
+  /** 读取当前成员并惰性剔除心跳超时者，返回静音集合与是否有剔除 */
+  private async liveMembers(groupId: bigint): Promise<{ ids: string[]; mutedIds: Set<string>; pruned: boolean }> {
     const key = this.key(groupId);
     const all = await this.redis.client.hgetall(key);
     const now = Date.now();
     const ids: string[] = [];
+    const mutedIds = new Set<string>();
     const stale: string[] = [];
-    for (const [uid, ts] of Object.entries(all)) {
-      if (now - Number(ts) > MEMBER_TTL_MS) stale.push(uid);
-      else ids.push(uid);
+    for (const [uid, raw] of Object.entries(all)) {
+      const { ts, muted } = this.decodeVal(raw);
+      if (now - ts > MEMBER_TTL_MS) {
+        stale.push(uid);
+      } else {
+        ids.push(uid);
+        if (muted) mutedIds.add(uid);
+      }
     }
     if (stale.length) {
       await this.redis.client.hdel(key, ...stale);
       this.serverLog(await this.currentSid(groupId), `心跳超时剔除: group=${groupId} stale=[${stale.join(',')}] 剩余=${ids.length}`, 'warn');
     }
-    return { ids, pruned: stale.length > 0 };
+    return { ids, mutedIds, pruned: stale.length > 0 };
   }
 
-  private async memberDetails(ids: string[]) {
+  private async memberDetails(ids: string[], mutedIds: Set<string> = new Set()) {
     if (!ids.length) return [];
     const users = await this.prisma.user.findMany({
       where: { id: { in: ids.map(BigInt) } },
@@ -109,14 +125,19 @@ export class VoiceRoomService {
     return ids
       .map((id) => map.get(id))
       .filter(Boolean)
-      .map((u) => ({ id: u!.id.toString(), nickname: u!.nickname, avatar: u!.avatar }));
+      .map((u) => ({
+        id: u!.id.toString(),
+        nickname: u!.nickname,
+        avatar: u!.avatar,
+        muted: mutedIds.has(u!.id.toString()),
+      }));
   }
 
   /** 成员变化广播全群（在线成员实时刷新语音房状态） */
   private async broadcast(groupId: bigint) {
-    const { ids } = await this.liveMembers(groupId);
+    const { ids, mutedIds } = await this.liveMembers(groupId);
     const [members, max, groupMembers] = await Promise.all([
-      this.memberDetails(ids),
+      this.memberDetails(ids, mutedIds),
       this.maxMembers(),
       this.prisma.groupMember.findMany({ where: { groupId }, select: { userId: true } }),
     ]);
@@ -129,10 +150,10 @@ export class VoiceRoomService {
   /** 房间状态（群聊页入口展示 N/max）；qrToken 供房内成员生成分享二维码 */
   async info(userId: bigint, groupId: bigint) {
     await this.assertGroupMember(userId, groupId);
-    const { ids, pruned } = await this.liveMembers(groupId);
+    const { ids, mutedIds, pruned } = await this.liveMembers(groupId);
     if (pruned) void this.broadcast(groupId).catch(() => {});
     return {
-      members: await this.memberDetails(ids),
+      members: await this.memberDetails(ids, mutedIds),
       max: await this.maxMembers(),
       roomId: await this.currentSid(groupId),
       qrToken: ids.length > 0 ? (await this.redis.client.get(this.qrKey(groupId))) ?? '' : '',
@@ -169,13 +190,13 @@ export class VoiceRoomService {
       this.serverLog(sid, `新场次开始: group=${groupId} 群主=${uid} 上限=${max}`);
     }
 
-    await this.redis.client.hset(key, uid, Date.now().toString());
+    await this.redis.client.hset(key, uid, this.encodeVal(Date.now(), false));
     await this.redis.client.expire(key, 86_400);
     this.serverLog(sid, `join: user=${uid} 房内=${ids.includes(uid) ? ids.length : ids.length + 1}/${max}`);
     await this.broadcast(groupId);
-    const { ids: after } = await this.liveMembers(groupId);
+    const { ids: after, mutedIds: afterMuted } = await this.liveMembers(groupId);
     return {
-      members: await this.memberDetails(after),
+      members: await this.memberDetails(after, afterMuted),
       max,
       roomId: sid,
       qrToken: (await this.redis.client.get(this.qrKey(groupId))) ?? '',
@@ -228,17 +249,29 @@ export class VoiceRoomService {
     return { ok: true };
   }
 
-  /** 客户端 30 秒一次心跳：刷新时间戳；已被剔除则返回 inRoom=false 由客户端退出 */
+  /** 客户端 30 秒一次心跳：刷新时间戳（保留静音标记）；已被剔除则返回 inRoom=false 由客户端退出 */
   async heartbeat(userId: bigint, groupId: bigint) {
     const key = this.key(groupId);
     const uid = userId.toString();
-    const exists = await this.redis.client.hexists(key, uid);
-    if (exists) {
-      await this.redis.client.hset(key, uid, Date.now().toString());
+    const raw = await this.redis.client.hget(key, uid);
+    if (raw != null) {
+      await this.redis.client.hset(key, uid, this.encodeVal(Date.now(), this.decodeVal(raw).muted));
     }
-    const { ids, pruned } = await this.liveMembers(groupId);
+    const { ids, mutedIds, pruned } = await this.liveMembers(groupId);
     if (pruned) void this.broadcast(groupId).catch(() => {});
-    return { inRoom: ids.includes(uid), members: await this.memberDetails(ids) };
+    return { inRoom: ids.includes(uid), members: await this.memberDetails(ids, mutedIds) };
+  }
+
+  /** 静音状态同步：本人开/关麦克风时上报，广播全群刷新静音图标 */
+  async setMuted(userId: bigint, groupId: bigint, muted: boolean) {
+    const key = this.key(groupId);
+    const uid = userId.toString();
+    const raw = await this.redis.client.hget(key, uid);
+    if (raw == null) return { ok: true };
+    await this.redis.client.hset(key, uid, this.encodeVal(Date.now(), muted));
+    this.serverLog(await this.currentSid(groupId), `mute: user=${uid} muted=${muted}`);
+    await this.broadcast(groupId);
+    return { ok: true };
   }
 
   /** 客户端日志上报：归入当前场次（房间已无场次 ID 时丢弃） */
