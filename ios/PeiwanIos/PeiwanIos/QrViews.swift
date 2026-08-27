@@ -87,15 +87,15 @@ struct MyQrCodeView: View {
                         .background(Capsule().fill(Theme.bg3))
                 }
                 if let img = qrImage {
-                    ShareLink(
-                        item: Image(uiImage: img),
-                        preview: SharePreview("我的收款码", image: Image(uiImage: img))
-                    ) {
+                    Button {
+                        ShareSheet.present([img])
+                    } label: {
                         Text("分享")
                             .font(.system(size: 14, weight: .medium)).foregroundStyle(.white)
                             .frame(width: 110, height: 40)
                             .background(Capsule().fill(Theme.accent))
                     }
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.top, 4)

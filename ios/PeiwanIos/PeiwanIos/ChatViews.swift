@@ -70,7 +70,7 @@ struct MessagesView: View {
     @State private var removeListener: (() -> Void)?
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             VStack(spacing: 0) {
                 header
                 if tab == "single" || tab == "group" {
@@ -122,8 +122,8 @@ struct MessagesView: View {
             pillTab("接单", "task", unread.task ?? 0)
             Spacer()
             Menu {
-                NavigationLink(value: Route.createGroup) { Label("创建群聊", systemImage: "person.2.badge.plus") }
-                NavigationLink(value: Route.joinGroup(nil)) { Label("加入群聊", systemImage: "qrcode.viewfinder") }
+                RouteLink(.createGroup) { Label("创建群聊", systemImage: "person.2.badge.plus") }
+                RouteLink(.joinGroup(nil)) { Label("加入群聊", systemImage: "qrcode.viewfinder") }
             } label: {
                 Text("+").font(.system(size: 18)).foregroundStyle(Theme.text)
                     .frame(width: 34, height: 34)
@@ -156,7 +156,7 @@ struct MessagesView: View {
     }
 
     private var aiEntryRow: some View {
-        NavigationLink(value: Route.aiChat) {
+        RouteLink(.aiChat) {
             VStack(spacing: 0) {
                 HStack(spacing: 12) {
                     Circle().fill(Theme.accentGrad)
@@ -181,7 +181,7 @@ struct MessagesView: View {
 
     /// 花边新闻置顶入口（每小时更新）
     private var newsEntryRow: some View {
-        NavigationLink(value: Route.newsList) {
+        RouteLink(.newsList) {
             VStack(spacing: 0) {
                 HStack(spacing: 12) {
                     Circle()
@@ -240,7 +240,7 @@ struct MessagesView: View {
     }
 
     private func noticeRow(_ n: NotificationItem) -> some View {
-        NavigationLink(value: tab == "comment" ? Route.moment(n.refId ?? "0") : Route.task(n.refId ?? "0")) {
+        RouteLink(tab == "comment" ? .moment(n.refId ?? "0") : .task(n.refId ?? "0")) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack {
                     Text(n.title ?? "")
@@ -274,7 +274,7 @@ struct ChatRoomSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             ChatRoomView(convId: target.convId, convType: target.convType, targetId: target.targetId, title: target.title)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
@@ -388,8 +388,8 @@ private struct RecordingOverlay: View {
 
             Text(String(format: "%d:%02d", seconds / 60, seconds % 60))
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white)
                 .monospacedDigit()
+                .foregroundStyle(.white)
 
             Text("松开发送")
                 .font(.system(size: 12))
@@ -421,7 +421,6 @@ struct ChatRoomView: View {
     @State private var showPanel = false
     @State private var showGift = false
     @State private var fullImage: String?
-    @State private var imageItem: PhotosPickerItem?
     @State private var removeListener: (() -> Void)?
     @State private var toastMsg: String?
     @State private var showClearConfirm = false
@@ -486,7 +485,7 @@ struct ChatRoomView: View {
         .toast($toastMsg)
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.bg, for: .navigationBar)
+        .compatNavBarBackground(Theme.bg)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 14) {
@@ -496,7 +495,9 @@ struct ChatRoomView: View {
                         Text("清空").font(.system(size: 13)).foregroundStyle(Theme.textSub)
                     }
                     if convType == 2 {
-                        NavigationLink(value: GroupInfoNav(groupId: targetId)) {
+                        NavigationLink {
+                            LazyView(GroupInfoView(groupId: targetId))
+                        } label: {
                             Text("群信息").font(.system(size: 13)).foregroundStyle(Theme.accent)
                         }
                     }
@@ -520,12 +521,9 @@ struct ChatRoomView: View {
             }
             Button("取消", role: .cancel) {}
         }
-        .navigationDestination(for: GroupInfoNav.self) { nav in
-            GroupInfoView(groupId: nav.groupId)
-        }
         .sheet(isPresented: $showGift) {
             GiftSheetView(toUserId: targetId)
-                .presentationDetents([.height(420)])
+                .compatDetents(height: 420)
         }
         .fullScreenCover(item: $fullImage) { img in
             let imgs = messages.filter { $0.type == "image" }.map(\.content)
@@ -567,19 +565,6 @@ struct ChatRoomView: View {
             }
         }
         .onDisappear { removeListener?() }
-        .onChange(of: imageItem) { item in
-            guard let item else { return }
-            showPanel = false
-            Task {
-                if let data = try? await item.loadTransferable(type: Data.self),
-                   let img = UIImage(data: data),
-                   let jpeg = img.jpegData(compressionQuality: 0.85),
-                   let url = try? await Api.upload("image", data: jpeg, filename: "img.jpg", mime: "image/jpeg") {
-                    sendMsg("image", url)
-                }
-                imageItem = nil
-            }
-        }
     }
 
     // MARK: - 底部输入区（微信式）
@@ -608,12 +593,19 @@ struct ChatRoomView: View {
                             else if recording { recording = false; finishRecording() }
                         }, perform: {})
                 } else {
-                    TextField("", text: $input, prompt: Text("发消息").foregroundColor(Theme.textDim), axis: .vertical)
-                        .lineLimit(1...4)
-                        .focused($inputFocused)
-                        .foregroundStyle(Theme.text)
-                        .padding(.horizontal, 14).padding(.vertical, 9)
-                        .background(RoundedRectangle(cornerRadius: 20).fill(Theme.bg3))
+                    Group {
+                        if #available(iOS 16.0, *) {
+                            TextField("", text: $input, prompt: Text("发消息").foregroundColor(Theme.textDim), axis: .vertical)
+                                .lineLimit(1 ... 4)
+                                .focused($inputFocused)
+                        } else {
+                            TextField("", text: $input, prompt: Text("发消息").foregroundColor(Theme.textDim))
+                                .focused($inputFocused)
+                        }
+                    }
+                    .foregroundStyle(Theme.text)
+                    .padding(.horizontal, 14).padding(.vertical, 9)
+                    .background(RoundedRectangle(cornerRadius: 20).fill(Theme.bg3))
                 }
 
                 Button {
@@ -667,7 +659,15 @@ struct ChatRoomView: View {
         return LazyVGrid(columns: cols, spacing: 14) {
             ForEach(Array(actions.enumerated()), id: \.offset) { _, item in
                 if item.1 == "相册" {
-                    PhotosPicker(selection: $imageItem, matching: .images) {
+                    CompatPhotoPicker(kind: .images, onPicked: { datas in
+                        showPanel = false
+                        guard let data = datas.first else { return }
+                        Task {
+                            if let url = try? await Api.upload("image", data: data, filename: "img.jpg", mime: "image/jpeg") {
+                                sendMsg("image", url)
+                            }
+                        }
+                    }) {
                         panelCell(icon: item.0, label: item.1)
                     }
                 } else {
@@ -742,8 +742,6 @@ struct ChatRoomView: View {
         }
     }
 }
-
-private struct GroupInfoNav: Hashable { let groupId: String }
 
 extension String: @retroactive Identifiable {
     public var id: String { self }
@@ -1089,7 +1087,6 @@ struct CreateGroupView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var avatar = ""
-    @State private var avatarItem: PhotosPickerItem?
     @State private var uploading = false
     @State private var people: [Person] = []
     @State private var selected: Set<String> = []
@@ -1100,7 +1097,16 @@ struct CreateGroupView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 12) {
                     // 群头像（可选，不设置默认用群主头像）
-                    PhotosPicker(selection: $avatarItem, matching: .images) {
+                    CompatPhotoPicker(kind: .images, onPicked: { datas in
+                        guard let data = datas.first else { return }
+                        uploading = true
+                        Task {
+                            if let url = try? await Api.upload("image", data: data, filename: "g.jpg", mime: "image/jpeg") {
+                                avatar = url
+                            }
+                            uploading = false
+                        }
+                    }) {
                         if avatar.isEmpty {
                             Circle().fill(Theme.bg3)
                                 .frame(width: 56, height: 56)
@@ -1117,17 +1123,6 @@ struct CreateGroupView: View {
                 Text("群头像可选，不设置默认显示群主头像 · 邀请成员（可选）").font(.system(size: 12)).foregroundStyle(Theme.textSub)
             }
             .padding(16)
-            .onChange(of: avatarItem) { item in
-                guard let item else { return }
-                uploading = true
-                Task {
-                    if let data = try? await item.loadTransferable(type: Data.self),
-                       let url = try? await Api.upload("image", data: data, filename: "g.jpg", mime: "image/jpeg") {
-                        avatar = url
-                    }
-                    uploading = false
-                }
-            }
 
             ScrollView {
                 LazyVStack(spacing: 0) {
@@ -1167,7 +1162,7 @@ struct CreateGroupView: View {
         .fullBg()
         .navigationTitle("创建群聊")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.bg, for: .navigationBar)
+        .compatNavBarBackground(Theme.bg)
         .fullScreenCover(item: $created, onDismiss: { dismiss() }) { t in
             ChatRoomSheet(target: t)
         }
@@ -1253,12 +1248,19 @@ struct AiChatView: View {
 
             // 底部输入区（对齐聊天页：圆角输入框 + 有文字才显示发送键）
             HStack(alignment: .bottom, spacing: 8) {
-                TextField("", text: $input, prompt: Text("随便问点什么…").foregroundColor(Theme.textDim), axis: .vertical)
-                    .lineLimit(1...4)
-                    .focused($inputFocused)
-                    .foregroundStyle(Theme.text)
-                    .padding(.horizontal, 14).padding(.vertical, 9)
-                    .background(RoundedRectangle(cornerRadius: 20).fill(Theme.bg3))
+                Group {
+                    if #available(iOS 16.0, *) {
+                        TextField("", text: $input, prompt: Text("随便问点什么…").foregroundColor(Theme.textDim), axis: .vertical)
+                            .lineLimit(1 ... 4)
+                            .focused($inputFocused)
+                    } else {
+                        TextField("", text: $input, prompt: Text("随便问点什么…").foregroundColor(Theme.textDim))
+                            .focused($inputFocused)
+                    }
+                }
+                .foregroundStyle(Theme.text)
+                .padding(.horizontal, 14).padding(.vertical, 9)
+                .background(RoundedRectangle(cornerRadius: 20).fill(Theme.bg3))
                 if !input.trimmingCharacters(in: .whitespaces).isEmpty && !thinking {
                     Button { send() } label: {
                         Text("发送").font(.system(size: 14)).foregroundStyle(.white)
@@ -1275,7 +1277,7 @@ struct AiChatView: View {
         .toast($toastMsg)
         .navigationTitle("AI 助手")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.bg, for: .navigationBar)
+        .compatNavBarBackground(Theme.bg)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
@@ -1423,7 +1425,6 @@ struct GroupInfoView: View {
 
     @State private var info: GroupInfoData?
     @State private var showShare = false
-    @State private var avatarItem: PhotosPickerItem?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1433,7 +1434,16 @@ struct GroupInfoView: View {
                 // 群头像（群主/管理员点击可换）+ 人数
                 HStack(spacing: 12) {
                     if canEdit {
-                        PhotosPicker(selection: $avatarItem, matching: .images) {
+                        CompatPhotoPicker(kind: .images, onPicked: { datas in
+                            guard let data = datas.first else { return }
+                            Task {
+                                struct Empty: Codable { var id: String? }
+                                if let url = try? await Api.upload("image", data: data, filename: "g.jpg", mime: "image/jpeg") {
+                                    let _: Empty? = try? await Api.request("/im/group/\(groupId)", method: "PUT", body: ["avatar": url])
+                                    info = try? await Api.request("/im/group/\(groupId)")
+                                }
+                            }
+                        }) {
                             AvatarView(url: g.avatar, size: 56)
                         }
                     } else {
@@ -1450,17 +1460,6 @@ struct GroupInfoView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 6)
-                .onChange(of: avatarItem) { item in
-                    guard let item else { return }
-                    Task {
-                        struct Empty: Codable { var id: String? }
-                        if let data = try? await item.loadTransferable(type: Data.self),
-                           let url = try? await Api.upload("image", data: data, filename: "g.jpg", mime: "image/jpeg") {
-                            let _: Empty? = try? await Api.request("/im/group/\(groupId)", method: "PUT", body: ["avatar": url])
-                            info = try? await Api.request("/im/group/\(groupId)")
-                        }
-                    }
-                }
                 ScrollView {
                     let cols = Array(repeating: GridItem(.flexible(), spacing: 12), count: 5)
                     LazyVGrid(columns: cols, spacing: 12) {
@@ -1490,7 +1489,7 @@ struct GroupInfoView: View {
         .fullBg()
         .navigationTitle(info?.name ?? "群信息")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.bg, for: .navigationBar)
+        .compatNavBarBackground(Theme.bg)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button("分享") { showShare = true }
@@ -1611,12 +1610,12 @@ struct GroupShareSheet: View {
 
                     HStack(spacing: 30) {
                         if let img = makeQRImage(groupQrContent(code: s.code), size: 640) {
-                            ShareLink(
-                                item: Image(uiImage: img),
-                                preview: SharePreview("群邀请码", image: Image(uiImage: img))
-                            ) {
+                            Button {
+                                ShareSheet.present([img])
+                            } label: {
                                 Text("分享二维码").font(.system(size: 13)).foregroundStyle(Theme.accent)
                             }
+                            .buttonStyle(.plain)
                         }
                         Button("关闭") { dismiss() }
                             .font(.system(size: 13)).foregroundStyle(Theme.textDim)
@@ -1801,7 +1800,7 @@ struct JoinGroupView: View {
         .fullBg()
         .navigationTitle("加入群聊")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.bg, for: .navigationBar)
+        .compatNavBarBackground(Theme.bg)
         .toast($toastMsg)
         .alert(pwdTarget?.name ?? "入群密码", isPresented: $showPwdAlert) {
             TextField("输入入群密码", text: $pwdInput)

@@ -18,7 +18,7 @@ struct TaskStatusTag: View {
 struct TaskCardView: View {
     let t: TaskOrder
     var body: some View {
-        NavigationLink(value: Route.task(t.id)) {
+        RouteLink(.task(t.id)) {
             HStack {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
@@ -50,7 +50,7 @@ struct TaskHallView: View {
         .fullBg()
         .navigationTitle("接单大厅")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.bg, for: .navigationBar)
+        .compatNavBarBackground(Theme.bg)
         .task { items = (try? await Api.request("/tasks/hall")) ?? [] }
     }
 }
@@ -68,7 +68,7 @@ struct TaskMineView: View {
         .fullBg()
         .navigationTitle(isFemale ? "我的接单" : "我的约单")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.bg, for: .navigationBar)
+        .compatNavBarBackground(Theme.bg)
         .task { items = (try? await Api.request(isFemale ? "/tasks/taken" : "/tasks/mine")) ?? [] }
     }
 }
@@ -123,7 +123,7 @@ struct TaskPostView: View {
         .fullBg()
         .navigationTitle("发布约单")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.bg, for: .navigationBar)
+        .compatNavBarBackground(Theme.bg)
         .toast($toastMsg)
     }
 
@@ -244,7 +244,7 @@ struct TaskDetailView: View {
         .fullBg()
         .navigationTitle("约单详情")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.bg, for: .navigationBar)
+        .compatNavBarBackground(Theme.bg)
         .toast($toastMsg)
         .task { await load() }
     }

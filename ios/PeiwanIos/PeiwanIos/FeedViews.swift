@@ -126,7 +126,7 @@ struct PlazaView: View {
     @State private var myLocation: CLLocation?
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             VStack(spacing: 0) {
                 HStack(spacing: 16) {
                     TextTab(text: "动态", selected: tab == "feed") { tab = "feed"; Task { await load() } }
@@ -256,7 +256,7 @@ struct FollowMomentsView: View {
         .fullBg()
         .navigationTitle("关注动态")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.bg, for: .navigationBar)
+        .compatNavBarBackground(Theme.bg)
         .task { await load() }
     }
 
@@ -290,7 +290,7 @@ struct MomentCardView: View {
             HStack(spacing: 10) {
                 // 点头像进入他人主页（自己的动态不跳转）
                 if m.user?.id != appState.user?.id, let uid = m.user?.id, !uid.isEmpty {
-                    NavigationLink(value: Route.userHome(uid)) {
+                    RouteLink(.userHome(uid)) {
                         AvatarView(url: m.user?.avatar, size: 40)
                     }
                     .buttonStyle(.plain)
@@ -366,7 +366,7 @@ struct MomentCardView: View {
             // 文字点击进详情；图片直接放大；视频点击原地播放
             Group {
                 if enableDetailLink {
-                    NavigationLink(value: Route.moment(m.id)) { textBody }
+                    RouteLink(.moment(m.id)) { textBody }
                         .buttonStyle(.plain)
                 } else {
                     textBody
@@ -425,7 +425,7 @@ struct MomentCardView: View {
                     .foregroundStyle(Theme.textSub)
 
                     if enableDetailLink {
-                        NavigationLink(value: Route.moment(m.id)) { commentLabel }
+                        RouteLink(.moment(m.id)) { commentLabel }
                             .buttonStyle(.plain)
                     } else {
                         commentLabel
@@ -607,7 +607,7 @@ struct MomentDetailView: View {
         .fullBg()
         .navigationTitle("动态详情")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.bg, for: .navigationBar)
+        .compatNavBarBackground(Theme.bg)
         .fullScreenCover(item: $chatTarget) { t in
             ChatRoomSheet(target: t)
         }
@@ -634,21 +634,6 @@ struct MomentDetailView: View {
     }
 }
 
-/// 相册视频经文件方式导入（比 Data 方式可靠，避免大视频读取失败）
-struct PickedVideo: Transferable {
-    let url: URL
-    static var transferRepresentation: some TransferRepresentation {
-        FileRepresentation(contentType: .movie) { v in
-            SentTransferredFile(v.url)
-        } importing: { received in
-            let copy = FileManager.default.temporaryDirectory.appendingPathComponent("pick_\(UUID().uuidString).mp4")
-            try? FileManager.default.removeItem(at: copy)
-            try FileManager.default.copyItem(at: received.file, to: copy)
-            return Self(url: copy)
-        }
-    }
-}
-
 /// 发布动态（图文 / 视频）
 struct PublishView: View {
     @Environment(\.dismiss) private var dismiss
@@ -664,15 +649,13 @@ struct PublishView: View {
     @State private var uploadProgress: Double = 0
     @State private var publishing = false
     @State private var toastMsg: String?
-    @State private var pickerItems: [PhotosPickerItem] = []
-    @State private var videoItem: PhotosPickerItem?
 
     private var canPublish: Bool {
         !publishing && !uploading && (mode == "image" ? !images.isEmpty || !content.isEmpty : !videoUrl.isEmpty)
     }
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             VStack(spacing: 0) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
@@ -710,7 +693,21 @@ struct PublishView: View {
                                     }
                                 }
                                 if images.count < 9 {
-                                    PhotosPicker(selection: $pickerItems, maxSelectionCount: 9 - images.count, matching: .images) {
+                                    CompatPhotoPicker(kind: .images, maxCount: 9 - images.count, onPicked: { datas in
+                                        Task {
+                                            uploading = true
+                                            let total = datas.count
+                                            for (idx, data) in datas.enumerated() {
+                                                if let url = try? await Api.upload("image", data: data, filename: "img.jpg", mime: "image/jpeg", progress: { p in
+                                                    uploadProgress = (Double(idx) + p) / Double(total)
+                                                }) {
+                                                    images.append(url)
+                                                }
+                                            }
+                                            uploading = false
+                                            uploadProgress = 0
+                                        }
+                                    }) {
                                         VStack {
                                             Text(uploading ? "上传中…" : "+")
                                                 .font(uploading ? .system(size: 12) : .system(size: 30, weight: .light))
@@ -724,7 +721,34 @@ struct PublishView: View {
                             }
                         } else {
                             if videoUrl.isEmpty {
-                                PhotosPicker(selection: $videoItem, matching: .videos) {
+                                CompatPhotoPicker(kind: .videos, onPickedFiles: { urls in
+                                    guard let picked = urls.first else { return }
+                                    Task {
+                                        uploading = true
+                                        uploadProgress = 0
+                                        do {
+                                            let data = try Data(contentsOf: picked)
+                                            videoUrl = try await Api.upload("video", data: data, filename: "video.mp4", mime: "video/mp4", progress: { p in
+                                                uploadProgress = p
+                                            })
+                                            // 生成首帧：本地预览 + 上传作为封面
+                                            let gen = AVAssetImageGenerator(asset: AVURLAsset(url: picked))
+                                            gen.appliesPreferredTrackTransform = true
+                                            if let cg = try? gen.copyCGImage(at: .zero, actualTime: nil) {
+                                                let thumb = UIImage(cgImage: cg)
+                                                videoThumb = thumb
+                                                if let jpeg = thumb.jpegData(compressionQuality: 0.8),
+                                                   let cover = try? await Api.upload("image", data: jpeg, filename: "cover.jpg", mime: "image/jpeg") {
+                                                    coverUrl = cover
+                                                }
+                                            }
+                                        } catch {
+                                            toastMsg = "视频上传失败：\(error.localizedDescription)"
+                                        }
+                                        uploading = false
+                                        uploadProgress = 0
+                                    }
+                                }) {
                                     VStack(spacing: 8) {
                                         Text(uploading ? "上传中…" : "选择视频")
                                             .font(.system(size: 14)).foregroundStyle(Theme.textSub)
@@ -754,8 +778,7 @@ struct PublishView: View {
                         }
 
                         VStack(alignment: .leading, spacing: 0) {
-                            TextField("", text: $content, prompt: Text("分享此刻的想法…").foregroundColor(Theme.textSub), axis: .vertical)
-                                .lineLimit(5...10)
+                            CompatVerticalTextField(text: $content, prompt: Text("分享此刻的想法…").foregroundColor(Theme.textSub), lineRange: 5 ... 10)
                                 .foregroundStyle(Theme.text)
                                 .padding(14)
                         }
@@ -809,59 +832,6 @@ struct PublishView: View {
                     if city.isEmpty, let name { city = name }
                     pubLocation = loc ?? pubLocation
                 }
-            }
-        }
-        .onChange(of: pickerItems) { items in
-            guard !items.isEmpty else { return }
-            Task {
-                uploading = true
-                let total = items.count
-                for (idx, item) in items.enumerated() {
-                    if let data = try? await item.loadTransferable(type: Data.self),
-                       let img = UIImage(data: data),
-                       let jpeg = img.jpegData(compressionQuality: 0.85) {
-                        if let url = try? await Api.upload("image", data: jpeg, filename: "img.jpg", mime: "image/jpeg", progress: { p in
-                            uploadProgress = (Double(idx) + p) / Double(total)
-                        }) {
-                            images.append(url)
-                        }
-                    }
-                }
-                pickerItems = []
-                uploading = false
-                uploadProgress = 0
-            }
-        }
-        .onChange(of: videoItem) { item in
-            guard let item else { return }
-            Task {
-                uploading = true
-                uploadProgress = 0
-                do {
-                    guard let picked = try await item.loadTransferable(type: PickedVideo.self) else {
-                        throw ApiError(code: -1, msg: "读取视频失败")
-                    }
-                    let data = try Data(contentsOf: picked.url)
-                    videoUrl = try await Api.upload("video", data: data, filename: "video.mp4", mime: "video/mp4", progress: { p in
-                        uploadProgress = p
-                    })
-                    // 生成首帧：本地预览 + 上传作为封面
-                    let gen = AVAssetImageGenerator(asset: AVURLAsset(url: picked.url))
-                    gen.appliesPreferredTrackTransform = true
-                    if let cg = try? gen.copyCGImage(at: .zero, actualTime: nil) {
-                        let thumb = UIImage(cgImage: cg)
-                        videoThumb = thumb
-                        if let jpeg = thumb.jpegData(compressionQuality: 0.8),
-                           let cover = try? await Api.upload("image", data: jpeg, filename: "cover.jpg", mime: "image/jpeg") {
-                            coverUrl = cover
-                        }
-                    }
-                } catch {
-                    toastMsg = "视频上传失败：\(error.localizedDescription)"
-                }
-                videoItem = nil
-                uploading = false
-                uploadProgress = 0
             }
         }
     }

@@ -38,7 +38,7 @@ Android (Kotlin / Compose)     iOS (Swift / SwiftUI)     Web (React / Vite)
 |---|---|
 | `houduan/` | NestJS 后端，Prisma + MySQL，WebSocket IM、通话信令、钱包、AI、新闻采集 |
 | `android/` | Android App（Kotlin + Jetpack Compose） |
-| `ios/PeiwanIos/` | iOS App（SwiftUI），最低系统 **iOS 16.0** |
+| `ios/PeiwanIos/` | iOS App（SwiftUI），最低系统 **iOS 15.6** |
 | `web/` | 用户 Web 端（React + TypeScript + Vite） |
 | `admin/` | 管理后台（Vue + Vite） |
 | `deploy/` | Nginx / Docker 部署配置（含密钥的 compose 文件不入库） |
@@ -54,7 +54,7 @@ Android (Kotlin / Compose)     iOS (Swift / SwiftUI)     Web (React / Vite)
 | 实时 | WebSocket（IM + 通话信令） |
 | 音视频 | SRS · WebRTC（WHIP / WHEP） |
 | Android | Kotlin、Jetpack Compose |
-| iOS | Swift、SwiftUI（部署目标 16.0） |
+| iOS | Swift、SwiftUI（部署目标 15.6） |
 | Web | React 18、Vite、Zustand |
 | 管理端 | Vue 3、Vite |
 | AI | OpenAI 兼容协议（默认 DeepSeek） |
@@ -78,7 +78,7 @@ cd web && npm install && npm run dev
 cd admin && npm install && npm run dev
 ```
 
-客户端请用 Android Studio / Xcode 打开对应工程编译运行。iOS 最低版本为 16.0（覆盖 iPhone 8 Plus 等 iOS 16.7 机型）。
+客户端请用 Android Studio / Xcode 打开对应工程编译运行。iOS 最低版本为 15.6（NavigationStack/PhotosPicker 等 iOS 16 API 已做兼容降级，见 Compat.swift）。
 
 ## 安全说明
 

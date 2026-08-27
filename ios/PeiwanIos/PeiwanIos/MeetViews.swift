@@ -107,7 +107,7 @@ struct MeetCardView: View {
     @EnvironmentObject private var appState: AppState
 
     var body: some View {
-        NavigationLink(value: Route.userHome(u.id)) {
+        RouteLink(.userHome(u.id)) {
             ZStack {
                 GeometryReader { geo in
                     RemoteImage(url: u.avatar ?? "")

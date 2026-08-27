@@ -29,7 +29,7 @@ struct UserHomeView: View {
             }
         }
         .fullBg()
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationBarHidden(true)
         .ignoresSafeArea(edges: .top)
         .fullScreenCover(item: $chatTarget) { t in
             ChatRoomSheet(target: t)
@@ -295,7 +295,7 @@ struct UserHomeView: View {
         }
         LazyVStack(alignment: .leading, spacing: 0) {
             ForEach(moments) { m in
-                NavigationLink(value: Route.moment(m.id)) {
+                RouteLink(.moment(m.id)) {
                     momentRow(m, profile: p)
                 }
                 .buttonStyle(.plain)

@@ -255,9 +255,38 @@ private struct HideTabBarModifier: ViewModifier {
 }
 
 extension View {
-    /// 每个 NavigationStack 根部调用，注册统一路由（子页面自动隐藏底部 tab 栏）
+    /// 每个导航栈根部调用，注册统一路由（子页面自动隐藏底部 tab 栏）。
+    /// iOS15 无值路由，跳转由 RouteLink 直接携带目的页，这里无需注册。
+    @ViewBuilder
     func withRoutes() -> some View {
-        navigationDestination(for: Route.self) { routeView($0).modifier(HideTabBarModifier()) }
+        if #available(iOS 16.0, *) {
+            navigationDestination(for: Route.self) { routeView($0).modifier(HideTabBarModifier()) }
+        } else {
+            self
+        }
+    }
+}
+
+/// 路由跳转链接：iOS16 走值路由（navigationDestination），iOS15 直接挂目的页
+struct RouteLink<Label: View>: View {
+    let route: Route
+    @ViewBuilder let label: () -> Label
+
+    init(_ route: Route, @ViewBuilder label: @escaping () -> Label) {
+        self.route = route
+        self.label = label
+    }
+
+    var body: some View {
+        if #available(iOS 16.0, *) {
+            NavigationLink(value: route, label: label)
+        } else {
+            NavigationLink {
+                LazyView(routeView(route).modifier(HideTabBarModifier()))
+            } label: {
+                label()
+            }
+        }
     }
 }
 

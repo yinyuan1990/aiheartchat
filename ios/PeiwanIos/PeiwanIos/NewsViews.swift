@@ -157,19 +157,19 @@ private struct QuotePageView: View {
                 HStack(spacing: 10) {
                     Text(artDay)
                         .font(.custom("Songti SC", size: 12))
-                        .foregroundStyle(Theme.textSub)
                         .tracking(3)
+                        .foregroundStyle(Theme.textSub)
                     if q.day == today {
                         Text("今日")
                             .font(.custom("Songti SC", size: 11))
-                            .foregroundStyle(Theme.accent)
                             .tracking(2)
+                            .foregroundStyle(Theme.accent)
                     }
                 }
                 Text("\(index + 1) / \(total)\(hasMore ? "+" : "")")
                     .font(.system(size: 11))
-                    .foregroundStyle(Theme.textDim)
                     .tracking(2)
+                    .foregroundStyle(Theme.textDim)
                     .padding(.top, 8).padding(.bottom, 22)
             }
         }
@@ -206,7 +206,7 @@ struct NewsSectionView: View {
                                 Button { preview = n } label: { newsRow(n) }
                                     .buttonStyle(.plain)
                             } else {
-                                NavigationLink(value: Route.newsDetail(n.id)) { newsRow(n) }
+                                RouteLink(.newsDetail(n.id)) { newsRow(n) }
                                     .buttonStyle(.plain)
                             }
                         }

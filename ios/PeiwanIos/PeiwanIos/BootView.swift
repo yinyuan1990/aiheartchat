@@ -8,8 +8,8 @@ struct BootView: View {
         VStack(spacing: 24) {
             Text("心之音")
                 .font(.system(size: 34, weight: .semibold))
-                .foregroundStyle(Theme.gold)
                 .tracking(8)
+                .foregroundStyle(Theme.gold)
             ProgressView()
                 .tint(Theme.gold)
         }

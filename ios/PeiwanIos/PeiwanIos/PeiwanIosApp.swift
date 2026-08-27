@@ -9,6 +9,8 @@ struct PeiwanIosApp: App {
             memoryCapacity: 64 * 1024 * 1024,
             diskCapacity: 512 * 1024 * 1024
         )
+        // iOS15 没有 toolbarBackground，用全局导航栏外观兜底
+        setupCompatNavBarAppearance()
     }
 
     var body: some Scene {
@@ -53,7 +55,7 @@ struct RootView: View {
             get: { callManager.openUserHome != nil },
             set: { if !$0 { callManager.openUserHome = nil } }
         )) {
-            NavigationStack {
+            NavStack {
                 UserHomeView(userId: callManager.openUserHome ?? "")
                     .withRoutes()
             }

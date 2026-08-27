@@ -251,9 +251,9 @@ struct CallRateView: View {
                             Slider(value: $scores[i], in: 0...100, step: 1)
                                 .tint(Theme.accent)
                             Text("\(Int(scores[i]))")
-                                .font(.system(size: 14, weight: .bold)).foregroundStyle(Theme.accent)
+                                .font(.system(size: 14, weight: .bold)).monospacedDigit()
+                                .foregroundStyle(Theme.accent)
                                 .frame(width: 34, alignment: .trailing)
-                                .monospacedDigit()
                         }
                     }
                 }

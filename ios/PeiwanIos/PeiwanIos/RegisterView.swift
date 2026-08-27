@@ -9,7 +9,6 @@ struct RegisterView: View {
     @State private var gender = 0
     @State private var loading = false
     @State private var error = ""
-    @State private var avatarItem: PhotosPickerItem?
     @State private var avatarData: Data?
     @State private var showAgreement = false
     @State private var agreementIsPrivacy = false
@@ -20,11 +19,13 @@ struct RegisterView: View {
 
             Text("心之音")
                 .font(.system(size: 34, weight: .semibold))
-                .foregroundStyle(Theme.gold)
                 .tracking(8)
+                .foregroundStyle(Theme.gold)
                 .padding(.bottom, 8)
 
-            PhotosPicker(selection: $avatarItem, matching: .images) {
+            CompatPhotoPicker(kind: .images, onPicked: { datas in
+                avatarData = datas.first
+            }) {
                 ZStack {
                     Circle()
                         .fill(Theme.bg3)
@@ -40,14 +41,6 @@ struct RegisterView: View {
                         Text("选择头像")
                             .font(.caption2)
                             .foregroundStyle(Theme.textSub)
-                    }
-                }
-            }
-            .onChange(of: avatarItem) { item in
-                Task {
-                    if let data = try? await item?.loadTransferable(type: Data.self),
-                       let image = UIImage(data: data) {
-                        avatarData = image.jpegData(compressionQuality: 0.8)
                     }
                 }
             }

@@ -16,7 +16,7 @@ struct MeView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             content
                 .fullBg()
                 .withRoutes()
@@ -34,7 +34,7 @@ struct MeView: View {
             }
         }
         .sheet(item: $scannedJoin) { s in
-            NavigationStack {
+            NavStack {
                 JoinGroupView(initialCode: s.code)
             }
         }
@@ -94,7 +94,7 @@ struct MeView: View {
                             .padding(.top, 14)
                         // 点击进关注/粉丝列表
                         HStack(spacing: 6) {
-                            NavigationLink(value: Route.followList("following")) {
+                            RouteLink(.followList("following")) {
                                 HStack(spacing: 6) {
                                     Text("\(u.following ?? 0)").font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.text)
                                     Text("关注").font(.system(size: 13)).foregroundStyle(Theme.textSub)
@@ -102,7 +102,7 @@ struct MeView: View {
                             }
                             .buttonStyle(.plain)
                             Spacer().frame(width: 14)
-                            NavigationLink(value: Route.followList("fans")) {
+                            RouteLink(.followList("fans")) {
                                 HStack(spacing: 6) {
                                     Text("\(u.fans ?? 0)").font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.text)
                                     Text("粉丝").font(.system(size: 13)).foregroundStyle(Theme.textSub)
@@ -113,7 +113,7 @@ struct MeView: View {
                         .padding(.top, 16)
 
                         // 积分余额：融合进头部（玻璃质感行，点击进钱包）
-                        NavigationLink(value: Route.wallet) {
+                        RouteLink(.wallet) {
                             HStack(alignment: .center) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("积分余额").font(.system(size: 11)).foregroundStyle(Theme.textSub)
@@ -173,7 +173,7 @@ struct MeView: View {
     }
 
     private func menuRow(_ label: String, _ route: Route) -> some View {
-        NavigationLink(value: route) {
+        RouteLink(route) {
             VStack(spacing: 0) {
                 HStack {
                     Text(label).font(.system(size: 15)).foregroundStyle(Theme.text)
@@ -301,10 +301,10 @@ struct WalletView: View {
         .fullBg()
         .navigationTitle("积分明细")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.bg, for: .navigationBar)
+        .compatNavBarBackground(Theme.bg)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                NavigationLink(value: Route.transfer) {
+                RouteLink(.transfer) {
                     Text("转赠").font(.system(size: 14)).foregroundStyle(Theme.accent)
                 }
             }
@@ -382,7 +382,7 @@ struct TransferView: View {
                         .multilineTextAlignment(.center)
                         .font(.system(size: 30, weight: .semibold, design: .monospaced))
                         .foregroundStyle(Theme.text)
-                        .tracking(6)
+                        .compatTracking(6)
                         .onChange(of: sid) { v in
                             let filtered = String(v.filter(\.isNumber).prefix(6))
                             if filtered != v { sid = filtered }
@@ -484,7 +484,7 @@ struct TransferView: View {
         .fullBg()
         .navigationTitle("积分转赠")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.bg, for: .navigationBar)
+        .compatNavBarBackground(Theme.bg)
         .toast($toastMsg)
         .fullScreenCover(isPresented: $showScan) {
             QrScanView { text in
@@ -496,7 +496,7 @@ struct TransferView: View {
             }
         }
         .sheet(isPresented: $showMyQr) {
-            MyQrCodeView().presentationDetents([.height(480)])
+            MyQrCodeView().compatDetents(height: 480)
         }
         .task {
             if let w: WalletData = try? await Api.request("/wallet") { balance = w.balance ?? "0" }
@@ -567,7 +567,7 @@ struct RealnameView: View {
         .fullBg()
         .navigationTitle("实名认证")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.bg, for: .navigationBar)
+        .compatNavBarBackground(Theme.bg)
         .toast($toastMsg)
     }
 
@@ -598,12 +598,10 @@ struct EditProfileView: View {
     @State private var signature = ""
     @State private var city = ""
     @State private var videoPrice = ""
-    @State private var avatarItem: PhotosPickerItem?
     @State private var toastMsg: String?
     @State private var loaded = false
     /// 照片墙（最多 8 张，支持多选）
     @State private var photos: [String] = []
-    @State private var wallItems: [PhotosPickerItem] = []
     @State private var uploadingPhoto = false
     /// 平台手续费（分/分钟）= 流量成本 x 平台倍率
     @State private var feeCut = 4
@@ -615,7 +613,14 @@ struct EditProfileView: View {
         ScrollView {
             VStack(spacing: 0) {
                 // ===== 头像 =====
-                PhotosPicker(selection: $avatarItem, matching: .images) {
+                CompatPhotoPicker(kind: .images, onPicked: { datas in
+                    guard let data = datas.first else { return }
+                    Task {
+                        if let url = try? await Api.upload("image", data: data, filename: "avatar.jpg", mime: "image/jpeg") {
+                            avatar = url
+                        }
+                    }
+                }) {
                     VStack(spacing: 8) {
                         ZStack(alignment: .bottom) {
                             AvatarView(url: avatar, size: 92)
@@ -687,8 +692,7 @@ struct EditProfileView: View {
                 editCard {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("签名").font(.system(size: 14)).foregroundStyle(Theme.textSub)
-                        TextField("介绍一下自己…", text: $signature, axis: .vertical)
-                            .lineLimit(3...6)
+                        CompatVerticalTextField(text: $signature, prompt: Text("介绍一下自己…"), lineRange: 3...6)
                             .font(.system(size: 15)).foregroundStyle(Theme.text)
                             .onChange(of: signature) { v in
                                 if v.count > 80 { signature = String(v.prefix(80)) }
@@ -735,7 +739,17 @@ struct EditProfileView: View {
                             }
                             if photos.count < 8 {
                                 // 多选：一次最多选剩余可加张数
-                                PhotosPicker(selection: $wallItems, maxSelectionCount: 8 - photos.count, matching: .images) {
+                                CompatPhotoPicker(kind: .images, maxCount: 8 - photos.count, onPicked: { datas in
+                                    uploadingPhoto = true
+                                    Task {
+                                        for data in datas where photos.count < 8 {
+                                            if let url = try? await Api.upload("image", data: data, filename: "wall.jpg", mime: "image/jpeg") {
+                                                photos.append(url)
+                                            }
+                                        }
+                                        uploadingPhoto = false
+                                    }
+                                }) {
                                     RoundedRectangle(cornerRadius: 10).fill(Theme.bg3)
                                         .aspectRatio(1, contentMode: .fit)
                                         .overlay(Text(uploadingPhoto ? "…" : "＋").font(.system(size: 26)).foregroundStyle(Theme.textDim))
@@ -753,7 +767,7 @@ struct EditProfileView: View {
         .fullBg()
         .navigationTitle("编辑资料")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.bg, for: .navigationBar)
+        .compatNavBarBackground(Theme.bg)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button("保存") { save() }
@@ -780,8 +794,8 @@ struct EditProfileView: View {
                 }
                 .pickerStyle(.wheel)
             }
-            .presentationDetents([.height(300)])
-            .presentationBackground(Theme.bg2)
+            .compatDetents(height: 300)
+            .compatSheetBackground(Theme.bg2)
         }
         .toast($toastMsg)
         .onAppear {
@@ -804,34 +818,6 @@ struct EditProfileView: View {
                 }
             }
             loaded = true
-        }
-        .onChange(of: avatarItem) { item in
-            guard let item else { return }
-            Task {
-                if let data = try? await item.loadTransferable(type: Data.self),
-                   let img = UIImage(data: data),
-                   let jpeg = img.jpegData(compressionQuality: 0.85),
-                   let url = try? await Api.upload("image", data: jpeg, filename: "avatar.jpg", mime: "image/jpeg") {
-                    avatar = url
-                }
-                avatarItem = nil
-            }
-        }
-        .onChange(of: wallItems) { items in
-            guard !items.isEmpty else { return }
-            uploadingPhoto = true
-            Task {
-                for item in items where photos.count < 8 {
-                    if let data = try? await item.loadTransferable(type: Data.self),
-                       let img = UIImage(data: data),
-                       let jpeg = img.jpegData(compressionQuality: 0.85),
-                       let url = try? await Api.upload("image", data: jpeg, filename: "wall.jpg", mime: "image/jpeg") {
-                        photos.append(url)
-                    }
-                }
-                uploadingPhoto = false
-                wallItems = []
-            }
         }
     }
 
@@ -926,7 +912,7 @@ struct GuideApplyView: View {
         .fullBg()
         .navigationTitle("搭子认证")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.bg, for: .navigationBar)
+        .compatNavBarBackground(Theme.bg)
         .toast($toastMsg)
     }
 
@@ -964,7 +950,7 @@ struct GiftsReceivedView: View {
         .fullBg()
         .navigationTitle("收到的礼物")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.bg, for: .navigationBar)
+        .compatNavBarBackground(Theme.bg)
         .task {
             gifts = (try? await Api.request("/gifts/received")) ?? []
         }
@@ -995,7 +981,7 @@ struct MyMomentsView: View {
         .fullBg()
         .navigationTitle("我的动态")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.bg, for: .navigationBar)
+        .compatNavBarBackground(Theme.bg)
         .confirmationDialog("删除后不可恢复，确定删除这条动态吗？", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
             Button("删除", role: .destructive) {
                 guard let m = deleting else { return }
@@ -1017,7 +1003,7 @@ struct MyMomentsView: View {
     private func momentCell(_ m: Moment) -> some View {
         let cover = m.type == 2 ? (m.coverUrl ?? "") : (m.images?.first ?? "")
         return ZStack(alignment: .topTrailing) {
-            NavigationLink(value: Route.moment(m.id)) {
+            RouteLink(.moment(m.id)) {
                 VStack(alignment: .leading, spacing: 0) {
                     if !cover.isEmpty {
                         RemoteImage(url: cover)
@@ -1086,7 +1072,7 @@ struct FollowListView: View {
                     ScrollView {
                         LazyVStack(spacing: 0) {
                             ForEach(list) { u in
-                                NavigationLink(value: Route.userHome(u.id)) {
+                                RouteLink(.userHome(u.id)) {
                                     HStack(spacing: 12) {
                                         AvatarView(url: u.avatar, size: 46)
                                         VStack(alignment: .leading, spacing: 3) {
@@ -1122,7 +1108,7 @@ struct FollowListView: View {
         .fullBg()
         .navigationTitle(type == "fans" ? "粉丝" : "关注")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.bg, for: .navigationBar)
+        .compatNavBarBackground(Theme.bg)
         .task {
             list = (try? await Api.request("/user/follows/list?type=\(type)")) ?? []
         }

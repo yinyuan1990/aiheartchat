@@ -11,13 +11,13 @@ struct HallView: View {
     @State private var projects: [ProjectItem] = []
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             VStack(spacing: 0) {
                 PageTitle(text: "大厅")
                 ScrollView {
                     LazyVStack(spacing: 14) {
                         ForEach(Array(projects.enumerated()), id: \.element.id) { idx, p in
-                            NavigationLink(value: Route.project) {
+                            RouteLink(.project) {
                                 ZStack(alignment: .bottomLeading) {
                                     RoundedRectangle(cornerRadius: 16).fill(projectCovers[idx % projectCovers.count])
                                         .frame(height: 132)
@@ -93,7 +93,7 @@ struct GuideProjectView: View {
         .fullBg()
         .navigationTitle("同城搭子")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.bg, for: .navigationBar)
+        .compatNavBarBackground(Theme.bg)
         .fullScreenCover(item: $chatTarget) { t in
             ChatRoomSheet(target: t)
         }
@@ -110,7 +110,7 @@ struct GuideProjectView: View {
     }
 
     private func entryCard(_ title: String, _ sub: String, _ route: Route) -> some View {
-        NavigationLink(value: route) {
+        RouteLink(route) {
             VStack(alignment: .leading, spacing: 5) {
                 Text(title).font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
                 Text(sub).font(.system(size: 12)).foregroundStyle(Theme.textSub)
@@ -191,7 +191,7 @@ struct PeopleView: View {
         .fullBg()
         .navigationTitle(tab == "guide" ? "找搭子" : "找人")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.bg, for: .navigationBar)
+        .compatNavBarBackground(Theme.bg)
         .fullScreenCover(item: $chatTarget) { t in
             ChatRoomSheet(target: t)
         }
