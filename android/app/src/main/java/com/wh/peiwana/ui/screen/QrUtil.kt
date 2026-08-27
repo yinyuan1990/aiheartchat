@@ -55,10 +55,10 @@ fun makeQrBitmap(text: String, size: Int = 640): Bitmap {
     return Bitmap.createBitmap(pixels, size, size, Bitmap.Config.ARGB_8888)
 }
 
-/** 保存二维码到系统相册 */
-fun saveQrToGallery(context: android.content.Context, bitmap: Bitmap): Boolean = runCatching {
+/** 保存图片到系统相册 */
+fun saveQrToGallery(context: android.content.Context, bitmap: Bitmap, namePrefix: String = "收款码"): Boolean = runCatching {
     val values = android.content.ContentValues().apply {
-        put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, "收款码_${System.currentTimeMillis()}.png")
+        put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, "${namePrefix}_${System.currentTimeMillis()}.png")
         put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/png")
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
             put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, android.os.Environment.DIRECTORY_PICTURES)
@@ -70,8 +70,8 @@ fun saveQrToGallery(context: android.content.Context, bitmap: Bitmap): Boolean =
     true
 }.getOrDefault(false)
 
-/** 调系统分享面板分享二维码图片 */
-fun shareQr(context: android.content.Context, bitmap: Bitmap) {
+/** 调系统分享面板分享图片 */
+fun shareQr(context: android.content.Context, bitmap: Bitmap, title: String = "分享收款码") {
     runCatching {
         val file = java.io.File(context.cacheDir, "share_qr.png")
         file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
@@ -81,6 +81,6 @@ fun shareQr(context: android.content.Context, bitmap: Bitmap) {
             putExtra(android.content.Intent.EXTRA_STREAM, uri)
             addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        context.startActivity(android.content.Intent.createChooser(intent, "分享收款码"))
+        context.startActivity(android.content.Intent.createChooser(intent, title))
     }
 }
