@@ -60,6 +60,8 @@ final class CallManager: ObservableObject {
     @Published var remoteVideoTrack: RTCVideoTrack?
     /// 呼叫失败提示（对方不在线等），UI 展示后置空
     @Published var errorMsg: String? { didSet { CallWindow.shared.update() } }
+    /// 独立提示弹框（积分不足等需要用户确认的提示），点「知道了」置空
+    @Published var alertMsg: String? { didSet { CallWindow.shared.update() } }
 
     /// 视频通话结束后男方待评分（挂断后弹评分界面）
     struct PendingRate {
@@ -236,7 +238,7 @@ final class CallManager: ObservableObject {
                 if let balStr = wallet?.balance, let balance = Int(balStr),
                    let price = peer?.videoPriceActualFen, price > 0, balance < price {
                     Self.clog("local precheck insufficient: balance=\(balance) price/min=\(price)")
-                    errorMsg = "积分不足，视频通话需 \(fmtPoints(String(price))) 积分/分钟"
+                    alertMsg = "视频通话需 \(fmtPoints(String(price))) 积分/分钟\n当前积分不足，无法发起"
                     return
                 }
             }
@@ -697,12 +699,12 @@ final class PullPcDelegate: NSObject, RTCPeerConnectionDelegate {
     func peerConnection(_ peerConnection: RTCPeerConnection, didOpen dataChannel: RTCDataChannel) {}
 }
 
-/// 空闲时点击穿透（仅显示错误 toast 时不挡操作）；评分界面（挂断后 phase 已是 idle）需要接收触摸
+/// 空闲时点击穿透（仅显示错误 toast 时不挡操作）；评分界面/提示弹框需要接收触摸
 private final class PassthroughWindow: UIWindow {
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         let view = super.hitTest(point, with: event)
         let manager = CallManager.shared
-        return (manager.phase == .idle && manager.pendingRate == nil) ? nil : view
+        return (manager.phase == .idle && manager.pendingRate == nil && manager.alertMsg == nil) ? nil : view
     }
 }
 
@@ -714,7 +716,7 @@ final class CallWindow {
     func update() {
         DispatchQueue.main.async {
             let manager = CallManager.shared
-            let needShow = manager.phase != .idle || manager.errorMsg != nil || manager.pendingRate != nil
+            let needShow = manager.phase != .idle || manager.errorMsg != nil || manager.pendingRate != nil || manager.alertMsg != nil
             if needShow {
                 if self.window == nil {
                     let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }

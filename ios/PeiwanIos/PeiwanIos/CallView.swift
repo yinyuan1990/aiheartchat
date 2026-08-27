@@ -14,6 +14,37 @@ struct CallOverlay: View {
                 // 视频通话结束后男方评分界面
                 CallRateView(pending: pending)
             }
+            // 独立提示弹框（积分不足等）：盖在最上层，点「知道了」关闭
+            if let alert = manager.alertMsg {
+                ZStack {
+                    Color.black.opacity(0.55).ignoresSafeArea()
+                    VStack(spacing: 16) {
+                        Text("提示")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(Theme.text)
+                        Text(alert)
+                            .font(.system(size: 14))
+                            .foregroundStyle(Theme.textSub)
+                            .multilineTextAlignment(.center)
+                            .lineSpacing(5)
+                        Button {
+                            manager.alertMsg = nil
+                        } label: {
+                            Text("知道了")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Capsule().fill(Theme.accentGrad))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.top, 4)
+                    }
+                    .padding(22)
+                    .frame(width: 280)
+                    .background(RoundedRectangle(cornerRadius: 18).fill(Theme.bg2))
+                }
+            }
         }
         .overlay(alignment: .top) {
             if let msg = manager.errorMsg {

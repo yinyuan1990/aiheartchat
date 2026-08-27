@@ -243,14 +243,25 @@ object CallManager {
                     val peer = Api.request("/user/$calleeId") as? kotlinx.serialization.json.JsonObject
                     val priceFen = peer?.get("videoPriceActualFen")?.jsonPrimitive?.contentOrNull?.toLongOrNull()
                     if (balance != null && priceFen != null && priceFen > 0 && balance < priceFen) {
-                        "积分不足，视频通话需 ${"%.2f".format(priceFen / 100.0).trimEnd('0').trimEnd('.')} 积分/分钟"
+                        "视频通话需 ${"%.2f".format(priceFen / 100.0).trimEnd('0').trimEnd('.')} 积分/分钟\n当前积分不足，无法发起"
                     } else {
                         null
                     }
                 }.getOrNull()
                 if (insufficientMsg != null) {
                     clog("local precheck insufficient balance for video call")
-                    android.widget.Toast.makeText(context, insufficientMsg, android.widget.Toast.LENGTH_LONG).show()
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        // 独立提示弹框（不用 toast）；context 异常时降级 Toast 兜底
+                        runCatching {
+                            android.app.AlertDialog.Builder(context)
+                                .setTitle("提示")
+                                .setMessage(insufficientMsg)
+                                .setPositiveButton("知道了", null)
+                                .show()
+                        }.onFailure {
+                            android.widget.Toast.makeText(context, insufficientMsg, android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    }
                     return@launch
                 }
             }
