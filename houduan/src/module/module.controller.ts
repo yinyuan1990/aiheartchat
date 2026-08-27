@@ -20,4 +20,13 @@ export class ModuleController {
       orderBy: { sort: 'asc' },
     });
   }
+
+  /**
+   * 大厅 H5 地址：App 端大厅 tab 用 WebView 加载此页，业务模块网页端热更、无需发版。
+   * env HALL_H5_URL 可覆盖；返回空串时客户端回退默认 {BASE_URL}/site/#/hall-embed。
+   */
+  @Get('hall')
+  hall() {
+    return { url: process.env.HALL_H5_URL ?? '' };
+  }
 }

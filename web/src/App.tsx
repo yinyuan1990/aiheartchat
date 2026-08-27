@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { HashRouter, Navigate, NavLink, Outlet, Route, Routes, useNavigate } from 'react-router-dom';
+import { HashRouter, Navigate, NavLink, Outlet, Route, Routes, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, getDeviceId, setToken, UserProfile } from './api';
 import { useApp } from './store';
 import { wsManager } from './ws';
@@ -82,6 +82,31 @@ function Shell() {
   );
 }
 
+/**
+ * App 内嵌大厅（原生大厅 tab 的 WebView 入口）：
+ * URL 带 ?token= 免登录（用 App 的身份），无底部导航（App 已有原生 tab 栏）。
+ * 以后大厅新增业务模块只改网页，无需客户端发版。
+ */
+function EmbedHallPage() {
+  const [params] = useSearchParams();
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const t = params.get('token');
+    if (t) setToken(t);
+    setReady(true);
+  }, []);
+
+  if (!ready) return null;
+  return (
+    <div className="app">
+      <div className="page" style={{ paddingBottom: 12 }}>
+        <HallPage />
+      </div>
+    </div>
+  );
+}
+
 function Boot() {
   const nav = useNavigate();
   const setUser = useApp((s) => s.setUser);
@@ -121,6 +146,7 @@ export function App() {
         <Route path="/enter" element={<EnterPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/agreement/:type" element={<AgreementPage />} />
+        <Route path="/hall-embed" element={<EmbedHallPage />} />
         <Route element={<Shell />}>
           <Route path="/plaza" element={<PlazaPage />} />
           <Route path="/hall" element={<HallPage />} />

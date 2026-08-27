@@ -16,43 +16,51 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import com.wh.peiwana.net.Api
-import com.wh.peiwana.net.ProjectItem
 import com.wh.peiwana.ui.*
 import com.wh.peiwana.ui.theme.*
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
-private val COVERS = listOf(
-    Brush.horizontalGradient(listOf(Color(0xFF3D0F1F), Color(0xFFB32B53))),
-    Brush.horizontalGradient(listOf(Color(0xFF101A2E), Color(0xFF2B5CB0))),
-    Brush.horizontalGradient(listOf(Color(0xFF241436), Color(0xFF7A3FD1))),
-)
-
+/**
+ * 大厅：App 内嵌 H5（WebView），业务模块在网页端热更、无需发版。
+ * 地址后台可配（GET /modules/hall，env HALL_H5_URL），默认加载 Web 端的 /site/#/hall-embed，
+ * URL 携带 token 免登录（用 App 的身份），页面内自行导航，其它 tab 保持原生。
+ */
 @Composable
 fun HallScreen(modifier: Modifier = Modifier, onOpenProject: (String) -> Unit) {
-    var projects by remember { mutableStateOf<List<ProjectItem>>(emptyList()) }
-    LaunchedEffect(Unit) { projects = runCatching { Api.getList<ProjectItem>("/modules") }.getOrDefault(emptyList()) }
+    var url by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        val cfg = runCatching {
+            Api.request("/modules/hall")!!.jsonObject["url"]?.jsonPrimitive?.contentOrNull
+        }.getOrNull()
+        val base = if (cfg.isNullOrEmpty()) "${Api.BASE_URL}/site/#/hall-embed" else cfg
+        val sep = if (base.contains("?")) "&" else "?"
+        url = "$base${sep}token=${Api.token ?: ""}&embed=1"
+    }
 
-    Column(modifier = modifier.fillMaxSize()) {
-        PageTitle("大厅")
-        LazyColumn(contentPadding = PaddingValues(16.dp, 4.dp, 16.dp, 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            items(projects, key = { it.id }) { p ->
-                val idx = projects.indexOf(p)
-                Box(
-                    modifier = Modifier.fillMaxWidth().height(132.dp).clip(RoundedCornerShape(16.dp))
-                        .background(COVERS[idx % COVERS.size]).clickable { onOpenProject(p.entry) },
-                ) {
-                    Column(modifier = Modifier.align(Alignment.BottomStart).padding(18.dp)) {
-                        Text(p.name, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                        Text(p.desc, color = Color.White.copy(alpha = 0.75f), fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp))
-                    }
-                    Box(
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).clip(RoundedCornerShape(16.dp))
-                            .background(Color.White.copy(alpha = 0.92f)).padding(horizontal = 20.dp, vertical = 7.dp),
-                    ) { Text("进入", color = Color(0xFF111111), fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
-                }
-            }
+    val u = url
+    if (u == null) {
+        Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("加载中…", color = TextSub, fontSize = 13.sp)
         }
+    } else {
+        AndroidView(
+            modifier = modifier.fillMaxSize(),
+            factory = { ctx ->
+                android.webkit.WebView(ctx).apply {
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    // 深色底避免加载白闪
+                    setBackgroundColor(0xFF141418.toInt())
+                    webViewClient = android.webkit.WebViewClient()
+                    loadUrl(u)
+                }
+            },
+        )
     }
 }
 

@@ -1,52 +1,52 @@
 import SwiftUI
+import WebKit
 
-private let projectCovers: [LinearGradient] = [
-    LinearGradient(colors: [Color(red: 0.24, green: 0.06, blue: 0.12), Color(red: 0.70, green: 0.17, blue: 0.33)], startPoint: .leading, endPoint: .trailing),
-    LinearGradient(colors: [Color(red: 0.06, green: 0.10, blue: 0.18), Color(red: 0.17, green: 0.36, blue: 0.69)], startPoint: .leading, endPoint: .trailing),
-    LinearGradient(colors: [Color(red: 0.14, green: 0.08, blue: 0.21), Color(red: 0.48, green: 0.25, blue: 0.82)], startPoint: .leading, endPoint: .trailing),
-]
-
-/// 大厅：项目入口（后台下发，后期游戏在此接入）
+/**
+ * 大厅：App 内嵌 H5（WebView），业务模块在网页端热更、无需发版。
+ * 地址后台可配（GET /modules/hall，env HALL_H5_URL），默认加载 Web 端的 /site/#/hall-embed，
+ * URL 携带 token 免登录（用 App 的身份），页面内自行导航，其它 tab 保持原生。
+ */
 struct HallView: View {
-    @State private var projects: [ProjectItem] = []
+    @State private var hallUrl: URL?
 
     var body: some View {
-        NavStack {
-            VStack(spacing: 0) {
-                PageTitle(text: "大厅")
-                ScrollView {
-                    LazyVStack(spacing: 14) {
-                        ForEach(Array(projects.enumerated()), id: \.element.id) { idx, p in
-                            RouteLink(.project) {
-                                ZStack(alignment: .bottomLeading) {
-                                    RoundedRectangle(cornerRadius: 16).fill(projectCovers[idx % projectCovers.count])
-                                        .frame(height: 132)
-                                    VStack(alignment: .leading, spacing: 5) {
-                                        Text(p.name).font(.system(size: 20, weight: .bold)).foregroundStyle(.white)
-                                        Text(p.desc ?? "").font(.system(size: 12)).foregroundStyle(.white.opacity(0.75))
-                                    }
-                                    .padding(18)
-                                    Text("进入")
-                                        .font(.system(size: 13, weight: .semibold)).foregroundStyle(Color(red: 0.07, green: 0.07, blue: 0.07))
-                                        .padding(.horizontal, 20).padding(.vertical, 7)
-                                        .background(Capsule().fill(.white.opacity(0.92)))
-                                        .frame(maxWidth: .infinity, alignment: .trailing)
-                                        .padding(16)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                }
+        Group {
+            if let hallUrl {
+                HallWebView(url: hallUrl)
+            } else {
+                EmptyHint(text: "加载中…")
             }
-            .fullBg()
-            .withRoutes()
         }
+        .fullBg()
         .task {
-            projects = (try? await Api.request("/modules")) ?? []
+            guard hallUrl == nil else { return }
+            struct HallCfg: Codable { var url: String? = "" }
+            let cfg: HallCfg? = try? await Api.request("/modules/hall")
+            var base = cfg?.url ?? ""
+            if base.isEmpty { base = "\(Api.baseURL)/site/#/hall-embed" }
+            let sep = base.contains("?") ? "&" : "?"
+            hallUrl = URL(string: "\(base)\(sep)token=\(Api.token ?? "")&embed=1")
         }
     }
+}
+
+/// 大厅 WebView 容器：深色底避免加载白闪，支持侧滑返回 H5 内页
+private struct HallWebView: UIViewRepresentable {
+    let url: URL
+
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.allowsInlineMediaPlayback = true
+        let web = WKWebView(frame: .zero, configuration: config)
+        web.isOpaque = false
+        web.backgroundColor = UIColor(Theme.bg)
+        web.scrollView.backgroundColor = UIColor(Theme.bg)
+        web.allowsBackForwardNavigationGestures = true
+        web.load(URLRequest(url: url))
+        return web
+    }
+
+    func updateUIView(_ uiView: WKWebView, context: Context) {}
 }
 
 /// 同城搭子项目主页
