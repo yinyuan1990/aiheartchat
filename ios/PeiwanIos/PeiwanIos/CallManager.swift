@@ -110,6 +110,13 @@ final class CallManager: ObservableObject {
         scheduleLogFlush()
     }
 
+    /// 当前绑定的通话 callId（加锁读取）
+    nonisolated static var currentLogCallId: String? {
+        CallLogStore.lock.lock()
+        defer { CallLogStore.lock.unlock() }
+        return CallLogStore.callId
+    }
+
     /// 关联当前 callId（callId 已知后才能上报，之前的日志一并带上）
     nonisolated static func bindLogCall(_ callId: String) {
         CallLogStore.lock.lock()
@@ -198,7 +205,7 @@ final class CallManager: ObservableObject {
                 Task { await startMedia(callId: callId, peerId: peerId, type: type) }
             }
         case "published":
-            if let callId = data["callId"] as? String, callId == Self.logCallId {
+            if let callId = data["callId"] as? String, callId == Self.currentLogCallId {
                 Self.clog("signal peer published")
                 peerPublished = true
             }
