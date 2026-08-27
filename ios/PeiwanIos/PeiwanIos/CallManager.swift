@@ -37,6 +37,20 @@ enum CallPhase: Equatable {
  * 双方各推一路流（WHIP）拉对方一路流（WHEP），流名 live/{callId}_{userId}。
  * 通话 UI 由独立 UIWindow 承载（CallWindow），保证盖在任何弹层之上。
  */
+/// 通话日志缓冲：独立于主 actor，NSLock 保证线程安全（WebRTC 回调线程也会写）
+private enum CallLogStore {
+    static var buf: [String] = []
+    static var callId: String?
+    static var flushScheduled = false
+    static let lock = NSLock()
+    static let timeFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss.SSS"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+}
+
 @MainActor
 final class CallManager: ObservableObject {
     static let shared = CallManager()
@@ -85,54 +99,45 @@ final class CallManager: ObservableObject {
     private let pushDelegate = PullPcDelegate(tag: "push")
 
     // ---- 通话日志：本地打印（Xcode 控制台过滤 PeiwanCall）+ 缓冲上报服务器（后台按 callId 汇总排查） ----
-    private static var logBuf: [String] = []
-    private static var logCallId: String?
-    private static var logFlushScheduled = false
-    private static let logLock = NSLock()
-    private static let logTimeFmt: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm:ss.SSS"
-        f.locale = Locale(identifier: "en_US_POSIX")
-        return f
-    }()
+    // nonisolated：WebRTC 回调在后台线程直接调用，线程安全由 CallLogStore 的锁保证，与主 actor 无关
 
-    static func clog(_ s: String) {
+    nonisolated static func clog(_ s: String) {
         NSLog("[PeiwanCall] %@", s)
-        logLock.lock()
-        logBuf.append("\(logTimeFmt.string(from: Date())) \(s)")
-        if logBuf.count > 500 { logBuf.removeFirst(logBuf.count - 500) }
-        logLock.unlock()
+        CallLogStore.lock.lock()
+        CallLogStore.buf.append("\(CallLogStore.timeFmt.string(from: Date())) \(s)")
+        if CallLogStore.buf.count > 500 { CallLogStore.buf.removeFirst(CallLogStore.buf.count - 500) }
+        CallLogStore.lock.unlock()
         scheduleLogFlush()
     }
 
     /// 关联当前 callId（callId 已知后才能上报，之前的日志一并带上）
-    static func bindLogCall(_ callId: String) {
-        logLock.lock()
-        logCallId = callId
-        logLock.unlock()
+    nonisolated static func bindLogCall(_ callId: String) {
+        CallLogStore.lock.lock()
+        CallLogStore.callId = callId
+        CallLogStore.lock.unlock()
         scheduleLogFlush()
     }
 
-    private static func scheduleLogFlush() {
-        logLock.lock()
-        if logFlushScheduled { logLock.unlock(); return }
-        logFlushScheduled = true
-        logLock.unlock()
+    private nonisolated static func scheduleLogFlush() {
+        CallLogStore.lock.lock()
+        if CallLogStore.flushScheduled { CallLogStore.lock.unlock(); return }
+        CallLogStore.flushScheduled = true
+        CallLogStore.lock.unlock()
         Task {
             try? await Task.sleep(nanoseconds: 3_000_000_000)
-            logLock.lock()
-            logFlushScheduled = false
-            logLock.unlock()
+            CallLogStore.lock.lock()
+            CallLogStore.flushScheduled = false
+            CallLogStore.lock.unlock()
             await flushLogs()
         }
     }
 
-    static func flushLogs() async {
-        logLock.lock()
-        guard let callId = logCallId, !logBuf.isEmpty else { logLock.unlock(); return }
-        let lines = logBuf
-        logBuf.removeAll()
-        logLock.unlock()
+    nonisolated static func flushLogs() async {
+        CallLogStore.lock.lock()
+        guard let callId = CallLogStore.callId, !CallLogStore.buf.isEmpty else { CallLogStore.lock.unlock(); return }
+        let lines = CallLogStore.buf
+        CallLogStore.buf.removeAll()
+        CallLogStore.lock.unlock()
         struct OkResp: Decodable { let ok: Bool? }
         let _: OkResp? = try? await Api.request("/call/log", method: "POST", body: [
             "callId": callId,
