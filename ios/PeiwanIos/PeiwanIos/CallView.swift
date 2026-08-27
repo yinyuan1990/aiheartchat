@@ -197,7 +197,10 @@ struct CallOverlay: View {
 /// 发起呼叫（含权限申请），type: 1=语音 2=视频
 func startCallWithPermissions(calleeId: String, type: Int, name: String = "", avatar: String = "") {
     requestPermissions(video: type == 2) {
-        CallManager.shared.startCall(calleeId: calleeId, type: type, name: name, avatar: avatar)
+        // 权限回调在后台线程，显式切回主 actor 调用通话管理器
+        Task { @MainActor in
+            CallManager.shared.startCall(calleeId: calleeId, type: type, name: name, avatar: avatar)
+        }
     }
 }
 
