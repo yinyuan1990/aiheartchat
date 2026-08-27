@@ -30,15 +30,56 @@ fun MeScreen(modifier: Modifier = Modifier, initialUser: UserProfile?, onNav: (S
     var me by remember { mutableStateOf(initialUser) }
     LaunchedEffect(Unit) { me = runCatching { Api.getObj<UserProfile>("/user/me") }.getOrNull() ?: me }
     val ctx = androidx.compose.ui.platform.LocalContext.current
+    val meScope = rememberCoroutineScope()
 
-    // 扫一扫：群邀请码 → 加入群聊；收款码 → 提示去转赠页
+    // 语音房扫码进房：入群后申请麦克风权限再进房
+    var pendingVroomGid by remember { mutableStateOf<String?>(null) }
+    val vroomMicPerm = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { ok ->
+        pendingVroomGid?.let { gid ->
+            if (ok) {
+                com.wh.peiwana.rtc.VoiceRoomManager.join(gid)
+            } else {
+                android.widget.Toast.makeText(ctx, "需要麦克风权限才能加入语音房", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+        pendingVroomGid = null
+    }
+
+    /** 语音房二维码：免密入群 → 打开群聊 → 自动进房 */
+    fun joinVroomByQr(groupId: String, token: String) {
+        meScope.launch {
+            runCatching { com.wh.peiwana.rtc.VoiceRoomManager.scanJoin(groupId, token) }
+                .onSuccess { r ->
+                    if (r.conversationId.isEmpty()) {
+                        android.widget.Toast.makeText(ctx, "群会话不存在", android.widget.Toast.LENGTH_SHORT).show()
+                        return@onSuccess
+                    }
+                    if (r.roomActive) {
+                        pendingVroomGid = r.groupId
+                        vroomMicPerm.launch(android.Manifest.permission.RECORD_AUDIO)
+                    } else {
+                        android.widget.Toast.makeText(ctx, "已入群，语音房当前未开启", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    onNav("chatroom/${r.conversationId}?convType=2&targetId=${r.groupId}&title=${android.net.Uri.encode("${r.groupName}（群）")}")
+                }
+                .onFailure {
+                    android.widget.Toast.makeText(ctx, it.message ?: "扫码失败", android.widget.Toast.LENGTH_SHORT).show()
+                }
+        }
+    }
+
+    // 扫一扫：语音房邀请 → 免密入群进房；群邀请码 → 加入群聊；收款码 → 提示去转赠页
     val meScanLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         com.journeyapps.barcodescanner.ScanContract(),
     ) { result ->
         result.contents?.let { text ->
+            val vroom = parseVroomQr(text)
             val groupCode = if (text.contains("group?code=")) parseGroupCode(text) else null
             val paySid = if (text.contains("pay?sid=")) parsePaySid(text) else null
             when {
+                vroom != null -> joinVroomByQr(vroom.first, vroom.second)
                 groupCode != null -> onNav("join-group?code=$groupCode")
                 paySid != null -> android.widget.Toast.makeText(ctx, "这是收款码，请到「积分明细 - 转赠」里扫码使用", android.widget.Toast.LENGTH_LONG).show()
                 parseGroupCode(text) != null -> onNav("join-group?code=${parseGroupCode(text)}")

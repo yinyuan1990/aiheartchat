@@ -17,6 +17,18 @@ func parsePaySid(_ text: String) -> String? {
 /// 群邀请码内容格式：peiwan://group?code=8位邀请码
 func groupQrContent(code: String) -> String { "peiwan://group?code=\(code)" }
 
+/// 语音房邀请二维码内容：peiwan://vroom?g=群id&t=场次token（扫码免密入群并进房）
+func vroomQrContent(groupId: String, token: String) -> String { "peiwan://vroom?g=\(groupId)&t=\(token)" }
+
+/// 从扫码结果里提取语音房邀请（groupId, token）
+func parseVroomQr(_ text: String) -> (groupId: String, token: String)? {
+    guard text.contains("vroom?"),
+          let gRange = text.range(of: #"g=(\d+)"#, options: .regularExpression),
+          let tRange = text.range(of: #"t=([A-Za-z0-9]+)"#, options: .regularExpression)
+    else { return nil }
+    return (String(text[gRange].dropFirst(2)), String(text[tRange].dropFirst(2)))
+}
+
 /// 从扫码结果里提取群邀请码（兼容 peiwan://group?code=xxx 和纯码）
 func parseGroupCode(_ text: String) -> String? {
     if let range = text.range(of: #"code=([A-Za-z0-9]{6,12})"#, options: .regularExpression) {

@@ -29,6 +29,17 @@ fun parseGroupCode(text: String): String? {
     return if (Regex("^[A-Z0-9]{6,12}$").matches(t)) t else null
 }
 
+/** 语音房邀请二维码内容：peiwan://vroom?g=群id&t=场次token（扫码免密入群并进房） */
+fun vroomQrContent(groupId: String, token: String) = "peiwan://vroom?g=$groupId&t=$token"
+
+/** 从扫码结果里提取语音房邀请（groupId to token） */
+fun parseVroomQr(text: String): Pair<String, String>? {
+    if (!text.contains("vroom?")) return null
+    val g = Regex("g=(\\d+)").find(text)?.groupValues?.get(1) ?: return null
+    val t = Regex("t=([A-Za-z0-9]+)").find(text)?.groupValues?.get(1) ?: return null
+    return g to t
+}
+
 /** 生成二维码 Bitmap */
 fun makeQrBitmap(text: String, size: Int = 640): Bitmap {
     val matrix = QRCodeWriter().encode(

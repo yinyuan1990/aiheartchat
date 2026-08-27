@@ -29,6 +29,8 @@ final class VoiceRoomManager: ObservableObject {
     /// 各群房间成员预览（未进房时群聊页入口展示人数），WS vroom 帧实时刷新
     @Published var roomPreview: [String: [VRMember]] = [:]
     @Published var toastMsg: String?
+    /// 当前场次的二维码 token（房内成员可分享，扫码免密进房）
+    @Published var qrToken = ""
 
     private var whipUrl = ""
     private var whepUrl = ""
@@ -77,10 +79,11 @@ final class VoiceRoomManager: ObservableObject {
 
     /// 群聊页打开/语音房面板打开时刷新一次房间状态
     func refreshInfo(groupId: String) async {
-        struct InfoResp: Codable { var members: [VRMember]? = []; var max: Int? = 3 }
+        struct InfoResp: Codable { var members: [VRMember]? = []; var max: Int? = 3; var qrToken: String? = "" }
         if let info: InfoResp = try? await Api.request("/im/group/\(groupId)/voiceroom") {
             roomPreview[groupId] = info.members ?? []
             if joinedGroupId == nil { maxMembers = info.max ?? 3 }
+            if joinedGroupId == groupId || joinedGroupId == nil { qrToken = info.qrToken ?? "" }
         }
     }
 
@@ -119,6 +122,7 @@ final class VoiceRoomManager: ObservableObject {
                 var members: [VRMember]? = []
                 var max: Int? = 3
                 var roomId: String? = ""
+                var qrToken: String? = ""
                 var whipUrl: String? = ""
                 var whepUrl: String? = ""
                 var stream: String? = ""
@@ -129,6 +133,7 @@ final class VoiceRoomManager: ObservableObject {
                 members = resp.members ?? []
                 maxMembers = resp.max ?? 3
                 roomId = resp.roomId ?? ""
+                qrToken = resp.qrToken ?? ""
                 whipUrl = resp.whipUrl ?? ""
                 whepUrl = resp.whepUrl ?? ""
                 roomPreview[groupId] = members

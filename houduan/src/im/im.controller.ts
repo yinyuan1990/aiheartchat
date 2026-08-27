@@ -129,6 +129,12 @@ export class ImController {
 
   // ---------- 群聊语音房 ----------
 
+  /** 语音房二维码扫码：token 校验通过免密入群，返回群会话与房间状态 */
+  @Post('voiceroom/scan')
+  voiceRoomScan(@CurrentUser() userId: bigint, @Body() dto: { groupId: string; token: string }) {
+    return this.voiceRoom.scanJoin(userId, BigInt(dto.groupId), dto.token ?? '');
+  }
+
   /** 房间状态：成员列表 + 人数上限（群聊页入口展示 N/max） */
   @Get('group/:id/voiceroom')
   voiceRoomInfo(@CurrentUser() userId: bigint, @Param('id') id: string) {

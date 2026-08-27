@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -41,6 +41,10 @@ export class VoiceRoomService {
 
   private sidKey(groupId: bigint) {
     return `vroom:${groupId}:sid`;
+  }
+
+  private qrKey(groupId: bigint) {
+    return `vroom:${groupId}:qr`;
   }
 
   /** 当前场次 ID（无则返回空串） */
@@ -122,12 +126,17 @@ export class VoiceRoomService {
     );
   }
 
-  /** 房间状态（群聊页入口展示 N/max） */
+  /** 房间状态（群聊页入口展示 N/max）；qrToken 供房内成员生成分享二维码 */
   async info(userId: bigint, groupId: bigint) {
     await this.assertGroupMember(userId, groupId);
     const { ids, pruned } = await this.liveMembers(groupId);
     if (pruned) void this.broadcast(groupId).catch(() => {});
-    return { members: await this.memberDetails(ids), max: await this.maxMembers(), roomId: await this.currentSid(groupId) };
+    return {
+      members: await this.memberDetails(ids),
+      max: await this.maxMembers(),
+      roomId: await this.currentSid(groupId),
+      qrToken: ids.length > 0 ? (await this.redis.client.get(this.qrKey(groupId))) ?? '' : '',
+    };
   }
 
   async join(userId: bigint, groupId: bigint) {
@@ -141,12 +150,23 @@ export class VoiceRoomService {
       throw new BadRequestException(`语音房已满（上限 ${max} 人）`);
     }
 
-    // 空房间首个成员进入 = 新场次，生成场次 ID（后续所有端的日志都归到这一场）
+    // 只有群主能开房（空房间首个进入者必须是群主），其他人只能加入已开的房
+    if (ids.length === 0) {
+      const group = await this.prisma.chatGroup.findUnique({ where: { id: groupId } });
+      if (!group || group.status !== 0) throw new NotFoundException('群不存在');
+      if (group.ownerId !== userId) {
+        this.serverLog(await this.currentSid(groupId), `join 拒绝(非群主开房): group=${groupId} user=${uid}`, 'warn');
+        throw new ForbiddenException('仅群主可开启语音房');
+      }
+    }
+
+    // 空房间首个成员进入 = 新场次：生成场次 ID（日志归类）+ 二维码 token（扫码免密进房凭证）
     let sid = await this.currentSid(groupId);
     if (ids.length === 0 || !sid) {
       sid = `vr_${groupId}_${randomUUID().replace(/-/g, '').slice(0, 8)}`;
       await this.redis.client.set(this.sidKey(groupId), sid, 'EX', 86_400);
-      this.serverLog(sid, `新场次开始: group=${groupId} 发起人=${uid} 上限=${max}`);
+      await this.redis.client.set(this.qrKey(groupId), randomUUID().replace(/-/g, '').slice(0, 12), 'EX', 86_400);
+      this.serverLog(sid, `新场次开始: group=${groupId} 群主=${uid} 上限=${max}`);
     }
 
     await this.redis.client.hset(key, uid, Date.now().toString());
@@ -158,9 +178,40 @@ export class VoiceRoomService {
       members: await this.memberDetails(after),
       max,
       roomId: sid,
+      qrToken: (await this.redis.client.get(this.qrKey(groupId))) ?? '',
       whipUrl: `${this.srsApi}/rtc/v1/whip/`,
       whepUrl: `${this.srsApi}/rtc/v1/whep/`,
       stream: `vr_${groupId}_${uid}`,
+    };
+  }
+
+  /**
+   * 语音房二维码扫码：token 校验通过即免密入群（尊重群人数上限），
+   * 返回群会话信息与房间状态，客户端随后走正常 join 建立媒体。
+   */
+  async scanJoin(userId: bigint, groupId: bigint, token: string) {
+    const saved = await this.redis.client.get(this.qrKey(groupId));
+    if (!saved || !token || saved !== token) throw new BadRequestException('二维码已失效');
+    const group = await this.prisma.chatGroup.findUnique({ where: { id: groupId } });
+    if (!group || group.status !== 0) throw new NotFoundException('群已解散');
+
+    const already = await this.prisma.groupMember.findUnique({
+      where: { groupId_userId: { groupId, userId } },
+    });
+    if (!already) {
+      const count = await this.prisma.groupMember.count({ where: { groupId } });
+      if (count >= group.memberLimit) throw new BadRequestException('群成员已达上限');
+      await this.prisma.groupMember.createMany({ data: [{ groupId, userId }], skipDuplicates: true });
+      this.serverLog(await this.currentSid(groupId), `扫码免密入群: group=${groupId} user=${userId}`);
+    }
+
+    const conv = await this.prisma.conversation.findUnique({ where: { groupId } });
+    const { ids } = await this.liveMembers(groupId);
+    return {
+      groupId: groupId.toString(),
+      conversationId: conv?.id?.toString() ?? '',
+      groupName: group.name,
+      roomActive: ids.length > 0,
     };
   }
 

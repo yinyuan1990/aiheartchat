@@ -54,6 +54,8 @@ object VoiceRoomManager {
     /** 各群房间成员预览（群聊页入口人数角标），WS vroom 帧实时刷新 */
     val roomPreview = MutableStateFlow<Map<String, List<VRMember>>>(emptyMap())
     val toastMsg = MutableStateFlow<String?>(null)
+    /** 当前场次的二维码 token（房内成员可分享，扫码免密进房） */
+    val qrToken = MutableStateFlow("")
 
     private var whipUrl = ""
     private var whepUrl = ""
@@ -107,7 +109,26 @@ object VoiceRoomManager {
             if (joinedGroupId.value == null) {
                 maxMembers.value = d["max"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 3
             }
+            if (joinedGroupId.value == null || joinedGroupId.value == groupId) {
+                qrToken.value = d["qrToken"]?.jsonPrimitive?.contentOrNull ?: ""
+            }
         }
+    }
+
+    data class VroomScanResult(val conversationId: String, val groupId: String, val groupName: String, val roomActive: Boolean)
+
+    /** 扫语音房二维码：免密入群，返回群会话与房间状态（失败抛异常，message 可直接展示） */
+    suspend fun scanJoin(groupId: String, token: String): VroomScanResult {
+        val d = Api.request("/im/voiceroom/scan", "POST", buildJsonObject {
+            put("groupId", groupId)
+            put("token", token)
+        })!!.jsonObject
+        return VroomScanResult(
+            conversationId = d["conversationId"]?.jsonPrimitive?.contentOrNull ?: "",
+            groupId = d["groupId"]?.jsonPrimitive?.contentOrNull ?: groupId,
+            groupName = d["groupName"]?.jsonPrimitive?.contentOrNull ?: "群聊",
+            roomActive = d["roomActive"]?.jsonPrimitive?.contentOrNull?.toBoolean() ?: false,
+        )
     }
 
     fun memberCount(groupId: String): Int =
@@ -147,6 +168,7 @@ object VoiceRoomManager {
                 members.value = Api.json.decodeFromJsonElement(ListSerializer(VRMember.serializer()), d["members"]!!)
                 maxMembers.value = d["max"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 3
                 roomId = d["roomId"]?.jsonPrimitive?.contentOrNull ?: ""
+                qrToken.value = d["qrToken"]?.jsonPrimitive?.contentOrNull ?: ""
                 whipUrl = d["whipUrl"]?.jsonPrimitive?.contentOrNull ?: ""
                 whepUrl = d["whepUrl"]?.jsonPrimitive?.contentOrNull ?: ""
                 val stream = d["stream"]?.jsonPrimitive?.contentOrNull ?: "vr_${groupId}_$myUserId"

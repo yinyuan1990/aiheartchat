@@ -80,8 +80,24 @@ struct VoiceRoomSheet: View {
                     .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 20)
+                // 分享二维码：好友扫码免密入群并直接进房
+                if !manager.qrToken.isEmpty {
+                    Button {
+                        if let img = makeQRImage(vroomQrContent(groupId: groupId, token: manager.qrToken), size: 640) {
+                            ShareSheet.present([img])
+                        }
+                    } label: {
+                        Label("分享二维码邀请好友", systemImage: "qrcode")
+                            .font(.system(size: 13)).foregroundStyle(Theme.accent)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 8)
+                }
             } else {
-                AccentButton(title: manager.joining ? "加入中…" : (isFull ? "房间已满" : "加入语音房"), enabled: !manager.joining && !isFull) {
+                AccentButton(
+                    title: manager.joining ? "加入中…" : (isFull ? "房间已满" : (roomMembers.isEmpty ? "开启语音房（仅群主）" : "加入语音房")),
+                    enabled: !manager.joining && !isFull
+                ) {
                     AVCaptureDevice.requestAccess(for: .audio) { ok in
                         DispatchQueue.main.async {
                             if ok {

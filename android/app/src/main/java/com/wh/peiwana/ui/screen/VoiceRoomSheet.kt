@@ -132,9 +132,21 @@ fun VoiceRoomDialog(groupId: String, groupName: String, onDismiss: () -> Unit) {
                             .padding(vertical = 12.dp),
                     )
                 }
+                // 分享二维码：好友扫码免密入群并直接进房
+                val token by VoiceRoomManager.qrToken.collectAsState()
+                if (token.isNotEmpty()) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "分享二维码邀请好友",
+                        color = Accent, fontSize = 13.sp,
+                        modifier = Modifier.noRippleClick {
+                            shareQr(ctx, makeQrBitmap(vroomQrContent(groupId, token)))
+                        },
+                    )
+                }
             } else {
                 Text(
-                    if (joining) "加入中…" else if (isFull) "房间已满" else "加入语音房",
+                    if (joining) "加入中…" else if (isFull) "房间已满" else if (roomMembers.isEmpty()) "开启语音房（仅群主）" else "加入语音房",
                     color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
                         .background(if (joining || isFull) Bg3 else Accent)
