@@ -236,10 +236,16 @@ export class ImService {
         const unread = await this.prisma.message.count({
           where: { conversationId: conv.id, id: { gt: lastRead }, senderId: { not: userId } },
         });
+        // 没设置群头像时默认显示群主头像
+        let groupAvatar = group.avatar;
+        if (!groupAvatar) {
+          const owner = await this.prisma.user.findUnique({ where: { id: group.ownerId }, select: { avatar: true } });
+          groupAvatar = owner?.avatar ?? '';
+        }
         result.push({
           id: conv.id,
           type: 2,
-          group: { id: group.id, name: group.name, avatar: group.avatar },
+          group: { id: group.id, name: group.name, avatar: groupAvatar },
           lastMsg: lastMsg && this.preview(lastMsg, key),
           unread,
           lastMsgAt: conv.lastMsgAt,

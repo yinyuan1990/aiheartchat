@@ -288,17 +288,34 @@ export class NewsService implements OnModuleInit {
 
   /** 生成当天的每日一句（force=true 覆盖当天已有） */
   private async generateQuote(audience: number, day: string, force = false) {
-    const prompt =
+    // 随机主题 + 带上最近用过的句子让模型避开，防止每天生成的都一个味
+    const themes =
       audience === 2
-        ? '写一句给女生看的情感励志话：关于爱自己、经营感情、越来越好，温柔有力量。'
-        : '以温柔女生的口吻写一句鼓励正在打拼的男生的话：懂他的辛苦、给他力量。';
+        ? ['爱自己', '勇敢向前', '放下与释怀', '独立与底气', '生活的小确幸', '越努力越幸运', '成为更好的自己', '温柔而坚定', '不辜负时光', '心态与格局']
+        : ['坚持与拼搏', '扛住压力', '梦想与远方', '低谷翻盘', '自律与成长', '平凡人的英雄梦', '责任与担当', '默默努力', '熬过去就赢了', '陪伴与被懂得'];
+    const theme = themes[Math.floor(Math.random() * themes.length)];
+    const recent = await this.prisma.dailyQuote.findMany({
+      where: { audience },
+      orderBy: { id: 'desc' },
+      take: 20,
+      select: { text: true },
+    });
+    const persona =
+      audience === 2
+        ? '写一句给女生看的励志鸡汤'
+        : '以温柔女生的口吻写一句鼓励正在打拼的男生的鸡汤';
+    const prompt =
+      `${persona}，主题围绕「${theme}」。要求：有画面感或比喻，别用烂大街的套话。` +
+      (recent.length
+        ? `\n下面是最近已经用过的句子，禁止重复、禁止写得雷同：\n${recent.map((q) => q.text).join('\n')}`
+        : '');
     const raw = await this.callModel([
       {
         role: 'system',
-        content: '你是文案作者。只输出一句话本身，25字以内，不要引号、不要任何解释和前后缀。',
+        content: '你是金句文案作者。只输出一句话本身，25字以内，不要引号、不要任何解释和前后缀。',
       },
       { role: 'user', content: prompt },
-    ], false);
+    ], false, 1.3);
     const text = raw.replace(/^["'“”‘’\s]+|["'“”‘’\s]+$/g, '').split('\n')[0].slice(0, 60);
     if (!text) return;
     await this.prisma.dailyQuote.upsert({
@@ -338,7 +355,7 @@ export class NewsService implements OnModuleInit {
     }
   }
 
-  private async callModel(messages: { role: string; content: string }[], json = true): Promise<string> {
+  private async callModel(messages: { role: string; content: string }[], json = true, temperature?: number): Promise<string> {
     const base = (process.env.AI_BASE_URL ?? 'https://api.deepseek.com/v1').replace(/\/$/, '');
     const model = process.env.AI_MODEL ?? 'deepseek-chat';
     const ctrl = new AbortController();
@@ -354,6 +371,7 @@ export class NewsService implements OnModuleInit {
           model,
           messages,
           max_tokens: 2000,
+          ...(temperature != null ? { temperature } : {}),
           ...(json ? { response_format: { type: 'json_object' } } : {}),
         }),
         signal: ctrl.signal,

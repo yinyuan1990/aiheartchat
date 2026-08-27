@@ -1084,6 +1084,9 @@ struct ZoomableImage: View {
 struct CreateGroupView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
+    @State private var avatar = ""
+    @State private var avatarItem: PhotosPickerItem?
+    @State private var uploading = false
     @State private var people: [Person] = []
     @State private var selected: Set<String> = []
     @State private var created: ChatTarget?
@@ -1091,13 +1094,36 @@ struct CreateGroupView: View {
     var body: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 10) {
-                TextField("", text: $name, prompt: Text("群名称").foregroundStyle(Theme.textDim))
-                    .foregroundStyle(Theme.text)
-                    .padding(14)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(Theme.bg2))
-                Text("邀请成员（可选）").font(.system(size: 13)).foregroundStyle(Theme.textSub)
+                HStack(spacing: 12) {
+                    // 群头像（可选，不设置默认用群主头像）
+                    PhotosPicker(selection: $avatarItem, matching: .images) {
+                        if avatar.isEmpty {
+                            Circle().fill(Theme.bg3)
+                                .frame(width: 56, height: 56)
+                                .overlay(Text(uploading ? "…" : "头像").font(.system(size: 11)).foregroundStyle(Theme.textDim))
+                        } else {
+                            AvatarView(url: avatar, size: 56)
+                        }
+                    }
+                    TextField("", text: $name, prompt: Text("群名称").foregroundStyle(Theme.textDim))
+                        .foregroundStyle(Theme.text)
+                        .padding(14)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(Theme.bg2))
+                }
+                Text("群头像可选，不设置默认显示群主头像 · 邀请成员（可选）").font(.system(size: 12)).foregroundStyle(Theme.textSub)
             }
             .padding(16)
+            .onChange(of: avatarItem) { _, item in
+                guard let item else { return }
+                uploading = true
+                Task {
+                    if let data = try? await item.loadTransferable(type: Data.self),
+                       let url = try? await Api.upload("image", data: data, filename: "g.jpg", mime: "image/jpeg") {
+                        avatar = url
+                    }
+                    uploading = false
+                }
+            }
 
             ScrollView {
                 LazyVStack(spacing: 0) {
@@ -1126,6 +1152,7 @@ struct CreateGroupView: View {
                     if let g: GroupCreated = try? await Api.request("/im/group", method: "POST", body: [
                         "name": name.trimmingCharacters(in: .whitespaces),
                         "memberIds": Array(selected),
+                        "avatar": avatar,
                     ]) {
                         created = ChatTarget(convId: g.conversationId, convType: 2, targetId: g.id, title: "\(g.name ?? "")（群）")
                     }
@@ -1380,20 +1407,51 @@ struct GroupInfoView: View {
     struct GroupInfoData: Codable {
         var id: String = ""
         var name: String? = ""
+        var avatar: String? = ""
         var notice: String? = ""
         var members: [GroupMemberItem]? = []
     }
 
     @State private var info: GroupInfoData?
     @State private var showShare = false
+    @State private var avatarItem: PhotosPickerItem?
 
     var body: some View {
         VStack(spacing: 0) {
             if let g = info {
-                Text("共 \(g.members?.count ?? 0) 人")
-                    .font(.system(size: 13)).foregroundStyle(Theme.textSub)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
+                let myRoleForEdit = g.members?.first { $0.id == state.user?.id }?.role ?? "member"
+                let canEdit = myRoleForEdit == "owner" || myRoleForEdit == "admin"
+                // 群头像（群主/管理员点击可换）+ 人数
+                HStack(spacing: 12) {
+                    if canEdit {
+                        PhotosPicker(selection: $avatarItem, matching: .images) {
+                            AvatarView(url: g.avatar, size: 56)
+                        }
+                    } else {
+                        AvatarView(url: g.avatar, size: 56)
+                    }
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("共 \(g.members?.count ?? 0) 人")
+                            .font(.system(size: 13)).foregroundStyle(Theme.textSub)
+                        if canEdit {
+                            Text("点头像可修改").font(.system(size: 11)).foregroundStyle(Theme.textDim)
+                        }
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 6)
+                .onChange(of: avatarItem) { _, item in
+                    guard let item else { return }
+                    Task {
+                        struct Empty: Codable { var id: String? }
+                        if let data = try? await item.loadTransferable(type: Data.self),
+                           let url = try? await Api.upload("image", data: data, filename: "g.jpg", mime: "image/jpeg") {
+                            let _: Empty? = try? await Api.request("/im/group/\(groupId)", method: "PUT", body: ["avatar": url])
+                            info = try? await Api.request("/im/group/\(groupId)")
+                        }
+                    }
+                }
                 ScrollView {
                     let cols = Array(repeating: GridItem(.flexible(), spacing: 12), count: 5)
                     LazyVGrid(columns: cols, spacing: 12) {
@@ -1489,61 +1547,71 @@ struct GroupShareSheet: View {
                     .buttonStyle(.plain)
 
                     if s.canEdit {
-                        HStack(spacing: 10) {
+                        // 模式切换 + 行内小保存按钮
+                        HStack(spacing: 8) {
                             ForEach([("none", "无密码"), ("pwd", "有密码")], id: \.0) { k, label in
                                 Button {
                                     mode = k
                                 } label: {
                                     Text(label)
-                                        .font(.system(size: 13))
+                                        .font(.system(size: 12))
                                         .foregroundStyle(mode == k ? .white : Theme.textSub)
-                                        .padding(.horizontal, 16).padding(.vertical, 6)
+                                        .padding(.horizontal, 14).padding(.vertical, 5)
                                         .background(Capsule().fill(mode == k ? Theme.accent : Theme.bg3))
                                 }
                                 .buttonStyle(.plain)
                             }
+                            Spacer()
+                            Button {
+                                guard !saving else { return }
+                                if mode == "pwd", pwd.trimmingCharacters(in: .whitespaces).isEmpty {
+                                    toastMsg = "请输入密码"
+                                    return
+                                }
+                                saving = true
+                                Task {
+                                    let s2: ShareInfo? = try? await Api.request(
+                                        "/im/group/\(groupId)/share", method: "POST",
+                                        body: ["password": mode == "pwd" ? pwd.trimmingCharacters(in: .whitespaces) : ""]
+                                    )
+                                    if let s2 { share = s2; toastMsg = "已保存" } else { toastMsg = "保存失败" }
+                                    saving = false
+                                }
+                            } label: {
+                                Text(saving ? "保存中…" : "保存")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 16).padding(.vertical, 5)
+                                    .background(Capsule().fill(Theme.accent))
+                            }
+                            .buttonStyle(.plain)
                         }
+                        .padding(.horizontal, 24)
                         if mode == "pwd" {
                             TextField("", text: $pwd, prompt: Text("设置入群密码").foregroundStyle(Theme.textDim))
+                                .font(.system(size: 14))
                                 .foregroundStyle(Theme.text)
-                                .padding(12)
+                                .padding(.horizontal, 12).padding(.vertical, 10)
                                 .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bg3))
                                 .padding(.horizontal, 24)
                                 .onChange(of: pwd) { _, v in if v.count > 20 { pwd = String(v.prefix(20)) } }
                         }
-                        AccentButton(title: saving ? "保存中…" : "保存设置") {
-                            guard !saving else { return }
-                            if mode == "pwd", pwd.trimmingCharacters(in: .whitespaces).isEmpty {
-                                toastMsg = "请输入密码"
-                                return
-                            }
-                            saving = true
-                            Task {
-                                let s2: ShareInfo? = try? await Api.request(
-                                    "/im/group/\(groupId)/share", method: "POST",
-                                    body: ["password": mode == "pwd" ? pwd.trimmingCharacters(in: .whitespaces) : ""]
-                                )
-                                if let s2 { share = s2; toastMsg = "已保存" } else { toastMsg = "保存失败" }
-                                saving = false
-                            }
-                        }
-                        .padding(.horizontal, 24)
                     }
 
-                    if let img = makeQRImage(groupQrContent(code: s.code), size: 640) {
-                        ShareLink(
-                            item: Image(uiImage: img),
-                            preview: SharePreview("群邀请码", image: Image(uiImage: img))
-                        ) {
-                            Text("分享二维码")
-                                .font(.system(size: 14, weight: .medium)).foregroundStyle(.white)
-                                .frame(width: 150, height: 40)
-                                .background(Capsule().fill(Theme.accent))
-                        }
-                    }
+                    Divider().overlay(Theme.bg3).padding(.horizontal, 24).padding(.top, 4)
 
-                    Button("关闭") { dismiss() }
-                        .font(.system(size: 14)).foregroundStyle(Theme.textSub)
+                    HStack(spacing: 30) {
+                        if let img = makeQRImage(groupQrContent(code: s.code), size: 640) {
+                            ShareLink(
+                                item: Image(uiImage: img),
+                                preview: SharePreview("群邀请码", image: Image(uiImage: img))
+                            ) {
+                                Text("分享二维码").font(.system(size: 13)).foregroundStyle(Theme.accent)
+                            }
+                        }
+                        Button("关闭") { dismiss() }
+                            .font(.system(size: 13)).foregroundStyle(Theme.textDim)
+                    }
                 } else {
                     Text("加载中…").font(.system(size: 13)).foregroundStyle(Theme.textSub).padding(40)
                 }
@@ -1561,13 +1629,23 @@ struct GroupShareSheet: View {
     }
 }
 
-/// 加入群聊：输入邀请码或扫码，有密码的群需输入密码；initialCode 由「扫一扫」预填并自动查询
+/// 加入群聊：群列表可直接加入，也可输邀请码/扫码；有密码的群需输入密码
 struct JoinGroupView: View {
     var initialCode: String? = nil
 
     struct CodeInfo: Codable {
         var groupId: String = ""
         var name: String? = ""
+        var memberCount: Int? = 0
+        var hasPassword: Bool = false
+        var isMember: Bool = false
+        var conversationId: String? = nil
+    }
+
+    struct GroupListItem: Codable, Identifiable {
+        var id: String = ""
+        var name: String? = ""
+        var avatar: String? = ""
         var memberCount: Int? = 0
         var hasPassword: Bool = false
         var isMember: Bool = false
@@ -1581,6 +1659,10 @@ struct JoinGroupView: View {
     @State private var showScan = false
     @State private var opened: ChatTarget?
     @State private var toastMsg: String?
+    @State private var groups: [GroupListItem] = []
+    @State private var pwdTarget: GroupListItem?
+    @State private var showPwdAlert = false
+    @State private var pwdInput = ""
 
     var body: some View {
         VStack(spacing: 14) {
@@ -1646,7 +1728,7 @@ struct JoinGroupView: View {
                         busy = false
                     }
                 }
-            } else {
+            } else if !code.isEmpty {
                 AccentButton(title: busy ? "查询中…" : "查找群聊") {
                     guard !busy else { return }
                     let c = code.trimmingCharacters(in: .whitespaces)
@@ -1654,7 +1736,50 @@ struct JoinGroupView: View {
                     Task { await check(c) }
                 }
             }
-            Spacer()
+
+            // 群列表：直接浏览加入
+            Text("群列表")
+                .font(.system(size: 13)).foregroundStyle(Theme.textSub)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 4)
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    if groups.isEmpty {
+                        Text("暂无群聊").font(.system(size: 13)).foregroundStyle(Theme.textDim).padding(.top, 20)
+                    }
+                    ForEach(groups) { g in
+                        HStack(spacing: 12) {
+                            AvatarView(url: g.avatar, size: 44)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(g.name ?? "").font(.system(size: 15)).foregroundStyle(Theme.text).lineLimit(1)
+                                Text("共 \(g.memberCount ?? 0) 人\(g.hasPassword ? " · 需要密码" : "")")
+                                    .font(.system(size: 12)).foregroundStyle(Theme.textSub)
+                            }
+                            Spacer()
+                            Button {
+                                if g.isMember, let convId = g.conversationId {
+                                    opened = ChatTarget(convId: convId, convType: 2, targetId: g.id, title: "\(g.name ?? "")（群）")
+                                } else if g.hasPassword {
+                                    pwdInput = ""
+                                    pwdTarget = g
+                                    showPwdAlert = true
+                                } else {
+                                    Task { await joinById(g, password: "") }
+                                }
+                            } label: {
+                                Text(g.isMember ? "进入" : "加入")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(g.isMember ? Theme.textSub : .white)
+                                    .padding(.horizontal, 16).padding(.vertical, 6)
+                                    .background(Capsule().fill(g.isMember ? Theme.bg3 : Theme.accent))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.vertical, 9)
+                        Divider().overlay(Theme.bg3.opacity(0.5))
+                    }
+                }
+            }
         }
         .padding(16)
         .fullBg()
@@ -1662,11 +1787,23 @@ struct JoinGroupView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Theme.bg, for: .navigationBar)
         .toast($toastMsg)
+        .alert(pwdTarget?.name ?? "入群密码", isPresented: $showPwdAlert) {
+            TextField("输入入群密码", text: $pwdInput)
+            Button("取消", role: .cancel) {}
+            Button("加入") {
+                if let g = pwdTarget {
+                    Task { await joinById(g, password: pwdInput) }
+                }
+            }
+        } message: {
+            Text("该群需要密码才能加入")
+        }
         .task {
             if let c = initialCode, !c.isEmpty {
                 code = c
                 await check(c)
             }
+            groups = (try? await Api.request("/im/group/list")) ?? []
         }
         .fullScreenCover(isPresented: $showScan) {
             QrScanView { text in
@@ -1692,6 +1829,24 @@ struct JoinGroupView: View {
             pwd = ""
         } catch {
             toastMsg = (error as? ApiError)?.msg ?? "邀请码无效"
+        }
+        busy = false
+    }
+
+    /** 按群 id 加入（群列表入口），密码可空 */
+    private func joinById(_ g: GroupListItem, password: String) async {
+        guard !busy else { return }
+        busy = true
+        struct Joined: Codable { var id: String = ""; var name: String? = ""; var conversationId: String? = nil }
+        do {
+            let j: Joined = try await Api.request("/im/group/\(g.id)/join", method: "POST", body: [
+                "password": password.trimmingCharacters(in: .whitespaces),
+            ])
+            if let convId = j.conversationId {
+                opened = ChatTarget(convId: convId, convType: 2, targetId: j.id, title: "\(j.name ?? "")（群）")
+            }
+        } catch {
+            toastMsg = (error as? ApiError)?.msg ?? "加入失败"
         }
         busy = false
     }

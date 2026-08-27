@@ -86,27 +86,34 @@ function GroupShareView({ groupId, onBack }: { groupId: string; onBack: () => vo
 
       {share.canEdit && (
         <div style={{ marginTop: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 10 }}>
+          {/* 模式切换 + 行内小保存按钮 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {([['none', '无密码'], ['pwd', '有密码']] as const).map(([k, label]) => (
               <span
                 key={k}
                 onClick={() => setMode(k)}
                 style={{
-                  padding: '6px 16px', borderRadius: 14, fontSize: 13, cursor: 'pointer',
+                  padding: '5px 14px', borderRadius: 13, fontSize: 12, cursor: 'pointer',
                   background: mode === k ? 'var(--accent-grad)' : 'var(--bg-input)',
                   color: mode === k ? '#fff' : 'var(--text-2)',
                 }}
               >{label}</span>
             ))}
+            <span className="grow" />
+            <span
+              onClick={() => !saving && save()}
+              style={{ padding: '5px 16px', borderRadius: 13, fontSize: 12, cursor: 'pointer', background: 'var(--accent-grad)', color: '#fff' }}
+            >{saving ? '保存中…' : '保存'}</span>
           </div>
           {mode === 'pwd' && (
-            <input className="input" placeholder="设置入群密码" value={pwd} maxLength={20} style={{ marginTop: 10 }} onChange={(e) => setPwd(e.target.value)} />
+            <input className="input" placeholder="设置入群密码" value={pwd} maxLength={20} style={{ marginTop: 10, marginBottom: 0 }} onChange={(e) => setPwd(e.target.value)} />
           )}
-          <button className="btn mt12" disabled={saving} onClick={save}>{saving ? '保存中…' : '保存设置'}</button>
         </div>
       )}
 
-      <button className="btn btn-ghost mt12" onClick={onBack}>返回</button>
+      <div style={{ borderTop: '1px solid var(--line)', marginTop: 16, paddingTop: 10 }}>
+        <span className="small" style={{ cursor: 'pointer' }} onClick={onBack}>‹ 返回群信息</span>
+      </div>
     </div>
   );
 }
@@ -119,11 +126,25 @@ function GroupInfoSheet({ groupId, onClose, onExit }: { groupId: string; onClose
   const [showShare, setShowShare] = useState(false);
   const [people, setPeople] = useState<any[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const avatarFileRef = useRef<HTMLInputElement>(null);
 
   const load = () => api<any>(`/im/group/${groupId}`).then(setInfo).catch(() => {});
   useEffect(() => { load(); }, [groupId]);
 
   const myRole: string = info?.members?.find((m: any) => m.id === me?.id)?.role ?? 'member';
+  const canEditInfo = myRole === 'owner' || myRole === 'admin';
+
+  /** 群主/管理员换群头像：选图 → 上传 → 更新群资料 */
+  const changeAvatar = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const url = await uploadFile('image', file);
+      await api(`/im/group/${groupId}`, { method: 'PUT', body: { avatar: url } });
+      load();
+    } catch (e: any) {
+      alert(e.message || '修改失败');
+    }
+  };
 
   const openInvite = async () => {
     const list = await api<any[]>('/guide/discover').catch(() => []);
@@ -178,6 +199,18 @@ function GroupInfoSheet({ groupId, onClose, onExit }: { groupId: string; onClose
             onClick={() => setShowShare(true)}
           >分享</span>
         )}
+        {/* 群头像（群主/管理员点击可换） */}
+        <div style={{ textAlign: 'center', marginBottom: 8 }}>
+          <div
+            className="avatar"
+            onClick={() => canEditInfo && avatarFileRef.current?.click()}
+            style={{ width: 56, height: 56, margin: '0 auto', cursor: canEditInfo ? 'pointer' : 'default' }}
+          >
+            {info.avatar && <img src={info.avatar} alt="" />}
+          </div>
+          {canEditInfo && <div className="small" style={{ marginTop: 4, fontSize: 11 }}>点头像可修改</div>}
+          <input ref={avatarFileRef} type="file" accept="image/*" hidden onChange={(e) => changeAvatar(e.target.files?.[0])} />
+        </div>
         <div style={{ textAlign: 'center', fontWeight: 600, marginBottom: 4 }}>{info.name}</div>
         <div className="small" style={{ textAlign: 'center', marginBottom: 14 }}>共 {info.members?.length ?? 0} 人</div>
 

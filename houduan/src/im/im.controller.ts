@@ -50,10 +50,16 @@ export class ImController {
 
   @Post('group')
   createGroup(@CurrentUser() userId: bigint, @Body() dto: CreateGroupDto) {
-    return this.groups.createGroup(userId, dto.name, (dto.memberIds ?? []).map(BigInt));
+    return this.groups.createGroup(userId, dto.name, (dto.memberIds ?? []).map(BigInt), dto.avatar ?? '');
   }
 
   // ---- 群分享/入群（静态路径注意声明在 group/:id 相关通配前） ----
+
+  /** 群广场：可加入的群列表 */
+  @Get('group/list')
+  listGroups(@CurrentUser() userId: bigint) {
+    return this.groups.listGroups(userId);
+  }
 
   /** 邀请码预检：群名/人数/是否需要密码 */
   @Get('group/code/:code')
@@ -95,8 +101,8 @@ export class ImController {
   }
 
   @Post('group/:id/join')
-  join(@CurrentUser() userId: bigint, @Param('id') id: string) {
-    return this.groups.join(userId, BigInt(id));
+  join(@CurrentUser() userId: bigint, @Param('id') id: string, @Body() dto: { password?: string }) {
+    return this.groups.join(userId, BigInt(id), dto?.password);
   }
 
   @Post('group/:id/leave')

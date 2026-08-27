@@ -8,6 +8,10 @@ export class CreateGroupDto {
   @IsOptional()
   @IsArray()
   memberIds?: string[];
+
+  @IsOptional()
+  @IsString()
+  avatar?: string;
 }
 
 export class MemberIdsDto {

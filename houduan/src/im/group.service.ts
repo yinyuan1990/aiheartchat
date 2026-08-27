@@ -9,8 +9,8 @@ export class GroupService {
     private readonly crypto: CryptoService,
   ) {}
 
-  async createGroup(ownerId: bigint, name: string, memberIds: bigint[] = []) {
-    const group = await this.prisma.chatGroup.create({ data: { name, ownerId } });
+  async createGroup(ownerId: bigint, name: string, memberIds: bigint[] = [], avatar = '') {
+    const group = await this.prisma.chatGroup.create({ data: { name, ownerId, avatar } });
     await this.prisma.conversation.create({
       data: {
         type: 2,
@@ -44,7 +44,8 @@ export class GroupService {
     return {
       id: group.id,
       name: group.name,
-      avatar: group.avatar,
+      // 没设置群头像时默认显示群主头像
+      avatar: group.avatar || (userMap.get(group.ownerId.toString())?.avatar ?? ''),
       notice: group.notice,
       ownerId: group.ownerId,
       memberLimit: group.memberLimit,
@@ -72,12 +73,61 @@ export class GroupService {
     return this.getGroup(operatorId, groupId);
   }
 
-  async join(userId: bigint, groupId: bigint) {
+  async join(userId: bigint, groupId: bigint, password?: string) {
     const group = await this.mustGroup(groupId);
-    const count = await this.prisma.groupMember.count({ where: { groupId } });
-    if (count >= group.memberLimit) throw new BadRequestException('群成员已达上限');
-    await this.prisma.groupMember.createMany({ data: [{ groupId, userId }], skipDuplicates: true });
+    const already = await this.prisma.groupMember.findUnique({
+      where: { groupId_userId: { groupId, userId } },
+    });
+    if (!already) {
+      if (group.joinPassword !== '' && (password ?? '').trim() !== group.joinPassword) {
+        throw new BadRequestException('入群密码错误');
+      }
+      const count = await this.prisma.groupMember.count({ where: { groupId } });
+      if (count >= group.memberLimit) throw new BadRequestException('群成员已达上限');
+      await this.prisma.groupMember.createMany({ data: [{ groupId, userId }], skipDuplicates: true });
+    }
     return this.getGroup(userId, groupId);
+  }
+
+  /** 群广场：可加入的群列表（含是否需要密码、是否已加入） */
+  async listGroups(userId: bigint) {
+    const groups = await this.prisma.chatGroup.findMany({
+      where: { status: 0 },
+      orderBy: { id: 'desc' },
+      take: 100,
+    });
+    if (groups.length === 0) return [];
+    const ids = groups.map((g) => g.id);
+    const counts = await this.prisma.groupMember.groupBy({
+      by: ['groupId'],
+      where: { groupId: { in: ids } },
+      _count: { _all: true },
+    });
+    const countMap = new Map(counts.map((c) => [c.groupId.toString(), c._count._all]));
+    const mine = await this.prisma.groupMember.findMany({
+      where: { userId, groupId: { in: ids } },
+      select: { groupId: true },
+    });
+    const mineSet = new Set(mine.map((m) => m.groupId.toString()));
+    const owners = await this.prisma.user.findMany({
+      where: { id: { in: groups.map((g) => g.ownerId) } },
+      select: { id: true, avatar: true },
+    });
+    const ownerAvatar = new Map(owners.map((o) => [o.id.toString(), o.avatar]));
+    const convs = await this.prisma.conversation.findMany({
+      where: { groupId: { in: ids } },
+      select: { id: true, groupId: true },
+    });
+    const convMap = new Map(convs.map((c) => [c.groupId!.toString(), c.id]));
+    return groups.map((g) => ({
+      id: g.id,
+      name: g.name,
+      avatar: g.avatar || (ownerAvatar.get(g.ownerId.toString()) ?? ''),
+      memberCount: countMap.get(g.id.toString()) ?? 0,
+      hasPassword: g.joinPassword !== '',
+      isMember: mineSet.has(g.id.toString()),
+      conversationId: mineSet.has(g.id.toString()) ? convMap.get(g.id.toString()) : undefined,
+    }));
   }
 
   // ---------- 群分享：邀请码 + 可选入群密码 ----------
@@ -120,10 +170,11 @@ export class GroupService {
       where: { groupId_userId: { groupId: group.id, userId } },
     });
     const conv = me ? await this.prisma.conversation.findUnique({ where: { groupId: group.id } }) : null;
+    const owner = await this.prisma.user.findUnique({ where: { id: group.ownerId }, select: { avatar: true } });
     return {
       groupId: group.id,
       name: group.name,
-      avatar: group.avatar,
+      avatar: group.avatar || (owner?.avatar ?? ''),
       memberCount,
       hasPassword: group.joinPassword !== '',
       isMember: !!me,

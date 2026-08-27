@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../api';
+import { api, uploadFile } from '../api';
 import { wsManager } from '../ws';
 
 interface ConversationItem {
@@ -49,12 +49,26 @@ function timeText(iso: string): string {
 /** 建群弹层 */
 function CreateGroupSheet({ onClose, onCreated }: { onClose: () => void; onCreated: (convId: string, name: string, groupId: string) => void }) {
   const [name, setName] = useState('');
+  const [avatar, setAvatar] = useState('');
+  const [uploading, setUploading] = useState(false);
   const [people, setPeople] = useState<any[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     api<any[]>('/guide/discover').then(setPeople).catch(() => {});
   }, []);
+
+  const pickAvatar = async (file: File | undefined) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      setAvatar(await uploadFile('image', file));
+    } catch (e: any) {
+      alert(e.message || '上传失败');
+    }
+    setUploading(false);
+  };
 
   const create = async () => {
     if (!name.trim()) {
@@ -62,7 +76,7 @@ function CreateGroupSheet({ onClose, onCreated }: { onClose: () => void; onCreat
       return;
     }
     try {
-      const g = await api<any>('/im/group', { method: 'POST', body: { name: name.trim(), memberIds: [...selected] } });
+      const g = await api<any>('/im/group', { method: 'POST', body: { name: name.trim(), memberIds: [...selected], avatar } });
       onCreated(g.conversationId, g.name, g.id);
     } catch (e: any) {
       alert(e.message);
@@ -73,8 +87,19 @@ function CreateGroupSheet({ onClose, onCreated }: { onClose: () => void; onCreat
     <div className="mask bottom" onClick={onClose}>
       <div className="sheet no-scrollbar" onClick={(e) => e.stopPropagation()}>
         <div style={{ textAlign: 'center', marginBottom: 12, fontWeight: 600 }}>创建群聊</div>
-        <input className="input" placeholder="群名称" value={name} maxLength={50} onChange={(e) => setName(e.target.value)} />
-        <div className="muted" style={{ margin: '4px 0 10px' }}>邀请成员（可选）</div>
+        <div className="row" style={{ gap: 12 }}>
+          {/* 群头像（可选，不设置默认用群主头像） */}
+          <div
+            className="avatar"
+            onClick={() => fileRef.current?.click()}
+            style={{ width: 56, height: 56, flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-input)', fontSize: 11, color: 'var(--text-3)' }}
+          >
+            {avatar ? <img src={avatar} alt="" /> : uploading ? '…' : '头像'}
+          </div>
+          <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => pickAvatar(e.target.files?.[0])} />
+          <input className="input grow" style={{ marginBottom: 0 }} placeholder="群名称" value={name} maxLength={50} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div className="muted" style={{ margin: '8px 0 10px' }}>群头像可选，不设置默认显示群主头像 · 邀请成员（可选）</div>
         {people.map((p) => (
           <div key={p.id} className="row" style={{ padding: '8px 0', cursor: 'pointer' }} onClick={() => {
             const next = new Set(selected);
@@ -96,16 +121,40 @@ function CreateGroupSheet({ onClose, onCreated }: { onClose: () => void; onCreat
   );
 }
 
-/** 加入群聊弹层：输邀请码（有密码的群需输密码）；initialCode 由「扫一扫」预填并自动查询 */
+/** 加入群聊弹层：群列表可直接加入，也可输邀请码；有密码的群需输密码；initialCode 由「扫一扫」预填并自动查询 */
 export function JoinGroupSheet({ onClose, onJoined, initialCode }: { onClose: () => void; onJoined: (convId: string, name: string, groupId: string) => void; initialCode?: string }) {
   const [code, setCode] = useState(initialCode ?? '');
   const [info, setInfo] = useState<any>(null);
   const [pwd, setPwd] = useState('');
   const [busy, setBusy] = useState(false);
+  const [groups, setGroups] = useState<any[]>([]);
 
   useEffect(() => {
     if (initialCode) check(initialCode);
+    api<any[]>('/im/group/list').then(setGroups).catch(() => {});
   }, []);
+
+  /** 按群 id 加入（群列表入口），有密码的群先 prompt */
+  const joinById = async (g: any) => {
+    if (g.isMember && g.conversationId) {
+      onJoined(g.conversationId, g.name, g.id);
+      return;
+    }
+    let password = '';
+    if (g.hasPassword) {
+      const input = prompt(`「${g.name}」需要密码才能加入`);
+      if (input == null) return;
+      password = input.trim();
+    }
+    setBusy(true);
+    try {
+      const r = await api<any>(`/im/group/${g.id}/join`, { method: 'POST', body: { password } });
+      onJoined(r.conversationId, r.name, r.id);
+    } catch (e: any) {
+      alert(e.message || '加入失败');
+    }
+    setBusy(false);
+  };
 
   const check = async (raw?: string) => {
     const c = (raw ?? code).trim().toUpperCase();
@@ -150,7 +199,7 @@ export function JoinGroupSheet({ onClose, onJoined, initialCode }: { onClose: ()
           onChange={(e) => { setCode(e.target.value.toUpperCase()); setInfo(null); }}
         />
         {!info ? (
-          <button className="btn mt12" disabled={busy} onClick={() => check()}>{busy ? '查询中…' : '查找群聊'}</button>
+          code.trim() && <button className="btn mt12" disabled={busy} onClick={() => check()}>{busy ? '查询中…' : '查找群聊'}</button>
         ) : (
           <>
             <div className="card" style={{ marginTop: 12, textAlign: 'center' }}>
@@ -166,6 +215,29 @@ export function JoinGroupSheet({ onClose, onJoined, initialCode }: { onClose: ()
             </button>
           </>
         )}
+
+        {/* 群列表：直接浏览加入 */}
+        <div className="small" style={{ margin: '14px 0 4px' }}>群列表</div>
+        {groups.length === 0 && <div className="empty" style={{ padding: 16 }}>暂无群聊</div>}
+        {groups.map((g) => (
+          <div key={g.id} className="row" style={{ padding: '9px 0', borderBottom: '1px solid var(--line)' }}>
+            <div className="avatar" style={{ width: 44, height: 44 }}>
+              {g.avatar && <img src={g.avatar} alt="" />}
+            </div>
+            <div className="grow" style={{ minWidth: 0 }}>
+              <div className="ellipsis" style={{ fontSize: 15 }}>{g.name}</div>
+              <div className="small" style={{ marginTop: 2 }}>共 {g.memberCount} 人{g.hasPassword ? ' · 需要密码' : ''}</div>
+            </div>
+            <span
+              onClick={() => !busy && joinById(g)}
+              style={{
+                padding: '6px 16px', borderRadius: 14, fontSize: 12, cursor: 'pointer', flexShrink: 0,
+                background: g.isMember ? 'var(--bg-input)' : 'var(--accent-grad)',
+                color: g.isMember ? 'var(--text-2)' : '#fff',
+              }}
+            >{g.isMember ? '进入' : '加入'}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
