@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -205,7 +206,19 @@ object CallManager {
                     peerPublished.value = true
                 }
             }
-            "reject", "cancel", "end" -> teardown()
+            "reject", "cancel", "end" -> {
+                // 服务端强制挂断（积分不足/连接中断）会带 reason，Toast 提示用户
+                val reason = data["reason"]?.jsonPrimitive?.contentOrNull
+                if (!reason.isNullOrEmpty()) {
+                    clog("call force-ended by server: $reason")
+                    appContextRef?.let { ctx ->
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            android.widget.Toast.makeText(ctx, reason, android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+                teardown()
+            }
         }
     }
 
