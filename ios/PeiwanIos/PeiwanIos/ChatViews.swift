@@ -105,7 +105,8 @@ struct MessagesView: View {
             WsClient.shared.connect()
             removeListener = WsClient.shared.addListener { frame in
                 let op = frame["op"] as? String
-                if op == "msg" || op == "conv_cleared" { Task { await loadConvs() } }
+                // conv_refresh：入群/退群等成员变动（扫码入群后新群立即出现在列表）
+                if op == "msg" || op == "conv_cleared" || op == "conv_refresh" { Task { await loadConvs() } }
                 if op == "notify" { Task { await loadUnread() } }
             }
         }

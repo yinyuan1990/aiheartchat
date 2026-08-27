@@ -1,13 +1,21 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto.service';
+import { ConnectionRegistry } from './connection.registry';
 
 @Injectable()
 export class GroupService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
+    private readonly registry: ConnectionRegistry,
   ) {}
+
+  /** 群成员变动后通知相关用户刷新会话列表（否则新群要等有人发消息才会出现在列表里） */
+  private notifyConvRefresh(userIds: bigint[]) {
+    if (!userIds.length) return;
+    void this.registry.deliver(userIds, { op: 'conv_refresh' }).catch(() => {});
+  }
 
   async createGroup(ownerId: bigint, name: string, memberIds: bigint[] = [], avatar = '') {
     const group = await this.prisma.chatGroup.create({ data: { name, ownerId, avatar } });
@@ -28,6 +36,7 @@ export class GroupService {
         role: userId === ownerId ? 'owner' : 'member',
       })),
     });
+    this.notifyConvRefresh(uniqueMembers);
     return this.getGroup(ownerId, group.id);
   }
 
@@ -70,6 +79,7 @@ export class GroupService {
       data: valid.map((u) => ({ groupId, userId: u.id })),
       skipDuplicates: true,
     });
+    this.notifyConvRefresh(valid.map((u) => u.id));
     return this.getGroup(operatorId, groupId);
   }
 
@@ -85,6 +95,7 @@ export class GroupService {
       const count = await this.prisma.groupMember.count({ where: { groupId } });
       if (count >= group.memberLimit) throw new BadRequestException('群成员已达上限');
       await this.prisma.groupMember.createMany({ data: [{ groupId, userId }], skipDuplicates: true });
+      this.notifyConvRefresh([userId]);
     }
     return this.getGroup(userId, groupId);
   }
@@ -195,6 +206,7 @@ export class GroupService {
     });
     if (!already && count >= group.memberLimit) throw new BadRequestException('群成员已达上限');
     await this.prisma.groupMember.createMany({ data: [{ groupId: group.id, userId }], skipDuplicates: true });
+    if (!already) this.notifyConvRefresh([userId]);
     return this.getGroup(userId, group.id);
   }
 
@@ -222,6 +234,7 @@ export class GroupService {
     const member = await this.mustMember(groupId, userId);
     if (member.role === 'owner') throw new BadRequestException('群主请先转让或解散群');
     await this.prisma.groupMember.delete({ where: { groupId_userId: { groupId, userId } } });
+    this.notifyConvRefresh([userId]);
     return { ok: true };
   }
 
@@ -231,6 +244,7 @@ export class GroupService {
     const target = await this.mustMember(groupId, targetId);
     if (target.role === 'owner') throw new ForbiddenException('无法移出群主');
     await this.prisma.groupMember.delete({ where: { groupId_userId: { groupId, userId: targetId } } });
+    this.notifyConvRefresh([targetId]);
     return { ok: true };
   }
 
@@ -249,7 +263,9 @@ export class GroupService {
   async dissolve(ownerId: bigint, groupId: bigint) {
     const owner = await this.mustMember(groupId, ownerId);
     if (owner.role !== 'owner') throw new ForbiddenException('仅群主可解散');
+    const members = await this.prisma.groupMember.findMany({ where: { groupId }, select: { userId: true } });
     await this.prisma.chatGroup.update({ where: { id: groupId }, data: { status: 1 } });
+    this.notifyConvRefresh(members.map((m) => m.userId));
     return { ok: true };
   }
 

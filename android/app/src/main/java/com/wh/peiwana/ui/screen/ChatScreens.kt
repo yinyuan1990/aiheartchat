@@ -139,7 +139,8 @@ fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, c
     DisposableEffect(Unit) {
         val remove = WsClient.addListener { frame ->
             when (frame["op"]?.jsonPrimitive?.content) {
-                "msg", "conv_cleared" -> loadConvs()
+                // conv_refresh：入群/退群等成员变动（扫码入群后新群立即出现在列表）
+                "msg", "conv_cleared", "conv_refresh" -> loadConvs()
                 "notify" -> loadUnread()
             }
         }

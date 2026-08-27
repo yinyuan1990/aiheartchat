@@ -224,6 +224,8 @@ export class VoiceRoomService {
       if (count >= group.memberLimit) throw new BadRequestException('群成员已达上限');
       await this.prisma.groupMember.createMany({ data: [{ groupId, userId }], skipDuplicates: true });
       this.serverLog(await this.currentSid(groupId), `扫码免密入群: group=${groupId} user=${userId}`);
+      // 通知新成员刷新会话列表（否则新群要等有人发消息才显示）
+      void this.registry.deliver([userId], { op: 'conv_refresh' }).catch(() => {});
     }
 
     const conv = await this.prisma.conversation.findUnique({ where: { groupId } });
