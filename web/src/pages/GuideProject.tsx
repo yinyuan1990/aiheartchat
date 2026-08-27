@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { openNativeChat } from '../bridge';
 import { api } from '../api';
 import { useApp } from '../store';
 
@@ -26,6 +27,7 @@ export function GuideProjectPage() {
   const greet = async (p: any) => {
     try {
       const r = await api<{ conversationId: string }>(`/im/conversations/open/${p.id}`, { method: 'POST' });
+      if (openNativeChat(r.conversationId, 1, p.id, p.nickname)) return;
       nav(`/chatroom/${r.conversationId}`, { state: { title: p.nickname, convType: 1, targetId: p.id } });
     } catch (e: any) {
       alert(e.message);

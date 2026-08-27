@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { openNativeChat } from '../bridge';
 import { api, fmtPoints } from '../api';
 import { CityPickerSheet } from '../components/CityPicker';
 import { locateCity } from '../cities';
@@ -499,6 +500,7 @@ export function PlazaPage() {
   const greet = async (m: MomentItem) => {
     try {
       const r = await api<{ conversationId: string }>(`/im/conversations/open/${m.user.id}`, { method: 'POST' });
+      if (openNativeChat(r.conversationId, 1, m.user.id, m.user.nickname)) return;
       nav(`/chatroom/${r.conversationId}`, { state: { title: m.user.nickname, convType: 1, targetId: m.user.id } });
     } catch (e: any) {
       alert(e.message);

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { openNativeChat } from '../bridge';
 import { api, fmtPoints } from '../api';
 import { useApp } from '../store';
 
@@ -100,6 +101,7 @@ export function UserHomePage() {
   const openChat = async () => {
     try {
       const r = await api<{ conversationId: string }>(`/im/conversations/open/${id}`, { method: 'POST' });
+      if (openNativeChat(r.conversationId, 1, id!, p?.nickname ?? '')) return;
       nav(`/chatroom/${r.conversationId}`, { state: { title: p?.nickname, convType: 1, targetId: id } });
     } catch (e: any) { showToast(e.message); }
   };

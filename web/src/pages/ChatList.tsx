@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { openNativeChat } from '../bridge';
 import { api, uploadFile } from '../api';
 import { wsManager } from '../ws';
 
@@ -396,7 +397,10 @@ export function ChatListPage() {
                 key={c.id}
                 className="row"
                 style={{ padding: '10px 16px', cursor: 'pointer' }}
-                onClick={() => nav(`/chatroom/${c.id}`, { state: { title, convType: c.type, targetId } })}
+                onClick={() => {
+                  if (openNativeChat(c.id, c.type, targetId ?? '', title ?? '')) return;
+                  nav(`/chatroom/${c.id}`, { state: { title, convType: c.type, targetId } });
+                }}
               >
                 <div className="avatar" style={{ width: 48, height: 48 }}>
                   {avatar && <img src={avatar} alt="" />}
@@ -446,6 +450,7 @@ export function ChatListPage() {
           onClose={() => setShowCreate(false)}
           onCreated={(convId, name, groupId) => {
             setShowCreate(false);
+            if (openNativeChat(convId, 2, groupId, `${name}（群）`)) return;
             nav(`/chatroom/${convId}`, { state: { title: `${name}（群）`, convType: 2, targetId: groupId } });
           }}
         />
@@ -456,6 +461,7 @@ export function ChatListPage() {
           onClose={() => setShowJoin(false)}
           onJoined={(convId, name, groupId) => {
             setShowJoin(false);
+            if (openNativeChat(convId, 2, groupId, `${name}（群）`)) return;
             nav(`/chatroom/${convId}`, { state: { title: `${name}（群）`, convType: 2, targetId: groupId } });
           }}
         />

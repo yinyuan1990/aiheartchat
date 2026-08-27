@@ -8,16 +8,23 @@ import WebKit
  */
 struct HallView: View {
     @State private var hallUrl: URL?
+    @State private var chatTarget: ChatTarget?
 
     var body: some View {
         Group {
             if let hallUrl {
-                HallWebView(url: hallUrl)
+                HallWebView(url: hallUrl) { target in
+                    chatTarget = target
+                }
             } else {
                 EmptyHint(text: "加载中…")
             }
         }
         .fullBg()
+        // H5 里点「打招呼」等经 JS 桥唤起原生聊天页
+        .fullScreenCover(item: $chatTarget) { t in
+            ChatRoomSheet(target: t)
+        }
         .task {
             guard hallUrl == nil else { return }
             struct HallCfg: Codable { var url: String? = "" }
@@ -30,13 +37,18 @@ struct HallView: View {
     }
 }
 
-/// 大厅 WebView 容器：深色底避免加载白闪，支持侧滑返回 H5 内页
+/// 大厅 WebView 容器：深色底避免加载白闪，支持侧滑返回 H5 内页；
+/// 注册 JS 桥（window.webkit.messageHandlers.peiwan），H5 聊天入口唤起原生聊天页
 private struct HallWebView: UIViewRepresentable {
     let url: URL
+    let onOpenChat: (ChatTarget) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(onOpenChat: onOpenChat) }
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
+        config.userContentController.add(context.coordinator, name: "peiwan")
         let web = WKWebView(frame: .zero, configuration: config)
         web.isOpaque = false
         web.backgroundColor = UIColor(Theme.bg)
@@ -47,6 +59,26 @@ private struct HallWebView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {}
+
+    final class Coordinator: NSObject, WKScriptMessageHandler {
+        let onOpenChat: (ChatTarget) -> Void
+        init(onOpenChat: @escaping (ChatTarget) -> Void) { self.onOpenChat = onOpenChat }
+
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard message.name == "peiwan",
+                  let body = message.body as? [String: Any],
+                  body["type"] as? String == "openChat",
+                  let convId = body["convId"] as? String, !convId.isEmpty
+            else { return }
+            let convType = (body["convType"] as? NSNumber)?.intValue ?? Int(body["convType"] as? String ?? "") ?? 1
+            let targetId = body["targetId"] as? String ?? ""
+            let title = body["title"] as? String ?? ""
+            let onOpenChat = onOpenChat
+            DispatchQueue.main.async {
+                onOpenChat(ChatTarget(convId: convId, convType: convType, targetId: targetId, title: title))
+            }
+        }
+    }
 }
 
 /// 同城搭子项目主页

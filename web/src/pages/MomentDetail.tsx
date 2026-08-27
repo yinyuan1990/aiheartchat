@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { openNativeChat } from '../bridge';
 import { api, uploadFile } from '../api';
 import { MomentItem } from './Plaza';
 import { useApp } from '../store';
@@ -53,6 +54,7 @@ export function MomentDetailPage() {
     if (!moment) return;
     try {
       const r = await api<{ conversationId: string }>(`/im/conversations/open/${moment.user.id}`, { method: 'POST' });
+      if (openNativeChat(r.conversationId, 1, moment.user.id, moment.user.nickname)) return;
       nav(`/chatroom/${r.conversationId}`, { state: { title: moment.user.nickname, convType: 1, targetId: moment.user.id } });
     } catch (e: any) {
       showToast(e.message);

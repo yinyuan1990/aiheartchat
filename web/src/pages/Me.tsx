@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import jsQR from 'jsqr';
+import { openNativeChat } from '../bridge';
 import { api, fmtPoints, UserProfile } from '../api';
 import { useApp } from '../store';
 import { JoinGroupSheet } from './ChatList';
@@ -218,6 +219,7 @@ export function MePage() {
           onClose={() => setJoinCode(null)}
           onJoined={(convId, name, groupId) => {
             setJoinCode(null);
+            if (openNativeChat(convId, 2, groupId, `${name}（群）`)) return;
             nav(`/chatroom/${convId}`, { state: { title: `${name}（群）`, convType: 2, targetId: groupId } });
           }}
         />

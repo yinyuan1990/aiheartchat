@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { openNativeChat } from '../bridge';
 import { api } from '../api';
 
 interface PersonItem {
@@ -29,6 +30,7 @@ export function PeoplePage() {
   const greet = async (p: PersonItem) => {
     try {
       const r = await api<{ conversationId: string }>(`/im/conversations/open/${p.id}`, { method: 'POST' });
+      if (openNativeChat(r.conversationId, 1, p.id, p.nickname)) return;
       nav(`/chatroom/${r.conversationId}`, { state: { title: p.nickname, convType: 1, targetId: p.id } });
     } catch (e: any) {
       alert(e.message);

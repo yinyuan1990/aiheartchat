@@ -31,7 +31,11 @@ import kotlinx.serialization.json.jsonPrimitive
  * URL 携带 token 免登录（用 App 的身份），页面内自行导航，其它 tab 保持原生。
  */
 @Composable
-fun HallScreen(modifier: Modifier = Modifier, onOpenProject: (String) -> Unit) {
+fun HallScreen(
+    modifier: Modifier = Modifier,
+    onOpenProject: (String) -> Unit,
+    onOpenChat: (convId: String, convType: Int, targetId: String, title: String) -> Unit = { _, _, _, _ -> },
+) {
     var url by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         val cfg = runCatching {
@@ -57,10 +61,22 @@ fun HallScreen(modifier: Modifier = Modifier, onOpenProject: (String) -> Unit) {
                     // 深色底避免加载白闪
                     setBackgroundColor(0xFF141418.toInt())
                     webViewClient = android.webkit.WebViewClient()
+                    // JS 桥（window.PeiwanNative）：H5 聊天入口唤起原生聊天页
+                    addJavascriptInterface(HallJsBridge(onOpenChat), "PeiwanNative")
                     loadUrl(u)
                 }
             },
         )
+    }
+}
+
+/** 大厅 H5 → 原生 的 JS 桥（JS 侧调用 PeiwanNative.openChat） */
+private class HallJsBridge(private val onOpenChat: (String, Int, String, String) -> Unit) {
+    @android.webkit.JavascriptInterface
+    fun openChat(convId: String, convType: String, targetId: String, title: String) {
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            onOpenChat(convId, convType.toIntOrNull() ?: 1, targetId, title)
+        }
     }
 }
 

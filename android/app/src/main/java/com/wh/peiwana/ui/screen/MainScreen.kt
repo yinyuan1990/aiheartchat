@@ -86,7 +86,12 @@ fun MainScreen(
                 PlazaScreen(onOpenDetail = { onNav("moment/$it") }, onOpenChat = onOpenChatWithUser, onOpenTiktok = { onNav("tiktok") }, onOpenUser = { onNav("u/$it") })
             }
             Pane(active = tab == 1) {
-                HallScreen(onOpenProject = { entry -> if (entry == "guide") onNav("project/guide") })
+                HallScreen(
+                    onOpenProject = { entry -> if (entry == "guide") onNav("project/guide") },
+                    onOpenChat = { convId, convType, targetId, title ->
+                        onNav("chatroom/$convId?convType=$convType&targetId=$targetId&title=${android.net.Uri.encode(title)}")
+                    },
+                )
             }
             Pane(active = tab == 2) {
                 MessagesScreen(
