@@ -1,0 +1,27 @@
+# ---- 通用 ----
+.DS_Store
+*.iml
+.idea/
+node_modules/
+
+# ---- 密钥与环境变量（勿入库：仓库是公开的）----
+.env
+.env.*
+deploy/app/docker-compose.yml
+
+# ---- 构建产物 ----
+dist/
+build/
+deploy/app/www/web/
+deploy/app/www/admin/
+
+# ---- Android ----
+.gradle/
+local.properties
+captures/
+.externalNativeBuild
+.cxx
+
+# ---- iOS ----
+xcuserdata/
+DerivedData/

@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="description" content="心之音 App 官方下载：遇见有趣的人，一对一加密聊天、高清视频通话、动态广场、同城搭子。" />
+<title>心之音 App - 官方下载</title>
+<style>
+  :root {
+    --bg: #0a0a0c;
+    --bg2: #161619;
+    --bg3: #212126;
+    --line: #1f1f24;
+    --text: #ffffff;
+    --text2: #8a8a93;
+    --text3: #4a4a52;
+    --accent: #fe2c55;
+    --accent2: #ff6b81;
+    --grad: linear-gradient(120deg, #fe2c55, #ff6b81);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "PingFang SC", "Microsoft YaHei", -apple-system, sans-serif;
+    overflow-x: hidden;
+  }
+  a { text-decoration: none; color: inherit; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+  /* 顶栏 */
+  header {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(10,10,12,0.85); backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav { display: flex; align-items: center; height: 60px; }
+  .logo {
+    font-size: 20px; font-weight: 800; letter-spacing: 2px;
+    background: var(--grad);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .nav-right { margin-left: auto; display: flex; gap: 22px; font-size: 14px; color: var(--text2); }
+  .nav-right a:hover { color: var(--text); }
+
+  /* Hero */
+  .hero { position: relative; padding: 72px 0 80px; }
+  .hero-glow {
+    position: absolute; width: 560px; height: 560px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(254,44,85,0.16), transparent 65%);
+    top: -140px; right: -120px; pointer-events: none;
+  }
+  .hero-inner { display: flex; align-items: center; gap: 48px; position: relative; }
+  .hero-left { flex: 1; min-width: 0; }
+  .hero h1 { font-size: 46px; line-height: 1.25; font-weight: 800; }
+  .hero h1 .em {
+    background: var(--grad);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .hero .slogan { margin-top: 16px; color: var(--text2); font-size: 16px; line-height: 1.9; }
+  .btns { margin-top: 36px; display: flex; gap: 14px; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    height: 50px; padding: 0 34px; border-radius: 25px; font-size: 15px; font-weight: 600;
+    transition: transform .15s ease, opacity .15s ease;
+  }
+  .btn:hover { transform: translateY(-2px); }
+  .btn-main { background: var(--grad); color: #fff; box-shadow: 0 8px 24px rgba(254,44,85,0.35); }
+  .btn-ghost { border: 1px solid #2a2a30; color: var(--text2); }
+  .btn-ghost:hover { color: var(--text); border-color: #3a3a42; }
+  .hero-note { margin-top: 18px; font-size: 12px; color: var(--text3); }
+
+  /* 手机模型（纯 CSS） */
+  .phone-col { flex-shrink: 0; display: flex; justify-content: center; }
+  .phone {
+    width: 270px; height: 552px; border-radius: 40px; padding: 10px;
+    background: #101014; border: 1px solid #26262c;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.6), 0 0 60px rgba(254,44,85,0.12);
+  }
+  .screen {
+    width: 100%; height: 100%; border-radius: 32px; background: var(--bg);
+    overflow: hidden; display: flex; flex-direction: column; border: 1px solid var(--line);
+  }
+  .s-top { display: flex; gap: 18px; padding: 20px 18px 12px; align-items: baseline; }
+  .s-tab { color: var(--text3); font-size: 14px; }
+  .s-tab.on { color: var(--text); font-size: 16px; font-weight: 700; position: relative; }
+  .s-tab.on::after {
+    content: ""; position: absolute; left: 50%; transform: translateX(-50%);
+    bottom: -6px; width: 18px; height: 3px; border-radius: 2px; background: var(--grad);
+  }
+  .s-subtabs { display: flex; gap: 8px; padding: 10px 18px 4px; }
+  .s-chip { font-size: 10px; color: var(--text2); background: var(--bg2); border-radius: 10px; padding: 3px 10px; white-space: nowrap; }
+  .s-chip.on { color: #fff; background: var(--grad); }
+  .s-grid { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px 12px; }
+  .s-card { border-radius: 12px; position: relative; overflow: hidden; background: var(--bg2); }
+  .s-card::before { content: ""; position: absolute; inset: 0; }
+  .s-card.c1::before { background: linear-gradient(160deg, #3a1220, #1a0a10 70%); }
+  .s-card.c2::before { background: linear-gradient(160deg, #16213a, #0a0e1a 70%); }
+  .s-card.c3::before { background: linear-gradient(160deg, #2a1a3a, #120a1a 70%); }
+  .s-card.c4::before { background: linear-gradient(160deg, #123a2a, #0a1a12 70%); }
+  .s-name {
+    position: absolute; left: 8px; bottom: 8px; font-size: 10px; color: #fff;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .s-dot { width: 5px; height: 5px; border-radius: 50%; background: #0bd07d; }
+  .s-badge {
+    position: absolute; top: 8px; left: 8px; font-size: 8px; color: #fff;
+    background: var(--grad); border-radius: 3px; padding: 1px 5px;
+  }
+  .s-bottom { display: flex; justify-content: space-around; padding: 10px 0 16px; border-top: 1px solid var(--line); }
+  .s-nav { font-size: 9px; color: var(--text3); }
+  .s-nav.on { color: var(--accent); }
+
+  /* 功能区 */
+  section { padding: 64px 0; }
+  .sec-title { text-align: center; font-size: 30px; font-weight: 800; }
+  .sec-sub { text-align: center; color: var(--text2); font-size: 14px; margin-top: 10px; }
+  .features { margin-top: 44px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .feature {
+    background: var(--bg2); border: 1px solid var(--line); border-radius: 16px; padding: 26px 22px;
+    transition: transform .15s ease, border-color .15s ease;
+  }
+  .feature:hover { transform: translateY(-4px); border-color: rgba(254,44,85,0.35); }
+  .f-mark { width: 34px; height: 6px; border-radius: 3px; background: var(--grad); }
+  .feature h3 { margin-top: 16px; font-size: 17px; }
+  .feature p { margin-top: 8px; color: var(--text2); font-size: 13px; line-height: 1.9; }
+
+  /* 三步开始 */
+  .steps { margin-top: 44px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .step { text-align: center; padding: 30px 18px; background: var(--bg2); border-radius: 16px; border: 1px solid var(--line); }
+  .step .num {
+    width: 44px; height: 44px; border-radius: 50%; margin: 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--grad); color: #fff; font-size: 18px; font-weight: 800;
+  }
+  .step h3 { margin-top: 16px; font-size: 16px; }
+  .step p { margin-top: 8px; color: var(--text2); font-size: 13px; line-height: 1.8; }
+
+  /* 底部下载条 */
+  .cta {
+    margin: 20px 0 0; border-radius: 20px; padding: 48px 24px; text-align: center;
+    background: linear-gradient(160deg, rgba(254,44,85,0.16), rgba(254,44,85,0.04));
+    border: 1px solid rgba(254,44,85,0.25);
+  }
+  .cta h2 { font-size: 26px; font-weight: 800; }
+  .cta p { color: var(--text2); font-size: 14px; margin-top: 10px; }
+  .cta .btns { justify-content: center; }
+
+  footer { border-top: 1px solid var(--line); margin-top: 72px; padding: 28px 0 40px; }
+  .foot { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; color: var(--text3); font-size: 12px; }
+  .foot a:hover { color: var(--text2); }
+  .foot .cr { margin-left: auto; }
+
+  @media (max-width: 860px) {
+    .hero { padding: 44px 0 56px; }
+    .hero-inner { flex-direction: column-reverse; gap: 40px; }
+    .hero h1 { font-size: 32px; text-align: center; }
+    .hero .slogan { text-align: center; }
+    .btns { justify-content: center; }
+    .hero-note { text-align: center; }
+    .features, .steps { grid-template-columns: 1fr; }
+    .phone { width: 240px; height: 492px; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div class="wrap nav">
+      <span class="logo">心之音</span>
+      <nav class="nav-right">
+        <a href="#features">功能</a>
+        <a href="#download">下载</a>
+        <a href="/">网页版</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-glow"></div>
+    <div class="wrap hero-inner">
+      <div class="hero-left">
+        <h1>遇见有趣的人<br /><span class="em">聊得来，见得着</span></h1>
+        <p class="slogan">
+          心之音是一款一对一社交 App：在「遇见」里发现同城与新人，
+          在动态广场分享生活，聊得投缘随时发起高清视频通话。
+          消息全程加密，隐私无忧。
+        </p>
+        <div class="btns">
+          <a class="btn btn-main" href="/site/app/peiwan.apk">Android 下载</a>
+          <a class="btn btn-ghost" href="javascript:void(0)" onclick="alert('iOS 版本正在上架审核，敬请期待')">iOS 敬请期待</a>
+          <a class="btn btn-ghost" href="/">打开网页版</a>
+        </div>
+        <p class="hero-note">网页版不支持语音/视频通话，完整体验请下载 App · 一机一号，安装即用无需注册账号密码</p>
+      </div>
+      <div class="phone-col">
+        <div class="phone">
+          <div class="screen">
+            <div class="s-top">
+              <span class="s-tab">动态</span>
+              <span class="s-tab on">遇见</span>
+            </div>
+            <div class="s-subtabs">
+              <span class="s-chip on">所有</span>
+              <span class="s-chip">新人</span>
+              <span class="s-chip">同城</span>
+              <span class="s-chip">亲密度</span>
+            </div>
+            <div class="s-grid">
+              <div class="s-card c1"><span class="s-badge">认证</span><span class="s-name"><span class="s-dot"></span>小柔 · 成都</span></div>
+              <div class="s-card c2"><span class="s-badge">新人</span><span class="s-name"><span class="s-dot"></span>一一 · 重庆</span></div>
+              <div class="s-card c3"><span class="s-name"><span class="s-dot"></span>Momo · 杭州</span></div>
+              <div class="s-card c4"><span class="s-badge">认证</span><span class="s-name"><span class="s-dot"></span>阿禾 · 上海</span></div>
+            </div>
+            <div class="s-bottom">
+              <span class="s-nav on">广场</span>
+              <span class="s-nav">搭子</span>
+              <span class="s-nav">消息</span>
+              <span class="s-nav">我的</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 功能 -->
+  <section id="features">
+    <div class="wrap">
+      <h2 class="sec-title">为「聊得来」而生</h2>
+      <p class="sec-sub">从遇见到畅聊，每一步都简单直接</p>
+      <div class="features">
+        <div class="feature">
+          <div class="f-mark"></div>
+          <h3>遇见</h3>
+          <p>所有 / 新人 / 同城 / 亲密度四个维度发现新朋友，在线状态、认证徽章一目了然，看对眼直接发起视频。</p>
+        </div>
+        <div class="feature">
+          <div class="f-mark"></div>
+          <h3>高清视频通话</h3>
+          <p>一对一低延迟高清视频，按分钟计费明码标价，通话结束互相评价，优质的人自然排在前面。</p>
+        </div>
+        <div class="feature">
+          <div class="f-mark"></div>
+          <h3>动态广场</h3>
+          <p>图文与短视频动态，普通流和全屏视频两种浏览模式；点赞评论都会累积你们的亲密度。</p>
+        </div>
+        <div class="feature">
+          <div class="f-mark"></div>
+          <h3>加密聊天</h3>
+          <p>消息内容 AES-256 加密存储传输，聊天记录可随时双向清空，隐私安全放在第一位。</p>
+        </div>
+        <div class="feature">
+          <div class="f-mark"></div>
+          <h3>同城搭子</h3>
+          <p>实名认证的同城搭子，约单积分托管、完成结算，安全有保障，爽约自动退回。</p>
+        </div>
+        <div class="feature">
+          <div class="f-mark"></div>
+          <h3>积分与礼物</h3>
+          <p>统一积分体系，送花送礼表达心意；贡献榜、亲密度榜，让每一次互动都有迹可循。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 三步开始 -->
+  <section>
+    <div class="wrap">
+      <h2 class="sec-title">三步开始</h2>
+      <p class="sec-sub">不需要手机号，不需要记密码</p>
+      <div class="steps">
+        <div class="step">
+          <div class="num">1</div>
+          <h3>下载安装</h3>
+          <p>一机一号，打开即自动创建账号，卸载重装自动恢复</p>
+        </div>
+        <div class="step">
+          <div class="num">2</div>
+          <h3>完善资料</h3>
+          <p>上传头像和照片墙，写一句签名，让别人认识你</p>
+        </div>
+        <div class="step">
+          <div class="num">3</div>
+          <h3>开始遇见</h3>
+          <p>刷动态、逛遇见，聊得来就视频，同城还能约搭子</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 底部下载 -->
+  <section id="download" style="padding-top: 20px;">
+    <div class="wrap">
+      <div class="cta">
+        <h2>现在下载，开始遇见</h2>
+        <p>Android 直接安装 · iOS 正在上架审核</p>
+        <div class="btns">
+          <a class="btn btn-main" href="/site/app/peiwan.apk">Android 下载</a>
+          <a class="btn btn-ghost" href="/">打开网页版</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap foot">
+      <a href="/agreement/user">用户协议</a>
+      <a href="/agreement/privacy">隐私政策</a>
+      <span>网页版不支持语音视频通话，请下载 App 体验完整功能</span>
+      <span class="cr">© 2026 心之音</span>
+    </div>
+  </footer>
+</body>
+</html>

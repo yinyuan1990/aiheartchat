@@ -1,0 +1,614 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- 平台核心：用户 ----------
+
+model User {
+  id           BigInt   @id @default(autoincrement())
+  /// 一机一号：设备 ID 唯一绑定账号，卸载重装凭此恢复
+  deviceId     String   @unique @map("device_id") @db.VarChar(80)
+  /// BNB 链(BSC)地址，即对外账号
+  address      String   @unique @db.VarChar(50)
+  /// BSC 私钥，服务端主密钥 AES-256-GCM 加密托管
+  encPrivKey   String   @map("enc_priv_key") @db.VarChar(300)
+  /// 6 位数字短号，对外展示与转赠使用
+  shortId      String?  @unique @map("short_id") @db.VarChar(6)
+  nickname     String   @db.VarChar(30)
+  avatar       String   @default("") @db.VarChar(255)
+  /// 1=男 2=女，注册后锁定，全局性别隔离依据
+  gender       Int      @db.TinyInt
+  age          Int      @default(0)
+  cityCode     String   @default("") @map("city_code") @db.VarChar(12)
+  cityName     String   @default("") @map("city_name") @db.VarChar(30)
+  signature    String   @default("") @db.VarChar(200)
+  latitude     Decimal? @db.Decimal(10, 6)
+  longitude    Decimal? @db.Decimal(10, 6)
+  isGuide      Boolean  @default(false) @map("is_guide")
+  /// 女生自定视频通话价（分/分钟），0=使用平台默认价；不得低于平台下限
+  videoPriceFen Int     @default(0) @map("video_price_fen")
+  /// 评分均分缓存（0-100，仅女生），评分越高广场推荐越靠前
+  ratingAvg    Int      @default(0) @map("rating_avg")
+  /// 被评分次数缓存
+  ratingCount  Int      @default(0) @map("rating_count")
+  /// 实名认证姓名（免费方案：身份证校验位本地核验，仅女生可认证）
+  realName     String   @default("") @map("real_name") @db.VarChar(30)
+  /// 身份证号，全局唯一（一证一号）；非空即已认证
+  idCard       String?  @unique @map("id_card") @db.VarChar(18)
+  /// 0=正常 1=封禁
+  status       Int      @default(0) @db.TinyInt
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  wallet       Wallet?
+  albums       UserAlbum[]
+
+  @@index([gender, isGuide, cityCode])
+  @@map("user")
+}
+
+/// 亲密度（有向对：owner 视角对 peer 的分数）。
+/// 记分规则：任何互动（消息/点赞/评论/视频每分钟）发起方 +1、接受方 +0.5；
+/// score 以 x10 整数存储（半分粒度），展示时 /10。
+model Intimacy {
+  id        BigInt   @id @default(autoincrement())
+  userId    BigInt   @map("user_id")
+  peerId    BigInt   @map("peer_id")
+  /// 分数 x10（10 = 1 分）
+  score     Int      @default(0)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, peerId])
+  @@index([userId, score])
+  @@map("intimacy")
+}
+
+model UserAlbum {
+  id        BigInt   @id @default(autoincrement())
+  userId    BigInt   @map("user_id")
+  /// 1=图片 2=视频
+  type      Int      @db.TinyInt
+  url       String   @db.VarChar(255)
+  coverUrl  String   @default("") @map("cover_url") @db.VarChar(255)
+  sort      Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("user_album")
+}
+
+model GuideApply {
+  id        BigInt   @id @default(autoincrement())
+  userId    BigInt   @map("user_id")
+  realName  String   @map("real_name") @db.VarChar(30)
+  idCardNo  String   @map("id_card_no") @db.VarChar(30)
+  intro     String   @db.VarChar(500)
+  /// 0=待审核 1=通过 2=拒绝
+  status    Int      @default(0) @db.TinyInt
+  rejectReason String @default("") @map("reject_reason") @db.VarChar(200)
+  createdAt DateTime @default(now()) @map("created_at")
+  reviewedAt DateTime? @map("reviewed_at")
+
+  @@index([userId])
+  @@index([status])
+  @@map("guide_apply")
+}
+
+// ---------- 平台核心：IM ----------
+
+/// 单聊与群聊统一会话
+model Conversation {
+  id          BigInt   @id @default(autoincrement())
+  /// 1=单聊 2=群聊
+  type        Int      @default(1) @db.TinyInt
+  /// 单聊唯一键：{minUserId}_{maxUserId}；群聊为 g_{groupId}
+  pairKey     String   @unique @map("pair_key") @db.VarChar(50)
+  userAId     BigInt?  @map("user_a_id")
+  userBId     BigInt?  @map("user_b_id")
+  groupId     BigInt?  @unique @map("group_id")
+  /// 会话 AES-256-GCM 密钥（单聊每会话一把、群聊每群一把），经服务端主密钥包裹后存储
+  wrappedKey  String   @map("wrapped_key") @db.VarChar(200)
+  lastMsgAt   DateTime @default(now()) @map("last_msg_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([userAId, lastMsgAt])
+  @@index([userBId, lastMsgAt])
+  @@map("conversation")
+}
+
+model Message {
+  id             BigInt   @id @default(autoincrement())
+  conversationId BigInt   @map("conversation_id")
+  senderId       BigInt   @map("sender_id")
+  /// 单聊为对方 id；群聊消息为 null（送礼消息填写接收成员 id）
+  receiverId     BigInt?  @map("receiver_id")
+  /// text|image|video|gift|call_invite|call_accept|call_reject|call_end|at|system
+  type           String   @db.VarChar(20)
+  /// AES-256-GCM 密文（iv:tag:cipher, base64），不存明文
+  cipherContent  String   @map("cipher_content") @db.Text
+  /// 单聊已读标记（群聊已读靠 group_member.last_read_msg_id）
+  isRead         Boolean  @default(false) @map("is_read")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([conversationId, id])
+  @@index([receiverId, isRead])
+  @@map("message")
+}
+
+model ChatGroup {
+  id          BigInt   @id @default(autoincrement())
+  name        String   @db.VarChar(50)
+  avatar      String   @default("") @db.VarChar(255)
+  notice      String   @default("") @db.VarChar(500)
+  ownerId     BigInt   @map("owner_id")
+  memberLimit Int      @default(500) @map("member_limit")
+  /// 0=正常 1=已解散
+  status      Int      @default(0) @db.TinyInt
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  members GroupMember[]
+
+  @@index([ownerId])
+  @@map("chat_group")
+}
+
+model GroupMember {
+  id            BigInt   @id @default(autoincrement())
+  groupId       BigInt   @map("group_id")
+  userId        BigInt   @map("user_id")
+  /// owner|admin|member
+  role          String   @default("member") @db.VarChar(10)
+  lastReadMsgId BigInt   @default(0) @map("last_read_msg_id")
+  joinedAt      DateTime @default(now()) @map("joined_at")
+
+  group ChatGroup @relation(fields: [groupId], references: [id])
+
+  @@unique([groupId, userId])
+  @@index([userId])
+  @@map("group_member")
+}
+
+// ---------- 平台核心：音视频通话 ----------
+
+model CallRecord {
+  id         BigInt    @id @default(autoincrement())
+  callId     String    @unique @map("call_id") @db.VarChar(40)
+  callerId   BigInt    @map("caller_id")
+  calleeId   BigInt    @map("callee_id")
+  /// 1=语音 2=视频
+  type       Int       @db.TinyInt
+  /// 0=呼叫中 1=进行中 2=已结束 3=未接 4=拒绝 5=取消
+  status     Int       @default(0) @db.TinyInt
+  startedAt  DateTime? @map("started_at")
+  endedAt    DateTime? @map("ended_at")
+  durationSec Int      @default(0) @map("duration_sec")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([callerId])
+  @@index([calleeId])
+  @@map("call_record")
+}
+
+/// 客户端通话日志上报（排查视频/语音概率性问题，双端各自分批上报）
+model CallClientLog {
+  id        BigInt   @id @default(autoincrement())
+  callId    String   @map("call_id") @db.VarChar(40)
+  uid       BigInt
+  /// android / ios / web
+  platform  String   @db.VarChar(10)
+  /// 批量日志文本，每行前带客户端时间戳
+  content   String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([callId])
+  @@map("call_client_log")
+}
+
+/// 视频通话结束后男方对女方的评分：5 个维度各 0-100 分，平均分为最终得分
+model CallRating {
+  id        BigInt   @id @default(autoincrement())
+  /// 一次通话只能评一次
+  callId    String   @unique @map("call_id") @db.VarChar(40)
+  maleId    BigInt   @map("male_id")
+  femaleId  BigInt   @map("female_id")
+  /// 与照片相符
+  photo     Int      @default(0)
+  /// 听话程度
+  obedience Int      @default(0)
+  /// 腿长
+  legs      Int      @default(0)
+  /// 胸大
+  chest     Int      @default(0)
+  /// 肤白
+  skin      Int      @default(0)
+  /// 五项平均分（0-100）
+  avg       Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([femaleId])
+  @@map("call_rating")
+}
+
+/// 通话参数，后台可调，App 发起通话前拉取
+model CallConfig {
+  id        Int      @id @default(autoincrement())
+  width     Int      @default(640)
+  height    Int      @default(480)
+  fps       Int      @default(25)
+  /// kbps
+  bitrate   Int      @default(800)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("call_config")
+}
+
+/// 计费配置（金额单位：分，100分=1积分=1元）
+/// 平台账本：每笔平台抽成收入落账，用于与女生对账
+model PlatformLedger {
+  id          BigInt   @id @default(autoincrement())
+  /// video_cut=视频通话抽成
+  type        String   @db.VarChar(20)
+  /// 关联单号（如 call_xxx），幂等
+  refKey      String   @unique @default("") @map("ref_key") @db.VarChar(60)
+  maleId      BigInt   @map("male_id")
+  femaleId    BigInt   @map("female_id")
+  /// 计费分钟数
+  minutes     Int      @default(0)
+  /// 男方实付总额（分）
+  grossFen    BigInt   @map("gross_fen")
+  /// 女方分成（分）
+  femaleFen   BigInt   @map("female_fen")
+  /// 平台抽成（分）= gross - female
+  platformFen BigInt   @map("platform_fen")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([femaleId, createdAt])
+  @@index([createdAt])
+  @@map("platform_ledger")
+}
+
+model PriceConfig {
+  id                 Int      @id @default(autoincrement())
+  /// 男→女 每条消息价格（分），默认 10 = 0.1 积分
+  msgPriceFen        Int      @default(10) @map("msg_price_fen")
+  /// 视频流量成本价（分/分钟），按 640x480@800kbps 双向流量实测约 1.2 分/分钟
+  videoBaseFenPerMin Int      @default(2) @map("video_base_fen_per_min")
+  /// 平台倍率 X：平台每分钟抽成 = 成本 x X（赚 X-1 倍流量费）；女生定价下限 = 成本 x X
+  videoPlatformX     Int      @default(2) @map("video_platform_x")
+  /// 女生须实名认证才能发布动态（男生无实名功能，不受约束）
+  momentNeedRealname Boolean  @default(false) @map("moment_need_realname")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@map("price_config")
+}
+
+// ---------- 平台核心：钱包（1积分=1元，无充值） ----------
+
+model Wallet {
+  userId    BigInt   @id @map("user_id")
+  /// 可用积分
+  balance   BigInt   @default(0)
+  /// 约单托管冻结积分
+  frozen    BigInt   @default(0)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("wallet")
+}
+
+model WalletTransaction {
+  id        BigInt   @id @default(autoincrement())
+  userId    BigInt   @map("user_id")
+  /// admin_grant|gift_send|gift_recv|task_freeze|task_settle|task_refund|withdraw|adjust
+  type      String   @db.VarChar(20)
+  /// 正为入账负为支出（对 balance 的变动）
+  amount    BigInt
+  /// 对 frozen 的变动
+  frozenDelta BigInt @default(0) @map("frozen_delta")
+  /// 变动后可用余额快照
+  balanceAfter BigInt @map("balance_after")
+  /// 关联单号（礼物记录/约单/提现等），幂等键
+  refKey    String   @default("") @map("ref_key") @db.VarChar(60)
+  remark    String   @default("") @db.VarChar(200)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([type, refKey, userId])
+  @@index([userId, createdAt])
+  @@map("wallet_transaction")
+}
+
+model WithdrawApply {
+  id        BigInt   @id @default(autoincrement())
+  userId    BigInt   @map("user_id")
+  amount    BigInt
+  account   String   @db.VarChar(100)
+  /// 0=待审核 1=通过 2=拒绝
+  status    Int      @default(0) @db.TinyInt
+  remark    String   @default("") @db.VarChar(200)
+  createdAt DateTime @default(now()) @map("created_at")
+  reviewedAt DateTime? @map("reviewed_at")
+
+  @@index([userId])
+  @@index([status])
+  @@map("withdraw_apply")
+}
+
+// ---------- 平台核心：礼物 ----------
+
+model Gift {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(30)
+  icon      String   @db.VarChar(255)
+  price     BigInt
+  sort      Int      @default(0)
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("gift")
+}
+
+model GiftRecord {
+  id         BigInt   @id @default(autoincrement())
+  giftId     Int      @map("gift_id")
+  giftName   String   @map("gift_name") @db.VarChar(30)
+  price      BigInt
+  senderId   BigInt   @map("sender_id")
+  receiverId BigInt   @map("receiver_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@map("gift_record")
+}
+
+// ---------- 平台核心：广场 ----------
+
+model Moment {
+  id        BigInt   @id @default(autoincrement())
+  userId    BigInt   @map("user_id")
+  /// 冗余性别用于隔离过滤
+  gender    Int      @db.TinyInt
+  content   String   @default("") @db.VarChar(1000)
+  /// 1=图文 2=视频
+  type      Int      @db.TinyInt
+  /// JSON 数组：图片 url 列表（MySQL TEXT 不支持默认值，用 VARCHAR）
+  images    String   @default("[]") @db.VarChar(3000)
+  videoUrl  String   @default("") @map("video_url") @db.VarChar(255)
+  coverUrl  String   @default("") @map("cover_url") @db.VarChar(255)
+  cityCode  String   @default("") @map("city_code") @db.VarChar(12)
+  cityName  String   @default("") @map("city_name") @db.VarChar(30)
+  latitude  Decimal? @db.Decimal(10, 6)
+  longitude Decimal? @db.Decimal(10, 6)
+  likeCount    Int   @default(0) @map("like_count")
+  commentCount Int   @default(0) @map("comment_count")
+  /// 0=正常 1=隐藏
+  status    Int      @default(0) @db.TinyInt
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([gender, status, id])
+  @@index([gender, cityCode, status, id])
+  @@index([userId])
+  @@map("moment")
+}
+
+model MomentLike {
+  id       BigInt   @id @default(autoincrement())
+  momentId BigInt   @map("moment_id")
+  userId   BigInt   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([momentId, userId])
+  @@map("moment_like")
+}
+
+model MomentComment {
+  id       BigInt   @id @default(autoincrement())
+  momentId BigInt   @map("moment_id")
+  userId   BigInt   @map("user_id")
+  content  String   @default("") @db.VarChar(500)
+  /// 评论图片
+  imageUrl String   @default("") @map("image_url") @db.VarChar(255)
+  /// 回复的评论 id
+  replyToId BigInt? @map("reply_to_id")
+  /// 0=正常 1=删除
+  status   Int      @default(0) @db.TinyInt
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([momentId, id])
+  @@map("moment_comment")
+}
+
+// ---------- 业务模块：约单/接单（男发单、女接单） ----------
+
+model TaskOrder {
+  id         BigInt   @id @default(autoincrement())
+  /// 发单人（男）
+  ownerId    BigInt   @map("owner_id")
+  title      String   @db.VarChar(60)
+  detail     String   @default("") @db.VarChar(500)
+  meetAt     DateTime @map("meet_at")
+  cityCode   String   @map("city_code") @db.VarChar(12)
+  cityName   String   @map("city_name") @db.VarChar(30)
+  address    String   @db.VarChar(200)
+  /// 报酬积分，发布时冻结托管
+  reward     BigInt
+  /// 0=待接单 1=进行中 2=已完成 3=已取消 4=仲裁中
+  status     Int      @default(0) @db.TinyInt
+  /// 选定的接单人（女）
+  takerId    BigInt?  @map("taker_id")
+  confirmedAt DateTime? @map("confirmed_at")
+  finishedAt  DateTime? @map("finished_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  applies TaskApply[]
+
+  @@index([status, cityCode, meetAt])
+  @@index([ownerId])
+  @@index([takerId])
+  @@map("task_order")
+}
+
+model TaskApply {
+  id        BigInt   @id @default(autoincrement())
+  orderId   BigInt   @map("order_id")
+  userId    BigInt   @map("user_id")
+  message   String   @default("") @db.VarChar(200)
+  /// 0=已报名 1=被选中 2=未选中 3=已撤回
+  status    Int      @default(0) @db.TinyInt
+  createdAt DateTime @default(now()) @map("created_at")
+
+  order TaskOrder @relation(fields: [orderId], references: [id])
+
+  @@unique([orderId, userId])
+  @@index([userId])
+  @@map("task_apply")
+}
+
+// ---------- 平台核心：模块入口配置（大厅页动态渲染） ----------
+
+/// 项目大厅入口（每个项目一张横幅卡；地陪是项目一，游戏等后台加卡即上线）
+model AppModule {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(30)
+  icon      String   @default("") @db.VarChar(255)
+  /// 项目简介（横幅卡副标题）
+  desc      String   @default("") @db.VarChar(100)
+  /// 封面图 URL，空则用默认渐变
+  cover     String   @default("") @db.VarChar(255)
+  /// native=客户端内置页 h5=内嵌网页
+  type      String   @default("native") @db.VarChar(10)
+  /// native: 路由标识（如 guide）；h5: 完整 url
+  entry     String   @db.VarChar(255)
+  sort      Int      @default(0)
+  enabled   Boolean  @default(true)
+  /// 0=全部可见 1=仅男 2=仅女（游戏类项目用 0）
+  visibleGender Int  @default(0) @map("visible_gender") @db.TinyInt
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("app_module")
+}
+
+// ---------- 其他 ----------
+
+model Region {
+  code     String @id @db.VarChar(12)
+  name     String @db.VarChar(30)
+  /// province|city
+  level    String @db.VarChar(10)
+  parentCode String @default("") @map("parent_code") @db.VarChar(12)
+  latitude  Decimal? @db.Decimal(10, 6)
+  longitude Decimal? @db.Decimal(10, 6)
+
+  @@index([parentCode])
+  @@map("region")
+}
+
+model AdminUser {
+  id           Int      @id @default(autoincrement())
+  username     String   @unique @db.VarChar(30)
+  passwordHash String   @map("password_hash") @db.VarChar(100)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("admin_user")
+}
+
+/// 关注关系
+model Follow {
+  id         BigInt   @id @default(autoincrement())
+  followerId BigInt   @map("follower_id")
+  targetId   BigInt   @map("target_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([followerId, targetId])
+  @@index([targetId])
+  @@map("follow")
+}
+
+/// 通知（评论/接单等分类消息）
+model Notification {
+  id         BigInt   @id @default(autoincrement())
+  userId     BigInt   @map("user_id")
+  /// comment | task
+  kind       String   @db.VarChar(10)
+  title      String   @db.VarChar(60)
+  body       String   @default("") @db.VarChar(200)
+  /// 关联对象：comment=momentId task=orderId
+  refId      BigInt   @default(0) @map("ref_id")
+  fromUserId BigInt?  @map("from_user_id")
+  isRead     Boolean  @default(false) @map("is_read")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([userId, kind, id])
+  @@map("notification")
+}
+
+/// 花边新闻（消息页入口，每小时采集一篇真实报道，采集失败兜底 AI 生成）
+model NewsArticle {
+  id        BigInt   @id @default(autoincrement())
+  /// 受众：1=男方看（共苦励志/鼓励/富豪女生活） 2=女方看（农村女逆袭）
+  audience  Int      @db.TinyInt
+  title     String   @db.VarChar(120)
+  summary   String   @default("") @db.VarChar(300)
+  /// 分类标签：励志/情感/财富/逆袭…
+  tag       String   @default("") @db.VarChar(8)
+  content   String   @db.Text
+  /// 来源站点名（采集的才有）
+  source    String   @default("") @db.VarChar(60)
+  /// 原文链接（采集的才有）
+  sourceUrl String   @default("") @map("source_url") @db.VarChar(500)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([audience, id])
+  @@map("news_article")
+}
+
+/// 每日一句励志（主页「遇见」右边，男女不同：1=男看女生口吻鼓励 2=女看情感励志）
+model DailyQuote {
+  id        BigInt   @id @default(autoincrement())
+  audience  Int      @db.TinyInt
+  /// 日期 YYYY-MM-DD（东八区）
+  day       String   @db.VarChar(10)
+  text      String   @db.VarChar(120)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([audience, day])
+  @@map("daily_quote")
+}
+
+/// AI 助手对话记录（免费问答，按用户隔离）
+model AiMessage {
+  id        BigInt   @id @default(autoincrement())
+  userId    BigInt   @map("user_id")
+  /// user | assistant
+  role      String   @db.VarChar(10)
+  content   String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, id])
+  @@map("ai_message")
+}
+
+model Report {
+  id         BigInt   @id @default(autoincrement())
+  reporterId BigInt   @map("reporter_id")
+  targetUserId BigInt @map("target_user_id")
+  /// user|moment|message
+  targetType String   @map("target_type") @db.VarChar(10)
+  targetId   BigInt   @default(0) @map("target_id")
+  reason     String   @db.VarChar(500)
+  /// 0=待处理 1=已处理
+  status     Int      @default(0) @db.TinyInt
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([status])
+  @@map("report")
+}
