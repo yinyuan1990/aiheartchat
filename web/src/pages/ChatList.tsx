@@ -96,6 +96,77 @@ function CreateGroupSheet({ onClose, onCreated }: { onClose: () => void; onCreat
   );
 }
 
+/** 加入群聊弹层：输邀请码（有密码的群需输密码） */
+function JoinGroupSheet({ onClose, onJoined }: { onClose: () => void; onJoined: (convId: string, name: string, groupId: string) => void }) {
+  const [code, setCode] = useState('');
+  const [info, setInfo] = useState<any>(null);
+  const [pwd, setPwd] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const check = async () => {
+    const c = code.trim().toUpperCase();
+    if (c.length < 6) { alert('请输入完整邀请码'); return; }
+    setBusy(true);
+    try {
+      const g = await api<any>(`/im/group/code/${c}`);
+      setInfo(g);
+      setPwd('');
+    } catch (e: any) {
+      alert(e.message || '邀请码无效');
+    }
+    setBusy(false);
+  };
+
+  const join = async () => {
+    if (info.isMember && info.conversationId) {
+      onJoined(info.conversationId, info.name, info.groupId);
+      return;
+    }
+    if (info.hasPassword && !pwd.trim()) { alert('请输入入群密码'); return; }
+    setBusy(true);
+    try {
+      const g = await api<any>('/im/group/join-by-code', { method: 'POST', body: { code: code.trim().toUpperCase(), password: pwd.trim() } });
+      onJoined(g.conversationId, g.name, g.id);
+    } catch (e: any) {
+      alert(e.message || '加入失败');
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div className="mask bottom" onClick={onClose}>
+      <div className="sheet no-scrollbar" onClick={(e) => e.stopPropagation()}>
+        <div style={{ textAlign: 'center', marginBottom: 12, fontWeight: 600 }}>加入群聊</div>
+        <input
+          className="input"
+          placeholder="输入群邀请码"
+          value={code}
+          maxLength={12}
+          style={{ textTransform: 'uppercase', letterSpacing: 2 }}
+          onChange={(e) => { setCode(e.target.value.toUpperCase()); setInfo(null); }}
+        />
+        {!info ? (
+          <button className="btn mt12" disabled={busy} onClick={check}>{busy ? '查询中…' : '查找群聊'}</button>
+        ) : (
+          <>
+            <div className="card" style={{ marginTop: 12, textAlign: 'center' }}>
+              <div style={{ fontSize: 16, fontWeight: 600 }}>{info.name}</div>
+              <div className="small" style={{ marginTop: 4 }}>共 {info.memberCount} 人{info.hasPassword ? ' · 需要密码' : ''}</div>
+              {info.isMember && <div className="small" style={{ color: 'var(--success, #0bd07d)', marginTop: 6 }}>你已在群里</div>}
+              {!info.isMember && info.hasPassword && (
+                <input className="input" type="password" placeholder="输入入群密码" value={pwd} maxLength={20} style={{ marginTop: 10 }} onChange={(e) => setPwd(e.target.value)} />
+              )}
+            </div>
+            <button className="btn mt12" disabled={busy} onClick={join}>
+              {info.isMember ? '进入群聊' : busy ? '加入中…' : '加入群聊'}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function ChatListPage() {
   const nav = useNavigate();
   const [tab, setTab] = useState<Tab>('single');
@@ -103,6 +174,8 @@ export function ChatListPage() {
   const [notices, setNotices] = useState<NotificationItem[]>([]);
   const [unread, setUnread] = useState<Record<string, number>>({});
   const [showCreate, setShowCreate] = useState(false);
+  const [showJoin, setShowJoin] = useState(false);
+  const [showPlusMenu, setShowPlusMenu] = useState(false);
 
   const loadConvs = () => api<ConversationItem[]>('/im/conversations').then(setConvs).catch(() => {});
   const loadUnread = () => api<Record<string, number>>('/notifications/unread').then(setUnread).catch(() => {});
@@ -171,16 +244,31 @@ export function ChatListPage() {
           </span>
         ))}
         <span className="grow" />
-        <span
-          onClick={() => setShowCreate(true)}
-          title="发起群聊"
-          style={{
-            width: 34, height: 34, borderRadius: 17, flexShrink: 0,
-            background: 'var(--bg-input)', color: 'var(--text)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 18, cursor: 'pointer',
-          }}
-        >+</span>
+        <span style={{ position: 'relative', flexShrink: 0 }}>
+          <span
+            onClick={() => setShowPlusMenu((v) => !v)}
+            title="群聊"
+            style={{
+              width: 34, height: 34, borderRadius: 17,
+              background: 'var(--bg-input)', color: 'var(--text)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 18, cursor: 'pointer',
+            }}
+          >+</span>
+          {showPlusMenu && (
+            <>
+              <div style={{ position: 'fixed', inset: 0, zIndex: 30 }} onClick={() => setShowPlusMenu(false)} />
+              <div style={{
+                position: 'absolute', top: 40, right: 0, zIndex: 31,
+                background: 'var(--bg-card)', border: '1px solid var(--line)', borderRadius: 10,
+                boxShadow: '0 8px 24px rgba(0,0,0,0.4)', overflow: 'hidden', width: 120,
+              }}>
+                <div style={{ padding: '11px 16px', fontSize: 14, cursor: 'pointer' }} onClick={() => { setShowPlusMenu(false); setShowCreate(true); }}>创建群聊</div>
+                <div style={{ padding: '11px 16px', fontSize: 14, cursor: 'pointer', borderTop: '1px solid var(--line)' }} onClick={() => { setShowPlusMenu(false); setShowJoin(true); }}>加入群聊</div>
+              </div>
+            </>
+          )}
+        </span>
       </div>
 
       {/* 会话列表（私聊/群聊） */}
@@ -282,6 +370,16 @@ export function ChatListPage() {
           onClose={() => setShowCreate(false)}
           onCreated={(convId, name, groupId) => {
             setShowCreate(false);
+            nav(`/chatroom/${convId}`, { state: { title: `${name}（群）`, convType: 2, targetId: groupId } });
+          }}
+        />
+      )}
+
+      {showJoin && (
+        <JoinGroupSheet
+          onClose={() => setShowJoin(false)}
+          onJoined={(convId, name, groupId) => {
+            setShowJoin(false);
             nav(`/chatroom/${convId}`, { state: { title: `${name}（群）`, convType: 2, targetId: groupId } });
           }}
         />

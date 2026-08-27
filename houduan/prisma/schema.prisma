@@ -149,6 +149,10 @@ model ChatGroup {
   notice      String   @default("") @db.VarChar(500)
   ownerId     BigInt   @map("owner_id")
   memberLimit Int      @default(500) @map("member_limit")
+  /// 群邀请码（8 位，首次分享时生成，扫码/输码入群用）
+  inviteCode  String?  @unique @map("invite_code") @db.VarChar(12)
+  /// 入群密码：空 = 无密码直接进；非空 = 扫码/输码入群必须输对
+  joinPassword String  @default("") @map("join_password") @db.VarChar(20)
   /// 0=正常 1=已解散
   status      Int      @default(0) @db.TinyInt
   createdAt   DateTime @default(now()) @map("created_at")

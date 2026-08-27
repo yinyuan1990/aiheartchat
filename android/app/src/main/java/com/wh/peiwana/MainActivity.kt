@@ -257,6 +257,12 @@ fun AppRoot() {
                     nav.navigate("chatroom/$convId?convType=2&targetId=$groupId&title=${Uri.encode("$name（群）")}")
                 })
             }
+            page("join-group") {
+                JoinGroupScreen(onBack = { nav.popBackStack() }, onJoined = { convId, groupId, name ->
+                    nav.popBackStack()
+                    nav.navigate("chatroom/$convId?convType=2&targetId=$groupId&title=${Uri.encode("$name（群）")}")
+                })
+            }
             page("moment/{id}", listOf(navArgument("id") { type = NavType.StringType })) { entry ->
                 MomentDetailScreen(entry.arguments!!.getString("id")!!, onBack = { nav.popBackStack() }, onOpenChat = ::openChatWithUser)
             }

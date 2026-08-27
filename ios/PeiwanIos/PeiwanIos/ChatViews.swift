@@ -121,7 +121,10 @@ struct MessagesView: View {
             pillTab("评论", "comment", unread.comment ?? 0)
             pillTab("接单", "task", unread.task ?? 0)
             Spacer()
-            NavigationLink(value: Route.createGroup) {
+            Menu {
+                NavigationLink(value: Route.createGroup) { Label("创建群聊", systemImage: "person.2.badge.plus") }
+                NavigationLink(value: Route.joinGroup) { Label("加入群聊", systemImage: "qrcode.viewfinder") }
+            } label: {
                 Text("+").font(.system(size: 18)).foregroundStyle(Theme.text)
                     .frame(width: 34, height: 34)
                     .background(Circle().fill(Theme.bg3))
@@ -1382,6 +1385,7 @@ struct GroupInfoView: View {
     }
 
     @State private var info: GroupInfoData?
+    @State private var showShare = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1420,8 +1424,267 @@ struct GroupInfoView: View {
         .navigationTitle(info?.name ?? "群信息")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Theme.bg, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("分享") { showShare = true }
+                    .font(.system(size: 14)).foregroundStyle(Theme.accent)
+            }
+        }
+        .sheet(isPresented: $showShare) {
+            GroupShareSheet(groupId: groupId)
+        }
         .task {
             info = try? await Api.request("/im/group/\(groupId)")
+        }
+    }
+}
+
+/// 群分享面板：二维码 + 邀请码 + 密码设置（群主/管理员）
+struct GroupShareSheet: View {
+    let groupId: String
+    @Environment(\.dismiss) private var dismiss
+
+    struct ShareInfo: Codable {
+        var code: String = ""
+        var hasPassword: Bool = false
+        var password: String? = nil
+        var canEdit: Bool = false
+        var name: String? = ""
+    }
+
+    @State private var share: ShareInfo?
+    @State private var mode = "none" // none=无密码 pwd=有密码
+    @State private var pwd = ""
+    @State private var saving = false
+    @State private var toastMsg: String?
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 14) {
+                if let s = share {
+                    Text("群邀请").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
+                    Text(s.hasPassword ? "扫码或输码后需输入密码才能加入" : "扫码或输入邀请码即可加入")
+                        .font(.system(size: 12)).foregroundStyle(Theme.textSub)
+
+                    if let img = makeQRImage(groupQrContent(code: s.code), size: 640) {
+                        Image(uiImage: img)
+                            .interpolation(.none)
+                            .resizable()
+                            .frame(width: 200, height: 200)
+                            .padding(12)
+                            .background(RoundedRectangle(cornerRadius: 12).fill(.white))
+                    }
+
+                    Button {
+                        UIPasteboard.general.string = s.code
+                        toastMsg = "邀请码已复制"
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(s.code).font(.system(size: 18, weight: .bold)).tracking(3).foregroundStyle(Theme.text)
+                            Text("复制").font(.system(size: 12)).foregroundStyle(Theme.accent)
+                        }
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bg3))
+                    }
+                    .buttonStyle(.plain)
+
+                    if s.canEdit {
+                        HStack(spacing: 10) {
+                            ForEach([("none", "无密码"), ("pwd", "有密码")], id: \.0) { k, label in
+                                Button {
+                                    mode = k
+                                } label: {
+                                    Text(label)
+                                        .font(.system(size: 13))
+                                        .foregroundStyle(mode == k ? .white : Theme.textSub)
+                                        .padding(.horizontal, 16).padding(.vertical, 6)
+                                        .background(Capsule().fill(mode == k ? Theme.accent : Theme.bg3))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        if mode == "pwd" {
+                            TextField("", text: $pwd, prompt: Text("设置入群密码").foregroundStyle(Theme.textDim))
+                                .foregroundStyle(Theme.text)
+                                .padding(12)
+                                .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bg3))
+                                .padding(.horizontal, 24)
+                                .onChange(of: pwd) { _, v in if v.count > 20 { pwd = String(v.prefix(20)) } }
+                        }
+                        AccentButton(title: saving ? "保存中…" : "保存设置") {
+                            guard !saving else { return }
+                            if mode == "pwd", pwd.trimmingCharacters(in: .whitespaces).isEmpty {
+                                toastMsg = "请输入密码"
+                                return
+                            }
+                            saving = true
+                            Task {
+                                let s2: ShareInfo? = try? await Api.request(
+                                    "/im/group/\(groupId)/share", method: "POST",
+                                    body: ["password": mode == "pwd" ? pwd.trimmingCharacters(in: .whitespaces) : ""]
+                                )
+                                if let s2 { share = s2; toastMsg = "已保存" } else { toastMsg = "保存失败" }
+                                saving = false
+                            }
+                        }
+                        .padding(.horizontal, 24)
+                    }
+
+                    if let img = makeQRImage(groupQrContent(code: s.code), size: 640) {
+                        ShareLink(
+                            item: Image(uiImage: img),
+                            preview: SharePreview("群邀请码", image: Image(uiImage: img))
+                        ) {
+                            Text("分享二维码")
+                                .font(.system(size: 14, weight: .medium)).foregroundStyle(.white)
+                                .frame(width: 150, height: 40)
+                                .background(Capsule().fill(Theme.accent))
+                        }
+                    }
+
+                    Button("关闭") { dismiss() }
+                        .font(.system(size: 14)).foregroundStyle(Theme.textSub)
+                } else {
+                    Text("加载中…").font(.system(size: 13)).foregroundStyle(Theme.textSub).padding(40)
+                }
+            }
+            .padding(.vertical, 26)
+            .frame(maxWidth: .infinity)
+        }
+        .background(Theme.bg)
+        .toast($toastMsg)
+        .task {
+            let s: ShareInfo? = try? await Api.request("/im/group/\(groupId)/share")
+            share = s
+            if let s { mode = s.hasPassword ? "pwd" : "none"; pwd = s.password ?? "" }
+        }
+    }
+}
+
+/// 加入群聊：输入邀请码或扫码，有密码的群需输入密码
+struct JoinGroupView: View {
+    struct CodeInfo: Codable {
+        var groupId: String = ""
+        var name: String? = ""
+        var memberCount: Int? = 0
+        var hasPassword: Bool = false
+        var isMember: Bool = false
+        var conversationId: String? = nil
+    }
+
+    @State private var code = ""
+    @State private var info: CodeInfo?
+    @State private var pwd = ""
+    @State private var busy = false
+    @State private var showScan = false
+    @State private var opened: ChatTarget?
+    @State private var toastMsg: String?
+
+    var body: some View {
+        VStack(spacing: 14) {
+            HStack(spacing: 10) {
+                TextField("", text: $code, prompt: Text("输入群邀请码").foregroundStyle(Theme.textDim))
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                    .foregroundStyle(Theme.text)
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bg2))
+                    .onChange(of: code) { _, v in
+                        let up = v.uppercased()
+                        code = String(up.prefix(12))
+                        info = nil
+                    }
+                Button("扫码") { showScan = true }
+                    .font(.system(size: 14)).foregroundStyle(Theme.accent)
+            }
+
+            if let g = info {
+                VStack(spacing: 6) {
+                    Text(g.name ?? "").font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.text)
+                    Text("共 \(g.memberCount ?? 0) 人\(g.hasPassword ? " · 需要密码" : "")")
+                        .font(.system(size: 12)).foregroundStyle(Theme.textSub)
+                    if g.isMember {
+                        Text("你已在群里").font(.system(size: 12)).foregroundStyle(Theme.success)
+                    } else if g.hasPassword {
+                        SecureField("", text: $pwd, prompt: Text("输入入群密码").foregroundStyle(Theme.textDim))
+                            .foregroundStyle(Theme.text)
+                            .padding(12)
+                            .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bg3))
+                            .padding(.top, 6)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(16)
+                .background(RoundedRectangle(cornerRadius: 12).fill(Theme.bg2))
+
+                AccentButton(title: g.isMember ? "进入群聊" : (busy ? "加入中…" : "加入群聊")) {
+                    guard !busy else { return }
+                    if g.isMember, let convId = g.conversationId {
+                        opened = ChatTarget(convId: convId, convType: 2, targetId: g.groupId, title: "\(g.name ?? "")（群）")
+                        return
+                    }
+                    if g.hasPassword, pwd.trimmingCharacters(in: .whitespaces).isEmpty {
+                        toastMsg = "请输入入群密码"
+                        return
+                    }
+                    busy = true
+                    Task {
+                        struct Joined: Codable { var id: String = ""; var name: String? = ""; var conversationId: String? = nil }
+                        do {
+                            let j: Joined = try await Api.request("/im/group/join-by-code", method: "POST", body: [
+                                "code": code.trimmingCharacters(in: .whitespaces),
+                                "password": pwd.trimmingCharacters(in: .whitespaces),
+                            ])
+                            if let convId = j.conversationId {
+                                opened = ChatTarget(convId: convId, convType: 2, targetId: j.id, title: "\(j.name ?? "")（群）")
+                            }
+                        } catch {
+                            toastMsg = (error as? ApiError)?.msg ?? "加入失败"
+                        }
+                        busy = false
+                    }
+                }
+            } else {
+                AccentButton(title: busy ? "查询中…" : "查找群聊") {
+                    guard !busy else { return }
+                    let c = code.trimmingCharacters(in: .whitespaces)
+                    if c.count < 6 { toastMsg = "请输入完整邀请码"; return }
+                    busy = true
+                    Task {
+                        do {
+                            let g: CodeInfo = try await Api.request("/im/group/code/\(c)")
+                            info = g
+                            pwd = ""
+                        } catch {
+                            toastMsg = (error as? ApiError)?.msg ?? "邀请码无效"
+                        }
+                        busy = false
+                    }
+                }
+            }
+            Spacer()
+        }
+        .padding(16)
+        .fullBg()
+        .navigationTitle("加入群聊")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(Theme.bg, for: .navigationBar)
+        .toast($toastMsg)
+        .fullScreenCover(isPresented: $showScan) {
+            QrScanView { text in
+                if let c = parseGroupCode(text) {
+                    code = c
+                    Task {
+                        if let g: CodeInfo = try? await Api.request("/im/group/code/\(c)") { info = g; pwd = "" }
+                        else { toastMsg = "邀请码无效" }
+                    }
+                } else {
+                    toastMsg = "无法识别的群二维码"
+                }
+            }
+        }
+        .fullScreenCover(item: $opened) { t in
+            ChatRoomSheet(target: t)
         }
     }
 }

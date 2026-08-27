@@ -32,11 +32,91 @@ function DownloadDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
+/** 群分享面板：二维码 + 邀请码 + 密码设置（群主/管理员） */
+function GroupShareView({ groupId, onBack }: { groupId: string; onBack: () => void }) {
+  const [share, setShare] = useState<any>(null);
+  const [qrUrl, setQrUrl] = useState('');
+  const [mode, setMode] = useState<'none' | 'pwd'>('none');
+  const [pwd, setPwd] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api<any>(`/im/group/${groupId}/share`).then((s) => {
+      setShare(s);
+      setMode(s.hasPassword ? 'pwd' : 'none');
+      setPwd(s.password || '');
+    }).catch((e: any) => alert(e.message));
+  }, [groupId]);
+
+  useEffect(() => {
+    if (!share?.code) return;
+    import('qrcode').then((QRCode) =>
+      QRCode.toDataURL(`peiwan://group?code=${share.code}`, { width: 480, margin: 1 }).then(setQrUrl),
+    ).catch(() => {});
+  }, [share?.code]);
+
+  const save = async () => {
+    if (mode === 'pwd' && !pwd.trim()) { alert('请输入密码'); return; }
+    setSaving(true);
+    try {
+      const s = await api<any>(`/im/group/${groupId}/share`, { method: 'POST', body: { password: mode === 'pwd' ? pwd.trim() : '' } });
+      setShare(s);
+      alert('已保存');
+    } catch (e: any) {
+      alert(e.message);
+    }
+    setSaving(false);
+  };
+
+  if (!share) return <div className="empty" style={{ padding: 30 }}>加载中…</div>;
+
+  return (
+    <div style={{ textAlign: 'center' }}>
+      <div className="small" style={{ marginBottom: 12 }}>
+        {share.hasPassword ? '扫码或输码后需输入密码才能加入' : '扫码或输入邀请码即可加入'}
+      </div>
+      {qrUrl && <img src={qrUrl} alt="群二维码" style={{ width: 200, height: 200, borderRadius: 12, background: '#fff', padding: 8 }} />}
+      <div
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 8, margin: '12px auto 0', padding: '8px 14px', background: 'var(--bg-input)', borderRadius: 8, cursor: 'pointer' }}
+        onClick={() => { navigator.clipboard?.writeText(share.code); alert('邀请码已复制'); }}
+      >
+        <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: 3 }}>{share.code}</span>
+        <span className="accent" style={{ fontSize: 12 }}>复制</span>
+      </div>
+
+      {share.canEdit && (
+        <div style={{ marginTop: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 10 }}>
+            {([['none', '无密码'], ['pwd', '有密码']] as const).map(([k, label]) => (
+              <span
+                key={k}
+                onClick={() => setMode(k)}
+                style={{
+                  padding: '6px 16px', borderRadius: 14, fontSize: 13, cursor: 'pointer',
+                  background: mode === k ? 'var(--accent-grad)' : 'var(--bg-input)',
+                  color: mode === k ? '#fff' : 'var(--text-2)',
+                }}
+              >{label}</span>
+            ))}
+          </div>
+          {mode === 'pwd' && (
+            <input className="input" placeholder="设置入群密码" value={pwd} maxLength={20} style={{ marginTop: 10 }} onChange={(e) => setPwd(e.target.value)} />
+          )}
+          <button className="btn mt12" disabled={saving} onClick={save}>{saving ? '保存中…' : '保存设置'}</button>
+        </div>
+      )}
+
+      <button className="btn btn-ghost mt12" onClick={onBack}>返回</button>
+    </div>
+  );
+}
+
 /** 群信息面板：成员查看、邀请、踢人、退群/解散 */
 function GroupInfoSheet({ groupId, onClose, onExit }: { groupId: string; onClose: () => void; onExit: () => void }) {
   const me = useApp((s) => s.user);
   const [info, setInfo] = useState<any>(null);
   const [showInvite, setShowInvite] = useState(false);
+  const [showShare, setShowShare] = useState(false);
   const [people, setPeople] = useState<any[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -89,11 +169,21 @@ function GroupInfoSheet({ groupId, onClose, onExit }: { groupId: string; onClose
 
   return (
     <div className="mask bottom" onClick={onClose}>
-      <div className="sheet no-scrollbar" style={{ maxHeight: '78vh' }} onClick={(e) => e.stopPropagation()}>
+      <div className="sheet no-scrollbar" style={{ maxHeight: '78vh', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+        {/* 右上角分享入口 */}
+        {!showShare && !showInvite && (
+          <span
+            className="accent"
+            style={{ position: 'absolute', top: 16, right: 18, fontSize: 13, cursor: 'pointer' }}
+            onClick={() => setShowShare(true)}
+          >分享</span>
+        )}
         <div style={{ textAlign: 'center', fontWeight: 600, marginBottom: 4 }}>{info.name}</div>
         <div className="small" style={{ textAlign: 'center', marginBottom: 14 }}>共 {info.members?.length ?? 0} 人</div>
 
-        {!showInvite ? (
+        {showShare ? (
+          <GroupShareView groupId={groupId} onBack={() => setShowShare(false)} />
+        ) : !showInvite ? (
           <>
             {/* 成员网格 */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>

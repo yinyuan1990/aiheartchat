@@ -53,6 +53,32 @@ export class ImController {
     return this.groups.createGroup(userId, dto.name, (dto.memberIds ?? []).map(BigInt));
   }
 
+  // ---- 群分享/入群（静态路径注意声明在 group/:id 相关通配前） ----
+
+  /** 邀请码预检：群名/人数/是否需要密码 */
+  @Get('group/code/:code')
+  codeInfo(@CurrentUser() userId: bigint, @Param('code') code: string) {
+    return this.groups.codeInfo(userId, code);
+  }
+
+  /** 扫码/输码入群，有密码必须带 password */
+  @Post('group/join-by-code')
+  joinByCode(@CurrentUser() userId: bigint, @Body() dto: { code: string; password?: string }) {
+    return this.groups.joinByCode(userId, dto.code, dto.password);
+  }
+
+  /** 分享信息：邀请码 + 是否有密码（成员可看） */
+  @Get('group/:id/share')
+  shareInfo(@CurrentUser() userId: bigint, @Param('id') id: string) {
+    return this.groups.shareInfo(userId, BigInt(id));
+  }
+
+  /** 设置入群密码（群主/管理员）；password 传空串 = 无密码 */
+  @Post('group/:id/share')
+  setShare(@CurrentUser() userId: bigint, @Param('id') id: string, @Body() dto: { password?: string }) {
+    return this.groups.setSharePassword(userId, BigInt(id), dto.password ?? '');
+  }
+
   @Get('group/:id')
   group(@CurrentUser() userId: bigint, @Param('id') id: string) {
     return this.groups.getGroup(userId, BigInt(id));

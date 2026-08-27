@@ -96,6 +96,7 @@ fun MainScreen(
                     onCreateGroup = { onNav("create-group") },
                     onOpenAi = { onNav("aichat") },
                     onOpenNews = { onNav("news") },
+                    onJoinGroup = { onNav("join-group") },
                 )
             }
             Pane(active = tab == 3) {

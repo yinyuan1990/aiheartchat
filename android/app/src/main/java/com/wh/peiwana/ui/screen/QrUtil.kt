@@ -19,6 +19,16 @@ fun parsePaySid(text: String): String? {
     return if (digits.length == 6) digits else null
 }
 
+/** 群邀请码内容格式：peiwan://group?code=8位邀请码 */
+fun groupQrContent(code: String) = "peiwan://group?code=$code"
+
+/** 从扫码结果里提取群邀请码（兼容 peiwan://group?code=xxx 和纯码） */
+fun parseGroupCode(text: String): String? {
+    Regex("code=([A-Za-z0-9]{6,12})").find(text)?.let { return it.groupValues[1].uppercase() }
+    val t = text.trim().uppercase()
+    return if (Regex("^[A-Z0-9]{6,12}$").matches(t)) t else null
+}
+
 /** 生成二维码 Bitmap */
 fun makeQrBitmap(text: String, size: Int = 640): Bitmap {
     val matrix = QRCodeWriter().encode(

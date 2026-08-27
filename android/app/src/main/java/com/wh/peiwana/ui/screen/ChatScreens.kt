@@ -123,7 +123,7 @@ private fun preview(msg: LastMsg?): String = when {
 
 /** 消息主页：四分类 私聊/群聊/评论/接单 */
 @Composable
-fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, convType: Int, targetId: String, title: String) -> Unit, onOpenMoment: (String) -> Unit, onOpenTask: (String) -> Unit, onCreateGroup: () -> Unit, onOpenAi: () -> Unit, onOpenNews: () -> Unit = {}) {
+fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, convType: Int, targetId: String, title: String) -> Unit, onOpenMoment: (String) -> Unit, onOpenTask: (String) -> Unit, onCreateGroup: () -> Unit, onOpenAi: () -> Unit, onOpenNews: () -> Unit = {}, onJoinGroup: () -> Unit = {}) {
     var tab by remember { mutableStateOf("single") }
     var convs by remember { mutableStateOf<List<ConversationItem>>(emptyList()) }
     var notices by remember { mutableStateOf<List<NotificationItem>>(emptyList()) }
@@ -157,7 +157,14 @@ fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, c
         Row(modifier = Modifier.fillMaxWidth().padding(16.dp, 14.dp, 16.dp, 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             tabs.forEach { (k, label, badge) -> PillTab(label, tab == k, badge) { tab = k } }
             Spacer(Modifier.weight(1f))
-            Box(modifier = Modifier.size(34.dp).clip(RoundedCornerShape(17.dp)).background(Bg3).clickable(onClick = onCreateGroup), contentAlignment = Alignment.Center) { Text("+", color = TextMain, fontSize = 18.sp) }
+            Box {
+                var showPlusMenu by remember { mutableStateOf(false) }
+                Box(modifier = Modifier.size(34.dp).clip(RoundedCornerShape(17.dp)).background(Bg3).clickable { showPlusMenu = true }, contentAlignment = Alignment.Center) { Text("+", color = TextMain, fontSize = 18.sp) }
+                androidx.compose.material3.DropdownMenu(expanded = showPlusMenu, onDismissRequest = { showPlusMenu = false }) {
+                    androidx.compose.material3.DropdownMenuItem(text = { Text("创建群聊", fontSize = 14.sp) }, onClick = { showPlusMenu = false; onCreateGroup() })
+                    androidx.compose.material3.DropdownMenuItem(text = { Text("加入群聊", fontSize = 14.sp) }, onClick = { showPlusMenu = false; onJoinGroup() })
+                }
+            }
         }
 
         if (tab == "single" || tab == "group") {

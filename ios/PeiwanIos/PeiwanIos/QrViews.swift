@@ -14,6 +14,19 @@ func parsePaySid(_ text: String) -> String? {
     return digits.count == 6 ? digits : nil
 }
 
+/// 群邀请码内容格式：peiwan://group?code=8位邀请码
+func groupQrContent(code: String) -> String { "peiwan://group?code=\(code)" }
+
+/// 从扫码结果里提取群邀请码（兼容 peiwan://group?code=xxx 和纯码）
+func parseGroupCode(_ text: String) -> String? {
+    if let range = text.range(of: #"code=([A-Za-z0-9]{6,12})"#, options: .regularExpression) {
+        return String(text[range].dropFirst(5)).uppercased()
+    }
+    let t = text.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+    if t.range(of: #"^[A-Z0-9]{6,12}$"#, options: .regularExpression) != nil { return t }
+    return nil
+}
+
 /// 生成二维码图片
 func makeQRImage(_ text: String, size: CGFloat = 240) -> UIImage? {
     let filter = CIFilter.qrCodeGenerator()

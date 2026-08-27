@@ -197,6 +197,8 @@ enum Route: Hashable {
     case task(String)
     case wallet, transfer, editProfile, guideApply, giftsReceived, myMoments, followMoments
     case createGroup
+    /// 加入群聊（扫码/输邀请码）
+    case joinGroup
     case realname
     case userHome(String)
     /// 关注/粉丝列表：type = following | fans
@@ -227,6 +229,7 @@ func routeView(_ route: Route) -> some View {
     case .myMoments: MyMomentsView()
     case .followMoments: FollowMomentsView()
     case .createGroup: CreateGroupView()
+    case .joinGroup: JoinGroupView()
     case .realname: RealnameView()
     case .userHome(let id): UserHomeView(userId: id)
     case .followList(let type): FollowListView(type: type)
