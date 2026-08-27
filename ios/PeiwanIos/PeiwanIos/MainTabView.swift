@@ -6,7 +6,7 @@ struct MainTabView: View {
     @State private var showPublish = false
     @State private var meKey = 0
     @State private var unreadTotal = 0
-    private let tabBarVis = TabBarVisibility.shared
+    @ObservedObject private var tabBarVis = TabBarVisibility.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -37,12 +37,12 @@ struct MainTabView: View {
                 }
             }
         }
-        .onChange(of: tab) { _, _ in
+        .onChange(of: tab) { _ in
             // 切换页面停止列表内正在播放的视频
             FeedVideoCenter.pauseCurrent()
             Task { await refreshUnread() }
         }
-        .onChange(of: showPublish) { _, shown in
+        .onChange(of: showPublish) { shown in
             if shown { FeedVideoCenter.pauseCurrent() }
         }
     }

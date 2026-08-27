@@ -277,7 +277,7 @@ struct ChatRoomSheet: View {
         NavigationStack {
             ChatRoomView(convId: target.convId, convType: target.convType, targetId: target.targetId, title: target.title)
                 .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
+                    ToolbarItem(placement: .navigationBarLeading) {
                         Button { dismiss() } label: {
                             Image(systemName: "chevron.left").foregroundStyle(Theme.text)
                         }
@@ -413,7 +413,7 @@ struct ChatRoomView: View {
     let targetId: String
     let title: String
 
-    @Environment(AppState.self) var state
+    @EnvironmentObject var state: AppState
     @State private var messages: [MsgItem] = []
     @State private var input = ""
     @State private var voiceMode = false
@@ -450,13 +450,17 @@ struct ChatRoomView: View {
                     }
                     .padding(.horizontal, 12).padding(.vertical, 8)
                 }
-                // 进入聊天默认停在最底部（最新消息）
-                .defaultScrollAnchor(.bottom)
                 .onTapGesture { showPanel = false; inputFocused = false }
-                .onChange(of: messages.count) { _, _ in
+                // 进入聊天默认停在最底部（最新消息）；defaultScrollAnchor 是 iOS 17 API，改用 scrollTo
+                .onAppear {
+                    if let last = messages.last {
+                        DispatchQueue.main.async { proxy.scrollTo(last.id, anchor: .bottom) }
+                    }
+                }
+                .onChange(of: messages.count) { _ in
                     if let last = messages.last { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
-                .onChange(of: inputFocused) { _, focused in
+                .onChange(of: inputFocused) { focused in
                     if focused {
                         // 键盘弹出时收起 + 面板，避免两者叠加把内容顶飞
                         showPanel = false
@@ -484,7 +488,7 @@ struct ChatRoomView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Theme.bg, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 14) {
                     Button {
                         showClearConfirm = true
@@ -563,7 +567,7 @@ struct ChatRoomView: View {
             }
         }
         .onDisappear { removeListener?() }
-        .onChange(of: imageItem) { _, item in
+        .onChange(of: imageItem) { item in
             guard let item else { return }
             showPanel = false
             Task {
@@ -604,7 +608,7 @@ struct ChatRoomView: View {
                             else if recording { recording = false; finishRecording() }
                         }, perform: {})
                 } else {
-                    TextField("", text: $input, prompt: Text("发消息").foregroundStyle(Theme.textDim), axis: .vertical)
+                    TextField("", text: $input, prompt: Text("发消息").foregroundColor(Theme.textDim), axis: .vertical)
                         .lineLimit(1...4)
                         .focused($inputFocused)
                         .foregroundStyle(Theme.text)
@@ -1105,7 +1109,7 @@ struct CreateGroupView: View {
                             AvatarView(url: avatar, size: 56)
                         }
                     }
-                    TextField("", text: $name, prompt: Text("群名称").foregroundStyle(Theme.textDim))
+                    TextField("", text: $name, prompt: Text("群名称").foregroundColor(Theme.textDim))
                         .foregroundStyle(Theme.text)
                         .padding(14)
                         .background(RoundedRectangle(cornerRadius: 12).fill(Theme.bg2))
@@ -1113,7 +1117,7 @@ struct CreateGroupView: View {
                 Text("群头像可选，不设置默认显示群主头像 · 邀请成员（可选）").font(.system(size: 12)).foregroundStyle(Theme.textSub)
             }
             .padding(16)
-            .onChange(of: avatarItem) { _, item in
+            .onChange(of: avatarItem) { item in
                 guard let item else { return }
                 uploading = true
                 Task {
@@ -1182,7 +1186,7 @@ struct AiChatView: View {
         var createdAt: String? = ""
     }
 
-    @Environment(AppState.self) var state
+    @EnvironmentObject var state: AppState
     @State private var messages: [AiMsg] = []
     @State private var input = ""
     @State private var thinking = false
@@ -1231,12 +1235,17 @@ struct AiChatView: View {
                         }
                         .padding(.horizontal, 12).padding(.vertical, 8)
                     }
-                    .defaultScrollAnchor(.bottom)
                     .onTapGesture { inputFocused = false }
-                    .onChange(of: messages.count) { _, _ in
+                    // 进入默认停在最底部；defaultScrollAnchor 是 iOS 17 API，改用 scrollTo
+                    .onAppear {
+                        if let last = messages.last {
+                            DispatchQueue.main.async { proxy.scrollTo(last.id, anchor: .bottom) }
+                        }
+                    }
+                    .onChange(of: messages.count) { _ in
                         if let last = messages.last { proxy.scrollTo(last.id, anchor: .bottom) }
                     }
-                    .onChange(of: thinking) { _, v in
+                    .onChange(of: thinking) { v in
                         if v { proxy.scrollTo("thinking", anchor: .bottom) }
                     }
                 }
@@ -1244,7 +1253,7 @@ struct AiChatView: View {
 
             // 底部输入区（对齐聊天页：圆角输入框 + 有文字才显示发送键）
             HStack(alignment: .bottom, spacing: 8) {
-                TextField("", text: $input, prompt: Text("随便问点什么…").foregroundStyle(Theme.textDim), axis: .vertical)
+                TextField("", text: $input, prompt: Text("随便问点什么…").foregroundColor(Theme.textDim), axis: .vertical)
                     .lineLimit(1...4)
                     .focused($inputFocused)
                     .foregroundStyle(Theme.text)
@@ -1268,7 +1277,7 @@ struct AiChatView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Theme.bg, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
                     Task {
                         struct OkResp: Codable { var ok: Bool? }
@@ -1395,7 +1404,7 @@ struct WebContentView: UIViewRepresentable {
 /// 群信息
 struct GroupInfoView: View {
     let groupId: String
-    @Environment(AppState.self) var state
+    @EnvironmentObject var state: AppState
     @Environment(\.dismiss) private var dismiss
 
     struct GroupMemberItem: Codable, Identifiable {
@@ -1441,7 +1450,7 @@ struct GroupInfoView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 6)
-                .onChange(of: avatarItem) { _, item in
+                .onChange(of: avatarItem) { item in
                     guard let item else { return }
                     Task {
                         struct Empty: Codable { var id: String? }
@@ -1483,7 +1492,7 @@ struct GroupInfoView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Theme.bg, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .navigationBarTrailing) {
                 Button("分享") { showShare = true }
                     .font(.system(size: 14)).foregroundStyle(Theme.accent)
             }
@@ -1588,13 +1597,13 @@ struct GroupShareSheet: View {
                         }
                         .padding(.horizontal, 24)
                         if mode == "pwd" {
-                            TextField("", text: $pwd, prompt: Text("设置入群密码").foregroundStyle(Theme.textDim))
+                            TextField("", text: $pwd, prompt: Text("设置入群密码").foregroundColor(Theme.textDim))
                                 .font(.system(size: 14))
                                 .foregroundStyle(Theme.text)
                                 .padding(.horizontal, 12).padding(.vertical, 10)
                                 .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bg3))
                                 .padding(.horizontal, 24)
-                                .onChange(of: pwd) { _, v in if v.count > 20 { pwd = String(v.prefix(20)) } }
+                                .onChange(of: pwd) { v in if v.count > 20 { pwd = String(v.prefix(20)) } }
                         }
                     }
 
@@ -1668,11 +1677,11 @@ struct JoinGroupView: View {
         VStack(spacing: 14) {
             // 邀请码输入框（右侧内嵌扫码图标）
             HStack(spacing: 8) {
-                TextField("", text: $code, prompt: Text("输入群邀请码").foregroundStyle(Theme.textDim))
+                TextField("", text: $code, prompt: Text("输入群邀请码").foregroundColor(Theme.textDim))
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()
                     .foregroundStyle(Theme.text)
-                    .onChange(of: code) { _, v in
+                    .onChange(of: code) { v in
                         let up = v.uppercased()
                         code = String(up.prefix(12))
                         info = nil
@@ -1697,7 +1706,7 @@ struct JoinGroupView: View {
                     if g.isMember {
                         Text("你已在群里").font(.system(size: 12)).foregroundStyle(Theme.success)
                     } else if g.hasPassword {
-                        SecureField("", text: $pwd, prompt: Text("输入入群密码").foregroundStyle(Theme.textDim))
+                        SecureField("", text: $pwd, prompt: Text("输入入群密码").foregroundColor(Theme.textDim))
                             .foregroundStyle(Theme.text)
                             .padding(12)
                             .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bg3))

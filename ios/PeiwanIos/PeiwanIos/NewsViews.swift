@@ -57,7 +57,7 @@ struct QuotesSectionView: View {
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
-                .onChange(of: page) { _, i in
+                .onChange(of: page) { i in
                     if hasMore, i >= items.count - 3 { Task { await loadMore() } }
                 }
             }

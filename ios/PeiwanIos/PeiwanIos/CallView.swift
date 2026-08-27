@@ -4,7 +4,7 @@ import WebRTC
 
 /// 通话全屏界面（微信式），由 CallWindow 独立窗口承载
 struct CallOverlay: View {
-    @State private var manager = CallManager.shared
+    @ObservedObject private var manager = CallManager.shared
 
     var body: some View {
         ZStack {

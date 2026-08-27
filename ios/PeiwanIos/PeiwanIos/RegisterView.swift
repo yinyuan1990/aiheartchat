@@ -3,7 +3,7 @@ import SwiftUI
 
 /// 一机一号注册：头像+昵称+年纪+性别，账号(BNB地址)自动生成，无密码
 struct RegisterView: View {
-    @Environment(AppState.self) var state
+    @EnvironmentObject var state: AppState
     @State private var nickname = ""
     @State private var age = ""
     @State private var gender = 0
@@ -43,7 +43,7 @@ struct RegisterView: View {
                     }
                 }
             }
-            .onChange(of: avatarItem) { _, item in
+            .onChange(of: avatarItem) { item in
                 Task {
                     if let data = try? await item?.loadTransferable(type: Data.self),
                        let image = UIImage(data: data) {
@@ -56,7 +56,7 @@ struct RegisterView: View {
             field("昵称", text: $nickname)
             field("年纪", text: $age)
                 .keyboardType(.numberPad)
-                .onChange(of: age) { _, v in
+                .onChange(of: age) { v in
                     age = String(v.filter(\.isNumber).prefix(2))
                 }
 
@@ -131,7 +131,7 @@ struct RegisterView: View {
     }
 
     private func field(_ label: String, text: Binding<String>) -> some View {
-        TextField("", text: text, prompt: Text(label).foregroundStyle(Theme.textSub))
+        TextField("", text: text, prompt: Text(label).foregroundColor(Theme.textSub))
             .padding(13)
             .background(RoundedRectangle(cornerRadius: 14).fill(Theme.bg3))
             .foregroundStyle(Theme.text)

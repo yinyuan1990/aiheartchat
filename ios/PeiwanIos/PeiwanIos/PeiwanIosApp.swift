@@ -25,15 +25,14 @@ enum AppStage {
     case main
 }
 
-@Observable
-final class AppState {
-    var stage: AppStage = .boot
-    var user: UserProfile?
+final class AppState: ObservableObject {
+    @Published var stage: AppStage = .boot
+    @Published var user: UserProfile?
 }
 
 struct RootView: View {
-    @State private var state = AppState()
-    @State private var callManager = CallManager.shared
+    @StateObject private var state = AppState()
+    @ObservedObject private var callManager = CallManager.shared
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -55,10 +54,10 @@ struct RootView: View {
                 UserHomeView(userId: callManager.openUserHome ?? "")
                     .withRoutes()
             }
-            .environment(state)
+            .environmentObject(state)
         }
-        .environment(state)
-        .onChange(of: state.stage) { _, stage in
+        .environmentObject(state)
+        .onChange(of: state.stage) { stage in
             // 登录后初始化通话信令监听 + 无声音频保活
             if stage == .main, let user = state.user {
                 WsClient.shared.connect()
@@ -66,7 +65,7 @@ struct RootView: View {
                 SilentAudioKeeper.shared.start()
             }
         }
-        .onChange(of: scenePhase) { _, phase in
+        .onChange(of: scenePhase) { phase in
             // 回前台立即重连 IM（后台 socket 可能被系统挂起断开）
             if phase == .active, state.stage == .main {
                 WsClient.shared.connect()

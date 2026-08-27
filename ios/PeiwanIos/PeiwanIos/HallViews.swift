@@ -51,7 +51,7 @@ struct HallView: View {
 
 /// 同城搭子项目主页
 struct GuideProjectView: View {
-    @Environment(AppState.self) var state
+    @EnvironmentObject var state: AppState
     @State private var guides: [Person] = []
     @State private var chatTarget: ChatTarget?
 

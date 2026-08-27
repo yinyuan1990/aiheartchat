@@ -4,7 +4,7 @@ import SwiftUI
 /// 他人主页：顶部大图 hero + 圆角资料卡（关于我/我的动态 tab）+ 底部操作栏
 struct UserHomeView: View {
     let userId: String
-    @Environment(AppState.self) private var appState
+    @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
     @State private var p: HomeProfile?
     @State private var moments: [Moment] = []

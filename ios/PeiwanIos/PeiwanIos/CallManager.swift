@@ -36,15 +36,14 @@ enum CallPhase: Equatable {
  * 双方各推一路流（WHIP）拉对方一路流（WHEP），流名 live/{callId}_{userId}。
  * 通话 UI 由独立 UIWindow 承载（CallWindow），保证盖在任何弹层之上。
  */
-@Observable
-final class CallManager {
+final class CallManager: ObservableObject {
     static let shared = CallManager()
 
-    var phase: CallPhase = .idle { didSet { CallWindow.shared.update() } }
-    var localVideoTrack: RTCVideoTrack?
-    var remoteVideoTrack: RTCVideoTrack?
+    @Published var phase: CallPhase = .idle { didSet { CallWindow.shared.update() } }
+    @Published var localVideoTrack: RTCVideoTrack?
+    @Published var remoteVideoTrack: RTCVideoTrack?
     /// 呼叫失败提示（对方不在线等），UI 展示后置空
-    var errorMsg: String? { didSet { CallWindow.shared.update() } }
+    @Published var errorMsg: String? { didSet { CallWindow.shared.update() } }
 
     /// 视频通话结束后男方待评分（挂断后弹评分界面）
     struct PendingRate {
@@ -53,22 +52,22 @@ final class CallManager {
         let peerName: String
         let peerAvatar: String
     }
-    var pendingRate: PendingRate? { didSet { CallWindow.shared.update() } }
+    @Published var pendingRate: PendingRate? { didSet { CallWindow.shared.update() } }
 
     /// 评分完成后要打开的女方主页 userId（RootView 监听后全屏展示并清空）
-    var openUserHome: String?
+    @Published var openUserHome: String?
 
     /// 对方已完成推流（published 信令）：收到后才订阅，保证订阅晚于发布
     private var peerPublished = false
 
     // 对方信息（微信式界面展示）
-    var peerName = ""
-    var peerAvatar = ""
+    @Published var peerName = ""
+    @Published var peerAvatar = ""
     // 通话控制状态
-    var muted = false
-    var speakerOn = false
-    var cameraOff = false
-    var callSeconds = 0
+    @Published var muted = false
+    @Published var speakerOn = false
+    @Published var cameraOff = false
+    @Published var callSeconds = 0
 
     private var config = CallConfig()
     private var myUserId = ""

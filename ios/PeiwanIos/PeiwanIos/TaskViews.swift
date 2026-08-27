@@ -57,7 +57,7 @@ struct TaskHallView: View {
 
 /// 我的约单 / 我的接单
 struct TaskMineView: View {
-    @Environment(AppState.self) var state
+    @EnvironmentObject var state: AppState
     @State private var items: [TaskOrder] = []
     private var isFemale: Bool { state.user?.gender == 2 }
     var body: some View {
@@ -95,7 +95,7 @@ struct TaskPostView: View {
                     .padding(14)
                     .background(RoundedRectangle(cornerRadius: 12).fill(Theme.bg2))
                 HStack {
-                    TextField("", text: $city, prompt: Text("城市").foregroundStyle(Theme.textDim))
+                    TextField("", text: $city, prompt: Text("城市").foregroundColor(Theme.textDim))
                         .foregroundStyle(Theme.text)
                     Button("定位") {
                         CityLocator.shared.detect { name in
@@ -107,7 +107,7 @@ struct TaskPostView: View {
                 .padding(14)
                 .background(RoundedRectangle(cornerRadius: 12).fill(Theme.bg2))
                 inputField("地点", text: $address)
-                TextField("", text: $reward, prompt: Text("报酬（积分）").foregroundStyle(Theme.textDim))
+                TextField("", text: $reward, prompt: Text("报酬（积分）").foregroundColor(Theme.textDim))
                     .keyboardType(.decimalPad)
                     .foregroundStyle(Theme.text)
                     .padding(14)
@@ -128,7 +128,7 @@ struct TaskPostView: View {
     }
 
     private func inputField(_ placeholder: String, text: Binding<String>) -> some View {
-        TextField("", text: text, prompt: Text(placeholder).foregroundStyle(Theme.textDim))
+        TextField("", text: text, prompt: Text(placeholder).foregroundColor(Theme.textDim))
             .foregroundStyle(Theme.text)
             .padding(14)
             .background(RoundedRectangle(cornerRadius: 12).fill(Theme.bg2))
@@ -156,7 +156,7 @@ struct TaskPostView: View {
 /// 约单详情
 struct TaskDetailView: View {
     let taskId: String
-    @Environment(AppState.self) var state
+    @EnvironmentObject var state: AppState
     @State private var d: TaskDetailData?
     @State private var msg = ""
     @State private var toastMsg: String?
@@ -184,7 +184,7 @@ struct TaskDetailView: View {
                     .background(RoundedRectangle(cornerRadius: 12).fill(Theme.bg2))
 
                     if isFemale && detail.status == 0 && detail.isOwner != true {
-                        TextField("", text: $msg, prompt: Text("报名留言（可选）").foregroundStyle(Theme.textDim))
+                        TextField("", text: $msg, prompt: Text("报名留言（可选）").foregroundColor(Theme.textDim))
                             .foregroundStyle(Theme.text)
                             .padding(14)
                             .background(RoundedRectangle(cornerRadius: 12).fill(Theme.bg2))

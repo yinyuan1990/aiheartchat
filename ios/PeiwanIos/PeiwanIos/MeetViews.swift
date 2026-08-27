@@ -26,7 +26,7 @@ struct MeetUser: Codable, Identifiable, Hashable {
 /// 子栏：所有 / 新人 / 同城 / 亲密度（亲密度按互动记分倒序）。
 struct MeetSectionView: View {
     let city: String
-    @Environment(AppState.self) private var appState
+    @EnvironmentObject private var appState: AppState
     @State private var tab = "all"
     @State private var items: [MeetUser] = []
     @State private var loading = false
@@ -104,7 +104,7 @@ struct MeetSectionView: View {
 struct MeetCardView: View {
     let u: MeetUser
     var showIntimacy = false
-    @Environment(AppState.self) private var appState
+    @EnvironmentObject private var appState: AppState
 
     var body: some View {
         NavigationLink(value: Route.userHome(u.id)) {

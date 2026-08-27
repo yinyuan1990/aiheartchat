@@ -20,19 +20,23 @@ struct TikTokView: View {
                 }
                 .frame(maxWidth: .infinity)
             } else {
-                ScrollView(.vertical, showsIndicators: false) {
-                    LazyVStack(spacing: 0) {
+                // iOS 16 兼容：旋转 TabView 实现竖向整页翻页（scrollPosition/paging 是 iOS 17 API）
+                GeometryReader { geo in
+                    TabView(selection: $currentId) {
                         ForEach(items) { m in
                             // 只播当前停留页，避免懒加载预创建的页面提前出声
                             TikTokPage(m: m, playing: currentId == m.id)
-                                .containerRelativeFrame(.vertical)
-                                .id(m.id)
+                                .frame(width: geo.size.width, height: geo.size.height)
+                                .rotationEffect(.degrees(-90))
+                                .frame(width: geo.size.height, height: geo.size.width)
+                                .tag(Optional(m.id))
                         }
                     }
-                    .scrollTargetLayout()
+                    .frame(width: geo.size.height, height: geo.size.width)
+                    .rotationEffect(.degrees(90), anchor: .topLeading)
+                    .offset(x: geo.size.width)
+                    .tabViewStyle(.page(indexDisplayMode: .never))
                 }
-                .scrollTargetBehavior(.paging)
-                .scrollPosition(id: $currentId)
                 .ignoresSafeArea()
             }
 
@@ -59,7 +63,7 @@ struct TikTokView: View {
 private struct TikTokPage: View {
     let m: Moment
     let playing: Bool
-    @Environment(AppState.self) private var appState
+    @EnvironmentObject private var appState: AppState
     @State private var player: AVQueuePlayer?
     @State private var looper: AVPlayerLooper?
     @State private var liked = false
@@ -150,7 +154,7 @@ private struct TikTokPage: View {
                 player?.play()
             }
         }
-        .onChange(of: playing) { _, p in
+        .onChange(of: playing) { p in
             // 翻页时旧页立即静音、新页开播
             ensurePlayer()
             if p {

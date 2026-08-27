@@ -41,7 +41,7 @@ func makeQRImage(_ text: String, size: CGFloat = 240) -> UIImage? {
 
 /// 我的收款二维码
 struct MyQrCodeView: View {
-    @Environment(AppState.self) var state
+    @EnvironmentObject var state: AppState
     @Environment(\.dismiss) private var dismiss
     @State private var toastMsg: String?
 

@@ -3,7 +3,7 @@ import PhotosUI
 
 /// 我的
 struct MeView: View {
-    @Environment(AppState.self) var state
+    @EnvironmentObject var state: AppState
     @State private var me: UserProfile?
     @State private var camDefaultOn = UserDefaults.standard.bool(forKey: "camDefaultOn")
     @State private var showScan = false
@@ -148,7 +148,7 @@ struct MeView: View {
                                 Toggle("", isOn: $camDefaultOn)
                                     .labelsHidden()
                                     .tint(Theme.accent)
-                                    .onChange(of: camDefaultOn) { _, v in
+                                    .onChange(of: camDefaultOn) { v in
                                         UserDefaults.standard.set(v, forKey: "camDefaultOn")
                                     }
                             }
@@ -211,7 +211,7 @@ struct ContribRankItem: Codable, Identifiable {
 
 /// 积分明细
 struct WalletView: View {
-    @Environment(AppState.self) var state
+    @EnvironmentObject var state: AppState
     @State private var wallet: WalletData?
     @State private var txs: [WalletTx] = []
     @State private var hasMore = false
@@ -303,7 +303,7 @@ struct WalletView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Theme.bg, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .navigationBarTrailing) {
                 NavigationLink(value: Route.transfer) {
                     Text("转赠").font(.system(size: 14)).foregroundStyle(Theme.accent)
                 }
@@ -361,7 +361,7 @@ struct WalletView: View {
 
 /// 积分转赠（支付宝转账式：大号居中输入 + 收款人确认卡）
 struct TransferView: View {
-    @Environment(AppState.self) var state
+    @EnvironmentObject var state: AppState
     @Environment(\.dismiss) private var dismiss
     @State private var sid = ""
     @State private var target: LookupUser?
@@ -377,13 +377,13 @@ struct TransferView: View {
                 // 收款人
                 VStack(spacing: 12) {
                     Text("对方 ID").font(.system(size: 13)).foregroundStyle(Theme.textSub)
-                    TextField("", text: $sid, prompt: Text("6 位数字").foregroundStyle(Theme.textDim))
+                    TextField("", text: $sid, prompt: Text("6 位数字").foregroundColor(Theme.textDim))
                         .keyboardType(.numberPad)
                         .multilineTextAlignment(.center)
                         .font(.system(size: 30, weight: .semibold, design: .monospaced))
                         .foregroundStyle(Theme.text)
                         .tracking(6)
-                        .onChange(of: sid) { _, v in
+                        .onChange(of: sid) { v in
                             let filtered = String(v.filter(\.isNumber).prefix(6))
                             if filtered != v { sid = filtered }
                             if filtered.count == 6 {
@@ -441,7 +441,7 @@ struct TransferView: View {
                 // 金额
                 VStack(spacing: 10) {
                     Text("转赠积分").font(.system(size: 13)).foregroundStyle(Theme.textSub)
-                    TextField("", text: $amount, prompt: Text("0").foregroundStyle(Theme.textDim))
+                    TextField("", text: $amount, prompt: Text("0").foregroundColor(Theme.textDim))
                         .keyboardType(.decimalPad)
                         .multilineTextAlignment(.center)
                         .font(.system(size: 40, weight: .bold))
@@ -506,7 +506,7 @@ struct TransferView: View {
 
 /// 实名认证（仅女生）：姓名 + 身份证号，后端本地核验校验位，一证一号
 struct RealnameView: View {
-    @Environment(AppState.self) var state
+    @EnvironmentObject var state: AppState
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var idCard = ""
@@ -533,20 +533,20 @@ struct RealnameView: View {
                     VStack(alignment: .leading, spacing: 14) {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("真实姓名").font(.system(size: 13)).foregroundStyle(Theme.textSub)
-                            TextField("", text: $name, prompt: Text("与身份证一致").foregroundStyle(Theme.textDim))
+                            TextField("", text: $name, prompt: Text("与身份证一致").foregroundColor(Theme.textDim))
                                 .font(.system(size: 16)).foregroundStyle(Theme.text)
                                 .padding(12)
                                 .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bg3))
                         }
                         VStack(alignment: .leading, spacing: 6) {
                             Text("身份证号").font(.system(size: 13)).foregroundStyle(Theme.textSub)
-                            TextField("", text: $idCard, prompt: Text("18 位身份证号码").foregroundStyle(Theme.textDim))
+                            TextField("", text: $idCard, prompt: Text("18 位身份证号码").foregroundColor(Theme.textDim))
                                 .font(.system(size: 16, design: .monospaced)).foregroundStyle(Theme.text)
                                 .textInputAutocapitalization(.characters)
                                 .autocorrectionDisabled()
                                 .padding(12)
                                 .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bg3))
-                                .onChange(of: idCard) { _, v in
+                                .onChange(of: idCard) { v in
                                     let filtered = String(v.uppercased().filter { $0.isNumber || $0 == "X" }.prefix(18))
                                     if filtered != v { idCard = filtered }
                                 }
@@ -590,7 +590,7 @@ struct RealnameView: View {
 
 /// 编辑资料
 struct EditProfileView: View {
-    @Environment(AppState.self) var state
+    @EnvironmentObject var state: AppState
     @Environment(\.dismiss) private var dismiss
     @State private var nickname = ""
     @State private var age = 18
@@ -690,7 +690,7 @@ struct EditProfileView: View {
                         TextField("介绍一下自己…", text: $signature, axis: .vertical)
                             .lineLimit(3...6)
                             .font(.system(size: 15)).foregroundStyle(Theme.text)
-                            .onChange(of: signature) { _, v in
+                            .onChange(of: signature) { v in
                                 if v.count > 80 { signature = String(v.prefix(80)) }
                             }
                         Text("\(signature.count)/80")
@@ -755,7 +755,7 @@ struct EditProfileView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Theme.bg, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .navigationBarTrailing) {
                 Button("保存") { save() }
                     .font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.accent)
             }
@@ -805,7 +805,7 @@ struct EditProfileView: View {
             }
             loaded = true
         }
-        .onChange(of: avatarItem) { _, item in
+        .onChange(of: avatarItem) { item in
             guard let item else { return }
             Task {
                 if let data = try? await item.loadTransferable(type: Data.self),
@@ -817,7 +817,7 @@ struct EditProfileView: View {
                 avatarItem = nil
             }
         }
-        .onChange(of: wallItems) { _, items in
+        .onChange(of: wallItems) { items in
             guard !items.isEmpty else { return }
             uploadingPhoto = true
             Task {
@@ -931,7 +931,7 @@ struct GuideApplyView: View {
     }
 
     private func inputField(_ placeholder: String, text: Binding<String>) -> some View {
-        TextField("", text: text, prompt: Text(placeholder).foregroundStyle(Theme.textDim))
+        TextField("", text: text, prompt: Text(placeholder).foregroundColor(Theme.textDim))
             .foregroundStyle(Theme.text)
             .padding(14)
             .background(RoundedRectangle(cornerRadius: 12).fill(Theme.bg2))

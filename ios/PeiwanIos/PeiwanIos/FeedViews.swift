@@ -190,7 +190,7 @@ struct PlazaView: View {
         .fullScreenCover(isPresented: $showTikTok) {
             TikTokView(startId: tiktokStartId)
         }
-        .onChange(of: showTikTok) { _, shown in
+        .onChange(of: showTikTok) { shown in
             // 进入抖音模式停止列表内视频
             if shown { FeedVideoCenter.pauseCurrent() }
         }
@@ -276,7 +276,7 @@ struct MomentCardView: View {
     /// 观看者位置（用于距离显示）
     var viewerLocation: CLLocation? = nil
     var onVideoCall: (MomentUser) -> Void
-    @Environment(AppState.self) private var appState
+    @EnvironmentObject private var appState: AppState
     @State private var liked = false
     @State private var likeCount = 0
     @State private var following = false
@@ -593,7 +593,7 @@ struct MomentDetailView: View {
             }
 
             HStack(spacing: 10) {
-                TextField("", text: $input, prompt: Text("说点什么…").foregroundStyle(Theme.textSub))
+                TextField("", text: $input, prompt: Text("说点什么…").foregroundColor(Theme.textSub))
                     .padding(.horizontal, 14).padding(.vertical, 10)
                     .background(Capsule().fill(Theme.bg3))
                     .foregroundStyle(Theme.text)
@@ -754,7 +754,7 @@ struct PublishView: View {
                         }
 
                         VStack(alignment: .leading, spacing: 0) {
-                            TextField("", text: $content, prompt: Text("分享此刻的想法…").foregroundStyle(Theme.textSub), axis: .vertical)
+                            TextField("", text: $content, prompt: Text("分享此刻的想法…").foregroundColor(Theme.textSub), axis: .vertical)
                                 .lineLimit(5...10)
                                 .foregroundStyle(Theme.text)
                                 .padding(14)
@@ -796,7 +796,7 @@ struct PublishView: View {
             .navigationTitle("发布")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .navigationBarLeading) {
                     Button("取消") { dismiss() }.foregroundStyle(Theme.textSub)
                 }
             }
@@ -811,7 +811,7 @@ struct PublishView: View {
                 }
             }
         }
-        .onChange(of: pickerItems) { _, items in
+        .onChange(of: pickerItems) { items in
             guard !items.isEmpty else { return }
             Task {
                 uploading = true
@@ -832,7 +832,7 @@ struct PublishView: View {
                 uploadProgress = 0
             }
         }
-        .onChange(of: videoItem) { _, item in
+        .onChange(of: videoItem) { item in
             guard let item else { return }
             Task {
                 uploading = true

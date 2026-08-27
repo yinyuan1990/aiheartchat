@@ -2,7 +2,7 @@ import SwiftUI
 
 /// 启动进入：设备已注册直接恢复账号，否则去注册（无密码）
 struct BootView: View {
-    @Environment(AppState.self) var state
+    @EnvironmentObject var state: AppState
 
     var body: some View {
         VStack(spacing: 24) {
