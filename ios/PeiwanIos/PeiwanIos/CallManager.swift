@@ -36,6 +36,7 @@ enum CallPhase: Equatable {
  * 双方各推一路流（WHIP）拉对方一路流（WHEP），流名 live/{callId}_{userId}。
  * 通话 UI 由独立 UIWindow 承载（CallWindow），保证盖在任何弹层之上。
  */
+@MainActor
 final class CallManager: ObservableObject {
     static let shared = CallManager()
 

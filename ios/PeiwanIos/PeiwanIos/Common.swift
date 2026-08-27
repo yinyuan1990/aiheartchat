@@ -240,6 +240,7 @@ func routeView(_ route: Route) -> some View {
 }
 
 /// 自定义底部 tab 栏的可见性：有子页面被 push 时隐藏（计数支持多级 push）
+@MainActor
 final class TabBarVisibility: ObservableObject {
     static let shared = TabBarVisibility()
     @Published var depth = 0

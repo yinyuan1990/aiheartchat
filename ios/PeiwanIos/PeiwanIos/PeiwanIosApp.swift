@@ -25,6 +25,9 @@ enum AppStage {
     case main
 }
 
+// 显式 @MainActor：工程开了默认 MainActor 隔离（SWIFT_DEFAULT_ACTOR_ISOLATION），
+// 部分 Xcode 26.x 版本对隐式推断的类型会误报 "does not conform to ObservableObject"
+@MainActor
 final class AppState: ObservableObject {
     @Published var stage: AppStage = .boot
     @Published var user: UserProfile?
