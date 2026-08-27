@@ -1,4 +1,12 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -6,6 +14,13 @@ import { WalletService } from '../wallet/wallet.service';
 import { ConnectionRegistry } from '../im/connection.registry';
 import { ImService } from '../im/im.service';
 import { IntimacyService } from '../intimacy/intimacy.service';
+
+/** 接通时预冻结的最大分钟数（余额更多也只锁这么多，tick 里按需续冻） */
+const MAX_FREEZE_MIN = 30n;
+/** 计费心跳间隔（毫秒） */
+const BILLING_TICK_MS = 60_000;
+/** 双方连续 N 个 tick 离线则强制挂断（防杀进程逃单 / 异常掉线占线） */
+const OFFLINE_STRIKE_LIMIT = 2;
 
 /**
  * 一对一音视频通话信令（媒体走 SRS WebRTC）：
@@ -15,9 +30,28 @@ import { IntimacyService } from '../intimacy/intimacy.service';
  * 信令帧经 IM WebSocket 下发：{ op: "call", event, data }
  */
 @Injectable()
-export class CallService {
+export class CallService implements OnModuleInit, OnModuleDestroy {
   private readonly srsServer: string;
   private readonly srsApi: string;
+  private readonly logger = new Logger('CallBilling');
+  private billingTimer?: NodeJS.Timeout;
+  /** 每通视频的价格缓存（tick 每分钟跑，避免重复查价） */
+  private readonly priceCache = new Map<string, { priceFen: bigint; platformCutFen: bigint }>();
+  /** 每通视频已冻结总额缓存（重启后 tick 会从流水表懒加载重建） */
+  private readonly frozenCache = new Map<string, bigint>();
+  /** 双方离线连击计数（连续 OFFLINE_STRIKE_LIMIT 次强制挂断） */
+  private readonly offlineStrikes = new Map<string, number>();
+
+  onModuleInit() {
+    this.billingTimer = setInterval(() => {
+      this.billingTick().catch((e) => this.logger.error(`计费 tick 异常: ${e?.stack ?? e}`));
+    }, BILLING_TICK_MS);
+    this.logger.log(`计费心跳已启动：间隔 ${BILLING_TICK_MS / 1000}s，预冻结上限 ${MAX_FREEZE_MIN} 分钟，离线判定 ${OFFLINE_STRIKE_LIMIT} 次`);
+  }
+
+  onModuleDestroy() {
+    if (this.billingTimer) clearInterval(this.billingTimer);
+  }
 
   constructor(
     private readonly prisma: PrismaService,
@@ -89,6 +123,18 @@ export class CallService {
     if (busySet.has(calleeId.toString())) throw new BadRequestException('对方正在通话中');
     if (busySet.has(callerId.toString())) throw new BadRequestException('您正在通话中');
 
+    // 视频通话发起时校验余额：至少够 1 分钟，不够直接拒绝（真正锁钱在 accept 预冻结）
+    if (type === 2) {
+      const { priceFen } = await this.videoPricing(calleeId);
+      const wallet = await this.wallets.getWallet(callerId);
+      if (priceFen > 0n && wallet.balance < priceFen) {
+        this.logger.warn(
+          `invite 拒绝(积分不足): caller=${callerId} callee=${calleeId} balance=${wallet.balance} price/min=${priceFen}`,
+        );
+        throw new BadRequestException('积分不足，无法发起视频通话');
+      }
+    }
+
     const callId = randomUUID().replace(/-/g, '');
     const record = await this.prisma.callRecord.create({
       data: { callId, callerId, calleeId, type, status: 0 },
@@ -112,6 +158,22 @@ export class CallService {
     const record = await this.mustCall(callId);
     if (record.calleeId !== userId) throw new ForbiddenException('无权操作');
     if (record.status !== 0) throw new BadRequestException('通话状态已变更');
+
+    // 视频通话接通即预冻结（安全核心：冻结后这笔钱不能同时用于消息/礼物）
+    if (record.type === 2) {
+      try {
+        await this.freezeForCall(callId, record.callerId, record.calleeId, 1);
+      } catch (e) {
+        // 男方余额在 invite 之后被花掉：不接通，通知双方
+        this.logger.warn(`accept 冻结失败，通话取消: callId=${callId} caller=${record.callerId} err=${(e as Error).message}`);
+        await this.prisma.callRecord.update({ where: { callId }, data: { status: 4, endedAt: new Date() } });
+        await this.registry.deliver([record.callerId], {
+          op: 'call', event: 'end', data: { callId, durationSec: 0, reason: '积分不足，无法接通' },
+        });
+        throw new BadRequestException('对方积分不足，无法接通');
+      }
+    }
+
     await this.prisma.callRecord.update({
       where: { callId },
       data: { status: 1, startedAt: new Date() },
@@ -121,11 +183,71 @@ export class CallService {
     return { callId, config };
   }
 
+  /**
+   * 预冻结 / 续冻：按女方每分钟价，冻 min(男方余额可冻分钟数, MAX_FREEZE_MIN) 分钟，
+   * 至少 1 分钟，不足抛「积分不足」。seq 用于幂等 refKey（call_{id}_f{seq}）。
+   */
+  private async freezeForCall(callId: string, maleId: bigint, femaleId: bigint, seq: number): Promise<bigint> {
+    let price = this.priceCache.get(callId);
+    if (!price) {
+      price = await this.videoPricing(femaleId);
+      this.priceCache.set(callId, price);
+    }
+    // 价格配置为 0 = 免费模式，跳过冻结与计费
+    if (price.priceFen <= 0n) return 0n;
+    const wallet = await this.wallets.getWallet(maleId);
+    let minutes = wallet.balance / price.priceFen;
+    if (minutes > MAX_FREEZE_MIN) minutes = MAX_FREEZE_MIN;
+    if (minutes < 1n) throw new BadRequestException('积分不足');
+    const freezeFen = price.priceFen * minutes;
+
+    let result: { balance: bigint; frozen: bigint };
+    try {
+      result = await this.prisma.$transaction((tx) =>
+        this.wallets.applyTx(tx, maleId, 'call_freeze', -freezeFen, {
+          frozenDelta: freezeFen,
+          refKey: `call_${callId}_f${seq}`,
+          remark: `视频通话预冻结 ${minutes} 分钟`,
+        }),
+      );
+    } catch (e: any) {
+      if (e?.code === 'P2002') {
+        // 同一 seq 已冻结过（accept 重试 / 并发 tick）：幂等成功，缓存失效待重建
+        this.logger.warn(`冻结幂等命中(已冻结过): callId=${callId} seq=${seq}`);
+        this.frozenCache.delete(callId);
+        return 0n;
+      }
+      throw e;
+    }
+    const total = (this.frozenCache.get(callId) ?? 0n) + freezeFen;
+    this.frozenCache.set(callId, total);
+    this.logger.log(
+      `冻结: callId=${callId} seq=${seq} male=${maleId} 冻结=${freezeFen}分(${minutes}分钟x${price.priceFen}) ` +
+        `累计冻结=${total} 余额=${result.balance} 冻结栏=${result.frozen}`,
+    );
+    return freezeFen;
+  }
+
+  /** 通话已冻结总额：优先内存缓存，重启后从流水表重建（type=call_freeze, refKey 前缀匹配） */
+  private async frozenTotal(callId: string, maleId: bigint): Promise<bigint> {
+    const cached = this.frozenCache.get(callId);
+    if (cached != null) return cached;
+    const rows = await this.prisma.walletTransaction.findMany({
+      where: { userId: maleId, type: 'call_freeze', refKey: { startsWith: `call_${callId}_f` } },
+      select: { frozenDelta: true },
+    });
+    const total = rows.reduce((s, r) => s + r.frozenDelta, 0n);
+    this.frozenCache.set(callId, total);
+    if (rows.length) this.logger.log(`冻结额从流水重建: callId=${callId} total=${total}（服务重启后恢复）`);
+    return total;
+  }
+
   async reject(userId: bigint, callId: string) {
     const record = await this.mustCall(callId);
     if (record.calleeId !== userId) throw new ForbiddenException('无权操作');
     if (record.status !== 0) return { ok: true };
     await this.prisma.callRecord.update({ where: { callId }, data: { status: 4, endedAt: new Date() } });
+    await this.refundFrozenIfAny(callId, record.callerId, 'reject');
     await this.registry.deliver([record.callerId], { op: 'call', event: 'reject', data: { callId } });
     await this.im.sendCallMessage(record.callerId, record.calleeId, JSON.stringify({ callType: record.type, result: 'reject' }));
     return { ok: true };
@@ -137,13 +259,43 @@ export class CallService {
     if (record.callerId !== userId) throw new ForbiddenException('无权操作');
     if (record.status !== 0) return { ok: true };
     await this.prisma.callRecord.update({ where: { callId }, data: { status: 5, endedAt: new Date() } });
+    await this.refundFrozenIfAny(callId, record.callerId, 'cancel');
     await this.registry.deliver([record.calleeId], { op: 'call', event: 'cancel', data: { callId } });
     await this.im.sendCallMessage(record.callerId, record.calleeId, JSON.stringify({ callType: record.type, result: 'cancel' }));
     return { ok: true };
   }
 
-  /** 任一方挂断；视频通话按分钟结算（男付女收） */
-  async end(userId: bigint, callId: string) {
+  /** 未接通路径的兜底：把可能残留的冻结全额退回（正常情况下未接通不会有冻结） */
+  private async refundFrozenIfAny(callId: string, maleId: bigint, scene: string) {
+    try {
+      const frozen = await this.frozenTotal(callId, maleId);
+      if (frozen > 0n) {
+        this.logger.warn(`${scene} 发现残留冻结，全额退回: callId=${callId} frozen=${frozen}`);
+        await this.prisma.$transaction((tx) =>
+          this.wallets.applyTx(tx, maleId, 'call_unfreeze', frozen, {
+            frozenDelta: -frozen,
+            refKey: `call_${callId}`,
+            remark: '通话未接通，冻结退回',
+          }),
+        );
+      }
+    } catch (e: any) {
+      if (e?.code === 'P2002') {
+        this.logger.warn(`${scene} 冻结退回幂等跳过: callId=${callId}`);
+      } else {
+        this.logger.error(`${scene} 冻结退回失败: callId=${callId} err=${e?.stack ?? e}`);
+      }
+    }
+    this.priceCache.delete(callId);
+    this.frozenCache.delete(callId);
+  }
+
+  /**
+   * 任一方挂断；视频通话按分钟从预冻结额清算（男付女收）。
+   * opts.reason：强制挂断原因（积分不足/连接中断），随 end 信令下发；
+   * opts.notifyBoth：true 时双方都收 end 信令（服务端强制挂断场景）。
+   */
+  async end(userId: bigint, callId: string, opts?: { reason?: string; notifyBoth?: boolean }) {
     const record = await this.mustCall(callId);
     if (record.callerId !== userId && record.calleeId !== userId) throw new ForbiddenException('无权操作');
     if (record.status !== 1 && record.status !== 0) return { ok: true };
@@ -155,55 +307,25 @@ export class CallService {
       data: { status: wasActive ? 2 : 3, endedAt, durationSec },
     });
 
-    // 视频计费：不足 1 分钟按 1 分钟；男付全价，平台抽 4 倍成本/分钟，剩余归女方
+    // 视频计费：不足 1 分钟按 1 分钟；从预冻结额清算，男付全价，平台抽成后剩余归女方
     let billedFen = 0n;
-    if (wasActive && record.type === 2 && durationSec > 0) {
-      const users = await this.prisma.user.findMany({
-        where: { id: { in: [record.callerId, record.calleeId] } },
-        select: { id: true, gender: true },
-      });
-      const male = users.find((u) => u.gender === 1);
-      const female = users.find((u) => u.gender === 2);
-      if (male && female) {
-        const { priceFen, platformCutFen } = await this.videoPricing(female.id);
-        const minutes = BigInt(Math.max(1, Math.ceil(durationSec / 60)));
-        const total = priceFen * minutes;
-        const wallet = await this.prisma.wallet.findUnique({ where: { userId: male.id } });
-        const actual = wallet && wallet.balance < total ? wallet.balance : total;
-        if (actual > 0n) {
-          // 平台成本优先扣除，剩余给女方（余额不足时按比例缩减女方所得）
-          const platformTotal = platformCutFen * minutes;
-          const femaleShare = actual > platformTotal ? actual - platformTotal : 0n;
-          const mins = Math.ceil(durationSec / 60);
-          await this.prisma.$transaction(async (tx) => {
-            await this.wallets.applyTx(tx, male.id, 'call_fee', -actual, {
-              refKey: `call_${callId}`,
-              remark: `视频通话 ${mins} 分钟`,
-            });
-            if (femaleShare > 0n) {
-              await this.wallets.applyTx(tx, female.id, 'call_income', femaleShare, {
-                refKey: `call_${callId}`,
-                remark: `视频通话收入 ${mins} 分钟（已扣平台成本）`,
-              });
-            }
-            // 平台账本落账：总收费 = 女方分成 + 平台抽成，供后台按女生对账
-            await tx.platformLedger.create({
-              data: {
-                type: 'video_cut',
-                refKey: `call_${callId}`,
-                maleId: male.id,
-                femaleId: female.id,
-                minutes: mins,
-                grossFen: actual,
-                femaleFen: femaleShare,
-                platformFen: actual - femaleShare,
-              },
-            });
-          });
-          billedFen = actual;
+    if (record.type === 2) {
+      try {
+        billedFen = await this.settleVideo(record, wasActive, durationSec);
+      } catch (e: any) {
+        // (type, refKey, userId) 唯一约束兜底：双方同时挂断 / tick 与 end 并发，只清算一次
+        if (e?.code === 'P2002') {
+          this.logger.warn(`清算跳过(已由并发方完成): callId=${callId}`);
+        } else {
+          this.logger.error(`清算失败: callId=${callId} err=${e?.stack ?? e}`);
+          throw e;
         }
       }
     }
+    // 清理本通话的内存状态
+    this.priceCache.delete(callId);
+    this.frozenCache.delete(callId);
+    this.offlineStrikes.delete(callId);
 
     // 亲密度：视频每分钟主叫 +1、被叫 +0.5（不足 1 分钟按 1 分钟）
     if (wasActive && record.type === 2 && durationSec > 0) {
@@ -211,13 +333,196 @@ export class CallService {
     }
 
     const peer = record.callerId === userId ? record.calleeId : record.callerId;
-    await this.registry.deliver([peer], { op: 'call', event: 'end', data: { callId, durationSec } });
+    const targets = opts?.notifyBoth ? [record.callerId, record.calleeId] : [peer];
+    await this.registry.deliver(targets, {
+      op: 'call',
+      event: 'end',
+      data: { callId, durationSec, ...(opts?.reason ? { reason: opts.reason } : {}) },
+    });
     await this.im.sendCallMessage(
       record.callerId,
       record.calleeId,
       JSON.stringify(wasActive ? { callType: record.type, result: 'end', duration: durationSec } : { callType: record.type, result: 'cancel' }),
     );
+    if (opts?.reason) {
+      this.logger.log(`强制挂断完成: callId=${callId} reason=${opts.reason} duration=${durationSec}s billed=${billedFen}`);
+    }
     return { ok: true, durationSec, billedFen };
+  }
+
+  /**
+   * 视频清算：实付 = min(价格 x ceil(秒/60), 已冻结总额)，从 frozen 扣，
+   * 剩余冻结解回余额；女方分成 = 实付 - 平台抽成。整体在一个事务里，refKey 幂等。
+   * 存量兼容：接通于旧版本（无冻结记录）的通话按旧逻辑从余额直扣。
+   */
+  private async settleVideo(
+    record: { callId: string; callerId: bigint; calleeId: bigint },
+    wasActive: boolean,
+    durationSec: number,
+  ): Promise<bigint> {
+    const callId = record.callId;
+    const frozenTotal = await this.frozenTotal(callId, record.callerId);
+    const mins = wasActive && durationSec > 0 ? Math.max(1, Math.ceil(durationSec / 60)) : 0;
+
+    if (frozenTotal <= 0n && mins === 0) return 0n;
+
+    let price = this.priceCache.get(callId);
+    if (!price) price = await this.videoPricing(record.calleeId);
+
+    // 存量兼容：无冻结记录的进行中通话（部署前接通），按旧逻辑从余额直扣
+    if (frozenTotal <= 0n) {
+      const owed = price.priceFen * BigInt(mins);
+      const wallet = await this.wallets.getWallet(record.callerId);
+      const actual = wallet.balance < owed ? wallet.balance : owed;
+      this.logger.warn(`清算(存量无冻结通话，余额直扣): callId=${callId} owed=${owed} actual=${actual}`);
+      if (actual <= 0n) return 0n;
+      const femaleShare = this.femaleShare(actual, price.platformCutFen, mins);
+      await this.settleTx(record, mins, actual, femaleShare, 0n, `视频通话 ${mins} 分钟`, false);
+      return actual;
+    }
+
+    const owed = price.priceFen * BigInt(mins);
+    // 安全边界：只从冻结额扣（tick 续冻失败的场景最多损失一个 tick 周期的分钟差）
+    const actual = owed > frozenTotal ? frozenTotal : owed;
+    const refund = frozenTotal - actual;
+    const femaleShare = this.femaleShare(actual, price.platformCutFen, mins);
+
+    await this.settleTx(record, mins, actual, femaleShare, refund, `视频通话 ${mins} 分钟（冻结清算）`, true);
+    this.logger.log(
+      `清算: callId=${callId} 时长=${durationSec}s(${mins}分钟) 应收=${owed} 冻结=${frozenTotal} ` +
+        `实收=${actual} 女方=${femaleShare} 平台=${actual - femaleShare} 解冻退回=${refund}`,
+    );
+    return actual;
+  }
+
+  private femaleShare(actual: bigint, platformCutFen: bigint, mins: number): bigint {
+    const platformTotal = platformCutFen * BigInt(mins);
+    return actual > platformTotal ? actual - platformTotal : 0n;
+  }
+
+  /** 清算事务：扣冻结/退冻结/女方入账/平台账本，refKey=call_{callId} 全链路幂等 */
+  private async settleTx(
+    record: { callId: string; callerId: bigint; calleeId: bigint },
+    mins: number,
+    actual: bigint,
+    femaleShare: bigint,
+    refundFromFrozen: bigint,
+    remark: string,
+    fromFrozen: boolean,
+  ) {
+    const callId = record.callId;
+    await this.prisma.$transaction(async (tx) => {
+      if (fromFrozen) {
+        // 冻结清算：fee 行消耗 frozen，unfreeze 行把剩余退回 balance
+        if (actual > 0n) {
+          await this.wallets.applyTx(tx, record.callerId, 'call_fee', 0n, {
+            frozenDelta: -actual,
+            refKey: `call_${callId}`,
+            remark,
+          });
+        }
+        if (refundFromFrozen > 0n) {
+          await this.wallets.applyTx(tx, record.callerId, 'call_unfreeze', refundFromFrozen, {
+            frozenDelta: -refundFromFrozen,
+            refKey: `call_${callId}`,
+            remark: '视频通话冻结退回',
+          });
+        }
+      } else if (actual > 0n) {
+        // 存量直扣（部署前接通、无冻结记录的通话）
+        await this.wallets.applyTx(tx, record.callerId, 'call_fee', -actual, {
+          refKey: `call_${callId}`,
+          remark,
+        });
+      }
+      if (femaleShare > 0n) {
+        await this.wallets.applyTx(tx, record.calleeId, 'call_income', femaleShare, {
+          refKey: `call_${callId}`,
+          remark: `视频通话收入 ${mins} 分钟（已扣平台成本）`,
+        });
+      }
+      if (actual > 0n) {
+        // 平台账本落账：总收费 = 女方分成 + 平台抽成，供后台按女生对账
+        await tx.platformLedger.create({
+          data: {
+            type: 'video_cut',
+            refKey: `call_${callId}`,
+            maleId: record.callerId,
+            femaleId: record.calleeId,
+            minutes: mins,
+            grossFen: actual,
+            femaleFen: femaleShare,
+            platformFen: actual - femaleShare,
+          },
+        });
+      }
+    });
+  }
+
+  /**
+   * 计费心跳（每分钟）：
+   * 1. 余额监控：已通话分钟数 x 价格 超过冻结额 → 尝试续冻，续不上强制挂断；
+   * 2. 离线监控：双方任一离线连续 OFFLINE_STRIKE_LIMIT 个 tick → 强制挂断（防杀进程逃单）。
+   * 通话中不逐分钟写库，只做读校验，性能开销可忽略。
+   */
+  private async billingTick() {
+    const active = await this.prisma.callRecord.findMany({ where: { status: 1 } });
+    if (!active.length) return;
+
+    // 批量在线检查（一次 Redis 查询）
+    const ids = active.flatMap((r) => [r.callerId, r.calleeId]);
+    const online = await this.registry.onlineSet(ids);
+    const now = Date.now();
+
+    for (const r of active) {
+      try {
+        // ---- 离线监控（语音/视频都适用）----
+        const bothSides = [r.callerId.toString(), r.calleeId.toString()];
+        const offline = bothSides.filter((id) => !online.has(id));
+        if (offline.length > 0) {
+          const strikes = (this.offlineStrikes.get(r.callId) ?? 0) + 1;
+          this.offlineStrikes.set(r.callId, strikes);
+          this.logger.warn(`tick 离线: callId=${r.callId} offline=[${offline.join(',')}] strikes=${strikes}/${OFFLINE_STRIKE_LIMIT}`);
+          if (strikes >= OFFLINE_STRIKE_LIMIT) {
+            await this.end(r.callerId, r.callId, { reason: '连接中断，通话已结束', notifyBoth: true });
+            continue;
+          }
+        } else if (this.offlineStrikes.has(r.callId)) {
+          this.offlineStrikes.delete(r.callId);
+          this.logger.log(`tick 恢复在线: callId=${r.callId}`);
+        }
+
+        // ---- 余额监控（仅视频计费）----
+        if (r.type !== 2 || !r.startedAt) continue;
+        const mins = Math.max(1, Math.ceil((now - r.startedAt.getTime()) / 60_000));
+        let price = this.priceCache.get(r.callId);
+        if (!price) {
+          price = await this.videoPricing(r.calleeId);
+          this.priceCache.set(r.callId, price);
+        }
+        if (price.priceFen <= 0n) continue; // 免费模式不计费
+        const frozen = await this.frozenTotal(r.callId, r.callerId);
+        const owed = price.priceFen * BigInt(mins);
+        // 下一分钟就要超出冻结额时提前续冻，避免边界分钟出现资金缺口
+        if (owed + price.priceFen > frozen) {
+          const freezeSeq = Math.floor(Number(frozen / price.priceFen)) + 1;
+          try {
+            await this.freezeForCall(r.callId, r.callerId, r.calleeId, 1000 + freezeSeq);
+          } catch {
+            if (owed >= frozen) {
+              this.logger.warn(
+                `tick 强制挂断(积分不足): callId=${r.callId} 已通话=${mins}分钟 应收=${owed} 冻结=${frozen} 续冻失败`,
+              );
+              await this.end(r.callerId, r.callId, { reason: '积分不足，通话已结束', notifyBoth: true });
+            } else {
+              this.logger.warn(`tick 续冻失败(冻结额还够${frozen - owed}分，暂不挂断): callId=${r.callId}`);
+            }
+          }
+        }
+      } catch (e: any) {
+        this.logger.error(`tick 处理通话异常: callId=${r.callId} err=${e?.stack ?? e}`);
+      }
+    }
   }
 
   /**

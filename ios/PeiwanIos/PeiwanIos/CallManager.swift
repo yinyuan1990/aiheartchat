@@ -210,6 +210,11 @@ final class CallManager: ObservableObject {
                 peerPublished = true
             }
         case "reject", "cancel", "end":
+            // 服务端强制挂断（积分不足/连接中断）会带 reason，展示给用户
+            if let reason = data["reason"] as? String, !reason.isEmpty {
+                Self.clog("call force-ended by server: \(reason)")
+                errorMsg = reason
+            }
             teardown()
         default:
             break
