@@ -1666,21 +1666,28 @@ struct JoinGroupView: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            HStack(spacing: 10) {
+            // 邀请码输入框（右侧内嵌扫码图标）
+            HStack(spacing: 8) {
                 TextField("", text: $code, prompt: Text("输入群邀请码").foregroundStyle(Theme.textDim))
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()
                     .foregroundStyle(Theme.text)
-                    .padding(12)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bg2))
                     .onChange(of: code) { _, v in
                         let up = v.uppercased()
                         code = String(up.prefix(12))
                         info = nil
                     }
-                Button("扫码") { showScan = true }
-                    .font(.system(size: 14)).foregroundStyle(Theme.accent)
+                Button {
+                    showScan = true
+                } label: {
+                    Image(systemName: "qrcode.viewfinder")
+                        .font(.system(size: 19))
+                        .foregroundStyle(Theme.accent)
+                }
+                .buttonStyle(.plain)
             }
+            .padding(.horizontal, 12).padding(.vertical, 11)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bg2))
 
             if let g = info {
                 VStack(spacing: 6) {

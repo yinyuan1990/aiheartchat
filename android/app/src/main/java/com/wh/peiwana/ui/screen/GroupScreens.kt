@@ -407,24 +407,28 @@ fun JoinGroupScreen(onBack: () -> Unit, onJoined: (convId: String, groupId: Stri
     Column(Modifier.fillMaxSize()) {
         NavBar("加入群聊", onBack)
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    code, { code = it.uppercase().take(12); info = null },
-                    placeholder = { Text("输入群邀请码", fontSize = 14.sp) },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                )
-                Text("扫码", color = Accent, fontSize = 14.sp, modifier = Modifier.clickable {
-                    scanLauncher.launch(
-                        com.journeyapps.barcodescanner.ScanOptions()
-                            .setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE)
-                            .setPrompt("对准群邀请二维码")
-                            .setBeepEnabled(false)
-                            .setOrientationLocked(true)
-                            .setCaptureActivity(PortraitCaptureActivity::class.java),
-                    )
-                })
-            }
+            OutlinedTextField(
+                code, { code = it.uppercase().take(12); info = null },
+                placeholder = { Text("输入群邀请码", fontSize = 14.sp) },
+                singleLine = true,
+                trailingIcon = {
+                    // 扫码：扫群邀请二维码
+                    Box(
+                        Modifier.size(40.dp).noRippleClick {
+                            scanLauncher.launch(
+                                com.journeyapps.barcodescanner.ScanOptions()
+                                    .setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE)
+                                    .setPrompt("对准群邀请二维码")
+                                    .setBeepEnabled(false)
+                                    .setOrientationLocked(true)
+                                    .setCaptureActivity(PortraitCaptureActivity::class.java),
+                            )
+                        },
+                        contentAlignment = Alignment.Center,
+                    ) { ScanIcon(Accent, 20.dp) }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
             val g = info
             if (g == null) {
                 if (code.isNotBlank()) {
