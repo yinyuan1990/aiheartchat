@@ -96,15 +96,19 @@ function CreateGroupSheet({ onClose, onCreated }: { onClose: () => void; onCreat
   );
 }
 
-/** 加入群聊弹层：输邀请码（有密码的群需输密码） */
-function JoinGroupSheet({ onClose, onJoined }: { onClose: () => void; onJoined: (convId: string, name: string, groupId: string) => void }) {
-  const [code, setCode] = useState('');
+/** 加入群聊弹层：输邀请码（有密码的群需输密码）；initialCode 由「扫一扫」预填并自动查询 */
+export function JoinGroupSheet({ onClose, onJoined, initialCode }: { onClose: () => void; onJoined: (convId: string, name: string, groupId: string) => void; initialCode?: string }) {
+  const [code, setCode] = useState(initialCode ?? '');
   const [info, setInfo] = useState<any>(null);
   const [pwd, setPwd] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const check = async () => {
-    const c = code.trim().toUpperCase();
+  useEffect(() => {
+    if (initialCode) check(initialCode);
+  }, []);
+
+  const check = async (raw?: string) => {
+    const c = (raw ?? code).trim().toUpperCase();
     if (c.length < 6) { alert('请输入完整邀请码'); return; }
     setBusy(true);
     try {
@@ -146,7 +150,7 @@ function JoinGroupSheet({ onClose, onJoined }: { onClose: () => void; onJoined: 
           onChange={(e) => { setCode(e.target.value.toUpperCase()); setInfo(null); }}
         />
         {!info ? (
-          <button className="btn mt12" disabled={busy} onClick={check}>{busy ? '查询中…' : '查找群聊'}</button>
+          <button className="btn mt12" disabled={busy} onClick={() => check()}>{busy ? '查询中…' : '查找群聊'}</button>
         ) : (
           <>
             <div className="card" style={{ marginTop: 12, textAlign: 'center' }}>

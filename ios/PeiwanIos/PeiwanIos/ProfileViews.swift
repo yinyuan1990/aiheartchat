@@ -6,12 +6,37 @@ struct MeView: View {
     @Environment(AppState.self) var state
     @State private var me: UserProfile?
     @State private var camDefaultOn = UserDefaults.standard.bool(forKey: "camDefaultOn")
+    @State private var showScan = false
+    @State private var scannedJoin: ScannedJoinCode?
+    @State private var scanToast: String?
+
+    struct ScannedJoinCode: Identifiable {
+        let id = UUID()
+        let code: String
+    }
 
     var body: some View {
         NavigationStack {
             content
                 .fullBg()
                 .withRoutes()
+        }
+        .toast($scanToast)
+        .fullScreenCover(isPresented: $showScan) {
+            QrScanView { text in
+                if text.contains("pay?sid=") {
+                    scanToast = "这是收款码，请到「积分转赠 - 扫一扫」使用"
+                } else if let c = parseGroupCode(text) {
+                    scannedJoin = ScannedJoinCode(code: c)
+                } else {
+                    scanToast = "无法识别的二维码"
+                }
+            }
+        }
+        .sheet(item: $scannedJoin) { s in
+            NavigationStack {
+                JoinGroupView(initialCode: s.code)
+            }
         }
         .task {
             if let u: UserProfile = try? await Api.request("/user/me") {
@@ -51,6 +76,18 @@ struct MeView: View {
                             }
                             .padding(.top, 4)
                             Spacer()
+                            // 扫一扫（扫群邀请二维码加群）
+                            Button {
+                                showScan = true
+                            } label: {
+                                Image(systemName: "qrcode.viewfinder")
+                                    .font(.system(size: 17))
+                                    .foregroundStyle(Theme.text)
+                                    .frame(width: 38, height: 38)
+                                    .background(Circle().fill(Theme.bg3))
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.top, 4)
                         }
                         Text(u.signature.isEmpty ? "还没有签名" : u.signature)
                             .font(.system(size: 13)).foregroundStyle(Theme.textSub)

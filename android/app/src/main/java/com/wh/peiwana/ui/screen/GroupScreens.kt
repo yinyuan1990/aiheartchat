@@ -241,11 +241,11 @@ private data class GroupCodeInfo(
     val conversationId: String? = null,
 )
 
-/** 加入群聊：输入邀请码或扫码，有密码的群需输入密码 */
+/** 加入群聊：输入邀请码或扫码，有密码的群需输入密码；initialCode 由「扫一扫」预填并自动查询 */
 @Composable
-fun JoinGroupScreen(onBack: () -> Unit, onJoined: (convId: String, groupId: String, name: String) -> Unit) {
+fun JoinGroupScreen(onBack: () -> Unit, onJoined: (convId: String, groupId: String, name: String) -> Unit, initialCode: String? = null) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
-    var code by remember { mutableStateOf("") }
+    var code by remember { mutableStateOf(initialCode ?: "") }
     var info by remember { mutableStateOf<GroupCodeInfo?>(null) }
     var pwd by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
@@ -263,6 +263,8 @@ fun JoinGroupScreen(onBack: () -> Unit, onJoined: (convId: String, groupId: Stri
             busy = false
         }
     }
+
+    LaunchedEffect(Unit) { if (!initialCode.isNullOrBlank()) check(initialCode) }
 
     val scanLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         com.journeyapps.barcodescanner.ScanContract(),

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -28,6 +29,23 @@ import kotlinx.coroutines.launch
 fun MeScreen(modifier: Modifier = Modifier, initialUser: UserProfile?, onNav: (String) -> Unit) {
     var me by remember { mutableStateOf(initialUser) }
     LaunchedEffect(Unit) { me = runCatching { Api.getObj<UserProfile>("/user/me") }.getOrNull() ?: me }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+
+    // 扫一扫：群邀请码 → 加入群聊；收款码 → 提示去转赠页
+    val meScanLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        com.journeyapps.barcodescanner.ScanContract(),
+    ) { result ->
+        result.contents?.let { text ->
+            val groupCode = if (text.contains("group?code=")) parseGroupCode(text) else null
+            val paySid = if (text.contains("pay?sid=")) parsePaySid(text) else null
+            when {
+                groupCode != null -> onNav("join-group?code=$groupCode")
+                paySid != null -> android.widget.Toast.makeText(ctx, "这是收款码，请到「积分明细 - 转赠」里扫码使用", android.widget.Toast.LENGTH_LONG).show()
+                parseGroupCode(text) != null -> onNav("join-group?code=${parseGroupCode(text)}")
+                else -> android.widget.Toast.makeText(ctx, "无法识别的二维码", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
     val u = me ?: return
 
     LazyColumn(modifier = modifier.fillMaxSize()) {
@@ -47,6 +65,21 @@ fun MeScreen(modifier: Modifier = Modifier, initialUser: UserProfile?, onNav: (S
                         }
                         if (u.shortId != null) Text("ID：${u.shortId}", color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
                     }
+                    // 扫一扫（扫群邀请二维码加群）
+                    Box(
+                        Modifier.padding(top = 4.dp).size(38.dp).clip(CircleShape).background(Bg3)
+                            .noRippleClick {
+                                meScanLauncher.launch(
+                                    com.journeyapps.barcodescanner.ScanOptions()
+                                        .setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE)
+                                        .setPrompt("扫描群邀请二维码")
+                                        .setBeepEnabled(false)
+                                        .setOrientationLocked(true)
+                                        .setCaptureActivity(PortraitCaptureActivity::class.java),
+                                )
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) { ScanIcon(TextMain, 18.dp) }
                 }
                 Text(if (u.signature.isNotEmpty()) u.signature else "还没有签名", color = TextSub, fontSize = 13.sp, modifier = Modifier.padding(top = 14.dp))
                 // 点击进关注/粉丝列表

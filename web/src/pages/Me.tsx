@@ -1,12 +1,26 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import jsQR from 'jsqr';
 import { api, fmtPoints, UserProfile } from '../api';
 import { useApp } from '../store';
+import { JoinGroupSheet } from './ChatList';
+
+/** 从扫码结果里提取群邀请码（兼容 peiwan://group?code=xxx 和纯码） */
+function parseGroupCode(text: string): string | null {
+  const m = text.match(/code=([A-Za-z0-9]{6,12})/);
+  if (m) return m[1].toUpperCase();
+  const t = text.trim().toUpperCase();
+  return /^[A-Z0-9]{6,12}$/.test(t) ? t : null;
+}
 
 export function MePage() {
   const nav = useNavigate();
   const { user, setUser } = useApp();
   const [me, setMe] = useState<UserProfile | null>(user);
+  const [scanning, setScanning] = useState(false);
+  const [joinCode, setJoinCode] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const scanStopRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     api<UserProfile>('/user/me').then((u) => {
@@ -14,6 +28,60 @@ export function MePage() {
       setUser(u);
     }).catch(() => {});
   }, []);
+
+  useEffect(() => () => scanStopRef.current(), []);
+
+  const stopScan = () => {
+    scanStopRef.current();
+    setScanning(false);
+  };
+
+  /** 扫一扫：群邀请码 → 加入群聊；收款码 → 提示去转赠页 */
+  const startScan = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) { alert('当前环境不支持相机'); return; }
+    setScanning(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      const video = videoRef.current!;
+      video.srcObject = stream;
+      await video.play();
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d')!;
+      let running = true;
+      scanStopRef.current = () => {
+        running = false;
+        stream.getTracks().forEach((t) => t.stop());
+      };
+
+      const tick = () => {
+        if (!running) return;
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          ctx.drawImage(video, 0, 0);
+          const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(img.data, img.width, img.height);
+          if (code?.data) {
+            stopScan();
+            if (code.data.includes('pay?sid=')) {
+              alert('这是收款码，请到「积分明细 - 转赠」里扫码使用');
+            } else {
+              const c = parseGroupCode(code.data);
+              if (c) setJoinCode(c);
+              else alert('无法识别的二维码');
+            }
+            return;
+          }
+        }
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    } catch {
+      setScanning(false);
+      alert('无法打开相机，请检查权限');
+    }
+  };
 
   if (!me) return <div className="empty">加载中…</div>;
 
@@ -47,6 +115,24 @@ export function MePage() {
                 ID：{me.shortId}（点击复制）
               </div>
             )}
+          </div>
+          {/* 扫一扫（扫群邀请二维码加群） */}
+          <div
+            title="扫一扫"
+            onClick={startScan}
+            style={{
+              width: 38, height: 38, borderRadius: 19, flexShrink: 0, marginTop: 4,
+              background: 'var(--bg-input)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer',
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text)" strokeWidth="2.2" strokeLinecap="round">
+              <path d="M3 8V4.5A1.5 1.5 0 0 1 4.5 3H8" />
+              <path d="M16 3h3.5A1.5 1.5 0 0 1 21 4.5V8" />
+              <path d="M21 16v3.5a1.5 1.5 0 0 1-1.5 1.5H16" />
+              <path d="M8 21H4.5A1.5 1.5 0 0 1 3 19.5V16" />
+              <path d="M5 12h14" />
+            </svg>
           </div>
         </div>
 
@@ -98,6 +184,43 @@ export function MePage() {
         <div className="card" style={{ margin: '10px 16px 24px', padding: '4px 0' }}>
           <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/guide-apply')}>搭子认证</div>
         </div>
+      )}
+
+      {/* 扫一扫全屏取景 */}
+      {scanning && (
+        <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 290 }}>
+          <video ref={videoRef} playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <div
+            style={{
+              position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-60%)',
+              width: 230, height: 230, border: '2px solid var(--accent)', borderRadius: 14,
+            }}
+          />
+          <div style={{ position: 'absolute', left: 0, right: 0, bottom: '22%', textAlign: 'center', color: '#fff', fontSize: 13 }}>
+            对准群邀请二维码
+          </div>
+          <div
+            style={{
+              position: 'absolute', top: 16, right: 16, width: 36, height: 36, borderRadius: 18,
+              background: 'rgba(0,0,0,0.4)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+            }}
+            onClick={stopScan}
+          >
+            ✕
+          </div>
+        </div>
+      )}
+
+      {/* 扫到群邀请码 → 加入群聊 */}
+      {joinCode && (
+        <JoinGroupSheet
+          initialCode={joinCode}
+          onClose={() => setJoinCode(null)}
+          onJoined={(convId, name, groupId) => {
+            setJoinCode(null);
+            nav(`/chatroom/${convId}`, { state: { title: `${name}（群）`, convType: 2, targetId: groupId } });
+          }}
+        />
       )}
     </div>
   );

@@ -123,7 +123,7 @@ struct MessagesView: View {
             Spacer()
             Menu {
                 NavigationLink(value: Route.createGroup) { Label("创建群聊", systemImage: "person.2.badge.plus") }
-                NavigationLink(value: Route.joinGroup) { Label("加入群聊", systemImage: "qrcode.viewfinder") }
+                NavigationLink(value: Route.joinGroup(nil)) { Label("加入群聊", systemImage: "qrcode.viewfinder") }
             } label: {
                 Text("+").font(.system(size: 18)).foregroundStyle(Theme.text)
                     .frame(width: 34, height: 34)
@@ -1561,8 +1561,10 @@ struct GroupShareSheet: View {
     }
 }
 
-/// 加入群聊：输入邀请码或扫码，有密码的群需输入密码
+/// 加入群聊：输入邀请码或扫码，有密码的群需输入密码；initialCode 由「扫一扫」预填并自动查询
 struct JoinGroupView: View {
+    var initialCode: String? = nil
+
     struct CodeInfo: Codable {
         var groupId: String = ""
         var name: String? = ""
@@ -1649,17 +1651,7 @@ struct JoinGroupView: View {
                     guard !busy else { return }
                     let c = code.trimmingCharacters(in: .whitespaces)
                     if c.count < 6 { toastMsg = "请输入完整邀请码"; return }
-                    busy = true
-                    Task {
-                        do {
-                            let g: CodeInfo = try await Api.request("/im/group/code/\(c)")
-                            info = g
-                            pwd = ""
-                        } catch {
-                            toastMsg = (error as? ApiError)?.msg ?? "邀请码无效"
-                        }
-                        busy = false
-                    }
+                    Task { await check(c) }
                 }
             }
             Spacer()
@@ -1670,14 +1662,17 @@ struct JoinGroupView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Theme.bg, for: .navigationBar)
         .toast($toastMsg)
+        .task {
+            if let c = initialCode, !c.isEmpty {
+                code = c
+                await check(c)
+            }
+        }
         .fullScreenCover(isPresented: $showScan) {
             QrScanView { text in
                 if let c = parseGroupCode(text) {
                     code = c
-                    Task {
-                        if let g: CodeInfo = try? await Api.request("/im/group/code/\(c)") { info = g; pwd = "" }
-                        else { toastMsg = "邀请码无效" }
-                    }
+                    Task { await check(c) }
                 } else {
                     toastMsg = "无法识别的群二维码"
                 }
@@ -1686,5 +1681,18 @@ struct JoinGroupView: View {
         .fullScreenCover(item: $opened) { t in
             ChatRoomSheet(target: t)
         }
+    }
+
+    private func check(_ c: String) async {
+        guard !busy else { return }
+        busy = true
+        do {
+            let g: CodeInfo = try await Api.request("/im/group/code/\(c)")
+            info = g
+            pwd = ""
+        } catch {
+            toastMsg = (error as? ApiError)?.msg ?? "邀请码无效"
+        }
+        busy = false
     }
 }

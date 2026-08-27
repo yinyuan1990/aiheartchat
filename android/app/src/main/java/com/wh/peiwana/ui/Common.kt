@@ -127,6 +127,24 @@ fun BackIcon(tint: Color, size: androidx.compose.ui.unit.Dp = 24.dp) {
     }
 }
 
+/** 扫一扫图标（四角取景框 + 中线） */
+@Composable
+fun ScanIcon(tint: Color, size: androidx.compose.ui.unit.Dp = 20.dp) {
+    androidx.compose.foundation.Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        val h = this.size.height
+        val c = w * 0.3f
+        val sw = w * 0.1f
+        val cap = androidx.compose.ui.graphics.StrokeCap.Round
+        fun p(x: Float, y: Float) = androidx.compose.ui.geometry.Offset(x, y)
+        drawLine(tint, p(0f, c), p(0f, 0f), sw, cap); drawLine(tint, p(0f, 0f), p(c, 0f), sw, cap)
+        drawLine(tint, p(w - c, 0f), p(w, 0f), sw, cap); drawLine(tint, p(w, 0f), p(w, c), sw, cap)
+        drawLine(tint, p(0f, h - c), p(0f, h), sw, cap); drawLine(tint, p(0f, h), p(c, h), sw, cap)
+        drawLine(tint, p(w - c, h), p(w, h), sw, cap); drawLine(tint, p(w, h), p(w, h - c), sw, cap)
+        drawLine(tint, p(w * 0.2f, h * 0.5f), p(w * 0.8f, h * 0.5f), sw, cap)
+    }
+}
+
 /** 全屏图片查看器（Telephoto）：双指/双击缩放 + 平移，横滑切换，单击关闭 */
 @Composable
 fun ImageViewer(urls: List<String>, startIndex: Int = 0, onClose: () -> Unit) {
