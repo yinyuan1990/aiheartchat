@@ -227,6 +227,19 @@ final class CallManager: ObservableObject {
         peerName = name
         peerAvatar = avatar
         Task {
+            // 视频通话本地预检：余额不够 1 分钟直接提示，不发起呼叫（服务端仍有权威校验兜底）
+            if type == 2 {
+                struct WalletResp: Codable { var balance: String? }
+                struct PeerPrice: Codable { var videoPriceActualFen: Int? }
+                let wallet: WalletResp? = try? await Api.request("/wallet")
+                let peer: PeerPrice? = try? await Api.request("/user/\(calleeId)")
+                if let balStr = wallet?.balance, let balance = Int(balStr),
+                   let price = peer?.videoPriceActualFen, price > 0, balance < price {
+                    Self.clog("local precheck insufficient: balance=\(balance) price/min=\(price)")
+                    errorMsg = "积分不足，视频通话需 \(fmtPoints(String(price))) 积分/分钟"
+                    return
+                }
+            }
             // 头像缺失时补拉对方资料（微信式界面需要展示）
             if avatar.isEmpty {
                 struct Brief: Codable { var nickname: String? = ""; var avatar: String? = "" }

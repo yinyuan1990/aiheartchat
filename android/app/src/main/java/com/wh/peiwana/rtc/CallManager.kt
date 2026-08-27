@@ -235,6 +235,25 @@ object CallManager {
                     if (name.isEmpty()) peerName.value = d?.get("nickname")?.jsonPrimitive?.content ?: ""
                 }
             }
+            // 视频通话本地预检：余额不够 1 分钟直接提示，不发起呼叫（服务端 invite 仍有权威校验兜底）
+            if (type == 2) {
+                val insufficientMsg = runCatching {
+                    val wallet = Api.request("/wallet") as? kotlinx.serialization.json.JsonObject
+                    val balance = wallet?.get("balance")?.jsonPrimitive?.contentOrNull?.toLongOrNull()
+                    val peer = Api.request("/user/$calleeId") as? kotlinx.serialization.json.JsonObject
+                    val priceFen = peer?.get("videoPriceActualFen")?.jsonPrimitive?.contentOrNull?.toLongOrNull()
+                    if (balance != null && priceFen != null && priceFen > 0 && balance < priceFen) {
+                        "积分不足，视频通话需 ${"%.2f".format(priceFen / 100.0).trimEnd('0').trimEnd('.')} 积分/分钟"
+                    } else {
+                        null
+                    }
+                }.getOrNull()
+                if (insufficientMsg != null) {
+                    clog("local precheck insufficient balance for video call")
+                    android.widget.Toast.makeText(context, insufficientMsg, android.widget.Toast.LENGTH_LONG).show()
+                    return@launch
+                }
+            }
             try {
                 val data = Api.request(
                     "/call/invite", "POST",
