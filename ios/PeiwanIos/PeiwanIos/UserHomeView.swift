@@ -114,7 +114,7 @@ struct UserHomeView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Theme.bg)
-                    .clipShape(UnevenRoundedRectangle(topLeadingRadius: 20, topTrailingRadius: 20))
+                    .clipShape(CompatUnevenRounded(topLeadingRadius: 20, topTrailingRadius: 20))
                     .offset(y: -20)
                 }
                 .padding(.bottom, 90)

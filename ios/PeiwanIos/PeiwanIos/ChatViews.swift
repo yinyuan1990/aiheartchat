@@ -816,10 +816,10 @@ struct MsgBubble: View {
         .frame(maxWidth: .infinity, alignment: mine ? .trailing : .leading)
     }
 
-    private var bubbleShape: UnevenRoundedRectangle {
+    private var bubbleShape: CompatUnevenRounded {
         mine
-            ? UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 16, bottomTrailingRadius: 16, topTrailingRadius: 4)
-            : UnevenRoundedRectangle(topLeadingRadius: 4, bottomLeadingRadius: 16, bottomTrailingRadius: 16, topTrailingRadius: 16)
+            ? CompatUnevenRounded(topLeadingRadius: 16, bottomLeadingRadius: 16, bottomTrailingRadius: 16, topTrailingRadius: 4)
+            : CompatUnevenRounded(topLeadingRadius: 4, bottomLeadingRadius: 16, bottomTrailingRadius: 16, topTrailingRadius: 16)
     }
 
     @ViewBuilder
@@ -1334,8 +1334,8 @@ struct AiChatView: View {
                         .padding(.horizontal, 14).padding(.vertical, 10)
                         .background(
                             (mine
-                                ? UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 16, bottomTrailingRadius: 16, topTrailingRadius: 4)
-                                : UnevenRoundedRectangle(topLeadingRadius: 4, bottomLeadingRadius: 16, bottomTrailingRadius: 16, topTrailingRadius: 16))
+                                ? CompatUnevenRounded(topLeadingRadius: 16, bottomLeadingRadius: 16, bottomTrailingRadius: 16, topTrailingRadius: 4)
+                                : CompatUnevenRounded(topLeadingRadius: 4, bottomLeadingRadius: 16, bottomTrailingRadius: 16, topTrailingRadius: 16))
                                 .fill(mine ? Theme.bubbleMine : Theme.bg3),
                         )
                 }
@@ -1350,7 +1350,7 @@ struct AiChatView: View {
                         }
                         .padding(.horizontal, 14).padding(.vertical, 10)
                         .background(
-                            UnevenRoundedRectangle(topLeadingRadius: 4, bottomLeadingRadius: 16, bottomTrailingRadius: 16, topTrailingRadius: 16)
+                            CompatUnevenRounded(topLeadingRadius: 4, bottomLeadingRadius: 16, bottomTrailingRadius: 16, topTrailingRadius: 16)
                                 .fill(Theme.bg3),
                         )
                     }

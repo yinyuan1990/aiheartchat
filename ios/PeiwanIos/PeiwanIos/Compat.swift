@@ -113,6 +113,40 @@ struct CompatVerticalTextField: View {
     }
 }
 
+// MARK: - 不等角圆角矩形（替代 iOS16 的 UnevenRoundedRectangle）
+
+/// 四角半径可各自指定的圆角矩形，参数命名与 UnevenRoundedRectangle 对齐
+struct CompatUnevenRounded: Shape {
+    var topLeadingRadius: CGFloat = 0
+    var bottomLeadingRadius: CGFloat = 0
+    var bottomTrailingRadius: CGFloat = 0
+    var topTrailingRadius: CGFloat = 0
+
+    func path(in rect: CGRect) -> Path {
+        let maxRadius = min(rect.width, rect.height) / 2
+        let tl = min(topLeadingRadius, maxRadius)
+        let bl = min(bottomLeadingRadius, maxRadius)
+        let br = min(bottomTrailingRadius, maxRadius)
+        let tr = min(topTrailingRadius, maxRadius)
+        var p = Path()
+        p.move(to: CGPoint(x: rect.minX + tl, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.maxX - tr, y: rect.minY))
+        p.addArc(center: CGPoint(x: rect.maxX - tr, y: rect.minY + tr), radius: tr,
+                 startAngle: .degrees(-90), endAngle: .degrees(0), clockwise: false)
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - br))
+        p.addArc(center: CGPoint(x: rect.maxX - br, y: rect.maxY - br), radius: br,
+                 startAngle: .degrees(0), endAngle: .degrees(90), clockwise: false)
+        p.addLine(to: CGPoint(x: rect.minX + bl, y: rect.maxY))
+        p.addArc(center: CGPoint(x: rect.minX + bl, y: rect.maxY - bl), radius: bl,
+                 startAngle: .degrees(90), endAngle: .degrees(180), clockwise: false)
+        p.addLine(to: CGPoint(x: rect.minX, y: rect.minY + tl))
+        p.addArc(center: CGPoint(x: rect.minX + tl, y: rect.minY + tl), radius: tl,
+                 startAngle: .degrees(180), endAngle: .degrees(270), clockwise: false)
+        p.closeSubpath()
+        return p
+    }
+}
+
 // MARK: - 系统分享（替代 ShareLink）
 
 enum ShareSheet {
