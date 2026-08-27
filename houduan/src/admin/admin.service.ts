@@ -321,12 +321,62 @@ export class AdminService {
 
   // ---------- 通话参数（后端可调核心） ----------
 
-  async updateCallConfig(data: { width?: number; height?: number; fps?: number; bitrate?: number }) {
+  async getCallConfig() {
+    const cfg = await this.prisma.callConfig.findFirst();
+    return cfg ?? { width: 640, height: 480, fps: 25, bitrate: 800, voiceRoomMax: 3 };
+  }
+
+  async updateCallConfig(data: { width?: number; height?: number; fps?: number; bitrate?: number; voiceRoomMax?: number }) {
+    if (data.voiceRoomMax !== undefined && (data.voiceRoomMax < 1 || data.voiceRoomMax > 50)) {
+      throw new BadRequestException('语音房人数上限须在 1-50 之间');
+    }
     const cfg = await this.prisma.callConfig.findFirst();
     if (cfg) {
       return this.prisma.callConfig.update({ where: { id: cfg.id }, data });
     }
     return this.prisma.callConfig.create({ data: { width: 640, height: 480, fps: 30, bitrate: 800, ...data } });
+  }
+
+  // ---------- 语音房日志：按场次（callId=vr_{groupId}_{rand}）汇总服务端+多端日志 ----------
+
+  async listVroomSessions() {
+    const groups = await this.prisma.callClientLog.groupBy({
+      by: ['callId'],
+      where: { callId: { startsWith: 'vr_' } },
+      _count: true,
+      _min: { createdAt: true },
+      _max: { createdAt: true },
+      orderBy: { _max: { createdAt: 'desc' } },
+      take: 50,
+    });
+    // 场次 ID 形如 vr_{groupId}_{rand}，解析群 id 带出群名
+    const groupIds = [...new Set(groups.map((g) => g.callId.split('_')[1]).filter(Boolean))];
+    const chatGroups = await this.prisma.chatGroup.findMany({
+      where: { id: { in: groupIds.map(BigInt) } },
+      select: { id: true, name: true },
+    });
+    const nameMap = new Map(chatGroups.map((g) => [g.id.toString(), g.name]));
+    return groups.map((g) => ({
+      roomId: g.callId,
+      groupId: g.callId.split('_')[1] ?? '',
+      groupName: nameMap.get(g.callId.split('_')[1] ?? '') ?? '(群已删除)',
+      logCount: g._count,
+      firstAt: g._min.createdAt,
+      lastAt: g._max.createdAt,
+    }));
+  }
+
+  async vroomLogDetail(roomId: string) {
+    if (!roomId.startsWith('vr_')) throw new BadRequestException('无效的房间场次 ID');
+    const logs = await this.prisma.callClientLog.findMany({ where: { callId: roomId }, orderBy: { id: 'asc' } });
+    const uids = [...new Set(logs.map((l) => l.uid).filter((u) => u !== 0n))];
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: uids } },
+      select: { id: true, nickname: true, shortId: true, gender: true },
+    });
+    const groupId = roomId.split('_')[1] ?? '';
+    const group = groupId ? await this.prisma.chatGroup.findUnique({ where: { id: BigInt(groupId) }, select: { name: true } }) : null;
+    return { roomId, groupName: group?.name ?? '(群已删除)', logs, users };
   }
 
   // ---------- 礼物管理 ----------

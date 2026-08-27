@@ -77,6 +77,20 @@ export class AdminController {
     return this.admin.callLogDetail(callId);
   }
 
+  // ---------- 语音房日志（按房间场次汇总多端日志） ----------
+
+  @Get('vroom-logs')
+  @UseGuards(AdminGuard)
+  vroomLogs() {
+    return this.admin.listVroomSessions();
+  }
+
+  @Get('vroom-logs/:roomId')
+  @UseGuards(AdminGuard)
+  vroomLogDetail(@Param('roomId') roomId: string) {
+    return this.admin.vroomLogDetail(roomId);
+  }
+
   // ---------- 平台账本 ----------
 
   @Get('ledger/summary')
@@ -127,9 +141,15 @@ export class AdminController {
 
   // ---------- 通话参数 ----------
 
+  @Get('call-config')
+  @UseGuards(AdminGuard)
+  getCallConfig() {
+    return this.admin.getCallConfig();
+  }
+
   @Put('call-config')
   @UseGuards(AdminGuard)
-  callConfig(@Body() body: { width?: number; height?: number; fps?: number; bitrate?: number }) {
+  callConfig(@Body() body: { width?: number; height?: number; fps?: number; bitrate?: number; voiceRoomMax?: number }) {
     return this.admin.updateCallConfig(body);
   }
 

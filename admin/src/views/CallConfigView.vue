@@ -6,6 +6,7 @@ const width = ref(640);
 const height = ref(480);
 const fps = ref(25);
 const bitrate = ref(800);
+const voiceRoomMax = ref(3);
 const msgPrice = ref('0.1');
 const videoBasePrice = ref('0.02');
 const platformX = ref(2);
@@ -19,6 +20,14 @@ function showToast(t: string) {
 
 onMounted(async () => {
   try {
+    const c = await api<any>('/admin/call-config');
+    width.value = c.width ?? 640;
+    height.value = c.height ?? 480;
+    fps.value = c.fps ?? 25;
+    bitrate.value = c.bitrate ?? 800;
+    voiceRoomMax.value = c.voiceRoomMax ?? 3;
+  } catch {}
+  try {
     const p = await api<any>('/admin/price-config');
     msgPrice.value = (p.msgPriceFen / 100).toString();
     videoBasePrice.value = (p.videoBaseFenPerMin / 100).toString();
@@ -30,9 +39,15 @@ onMounted(async () => {
 async function save() {
   await api('/admin/call-config', {
     method: 'PUT',
-    body: { width: width.value, height: height.value, fps: fps.value, bitrate: bitrate.value },
+    body: {
+      width: width.value,
+      height: height.value,
+      fps: fps.value,
+      bitrate: bitrate.value,
+      voiceRoomMax: Math.max(1, Math.round(voiceRoomMax.value || 3)),
+    },
   });
-  showToast('已保存，App 下次呼叫生效');
+  showToast('已保存，App 下次呼叫/进房生效');
 }
 
 async function savePrices() {
@@ -81,11 +96,12 @@ function applyPreset(p: (typeof presets)[0]) {
         <label class="muted">高 <input v-model.number="height" type="number" style="width: 100px" /></label>
         <label class="muted">帧率 <input v-model.number="fps" type="number" style="width: 80px" /></label>
         <label class="muted">码率(kbps) <input v-model.number="bitrate" type="number" style="width: 100px" /></label>
+        <label class="muted">语音房人数上限 <input v-model.number="voiceRoomMax" type="number" min="1" max="50" style="width: 80px" /> 人</label>
       </div>
       <div style="margin-top: 16px">
         <button @click="save">保存生效</button>
       </div>
-      <p class="muted" style="margin-top: 12px">默认 640x480 @ 25fps 800kbps；修改后 App 端发起新通话时自动拉取新参数。</p>
+      <p class="muted" style="margin-top: 12px">默认 640x480 @ 25fps 800kbps；修改后 App 端发起新通话时自动拉取新参数。语音房上限默认 3 人，保存后新进房请求即时生效（已在房内的人不受影响）。</p>
     </div>
 
     <div class="page-title" style="margin-top: 24px">计费配置（单位：积分，1 积分 = 1 元，支持小数）</div>

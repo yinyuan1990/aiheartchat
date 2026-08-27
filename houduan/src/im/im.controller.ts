@@ -3,6 +3,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/current-user.decorator';
 import { ImService } from './im.service';
 import { GroupService } from './group.service';
+import { VoiceRoomService } from './voiceroom.service';
 import { CreateGroupDto, GroupInfoDto, MemberIdsDto } from './im.dto';
 
 @Controller('im')
@@ -11,6 +12,7 @@ export class ImController {
   constructor(
     private readonly im: ImService,
     private readonly groups: GroupService,
+    private readonly voiceRoom: VoiceRoomService,
   ) {}
 
   @Get('conversations')
@@ -123,5 +125,40 @@ export class ImController {
   @Post('group/:id/dissolve')
   dissolve(@CurrentUser() userId: bigint, @Param('id') id: string) {
     return this.groups.dissolve(userId, BigInt(id));
+  }
+
+  // ---------- 群聊语音房 ----------
+
+  /** 房间状态：成员列表 + 人数上限（群聊页入口展示 N/max） */
+  @Get('group/:id/voiceroom')
+  voiceRoomInfo(@CurrentUser() userId: bigint, @Param('id') id: string) {
+    return this.voiceRoom.info(userId, BigInt(id));
+  }
+
+  /** 加入语音房：返回成员、SRS 推拉流地址、本人流名、场次 ID */
+  @Post('group/:id/voiceroom/join')
+  voiceRoomJoin(@CurrentUser() userId: bigint, @Param('id') id: string) {
+    return this.voiceRoom.join(userId, BigInt(id));
+  }
+
+  @Post('group/:id/voiceroom/leave')
+  voiceRoomLeave(@CurrentUser() userId: bigint, @Param('id') id: string) {
+    return this.voiceRoom.leave(userId, BigInt(id));
+  }
+
+  /** 30 秒心跳：保活房内席位；返回 inRoom=false 时客户端应退出 */
+  @Post('group/:id/voiceroom/heartbeat')
+  voiceRoomHeartbeat(@CurrentUser() userId: bigint, @Param('id') id: string) {
+    return this.voiceRoom.heartbeat(userId, BigInt(id));
+  }
+
+  /** 客户端日志上报：按房间场次汇总（管理端「通话日志-语音房」查看） */
+  @Post('group/:id/voiceroom/log')
+  voiceRoomLog(
+    @CurrentUser() userId: bigint,
+    @Param('id') id: string,
+    @Body() dto: { platform: string; lines: string[] },
+  ) {
+    return this.voiceRoom.appendLog(userId, BigInt(id), dto.platform ?? 'unknown', dto.lines ?? []);
   }
 }

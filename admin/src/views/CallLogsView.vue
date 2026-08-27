@@ -6,6 +6,10 @@ const list = ref<any[]>([]);
 const loading = ref(false);
 const hasMore = ref(true);
 const detail = ref<any>(null);
+/** 页签：call=一对一通话，vroom=群语音房 */
+const tab = ref<'call' | 'vroom'>('call');
+const vroomList = ref<any[]>([]);
+const vroomDetail = ref<any>(null);
 
 const STATUS: Record<number, string> = { 0: '呼叫中', 1: '进行中', 2: '已结束', 3: '未接', 4: '拒绝', 5: '取消' };
 
@@ -52,6 +56,52 @@ function download() {
   URL.revokeObjectURL(a.href);
 }
 
+// ---------- 语音房日志（按房间场次汇总服务端+多端日志） ----------
+
+async function loadVrooms() {
+  loading.value = true;
+  try {
+    vroomList.value = await api<any[]>('/admin/vroom-logs');
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function openVroomDetail(r: any) {
+  vroomDetail.value = await api<any>(`/admin/vroom-logs/${r.roomId}`);
+}
+
+function vroomUserName(uid: string) {
+  if (String(uid) === '0') return '服务端';
+  const u = (vroomDetail.value?.users ?? []).find((x: any) => String(x.id) === String(uid));
+  return u ? `${u.nickname}(${u.shortId ?? ''})` : uid;
+}
+
+function downloadVroom() {
+  if (!vroomDetail.value) return;
+  const head = [
+    `roomId: ${vroomDetail.value.roomId}`,
+    `group: ${vroomDetail.value.groupName}`,
+    '='.repeat(60),
+  ].join('\n');
+  const body = vroomDetail.value.logs
+    .map((l: any) => `\n---- [${l.platform}] ${vroomUserName(l.uid)} 上报于 ${new Date(l.createdAt).toLocaleString()} ----\n${l.content}`)
+    .join('\n');
+  const blob = new Blob([`${head}\n${body}`], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${vroomDetail.value.roomId}.log.txt`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function switchTab(t: 'call' | 'vroom') {
+  tab.value = t;
+  detail.value = null;
+  vroomDetail.value = null;
+  if (t === 'vroom') loadVrooms();
+}
+
 onMounted(() => load());
 </script>
 
@@ -59,7 +109,54 @@ onMounted(() => load());
   <div>
     <div class="page-title">通话日志（排查视频/语音问题）</div>
 
-    <div class="card">
+    <div class="row" style="margin-bottom: 12px; gap: 8px">
+      <button class="small" :class="{ ghost: tab !== 'call' }" @click="switchTab('call')">一对一通话</button>
+      <button class="small" :class="{ ghost: tab !== 'vroom' }" @click="switchTab('vroom')">群语音房</button>
+    </div>
+
+    <div v-if="tab === 'vroom'">
+      <div class="card">
+        <table>
+          <thead>
+            <tr><th>最近活动</th><th>群</th><th>房间场次</th><th>日志</th><th>操作</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="r in vroomList" :key="r.roomId">
+              <td class="muted">{{ new Date(r.lastAt).toLocaleString() }}</td>
+              <td>{{ r.groupName }}</td>
+              <td class="muted">{{ r.roomId }}</td>
+              <td>{{ r.logCount }} 批</td>
+              <td><button class="small ghost" @click="openVroomDetail(r)">查看</button></td>
+            </tr>
+            <tr v-if="!vroomList.length && !loading"><td colspan="5" class="muted">暂无语音房日志</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div v-if="vroomDetail" class="card">
+        <div class="row" style="justify-content: space-between; margin-bottom: 10px">
+          <div class="page-title" style="font-size: 15px; margin: 0">
+            语音房 {{ vroomDetail.groupName }} <span class="muted">（{{ vroomDetail.roomId }}）</span>
+          </div>
+          <div class="row" style="gap: 8px">
+            <button class="small" @click="downloadVroom">下载日志</button>
+            <button class="small ghost" @click="vroomDetail = null">关闭</button>
+          </div>
+        </div>
+        <div v-for="l in vroomDetail.logs" :key="l.id" style="margin-bottom: 14px">
+          <div class="muted" style="font-size: 12px; margin-bottom: 4px">
+            [{{ l.platform }}] {{ vroomUserName(l.uid) }} · 上报于 {{ new Date(l.createdAt).toLocaleString() }}
+          </div>
+          <pre style="
+            background: #0f0f12; color: #c8c8d0; padding: 10px 12px; border-radius: 8px;
+            font-size: 12px; line-height: 1.6; overflow-x: auto; white-space: pre-wrap; word-break: break-all; margin: 0;
+          ">{{ l.content }}</pre>
+        </div>
+        <div v-if="!vroomDetail.logs.length" class="muted">该场次无日志</div>
+      </div>
+    </div>
+
+    <div v-show="tab === 'call'" class="card">
       <table>
         <thead>
           <tr>

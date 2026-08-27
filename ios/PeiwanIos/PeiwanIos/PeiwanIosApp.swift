@@ -68,6 +68,7 @@ struct RootView: View {
             if stage == .main, let user = state.user {
                 WsClient.shared.connect()
                 CallManager.shared.start(userId: user.id, gender: user.gender)
+                VoiceRoomManager.shared.start(userId: user.id)
                 SilentAudioKeeper.shared.start()
             }
         }

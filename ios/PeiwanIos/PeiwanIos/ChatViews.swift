@@ -424,6 +424,8 @@ struct ChatRoomView: View {
     @State private var removeListener: (() -> Void)?
     @State private var toastMsg: String?
     @State private var showClearConfirm = false
+    @State private var showVoiceRoom = false
+    @ObservedObject private var vroom = VoiceRoomManager.shared
     private let recorderBox = VoiceRecorder()
     @FocusState private var inputFocused: Bool
 
@@ -495,6 +497,16 @@ struct ChatRoomView: View {
                         Text("清空").font(.system(size: 13)).foregroundStyle(Theme.textSub)
                     }
                     if convType == 2 {
+                        Button {
+                            showVoiceRoom = true
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: "waveform").font(.system(size: 11))
+                                Text(vroom.memberCount(targetId) > 0 ? "语音房·\(vroom.memberCount(targetId))" : "语音房")
+                                    .font(.system(size: 13))
+                            }
+                            .foregroundStyle(vroom.joinedGroupId == targetId ? Theme.accent : Theme.text)
+                        }
                         NavigationLink {
                             LazyView(GroupInfoView(groupId: targetId))
                         } label: {
@@ -525,6 +537,10 @@ struct ChatRoomView: View {
             GiftSheetView(toUserId: targetId)
                 .compatDetents(height: 420)
         }
+        .sheet(isPresented: $showVoiceRoom) {
+            VoiceRoomSheet(groupId: targetId, groupName: title)
+                .compatDetents(height: 440)
+        }
         .fullScreenCover(item: $fullImage) { img in
             let imgs = messages.filter { $0.type == "image" }.map(\.content)
             ImageViewerView(images: imgs.isEmpty ? [img] : imgs, initial: max(0, imgs.firstIndex(of: img) ?? 0)) {
@@ -535,6 +551,8 @@ struct ChatRoomView: View {
             messages = (try? await Api.request("/im/messages?conversationId=\(convId)")) ?? []
             if let last = messages.last { WsClient.shared.markRead(conversationId: convId, msgId: last.id) }
             WsClient.shared.connect()
+            // 群聊：拉一次语音房人数（入口角标）
+            if convType == 2 { await vroom.refreshInfo(groupId: targetId) }
             removeListener = WsClient.shared.addListener { frame in
                 let op = frame["op"] as? String
                 if op == "error" {

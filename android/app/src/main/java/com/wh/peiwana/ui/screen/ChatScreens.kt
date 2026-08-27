@@ -377,6 +377,14 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
 
     var showClearConfirm by remember { mutableStateOf(false) }
+    var showVoiceRoom by remember { mutableStateOf(false) }
+    val vrJoinedGid by com.wh.peiwana.rtc.VoiceRoomManager.joinedGroupId.collectAsState()
+    val vrMembers by com.wh.peiwana.rtc.VoiceRoomManager.members.collectAsState()
+    val vrPreview by com.wh.peiwana.rtc.VoiceRoomManager.roomPreview.collectAsState()
+    val vrCount = if (vrJoinedGid == targetId) vrMembers.size else vrPreview[targetId]?.size ?: 0
+    LaunchedEffect(targetId) {
+        if (convType == 2) com.wh.peiwana.rtc.VoiceRoomManager.refreshInfo(targetId)
+    }
 
     Column(Modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxWidth().padding(8.dp, 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -385,8 +393,18 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
             Text("清空", color = TextSub, fontSize = 13.sp, modifier = Modifier.noRippleClick { showClearConfirm = true })
             if (convType == 2) {
                 Spacer(Modifier.width(14.dp))
+                Text(
+                    if (vrCount > 0) "语音房·$vrCount" else "语音房",
+                    color = if (vrJoinedGid == targetId) Accent else TextMain, fontSize = 13.sp,
+                    modifier = Modifier.noRippleClick { showVoiceRoom = true },
+                )
+                Spacer(Modifier.width(14.dp))
                 Text("群信息", color = Accent, fontSize = 13.sp, modifier = Modifier.noRippleClick(onGroupInfo))
             }
+        }
+
+        if (showVoiceRoom) {
+            VoiceRoomDialog(groupId = targetId, groupName = title) { showVoiceRoom = false }
         }
 
         if (showClearConfirm) {

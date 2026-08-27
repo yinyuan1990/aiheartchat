@@ -248,6 +248,8 @@ model CallConfig {
   fps       Int      @default(25)
   /// kbps
   bitrate   Int      @default(800)
+  /// 群聊语音房人数上限（管理端可调）
+  voiceRoomMax Int   @default(3) @map("voice_room_max")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("call_config")

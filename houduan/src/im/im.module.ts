@@ -6,11 +6,12 @@ import { GroupService } from './group.service';
 import { ImController } from './im.controller';
 import { ImGateway } from './im.gateway';
 import { ImService } from './im.service';
+import { VoiceRoomService } from './voiceroom.service';
 
 @Module({
   imports: [AuthModule, WalletModule],
   controllers: [ImController],
-  providers: [ConnectionRegistry, ImService, GroupService, ImGateway],
+  providers: [ConnectionRegistry, ImService, GroupService, ImGateway, VoiceRoomService],
   exports: [ConnectionRegistry, ImService],
 })
 export class ImModule {}

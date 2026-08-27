@@ -82,6 +82,7 @@ export class CallService implements OnModuleInit, OnModuleDestroy {
       msgPriceFen: price?.msgPriceFen ?? 10,
       videoBaseFenPerMin: price?.videoBaseFenPerMin ?? 2,
       videoPlatformX: price?.videoPlatformX ?? 2,
+      voiceRoomMax: cfg?.voiceRoomMax ?? 3,
     };
   }
 

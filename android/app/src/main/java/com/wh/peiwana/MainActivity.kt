@@ -110,6 +110,7 @@ fun AppRoot() {
             WsClient.connect()
             CallManager.attachContext(context)
             CallManager.init(context, it.id)
+            com.wh.peiwana.rtc.VoiceRoomManager.init(context, it.id)
             // 保活：前台服务 + 请求忽略电池优化（保证熄屏收消息/来电）
             runCatching { KeepAliveService.start(context) }
             runCatching {
