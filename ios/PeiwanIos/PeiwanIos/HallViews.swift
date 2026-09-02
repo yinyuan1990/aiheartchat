@@ -9,13 +9,16 @@ import WebKit
 struct HallView: View {
     @State private var hallUrl: URL?
     @State private var chatTarget: ChatTarget?
+    @State private var webTarget: WebTarget?
 
     var body: some View {
         Group {
             if let hallUrl {
-                HallWebView(url: hallUrl) { target in
-                    chatTarget = target
-                }
+                HallWebView(
+                    url: hallUrl,
+                    onOpenChat: { target in chatTarget = target },
+                    onOpenWeb: { target in webTarget = target }
+                )
             } else {
                 EmptyHint(text: "加载中…")
             }
@@ -24,6 +27,10 @@ struct HallView: View {
         // H5 里点「打招呼」等经 JS 桥唤起原生聊天页
         .fullScreenCover(item: $chatTarget) { t in
             ChatRoomSheet(target: t)
+        }
+        // 小游戏等第三方 H5：独立原生 WebView 全屏打开，不污染大厅页
+        .fullScreenCover(item: $webTarget) { t in
+            GameWebSheet(url: t.url, title: t.title, landscape: t.landscape)
         }
         .task {
             guard hallUrl == nil else { return }
@@ -37,13 +44,22 @@ struct HallView: View {
     }
 }
 
+/// 原生全屏网页目标（小游戏等）；landscape 为横屏游戏（仅该页旋转）
+struct WebTarget: Identifiable {
+    let id = UUID()
+    let url: URL
+    let title: String
+    var landscape: Bool = false
+}
+
 /// 大厅 WebView 容器：深色底避免加载白闪，支持侧滑返回 H5 内页；
-/// 注册 JS 桥（window.webkit.messageHandlers.peiwan），H5 聊天入口唤起原生聊天页
+/// 注册 JS 桥（window.webkit.messageHandlers.peiwan）：openChat 唤起原生聊天页，openWeb 唤起原生全屏网页
 private struct HallWebView: UIViewRepresentable {
     let url: URL
     let onOpenChat: (ChatTarget) -> Void
+    let onOpenWeb: (WebTarget) -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(onOpenChat: onOpenChat) }
+    func makeCoordinator() -> Coordinator { Coordinator(onOpenChat: onOpenChat, onOpenWeb: onOpenWeb) }
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -62,21 +78,248 @@ private struct HallWebView: UIViewRepresentable {
 
     final class Coordinator: NSObject, WKScriptMessageHandler {
         let onOpenChat: (ChatTarget) -> Void
-        init(onOpenChat: @escaping (ChatTarget) -> Void) { self.onOpenChat = onOpenChat }
+        let onOpenWeb: (WebTarget) -> Void
+        init(onOpenChat: @escaping (ChatTarget) -> Void, onOpenWeb: @escaping (WebTarget) -> Void) {
+            self.onOpenChat = onOpenChat
+            self.onOpenWeb = onOpenWeb
+        }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-            guard message.name == "peiwan",
-                  let body = message.body as? [String: Any],
-                  body["type"] as? String == "openChat",
-                  let convId = body["convId"] as? String, !convId.isEmpty
-            else { return }
-            let convType = (body["convType"] as? NSNumber)?.intValue ?? Int(body["convType"] as? String ?? "") ?? 1
-            let targetId = body["targetId"] as? String ?? ""
-            let title = body["title"] as? String ?? ""
-            let onOpenChat = onOpenChat
-            DispatchQueue.main.async {
-                onOpenChat(ChatTarget(convId: convId, convType: convType, targetId: targetId, title: title))
+            guard message.name == "peiwan", let body = message.body as? [String: Any] else { return }
+            switch body["type"] as? String {
+            case "openChat":
+                guard let convId = body["convId"] as? String, !convId.isEmpty else { return }
+                let convType = (body["convType"] as? NSNumber)?.intValue ?? Int(body["convType"] as? String ?? "") ?? 1
+                let targetId = body["targetId"] as? String ?? ""
+                let title = body["title"] as? String ?? ""
+                let onOpenChat = onOpenChat
+                DispatchQueue.main.async {
+                    onOpenChat(ChatTarget(convId: convId, convType: convType, targetId: targetId, title: title))
+                }
+            case "openWeb":
+                guard let raw = body["url"] as? String,
+                      let url = URL(string: raw),
+                      let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https"
+                else { return }
+                let title = body["title"] as? String ?? ""
+                let landscape = (body["orientation"] as? String) == "landscape"
+                let onOpenWeb = onOpenWeb
+                DispatchQueue.main.async { onOpenWeb(WebTarget(url: url, title: title, landscape: landscape)) }
+            default:
+                return
             }
+        }
+    }
+}
+
+/**
+ * 小游戏 / 第三方 H5 全屏容器：独立于大厅 WebView，游戏内跳转不影响大厅页。
+ * - landscape=true：仅本页旋转为横屏（App 其余页面锁竖屏，见 OrientationLock），无顶栏、隐藏状态栏，左上角浮动返回键
+ * - 竖屏顶栏：返回（优先网页后退）、标题（跟随网页 title）、关闭
+ * - WKWebView 按游戏场景配置：内联播放、媒体免手势自动播放、侧滑后退、弹窗（alert/confirm）转原生
+ * - 非 http(s) 链接（weixin:// alipays:// 等）交给系统打开
+ */
+struct GameWebSheet: View {
+    let url: URL
+    let title: String
+    var landscape: Bool = false
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var model = GameWebModel()
+
+    var body: some View {
+        Group {
+            if landscape {
+                GameWebView(url: url, model: model)
+                    .ignoresSafeArea()
+                    .overlay(alignment: .topLeading) {
+                        Button {
+                            if model.canGoBack { model.goBack() } else { dismiss() }
+                        } label: {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 36, height: 36)
+                                .background(Color.black.opacity(0.45), in: Circle())
+                        }
+                        .padding(.leading, 10)
+                        .padding(.top, 10)
+                    }
+                    .statusBarHidden(true)
+            } else {
+                VStack(spacing: 0) {
+                    HStack(spacing: 0) {
+                        Button {
+                            if model.canGoBack { model.goBack() } else { dismiss() }
+                        } label: {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(Theme.text)
+                                .frame(width: 40, height: 40)
+                        }
+                        Text(model.pageTitle.isEmpty ? title : model.pageTitle)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(Theme.text)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity)
+                        Button("关闭") { dismiss() }
+                            .font(.system(size: 14))
+                            .foregroundStyle(model.canGoBack ? Theme.textSub : .clear)
+                            .frame(width: 56, height: 40)
+                            .disabled(!model.canGoBack)
+                    }
+                    .padding(.horizontal, 8)
+                    .background(Theme.bg)
+                    .overlay(alignment: .bottom) {
+                        if model.progress > 0 && model.progress < 1 {
+                            GeometryReader { geo in
+                                Rectangle().fill(Theme.accent)
+                                    .frame(width: geo.size.width * model.progress, height: 2)
+                            }
+                            .frame(height: 2)
+                        }
+                    }
+                    GameWebView(url: url, model: model)
+                        .ignoresSafeArea(edges: .bottom)
+                }
+            }
+        }
+        .background(Color.black.ignoresSafeArea())
+        // 进入横屏游戏时旋转屏幕，离开还原竖屏（fullScreenCover 关闭即触发）
+        .onAppear { if landscape { OrientationLock.set(.landscape) } }
+        .onDisappear { if landscape { OrientationLock.set(.portrait) } }
+    }
+}
+
+/// 游戏 WebView 状态（标题 / 进度 / 可后退），供顶栏展示与控制
+final class GameWebModel: ObservableObject {
+    @Published var pageTitle = ""
+    @Published var progress: Double = 0
+    @Published var canGoBack = false
+    weak var webView: WKWebView?
+
+    func goBack() { webView?.goBack() }
+}
+
+private struct GameWebView: UIViewRepresentable {
+    let url: URL
+    let model: GameWebModel
+
+    func makeCoordinator() -> Coordinator { Coordinator(model: model) }
+
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.allowsInlineMediaPlayback = true
+        // 游戏音效 / 背景音乐无需用户手势即可播放
+        config.mediaTypesRequiringUserActionForPlayback = []
+        config.allowsPictureInPictureMediaPlayback = false
+        config.preferences.javaScriptCanOpenWindowsAutomatically = true
+        // 默认 UA 后追加 App 标识，游戏侧可据此识别 App 环境
+        config.applicationNameForUserAgent = "PeiwanApp/iOS"
+        let web = WKWebView(frame: .zero, configuration: config)
+        web.isOpaque = false
+        web.backgroundColor = .black
+        web.scrollView.backgroundColor = .black
+        web.scrollView.contentInsetAdjustmentBehavior = .never
+        web.scrollView.bounces = false
+        web.allowsBackForwardNavigationGestures = true
+        web.navigationDelegate = context.coordinator
+        web.uiDelegate = context.coordinator
+        model.webView = web
+        context.coordinator.observe(web)
+        web.load(URLRequest(url: url))
+        return web
+    }
+
+    func updateUIView(_ uiView: WKWebView, context: Context) {}
+
+    static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
+        coordinator.stopObserving()
+        uiView.stopLoading()
+        // 释放游戏音频 / 定时器
+        uiView.loadHTMLString("", baseURL: nil)
+    }
+
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
+        let model: GameWebModel
+        private var observers: [NSKeyValueObservation] = []
+        init(model: GameWebModel) { self.model = model }
+
+        func observe(_ web: WKWebView) {
+            observers = [
+                web.observe(\.title, options: [.new]) { [weak self] w, _ in
+                    let t = w.title ?? ""
+                    if !t.isEmpty, !t.hasPrefix("http") { self?.model.pageTitle = t }
+                },
+                web.observe(\.estimatedProgress, options: [.new]) { [weak self] w, _ in
+                    self?.model.progress = w.estimatedProgress
+                },
+                web.observe(\.canGoBack, options: [.new]) { [weak self] w, _ in
+                    self?.model.canGoBack = w.canGoBack
+                },
+            ]
+        }
+
+        func stopObserving() {
+            observers.forEach { $0.invalidate() }
+            observers.removeAll()
+        }
+
+        // 非 http(s) scheme（微信 / 支付宝等）交给系统
+        func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            guard let u = navigationAction.request.url, let scheme = u.scheme?.lowercased() else {
+                decisionHandler(.allow); return
+            }
+            if scheme == "http" || scheme == "https" || scheme == "about" || scheme == "blob" || scheme == "data" {
+                decisionHandler(.allow)
+            } else {
+                UIApplication.shared.open(u)
+                decisionHandler(.cancel)
+            }
+        }
+
+        // 游戏里 window.open / target=_blank：在当前 WebView 内打开
+        func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+            if navigationAction.targetFrame == nil, let u = navigationAction.request.url {
+                webView.load(URLRequest(url: u))
+            }
+            return nil
+        }
+
+        // alert / confirm / prompt 转原生弹窗（WKWebView 默认不显示）
+        func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
+            present(UIAlertController(title: nil, message: message, preferredStyle: .alert), actions: [
+                UIAlertAction(title: "好", style: .default) { _ in completionHandler() },
+            ], onFail: completionHandler)
+        }
+
+        func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
+            present(UIAlertController(title: nil, message: message, preferredStyle: .alert), actions: [
+                UIAlertAction(title: "取消", style: .cancel) { _ in completionHandler(false) },
+                UIAlertAction(title: "确定", style: .default) { _ in completionHandler(true) },
+            ], onFail: { completionHandler(false) })
+        }
+
+        func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (String?) -> Void) {
+            let alert = UIAlertController(title: nil, message: prompt, preferredStyle: .alert)
+            alert.addTextField { $0.text = defaultText }
+            present(alert, actions: [
+                UIAlertAction(title: "取消", style: .cancel) { _ in completionHandler(nil) },
+                UIAlertAction(title: "确定", style: .default) { _ in completionHandler(alert.textFields?.first?.text) },
+            ], onFail: { completionHandler(nil) })
+        }
+
+        private func present(_ alert: UIAlertController, actions: [UIAlertAction], onFail: @escaping () -> Void) {
+            actions.forEach(alert.addAction)
+            guard let top = Self.topController() else { onFail(); return }
+            top.present(alert, animated: true)
+        }
+
+        private static func topController() -> UIViewController? {
+            let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            let window = scenes.flatMap { $0.windows }.first { $0.isKeyWindow }
+            var top = window?.rootViewController
+            while let presented = top?.presentedViewController { top = presented }
+            return top
         }
     }
 }

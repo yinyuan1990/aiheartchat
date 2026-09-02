@@ -485,15 +485,18 @@ model TaskApply {
 model AppModule {
   id        Int      @id @default(autoincrement())
   name      String   @db.VarChar(30)
+  /// 图标 URL（小游戏宫格用，后台上传）
   icon      String   @default("") @db.VarChar(255)
-  /// 项目简介（横幅卡副标题）
+  /// 项目简介（横幅卡副标题 / 小游戏说明）
   desc      String   @default("") @db.VarChar(100)
-  /// 封面图 URL，空则用默认渐变
+  /// 封面图 URL，空则用默认渐变（横幅项目用）
   cover     String   @default("") @db.VarChar(255)
-  /// native=客户端内置页 h5=内嵌网页
+  /// native=客户端内置页 h5=内嵌网页横幅 game=小游戏（大厅宫格，App 内原生 WebView 全屏打开）
   type      String   @default("native") @db.VarChar(10)
-  /// native: 路由标识（如 guide）；h5: 完整 url
+  /// native: 路由标识（如 guide）；h5/game: 完整 url
   entry     String   @db.VarChar(255)
+  /// 小游戏屏幕方向：portrait=竖屏 landscape=横屏（App 打开游戏页时旋转屏幕，仅该页生效）
+  orientation String @default("portrait") @db.VarChar(10)
   sort      Int      @default(0)
   enabled   Boolean  @default(true)
   /// 0=全部可见 1=仅男 2=仅女（游戏类项目用 0）

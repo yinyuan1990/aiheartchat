@@ -35,6 +35,7 @@ fun HallScreen(
     modifier: Modifier = Modifier,
     onOpenProject: (String) -> Unit,
     onOpenChat: (convId: String, convType: Int, targetId: String, title: String) -> Unit = { _, _, _, _ -> },
+    onOpenWeb: (url: String, title: String, landscape: Boolean) -> Unit = { _, _, _ -> },
 ) {
     var url by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
@@ -61,8 +62,8 @@ fun HallScreen(
                     // 深色底避免加载白闪
                     setBackgroundColor(0xFF141418.toInt())
                     webViewClient = android.webkit.WebViewClient()
-                    // JS 桥（window.PeiwanNative）：H5 聊天入口唤起原生聊天页
-                    addJavascriptInterface(HallJsBridge(onOpenChat), "PeiwanNative")
+                    // JS 桥（window.PeiwanNative）：H5 聊天入口唤起原生聊天页 / 小游戏唤起原生全屏网页
+                    addJavascriptInterface(HallJsBridge(onOpenChat, onOpenWeb), "PeiwanNative")
                     loadUrl(u)
                 }
             },
@@ -70,14 +71,29 @@ fun HallScreen(
     }
 }
 
-/** 大厅 H5 → 原生 的 JS 桥（JS 侧调用 PeiwanNative.openChat） */
-private class HallJsBridge(private val onOpenChat: (String, Int, String, String) -> Unit) {
+/** 大厅 H5 → 原生 的 JS 桥（JS 侧调用 PeiwanNative.openChat / PeiwanNative.openWeb） */
+private class HallJsBridge(
+    private val onOpenChat: (String, Int, String, String) -> Unit,
+    private val onOpenWeb: (String, String, Boolean) -> Unit,
+) {
     @android.webkit.JavascriptInterface
     fun openChat(convId: String, convType: String, targetId: String, title: String) {
         android.os.Handler(android.os.Looper.getMainLooper()).post {
             onOpenChat(convId, convType.toIntOrNull() ?: 1, targetId, title)
         }
     }
+
+    /** 小游戏等第三方 H5：独立原生 WebView 全屏打开，不污染大厅页；orientation=landscape 时该页旋转为横屏 */
+    @android.webkit.JavascriptInterface
+    fun openWeb(url: String, title: String, orientation: String?) {
+        if (!url.startsWith("http://") && !url.startsWith("https://")) return
+        val landscape = orientation == "landscape"
+        android.os.Handler(android.os.Looper.getMainLooper()).post { onOpenWeb(url, title, landscape) }
+    }
+
+    /** 兼容两参调用（默认竖屏） */
+    @android.webkit.JavascriptInterface
+    fun openWeb(url: String, title: String) = openWeb(url, title, null)
 }
 
 /** 地陪项目主页 */

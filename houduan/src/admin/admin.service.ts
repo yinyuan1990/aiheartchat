@@ -399,23 +399,35 @@ export class AdminService {
     return this.prisma.gift.create({ data: payload });
   }
 
-  // ---------- 模块入口管理（游戏等新模块接入点） ----------
+  // ---------- 模块入口管理（横幅项目 + 小游戏） ----------
 
   listModules() {
     return this.prisma.appModule.findMany({ orderBy: { sort: 'asc' } });
   }
 
+  /**
+   * type: native=客户端内置页（entry 为路由标识）；h5=横幅内嵌网页；game=小游戏（大厅宫格，图标+链接+说明）。
+   * h5/game 的 entry 必须是 http(s) 完整地址，game 必须有图标；orientation 为游戏屏幕方向（portrait/landscape）。
+   */
   upsertModule(data: {
     id?: number; name: string; icon?: string; desc?: string; cover?: string; type: string; entry: string;
-    sort?: number; enabled?: boolean; visibleGender?: number;
+    orientation?: string; sort?: number; enabled?: boolean; visibleGender?: number;
   }) {
+    if (!['native', 'h5', 'game'].includes(data.type)) throw new BadRequestException('type 非法');
+    const entry = (data.entry ?? '').trim();
+    if (!entry) throw new BadRequestException('入口不能为空');
+    if (data.type !== 'native' && !/^https?:\/\//i.test(entry)) throw new BadRequestException('链接地址需以 http(s):// 开头');
+    if (data.type === 'game' && !(data.icon ?? '').trim()) throw new BadRequestException('小游戏需上传图标');
+    const orientation = data.orientation ?? 'portrait';
+    if (!['portrait', 'landscape'].includes(orientation)) throw new BadRequestException('屏幕方向非法');
     const payload = {
       name: data.name,
       icon: data.icon ?? '',
       desc: data.desc ?? '',
       cover: data.cover ?? '',
       type: data.type,
-      entry: data.entry,
+      entry,
+      orientation,
       sort: data.sort ?? 0,
       enabled: data.enabled ?? true,
       visibleGender: data.visibleGender ?? 0,

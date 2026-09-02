@@ -2,8 +2,45 @@ import Combine
 import CoreLocation
 import SwiftUI
 
+/// 屏幕方向控制：全 App 默认锁竖屏（工程 Info 虽列了横屏，实际以此处返回值为准），
+/// 仅横屏小游戏页临时放开为横屏（离开还原）
+@MainActor
+final class AppDelegate: NSObject, UIApplicationDelegate {
+    static var orientationMask: UIInterfaceOrientationMask = .portrait
+
+    func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        AppDelegate.orientationMask
+    }
+}
+
+@MainActor
+enum OrientationLock {
+    /// 切换允许的方向并立即请求系统旋转到目标方向
+    static func set(_ mask: UIInterfaceOrientationMask) {
+        AppDelegate.orientationMask = mask
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        if #available(iOS 16.0, *) {
+            for scene in scenes {
+                scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { _ in }
+                scene.windows.forEach { window in
+                    var top = window.rootViewController
+                    while let presented = top?.presentedViewController { top = presented }
+                    top?.setNeedsUpdateOfSupportedInterfaceOrientations()
+                    window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+                }
+            }
+        } else {
+            let target: UIInterfaceOrientation = mask == .portrait ? .portrait : .landscapeRight
+            UIDevice.current.setValue(target.rawValue, forKey: "orientation")
+            UIViewController.attemptRotationToDeviceOrientation()
+        }
+    }
+}
+
 @main
 struct PeiwanIosApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     init() {
         // 图片/资源 HTTP 缓存：内存 64MB + 磁盘 512MB（AsyncImage 走 URLSession.shared 命中此缓存）
         URLCache.shared = URLCache(

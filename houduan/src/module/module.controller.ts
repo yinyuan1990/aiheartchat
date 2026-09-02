@@ -3,7 +3,10 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 
-/** 大厅页模块入口，后台配置、按性别可见性下发（游戏等新模块由此接入） */
+/**
+ * 大厅页模块入口，后台配置、按性别可见性下发。
+ * type=native/h5 为横幅项目卡；type=game 为小游戏（图标 icon + 链接 entry + 说明 desc），大厅按宫格展示。
+ */
 @Controller('modules')
 @UseGuards(JwtAuthGuard)
 export class ModuleController {

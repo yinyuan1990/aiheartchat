@@ -28,3 +28,38 @@ export function openNativeChat(convId: string, convType: number, targetId: strin
   }
   return false;
 }
+
+/** 是否运行在 App 原生 WebView 里（任一桥存在） */
+export function inNativeApp(): boolean {
+  const w = window as any;
+  return !!(w.webkit?.messageHandlers?.peiwan || w.PeiwanNative);
+}
+
+export type WebOrientation = 'portrait' | 'landscape';
+
+/**
+ * 唤起原生全屏网页容器打开 url（小游戏等第三方 H5）：独立于大厅 WebView，
+ * 带标题栏/关闭，游戏内导航不影响大厅页；orientation 指定该页屏幕方向（横屏游戏旋转屏幕）。成功返回 true。
+ */
+export function openNativeWeb(url: string, title: string, orientation: WebOrientation = 'portrait'): boolean {
+  const payload = { type: 'openWeb', url, title, orientation };
+  const wk = (window as any).webkit?.messageHandlers?.peiwan;
+  if (wk) {
+    try {
+      wk.postMessage(payload);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  const droid = (window as any).PeiwanNative;
+  if (droid?.openWeb) {
+    try {
+      droid.openWeb(url, title, orientation);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}

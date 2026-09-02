@@ -201,7 +201,7 @@ export class AdminController {
   upsertModule(
     @Body() body: {
       id?: number; name: string; icon?: string; desc?: string; cover?: string; type: string; entry: string;
-      sort?: number; enabled?: boolean; visibleGender?: number;
+      orientation?: string; sort?: number; enabled?: boolean; visibleGender?: number;
     },
   ) {
     return this.admin.upsertModule(body);

@@ -24,7 +24,7 @@ const tabs = [
   { key: 'calllogs', label: '通话日志' },
   { key: 'guide', label: '地陪审核' },
   { key: 'disputes', label: '约单仲裁' },
-  { key: 'modules', label: '模块管理' },
+  { key: 'modules', label: '大厅 / 小游戏' },
 ];
 
 async function login() {

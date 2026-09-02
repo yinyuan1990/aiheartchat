@@ -280,6 +280,23 @@ fun AppRoot() {
             page("project/guide") {
                 GuideProjectScreen(user?.gender ?: 1, onBack = { nav.popBackStack() }, onNav = { nav.navigate(it) }, onOpenChat = ::openChatWithUser)
             }
+            // 小游戏 / 第三方 H5 全屏容器（大厅 H5 经 JS 桥 openWeb 唤起）；landscape=true 该页横屏
+            page(
+                "web?url={url}&title={title}&landscape={landscape}",
+                listOf(
+                    navArgument("url") { type = NavType.StringType; defaultValue = "" },
+                    navArgument("title") { type = NavType.StringType; defaultValue = "" },
+                    navArgument("landscape") { type = NavType.BoolType; defaultValue = false },
+                ),
+            ) { entry ->
+                val a = entry.arguments!!
+                GameWebScreen(
+                    url = a.getString("url") ?: "",
+                    title = a.getString("title") ?: "",
+                    landscape = a.getBoolean("landscape"),
+                    onBack = { nav.popBackStack() },
+                )
+            }
             page("people/{mode}", listOf(navArgument("mode") { type = NavType.StringType })) { entry ->
                 PeopleScreen(entry.arguments!!.getString("mode")!!, onBack = { nav.popBackStack() }, onOpenChat = ::openChatWithUser)
             }

@@ -91,6 +91,9 @@ fun MainScreen(
                     onOpenChat = { convId, convType, targetId, title ->
                         onNav("chatroom/$convId?convType=$convType&targetId=$targetId&title=${android.net.Uri.encode(title)}")
                     },
+                    onOpenWeb = { url, title, landscape ->
+                        onNav("web?url=${android.net.Uri.encode(url)}&title=${android.net.Uri.encode(title)}&landscape=$landscape")
+                    },
                 )
             }
             Pane(active = tab == 2) {
