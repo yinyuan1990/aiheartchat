@@ -63,18 +63,22 @@ fun GameWebScreen(url: String, title: String, landscape: Boolean = false, onBack
     // 横屏游戏：进入时旋转 + 沉浸式（隐藏状态栏/导航栏），离开还原竖屏
     val activity = androidx.compose.ui.platform.LocalContext.current.findActivity()
     DisposableEffect(landscape, activity) {
+        GameLog.d("game: enter url=$url title=$title landscape=$landscape activity=${activity?.javaClass?.simpleName}")
         val window = activity?.window
         val controller = window?.let { androidx.core.view.WindowCompat.getInsetsController(it, it.decorView) }
         if (landscape && activity != null) {
             activity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
             controller?.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller?.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            GameLog.d("game: requested landscape, system bars hidden")
         }
         onDispose {
             if (landscape && activity != null) {
                 controller?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
                 activity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                GameLog.d("game: restored portrait")
             }
+            GameLog.d("game: leave")
         }
     }
 
@@ -167,17 +171,34 @@ fun GameWebScreen(url: String, title: String, landscape: Boolean = false, onBack
                                 val scheme = u.scheme?.lowercase() ?: return false
                                 if (scheme == "http" || scheme == "https") return false
                                 // 支付宝 / 微信等 scheme 跳转交给系统，App 未安装则忽略
+                                GameLog.d("game: external scheme $u")
                                 runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, u).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                                    .onFailure { GameLog.w("game: open external failed $it") }
                                 return true
                             }
 
                             override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
+                                GameLog.d("game: page started $url")
                                 canGoBack = view.canGoBack()
                             }
 
                             override fun onPageFinished(view: WebView, url: String?) {
+                                GameLog.d("game: page finished $url title='${view.title}'")
                                 canGoBack = view.canGoBack()
                                 progress = 100
+                            }
+
+                            override fun onReceivedError(view: WebView, request: WebResourceRequest, error: android.webkit.WebResourceError) {
+                                GameLog.e("game: load error main=${request.isForMainFrame} url=${request.url} code=${error.errorCode} desc=${error.description}")
+                            }
+
+                            override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, errorResponse: android.webkit.WebResourceResponse) {
+                                if (request.isForMainFrame) GameLog.e("game: http error ${errorResponse.statusCode} url=${request.url}")
+                            }
+
+                            override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
+                                GameLog.e("game: render process gone crash=${detail.didCrash()}")
+                                return super.onRenderProcessGone(view, detail)
                             }
                         }
                         webChromeClient = object : WebChromeClient() {
@@ -189,7 +210,13 @@ fun GameWebScreen(url: String, title: String, landscape: Boolean = false, onBack
                                 if (!t.isNullOrBlank() && !t.startsWith("http")) pageTitle = t
                             }
 
+                            override fun onConsoleMessage(m: android.webkit.ConsoleMessage): Boolean {
+                                GameLog.d("game: [H5 ${m.messageLevel()}] ${m.message()} (${m.sourceId().substringAfterLast('/')}:${m.lineNumber()})")
+                                return true
+                            }
+
                             override fun onShowCustomView(view: View, callback: CustomViewCallback) {
+                                GameLog.d("game: enter web fullscreen")
                                 if (fullscreenView != null) {
                                     callback.onCustomViewHidden()
                                     return
@@ -199,9 +226,11 @@ fun GameWebScreen(url: String, title: String, landscape: Boolean = false, onBack
                             }
 
                             override fun onHideCustomView() {
+                                GameLog.d("game: exit web fullscreen")
                                 exitFullscreen()
                             }
                         }
+                        GameLog.d("game: webview created ua=${settings.userAgentString}")
                         loadUrl(url)
                         webView = this
                     }

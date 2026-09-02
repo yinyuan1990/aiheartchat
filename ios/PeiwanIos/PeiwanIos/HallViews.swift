@@ -32,6 +32,9 @@ struct HallView: View {
         .fullScreenCover(item: $webTarget) { t in
             GameWebSheet(url: t.url, title: t.title, landscape: t.landscape)
         }
+        .onChange(of: webTarget?.id) { id in
+            GameLog.log("hall: webTarget changed -> \(id == nil ? "nil(dismiss)" : "present \(webTarget?.url.absoluteString ?? "") landscape=\(webTarget?.landscape ?? false)")")
+        }
         .task {
             guard hallUrl == nil else { return }
             struct HallCfg: Codable { var url: String? = "" }
@@ -40,6 +43,7 @@ struct HallView: View {
             if base.isEmpty { base = "\(Api.baseURL)/site/#/hall-embed" }
             let sep = base.contains("?") ? "&" : "?"
             hallUrl = URL(string: "\(base)\(sep)token=\(Api.token ?? "")&embed=1")
+            GameLog.log("hall: load url=\(base) (cfg='\(cfg?.url ?? "")')")
         }
     }
 }
@@ -50,6 +54,72 @@ struct WebTarget: Identifiable {
     let url: URL
     let title: String
     var landscape: Bool = false
+}
+
+/**
+ * 小游戏/大厅 WebView 调试日志：Xcode 控制台或 Console.app 搜索 "[Game]"。
+ * 同时把 H5 的 console.log/error、window.onerror 通过 JS 桥转成原生日志（见 consoleForwardScript）。
+ */
+enum GameLog {
+    static func log(_ msg: String) { NSLog("[Game] %@", msg) }
+
+    /// 注入到 H5：console.* 与 JS 报错转发到 messageHandlers.peiwan（type=log）
+    static let consoleForwardScript = WKUserScript(source: """
+    (function(){
+      if (window.__peiwanLogHooked) return; window.__peiwanLogHooked = true;
+      function fmt(args){ return Array.prototype.map.call(args, function(a){
+        if (typeof a === 'string') return a;
+        if (a instanceof Error) return a.message + ' ' + (a.stack || '');
+        try { return JSON.stringify(a); } catch (e) { return String(a); }
+      }).join(' '); }
+      function send(level, args){
+        try { window.webkit.messageHandlers.peiwan.postMessage({ type: 'log', level: level, msg: fmt(args) }); } catch (e) {}
+      }
+      ['log','info','warn','error'].forEach(function(k){
+        var orig = console[k];
+        console[k] = function(){ send(k, arguments); try { orig.apply(console, arguments); } catch (e) {} };
+      });
+      window.addEventListener('error', function(e){ send('error', ['onerror', e.message, (e.filename||'') + ':' + e.lineno]); });
+      window.addEventListener('unhandledrejection', function(e){ send('error', ['unhandledrejection', String(e.reason && (e.reason.stack || e.reason))]); });
+      send('log', ['bridge ready: webkit=' + !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.peiwan)]);
+    })();
+    """, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+
+    /// 处理 H5 转发过来的 log 消息，返回 true 表示已消费
+    static func handleLogMessage(_ body: [String: Any], scope: String) -> Bool {
+        guard body["type"] as? String == "log" else { return false }
+        let level = body["level"] as? String ?? "log"
+        let msg = body["msg"] as? String ?? ""
+        log("\(scope): [H5 \(level)] \(msg)")
+        return true
+    }
+}
+
+/// 页面加载 / 失败 / 进程崩溃日志（大厅与游戏页共用）
+final class WebNavLogger: NSObject, WKNavigationDelegate {
+    let scope: String
+    init(scope: String) { self.scope = scope }
+
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        GameLog.log("\(scope): page started \(webView.url?.absoluteString.components(separatedBy: "token=").first ?? "")")
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        GameLog.log("\(scope): page finished title='\(webView.title ?? "")'")
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        GameLog.log("\(scope): load failed \(error.localizedDescription)")
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        GameLog.log("\(scope): provisional load failed \(error.localizedDescription)")
+    }
+
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        GameLog.log("\(scope): web content process terminated (crash), reloading")
+        webView.reload()
+    }
 }
 
 /// 大厅 WebView 容器：深色底避免加载白闪，支持侧滑返回 H5 内页；
@@ -65,11 +135,15 @@ private struct HallWebView: UIViewRepresentable {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         config.userContentController.add(context.coordinator, name: "peiwan")
+        // H5 console / JS 报错转原生日志（[Game] hall: [H5 ...]）
+        config.userContentController.addUserScript(GameLog.consoleForwardScript)
         let web = WKWebView(frame: .zero, configuration: config)
         web.isOpaque = false
         web.backgroundColor = UIColor(Theme.bg)
         web.scrollView.backgroundColor = UIColor(Theme.bg)
         web.allowsBackForwardNavigationGestures = true
+        web.navigationDelegate = context.coordinator.navLogger
+        GameLog.log("hall: webview created, bridge peiwan registered")
         web.load(URLRequest(url: url))
         return web
     }
@@ -79,13 +153,20 @@ private struct HallWebView: UIViewRepresentable {
     final class Coordinator: NSObject, WKScriptMessageHandler {
         let onOpenChat: (ChatTarget) -> Void
         let onOpenWeb: (WebTarget) -> Void
+        let navLogger = WebNavLogger(scope: "hall")
         init(onOpenChat: @escaping (ChatTarget) -> Void, onOpenWeb: @escaping (WebTarget) -> Void) {
             self.onOpenChat = onOpenChat
             self.onOpenWeb = onOpenWeb
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-            guard message.name == "peiwan", let body = message.body as? [String: Any] else { return }
+            guard message.name == "peiwan" else { return }
+            guard let body = message.body as? [String: Any] else {
+                GameLog.log("hall: bridge message with non-dict body: \(String(describing: message.body))")
+                return
+            }
+            if GameLog.handleLogMessage(body, scope: "hall") { return }
+            GameLog.log("hall: bridge message \(body)")
             switch body["type"] as? String {
             case "openChat":
                 guard let convId = body["convId"] as? String, !convId.isEmpty else { return }
@@ -100,12 +181,19 @@ private struct HallWebView: UIViewRepresentable {
                 guard let raw = body["url"] as? String,
                       let url = URL(string: raw),
                       let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https"
-                else { return }
+                else {
+                    GameLog.log("hall: openWeb rejected, url invalid or not http(s): \(String(describing: body["url"]))")
+                    return
+                }
                 let title = body["title"] as? String ?? ""
                 let landscape = (body["orientation"] as? String) == "landscape"
                 let onOpenWeb = onOpenWeb
-                DispatchQueue.main.async { onOpenWeb(WebTarget(url: url, title: title, landscape: landscape)) }
+                DispatchQueue.main.async {
+                    GameLog.log("hall: openWeb -> present GameWebSheet url=\(url.absoluteString) landscape=\(landscape)")
+                    onOpenWeb(WebTarget(url: url, title: title, landscape: landscape))
+                }
             default:
+                GameLog.log("hall: unknown bridge type \(String(describing: body["type"]))")
                 return
             }
         }
@@ -185,8 +273,14 @@ struct GameWebSheet: View {
         }
         .background(Color.black.ignoresSafeArea())
         // 进入横屏游戏时旋转屏幕，离开还原竖屏（fullScreenCover 关闭即触发）
-        .onAppear { if landscape { OrientationLock.set(.landscape) } }
-        .onDisappear { if landscape { OrientationLock.set(.portrait) } }
+        .onAppear {
+            GameLog.log("game: sheet appear url=\(url.absoluteString) title=\(title) landscape=\(landscape)")
+            if landscape { OrientationLock.set(.landscape) }
+        }
+        .onDisappear {
+            GameLog.log("game: sheet disappear")
+            if landscape { OrientationLock.set(.portrait) }
+        }
     }
 }
 
@@ -215,6 +309,9 @@ private struct GameWebView: UIViewRepresentable {
         config.preferences.javaScriptCanOpenWindowsAutomatically = true
         // 默认 UA 后追加 App 标识，游戏侧可据此识别 App 环境
         config.applicationNameForUserAgent = "PeiwanApp/iOS"
+        // 游戏页 console / JS 报错转原生日志（[Game] game: [H5 ...]）
+        config.userContentController.add(context.coordinator, name: "peiwan")
+        config.userContentController.addUserScript(GameLog.consoleForwardScript)
         let web = WKWebView(frame: .zero, configuration: config)
         web.isOpaque = false
         web.backgroundColor = .black
@@ -226,6 +323,7 @@ private struct GameWebView: UIViewRepresentable {
         web.uiDelegate = context.coordinator
         model.webView = web
         context.coordinator.observe(web)
+        GameLog.log("game: webview created, loading \(url.absoluteString)")
         web.load(URLRequest(url: url))
         return web
     }
@@ -233,16 +331,44 @@ private struct GameWebView: UIViewRepresentable {
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
     static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
+        GameLog.log("game: webview dismantle")
         coordinator.stopObserving()
+        uiView.configuration.userContentController.removeScriptMessageHandler(forName: "peiwan")
         uiView.stopLoading()
         // 释放游戏音频 / 定时器
         uiView.loadHTMLString("", baseURL: nil)
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
         let model: GameWebModel
         private var observers: [NSKeyValueObservation] = []
         init(model: GameWebModel) { self.model = model }
+
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard let body = message.body as? [String: Any] else { return }
+            if GameLog.handleLogMessage(body, scope: "game") { return }
+            GameLog.log("game: bridge message ignored \(body)")
+        }
+
+        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            GameLog.log("game: page started \(webView.url?.absoluteString ?? "")")
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            GameLog.log("game: page finished title='\(webView.title ?? "")'")
+        }
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            GameLog.log("game: load failed \(error.localizedDescription)")
+        }
+
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            GameLog.log("game: provisional load failed \(error.localizedDescription)")
+        }
+
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            GameLog.log("game: web content process terminated (crash)")
+        }
 
         func observe(_ web: WKWebView) {
             observers = [
@@ -272,6 +398,7 @@ private struct GameWebView: UIViewRepresentable {
             if scheme == "http" || scheme == "https" || scheme == "about" || scheme == "blob" || scheme == "data" {
                 decisionHandler(.allow)
             } else {
+                GameLog.log("game: external scheme \(u.absoluteString)")
                 UIApplication.shared.open(u)
                 decisionHandler(.cancel)
             }

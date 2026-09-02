@@ -41,10 +41,11 @@ fun HallScreen(
     LaunchedEffect(Unit) {
         val cfg = runCatching {
             Api.request("/modules/hall")!!.jsonObject["url"]?.jsonPrimitive?.contentOrNull
-        }.getOrNull()
+        }.onFailure { GameLog.w("hall: GET /modules/hall failed: $it") }.getOrNull()
         val base = if (cfg.isNullOrEmpty()) "${Api.BASE_URL}/site/#/hall-embed" else cfg
         val sep = if (base.contains("?")) "&" else "?"
         url = "$base${sep}token=${Api.token ?: ""}&embed=1"
+        GameLog.d("hall: load url=${url?.substringBefore("token=")}token=*** (cfg='${cfg ?: ""}')")
     }
 
     val u = url
@@ -61,9 +62,12 @@ fun HallScreen(
                     settings.domStorageEnabled = true
                     // 深色底避免加载白闪
                     setBackgroundColor(0xFF141418.toInt())
-                    webViewClient = android.webkit.WebViewClient()
+                    webViewClient = GameLog.webViewClient("hall")
+                    // H5 的 console.log / JS 报错转到 logcat（tag=Game），排查黑屏/点击无反应
+                    webChromeClient = GameLog.chromeClient("hall")
                     // JS 桥（window.PeiwanNative）：H5 聊天入口唤起原生聊天页 / 小游戏唤起原生全屏网页
                     addJavascriptInterface(HallJsBridge(onOpenChat, onOpenWeb), "PeiwanNative")
+                    GameLog.d("hall: webview created, bridge PeiwanNative registered")
                     loadUrl(u)
                 }
             },
@@ -78,6 +82,7 @@ private class HallJsBridge(
 ) {
     @android.webkit.JavascriptInterface
     fun openChat(convId: String, convType: String, targetId: String, title: String) {
+        GameLog.d("bridge.openChat conv=$convId type=$convType target=$targetId title=$title")
         android.os.Handler(android.os.Looper.getMainLooper()).post {
             onOpenChat(convId, convType.toIntOrNull() ?: 1, targetId, title)
         }
@@ -86,14 +91,74 @@ private class HallJsBridge(
     /** 小游戏等第三方 H5：独立原生 WebView 全屏打开，不污染大厅页；orientation=landscape 时该页旋转为横屏 */
     @android.webkit.JavascriptInterface
     fun openWeb(url: String, title: String, orientation: String?) {
-        if (!url.startsWith("http://") && !url.startsWith("https://")) return
+        GameLog.d("bridge.openWeb url=$url title=$title orientation=$orientation")
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            GameLog.w("bridge.openWeb rejected: url must be http(s)")
+            return
+        }
         val landscape = orientation == "landscape"
-        android.os.Handler(android.os.Looper.getMainLooper()).post { onOpenWeb(url, title, landscape) }
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            GameLog.d("bridge.openWeb -> navigate landscape=$landscape")
+            onOpenWeb(url, title, landscape)
+        }
     }
 
     /** 兼容两参调用（默认竖屏） */
     @android.webkit.JavascriptInterface
     fun openWeb(url: String, title: String) = openWeb(url, title, null)
+}
+
+/**
+ * 小游戏/大厅 WebView 调试日志，logcat 过滤 tag=Game 即可：
+ * adb logcat -s Game
+ */
+object GameLog {
+    const val TAG = "Game"
+    fun d(msg: String) = android.util.Log.d(TAG, msg)
+    fun w(msg: String) = android.util.Log.w(TAG, msg)
+    fun e(msg: String, t: Throwable? = null) = android.util.Log.e(TAG, msg, t)
+
+    /** 页面加载 / 错误 / 渲染进程崩溃日志 */
+    fun webViewClient(scope: String) = object : android.webkit.WebViewClient() {
+        override fun onPageStarted(view: android.webkit.WebView, url: String?, favicon: android.graphics.Bitmap?) {
+            d("$scope: page started ${url?.substringBefore("token=")}")
+        }
+
+        override fun onPageFinished(view: android.webkit.WebView, url: String?) {
+            d("$scope: page finished ${url?.substringBefore("token=")} title='${view.title}' progress=${view.progress}")
+        }
+
+        override fun onReceivedError(view: android.webkit.WebView, request: android.webkit.WebResourceRequest, error: android.webkit.WebResourceError) {
+            e("$scope: load error main=${request.isForMainFrame} url=${request.url} code=${error.errorCode} desc=${error.description}")
+        }
+
+        override fun onReceivedHttpError(view: android.webkit.WebView, request: android.webkit.WebResourceRequest, errorResponse: android.webkit.WebResourceResponse) {
+            if (request.isForMainFrame) e("$scope: http error ${errorResponse.statusCode} url=${request.url}")
+        }
+
+        override fun onReceivedSslError(view: android.webkit.WebView, handler: android.webkit.SslErrorHandler, error: android.net.http.SslError) {
+            e("$scope: ssl error $error")
+            super.onReceivedSslError(view, handler, error)
+        }
+
+        override fun onRenderProcessGone(view: android.webkit.WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
+            e("$scope: render process gone crash=${detail.didCrash()}")
+            return super.onRenderProcessGone(view, detail)
+        }
+    }
+
+    /** H5 console 输出转 logcat */
+    fun chromeClient(scope: String) = object : android.webkit.WebChromeClient() {
+        override fun onConsoleMessage(m: android.webkit.ConsoleMessage): Boolean {
+            val line = "$scope: [H5 ${m.messageLevel()}] ${m.message()} (${m.sourceId().substringAfterLast('/')}:${m.lineNumber()})"
+            when (m.messageLevel()) {
+                android.webkit.ConsoleMessage.MessageLevel.ERROR -> e(line)
+                android.webkit.ConsoleMessage.MessageLevel.WARNING -> w(line)
+                else -> d(line)
+            }
+            return true
+        }
+    }
 }
 
 /** 地陪项目主页 */

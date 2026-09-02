@@ -92,7 +92,9 @@ fun MainScreen(
                         onNav("chatroom/$convId?convType=$convType&targetId=$targetId&title=${android.net.Uri.encode(title)}")
                     },
                     onOpenWeb = { url, title, landscape ->
-                        onNav("web?url=${android.net.Uri.encode(url)}&title=${android.net.Uri.encode(title)}&landscape=$landscape")
+                        val route = "web?url=${android.net.Uri.encode(url)}&title=${android.net.Uri.encode(title)}&landscape=$landscape"
+                        GameLog.d("main: nav -> $route")
+                        runCatching { onNav(route) }.onFailure { GameLog.e("main: nav failed", it) }
                     },
                 )
             }

@@ -17,6 +17,9 @@ interface ProjectItem {
   orientation?: string;
 }
 
+/** 大厅页版本标记，日志里用来确认 App 加载到的是不是新部署的 H5 */
+const HALL_VERSION = '2026-09-03-game-v2';
+
 const COVERS = [
   'linear-gradient(120deg, #3d0f1f 0%, #7a1f3d 55%, #b32b53 100%)',
   'linear-gradient(120deg, #101a2e 0%, #1c3a6e 60%, #2b5cb0 100%)',
@@ -35,13 +38,23 @@ function fillEntry(entry: string, uid: string): string {
  * 浏览器新标签打开；被拦截则当前页跳转。
  */
 function openGameUrl(url: string, title: string, orientation: WebOrientation) {
-  if (openNativeWeb(url, title, orientation)) return;
+  const w = window as any;
+  console.log(
+    `[Game] open url=${url} title=${title} orientation=${orientation} ` +
+      `bridge: wk=${!!w.webkit?.messageHandlers?.peiwan} droid=${!!w.PeiwanNative} droid.openWeb=${typeof w.PeiwanNative?.openWeb}`,
+  );
+  if (openNativeWeb(url, title, orientation)) {
+    console.log('[Game] native bridge accepted');
+    return;
+  }
   if (inNativeApp()) {
+    console.log('[Game] in app but no openWeb bridge (old app), fallback location.href');
     location.href = url;
     return;
   }
-  const w = window.open(url, '_blank', 'noopener');
-  if (!w) location.href = url;
+  console.log('[Game] browser fallback window.open');
+  const win = window.open(url, '_blank', 'noopener');
+  if (!win) location.href = url;
 }
 
 /** 项目大厅：横幅项目卡 + 小游戏宫格，均由后台配置 */
@@ -53,9 +66,16 @@ export function HallPage() {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
+    console.log(`[Game] hall mounted, version=${HALL_VERSION} path=${location.pathname}${location.hash}`);
     api<ProjectItem[]>('/modules')
-      .then(setProjects)
-      .catch(() => {})
+      .then((list) => {
+        console.log(
+          `[Game] /modules ok: ${list.length} items, games=${list.filter((p) => p.type === 'game').length} ` +
+            list.map((p) => `${p.type}:${p.name}${p.type === 'game' ? `(${p.orientation ?? 'portrait'})` : ''}`).join(', '),
+        );
+        setProjects(list);
+      })
+      .catch((e) => console.error('[Game] /modules failed', e?.message ?? e))
       .finally(() => setLoaded(true));
   }, []);
 
@@ -77,6 +97,7 @@ export function HallPage() {
   };
 
   const openGame = (g: ProjectItem) => {
+    console.log(`[Game] click game id=${g.id} name=${g.name}`);
     openGameUrl(fillEntry(g.entry, user?.id ?? ''), g.name, g.orientation === 'landscape' ? 'landscape' : 'portrait');
   };
 

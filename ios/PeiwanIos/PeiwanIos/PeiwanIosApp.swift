@@ -19,6 +19,7 @@ enum OrientationLock {
     static func set(_ mask: UIInterfaceOrientationMask) {
         AppDelegate.orientationMask = mask
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        NSLog("[Game] orientation: set mask=%@ scenes=%d", mask == .portrait ? "portrait" : "landscape", scenes.count)
         if #available(iOS 16.0, *) {
             for scene in scenes {
                 scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { _ in }
