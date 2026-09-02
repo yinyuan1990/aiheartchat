@@ -42,10 +42,20 @@ struct HallView: View {
             var base = cfg?.url ?? ""
             if base.isEmpty { base = "\(Api.baseURL)/site/#/hall-embed" }
             let sep = base.contains("?") ? "&" : "?"
-            hallUrl = URL(string: "\(base)\(sep)token=\(Api.token ?? "")&embed=1")
+            hallUrl = URL(string: withIndexCacheBuster("\(base)\(sep)token=\(Api.token ?? "")&embed=1"))
             GameLog.log("hall: load url=\(base) (cfg='\(cfg?.url ?? "")')")
         }
     }
+}
+
+/// 在 hash（#）之前加 _t 时间戳：index.html 请求每次都不同，绕过 WebView 缓存的旧 index.html
+/// （旧 index 引用的旧 hash 资源部署后已删除 → 黑屏）。hash 后的路由参数不受影响。
+func withIndexCacheBuster(_ url: String) -> String {
+    let parts = url.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false)
+    let head = String(parts[0])
+    let tail = parts.count > 1 ? "#" + String(parts[1]) : ""
+    let sep = head.contains("?") ? "&" : "?"
+    return "\(head)\(sep)_t=\(Int(Date().timeIntervalSince1970))\(tail)"
 }
 
 /// 原生全屏网页目标（小游戏等）；landscape 为横屏游戏（仅该页旋转）

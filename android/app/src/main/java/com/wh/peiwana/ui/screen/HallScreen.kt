@@ -48,7 +48,7 @@ fun HallScreen(
         }.onFailure { GameLog.w("hall: GET /modules/hall failed: $it") }.getOrNull()
         val base = if (cfg.isNullOrEmpty()) "${Api.BASE_URL}/site/#/hall-embed" else cfg
         val sep = if (base.contains("?")) "&" else "?"
-        url = "$base${sep}token=${Api.token ?: ""}&embed=1"
+        url = withIndexCacheBuster("$base${sep}token=${Api.token ?: ""}&embed=1")
         GameLog.d("hall: load url=${url?.substringBefore("token=")}token=*** (cfg='${cfg ?: ""}')")
     }
 
@@ -77,6 +77,18 @@ fun HallScreen(
             },
         )
     }
+}
+
+/**
+ * 在 hash（#）之前加 _t 时间戳：让 index.html 请求每次都不同，绕过 WebView 对旧 index.html 的缓存
+ * （旧 index 引用的旧 hash 资源部署后已删除 → 黑屏）。hash 后的路由参数不受影响。
+ */
+fun withIndexCacheBuster(url: String): String {
+    val hashAt = url.indexOf('#')
+    val head = if (hashAt >= 0) url.substring(0, hashAt) else url
+    val tail = if (hashAt >= 0) url.substring(hashAt) else ""
+    val sep = if (head.contains("?")) "&" else "?"
+    return "$head${sep}_t=${System.currentTimeMillis()}$tail"
 }
 
 /** 大厅 H5 → 原生 的 JS 桥（JS 侧调用 PeiwanNative.openChat / PeiwanNative.openWeb） */
@@ -137,7 +149,8 @@ object GameLog {
         }
 
         override fun onReceivedHttpError(view: android.webkit.WebView, request: android.webkit.WebResourceRequest, errorResponse: android.webkit.WebResourceResponse) {
-            if (request.isForMainFrame) e("$scope: http error ${errorResponse.statusCode} url=${request.url}")
+            // 子资源（js/css）404 也要打出来：旧 index.html 引用已删除的 hash 文件就是这种表现
+            e("$scope: http error ${errorResponse.statusCode} main=${request.isForMainFrame} url=${request.url}")
         }
 
         override fun onReceivedSslError(view: android.webkit.WebView, handler: android.webkit.SslErrorHandler, error: android.net.http.SslError) {
