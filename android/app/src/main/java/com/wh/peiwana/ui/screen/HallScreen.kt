@@ -39,6 +39,10 @@ fun HallScreen(
 ) {
     var url by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
+        val webviewPkg = if (android.os.Build.VERSION.SDK_INT >= 26) {
+            runCatching { android.webkit.WebView.getCurrentWebViewPackage()?.let { "${it.packageName} ${it.versionName}" } }.getOrNull()
+        } else null
+        GameLog.d("hall: start, base=${Api.BASE_URL} hasToken=${!Api.token.isNullOrEmpty()} webview=$webviewPkg sdk=${android.os.Build.VERSION.SDK_INT}")
         val cfg = runCatching {
             Api.request("/modules/hall")!!.jsonObject["url"]?.jsonPrimitive?.contentOrNull
         }.onFailure { GameLog.w("hall: GET /modules/hall failed: $it") }.getOrNull()
@@ -63,7 +67,7 @@ fun HallScreen(
                     // 深色底避免加载白闪
                     setBackgroundColor(0xFF141418.toInt())
                     webViewClient = GameLog.webViewClient("hall")
-                    // H5 的 console.log / JS 报错转到 logcat（tag=Game），排查黑屏/点击无反应
+                    // H5 的 console.log / JS 报错转到 logcat（tag=YGameXd），排查黑屏/点击无反应
                     webChromeClient = GameLog.chromeClient("hall")
                     // JS 桥（window.PeiwanNative）：H5 聊天入口唤起原生聊天页 / 小游戏唤起原生全屏网页
                     addJavascriptInterface(HallJsBridge(onOpenChat, onOpenWeb), "PeiwanNative")
@@ -109,11 +113,11 @@ private class HallJsBridge(
 }
 
 /**
- * 小游戏/大厅 WebView 调试日志，logcat 过滤 tag=Game 即可：
- * adb logcat -s Game
+ * 小游戏/大厅 WebView 调试日志，logcat 过滤 tag=YGameXd 即可（tag 取得独特些，避免和系统里的 Game 日志混在一起）：
+ * adb logcat -s YGameXd
  */
 object GameLog {
-    const val TAG = "Game"
+    const val TAG = "YGameXd"
     fun d(msg: String) = android.util.Log.d(TAG, msg)
     fun w(msg: String) = android.util.Log.w(TAG, msg)
     fun e(msg: String, t: Throwable? = null) = android.util.Log.e(TAG, msg, t)
