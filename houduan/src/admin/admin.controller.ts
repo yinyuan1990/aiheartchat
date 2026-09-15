@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Put, Query, Req, UseGuards } from '
 import type { Request } from 'express';
 import { Throttle } from '../common/rate-limit.guard';
 import { NewsService } from '../news/news.service';
+import { TreeholeService } from '../treehole/treehole.service';
 import { AdminGuard } from './admin.guard';
 import { AdminService } from './admin.service';
 
@@ -10,7 +11,50 @@ export class AdminController {
   constructor(
     private readonly admin: AdminService,
     private readonly news: NewsService,
+    private readonly treehole: TreeholeService,
   ) {}
+
+  // ---------- 私密树洞 ----------
+
+  /** 帖子列表（含隐藏）；status=0/1 可筛 */
+  @Get('treehole')
+  @UseGuards(AdminGuard)
+  treeholeList(@Query('beforeId') beforeId?: string, @Query('status') status?: string) {
+    return this.treehole.adminList(beforeId ? BigInt(beforeId) : undefined, status != null && status !== '' ? Number(status) : undefined);
+  }
+
+  /** 后台手动录入一条（匿名） */
+  @Post('treehole')
+  @UseGuards(AdminGuard)
+  treeholeCreate(@Body() body: { content: string }) {
+    return this.treehole.adminCreate(body.content);
+  }
+
+  /** 编辑后台录入的内容 */
+  @Post('treehole/:id')
+  @UseGuards(AdminGuard)
+  treeholeUpdate(@Param('id') id: string, @Body() body: { content: string }) {
+    return this.treehole.adminUpdate(BigInt(id), body.content);
+  }
+
+  /** 上/下架：status 0=显示 1=隐藏 */
+  @Post('treehole/:id/status')
+  @UseGuards(AdminGuard)
+  treeholeStatus(@Param('id') id: string, @Body() body: { status: number }) {
+    return this.treehole.adminSetStatus(BigInt(id), Number(body.status));
+  }
+
+  @Get('treehole/:id/comments')
+  @UseGuards(AdminGuard)
+  treeholeComments(@Param('id') id: string) {
+    return this.treehole.adminComments(BigInt(id));
+  }
+
+  @Post('treehole/comments/:id/delete')
+  @UseGuards(AdminGuard)
+  treeholeDeleteComment(@Param('id') id: string) {
+    return this.treehole.adminDeleteComment(BigInt(id));
+  }
 
   // ---------- 内容（花边新闻 / 励志行） ----------
 

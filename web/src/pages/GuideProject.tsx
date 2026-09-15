@@ -4,8 +4,25 @@ import { openNativeChat } from '../bridge';
 import { api } from '../api';
 import { useApp } from '../store';
 
-/** 地陪项目主页：项目内自己的规则与功能入口 */
+/** 地陪项目主页：项目内自己的规则与功能入口（独立页面，带返回栏） */
 export function GuideProjectPage() {
+  const nav = useNavigate();
+  return (
+    <div className="app">
+      <div className="navbar" style={{ borderBottom: 'none' }}>
+        <span className="back" onClick={() => nav(-1)}>‹ 返回</span>
+        <span className="title">同城搭子</span>
+        <span style={{ width: 40 }} />
+      </div>
+      <div className="page no-scrollbar" style={{ padding: '4px 16px' }}>
+        <GuideProjectBody />
+      </div>
+    </div>
+  );
+}
+
+/** 同城搭子内容区：功能入口 2x2 + 推荐搭子；大厅「同城搭子」tab 直接内联此组件 */
+export function GuideProjectBody() {
   const nav = useNavigate();
   const me = useApp((s) => s.user);
   const isFemale = me?.gender === 2;
@@ -35,56 +52,48 @@ export function GuideProjectPage() {
   };
 
   return (
-    <div className="app">
-      <div className="navbar" style={{ borderBottom: 'none' }}>
-        <span className="back" onClick={() => nav(-1)}>‹ 返回</span>
-        <span className="title">同城搭子</span>
-        <span style={{ width: 40 }} />
+    <>
+      {/* 功能入口 2x2 */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        {entries.map((e) => (
+          <div
+            key={e.title}
+            onClick={() => nav(e.to)}
+            style={{ padding: '18px 16px', borderRadius: 14, background: 'var(--bg-card)', cursor: 'pointer' }}
+          >
+            <div style={{ fontSize: 16, fontWeight: 600 }}>{e.title}</div>
+            <div className="small" style={{ marginTop: 5 }}>{e.desc}</div>
+          </div>
+        ))}
       </div>
 
-      <div className="page no-scrollbar" style={{ padding: '4px 16px' }}>
-        {/* 功能入口 2x2 */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          {entries.map((e) => (
-            <div
-              key={e.title}
-              onClick={() => nav(e.to)}
-              style={{ padding: '18px 16px', borderRadius: 14, background: 'var(--bg-card)', cursor: 'pointer' }}
-            >
-              <div style={{ fontSize: 16, fontWeight: 600 }}>{e.title}</div>
-              <div className="small" style={{ marginTop: 5 }}>{e.desc}</div>
+      {/* 推荐地陪 */}
+      {guides.length > 0 && (
+        <>
+          <div className="row" style={{ margin: '20px 0 10px' }}>
+            <span style={{ fontSize: 15, fontWeight: 600 }} className="grow">推荐搭子</span>
+            <span className="small" style={{ cursor: 'pointer' }} onClick={() => nav('/people/guide')}>全部 ›</span>
+          </div>
+          {guides.map((p) => (
+            <div key={p.id} className="row" style={{ padding: '10px 0', borderBottom: '1px solid var(--line)' }}>
+              <div className="avatar" style={{ width: 48, height: 48 }}>
+                {p.avatar && <img src={p.avatar} alt="" />}
+              </div>
+              <div className="grow">
+                <div style={{ fontSize: 15 }}>
+                  {p.nickname} <span className="muted">· {p.age}</span>
+                  <span className="tag tag-accent" style={{ marginLeft: 6 }}>认证</span>
+                </div>
+                <div className="small ellipsis" style={{ marginTop: 3 }}>{p.cityName ? `${p.cityName} · ` : ''}{p.signature || '这个人很神秘'}</div>
+              </div>
+              <button className="btn-sm" onClick={() => greet(p)}>打招呼</button>
             </div>
           ))}
-        </div>
-
-        {/* 推荐地陪 */}
-        {guides.length > 0 && (
-          <>
-            <div className="row" style={{ margin: '20px 0 10px' }}>
-              <span style={{ fontSize: 15, fontWeight: 600 }} className="grow">推荐搭子</span>
-              <span className="small" style={{ cursor: 'pointer' }} onClick={() => nav('/people/guide')}>全部 ›</span>
-            </div>
-            {guides.map((p) => (
-              <div key={p.id} className="row" style={{ padding: '10px 0', borderBottom: '1px solid var(--line)' }}>
-                <div className="avatar" style={{ width: 48, height: 48 }}>
-                  {p.avatar && <img src={p.avatar} alt="" />}
-                </div>
-                <div className="grow">
-                  <div style={{ fontSize: 15 }}>
-                    {p.nickname} <span className="muted">· {p.age}</span>
-                    <span className="tag tag-accent" style={{ marginLeft: 6 }}>认证</span>
-                  </div>
-                  <div className="small ellipsis" style={{ marginTop: 3 }}>{p.cityName ? `${p.cityName} · ` : ''}{p.signature || '这个人很神秘'}</div>
-                </div>
-                <button className="btn-sm" onClick={() => greet(p)}>打招呼</button>
-              </div>
-            ))}
-          </>
-        )}
-        {guides.length === 0 && (
-          <div className="empty" style={{ padding: 40 }}>暂无认证搭子<br />可以先去「找人」打招呼</div>
-        )}
-      </div>
-    </div>
+        </>
+      )}
+      {guides.length === 0 && (
+        <div className="empty" style={{ padding: 40 }}>暂无认证搭子<br />可以先去「找人」打招呼</div>
+      )}
+    </>
   );
 }

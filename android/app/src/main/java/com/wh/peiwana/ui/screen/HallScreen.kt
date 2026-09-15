@@ -36,6 +36,8 @@ fun HallScreen(
     onOpenProject: (String) -> Unit,
     onOpenChat: (convId: String, convType: Int, targetId: String, title: String) -> Unit = { _, _, _, _ -> },
     onOpenWeb: (url: String, title: String, landscape: Boolean) -> Unit = { _, _, _ -> },
+    /** 大厅 tab 是否当前可见（各 tab 常驻，只有可见时才接管返回键） */
+    active: Boolean = true,
 ) {
     var url by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
@@ -53,6 +55,11 @@ fun HallScreen(
     }
 
     val u = url
+    // 大厅 H5 内有子页面（树洞详情/发布等）：系统返回键先让网页后退，退不了才交给系统
+    var webView by remember { mutableStateOf<android.webkit.WebView?>(null) }
+    var canGoBack by remember { mutableStateOf(false) }
+    androidx.activity.compose.BackHandler(enabled = active && canGoBack) { webView?.goBack() }
+
     if (u == null) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("加载中…", color = TextSub, fontSize = 13.sp)
@@ -66,13 +73,14 @@ fun HallScreen(
                     settings.domStorageEnabled = true
                     // 深色底避免加载白闪
                     setBackgroundColor(0xFF141418.toInt())
-                    webViewClient = GameLog.webViewClient("hall")
+                    webViewClient = GameLog.webViewClient("hall") { canGoBack = it }
                     // H5 的 console.log / JS 报错转到 logcat（tag=YGameXd），排查黑屏/点击无反应
                     webChromeClient = GameLog.chromeClient("hall")
                     // JS 桥（window.PeiwanNative）：H5 聊天入口唤起原生聊天页 / 小游戏唤起原生全屏网页
                     addJavascriptInterface(HallJsBridge(onOpenChat, onOpenWeb), "PeiwanNative")
                     GameLog.d("hall: webview created, bridge PeiwanNative registered")
                     loadUrl(u)
+                    webView = this
                 }
             },
         )
@@ -134,14 +142,23 @@ object GameLog {
     fun w(msg: String) = android.util.Log.w(TAG, msg)
     fun e(msg: String, t: Throwable? = null) = android.util.Log.e(TAG, msg, t)
 
-    /** 页面加载 / 错误 / 渲染进程崩溃日志 */
-    fun webViewClient(scope: String) = object : android.webkit.WebViewClient() {
+    /**
+     * 页面加载 / 错误 / 渲染进程崩溃日志；
+     * onCanGoBack：历史变化（含 hash 路由跳转）时回调网页能否后退，供系统返回键接管
+     */
+    fun webViewClient(scope: String, onCanGoBack: ((Boolean) -> Unit)? = null) = object : android.webkit.WebViewClient() {
         override fun onPageStarted(view: android.webkit.WebView, url: String?, favicon: android.graphics.Bitmap?) {
             d("$scope: page started ${url?.substringBefore("token=")}")
         }
 
         override fun onPageFinished(view: android.webkit.WebView, url: String?) {
             d("$scope: page finished ${url?.substringBefore("token=")} title='${view.title}' progress=${view.progress}")
+            onCanGoBack?.invoke(view.canGoBack())
+        }
+
+        // hash 路由（#/treehole/1）切换不触发 onPageFinished，这里能拿到
+        override fun doUpdateVisitedHistory(view: android.webkit.WebView, url: String?, isReload: Boolean) {
+            onCanGoBack?.invoke(view.canGoBack())
         }
 
         override fun onReceivedError(view: android.webkit.WebView, request: android.webkit.WebResourceRequest, error: android.webkit.WebResourceError) {

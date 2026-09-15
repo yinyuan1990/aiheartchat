@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { api, getToken, UserProfile } from '../api';
 import { inNativeApp, openNativeWeb, WebOrientation } from '../bridge';
 import { useApp } from '../store';
+import { GuideProjectBody } from './GuideProject';
+import { TreeholeFeed } from './Treehole';
 
 interface ProjectItem {
   id: number;
@@ -10,7 +11,7 @@ interface ProjectItem {
   icon: string;
   desc: string;
   cover: string;
-  /** native=客户端内置页 h5=横幅内嵌网页 game=小游戏（宫格） */
+  /** native=客户端内置页 h5=横幅内嵌网页 game=小游戏（九宫格） */
   type: string;
   entry: string;
   /** 小游戏屏幕方向：portrait / landscape（App 游戏页按此旋转） */
@@ -18,7 +19,15 @@ interface ProjectItem {
 }
 
 /** 大厅页版本标记，日志里用来确认 App 加载到的是不是新部署的 H5 */
-const HALL_VERSION = '2026-09-03-game-v2';
+const HALL_VERSION = '2026-09-15-hall-tabs-v3';
+
+type HallTab = 'guide' | 'games' | 'treehole';
+const TABS: { key: HallTab; label: string }[] = [
+  { key: 'guide', label: '同城搭子' },
+  { key: 'games', label: '休闲游戏' },
+  { key: 'treehole', label: '私密树洞' },
+];
+const TAB_KEY = 'hall_tab';
 
 const COVERS = [
   'linear-gradient(120deg, #3d0f1f 0%, #7a1f3d 55%, #b32b53 100%)',
@@ -57,13 +66,18 @@ function openGameUrl(url: string, title: string, orientation: WebOrientation) {
   if (!win) location.href = url;
 }
 
-/** 项目大厅：横幅项目卡 + 小游戏宫格，均由后台配置 */
+/** 大厅：三个 tab —— 同城搭子（项目内容内联）/ 休闲游戏（九宫格）/ 私密树洞（匿名信息流） */
 export function HallPage() {
-  const nav = useNavigate();
   const user = useApp((s) => s.user);
   const setUser = useApp((s) => s.setUser);
+  const [tab, setTab] = useState<HallTab>(() => (sessionStorage.getItem(TAB_KEY) as HallTab) || 'guide');
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [loaded, setLoaded] = useState(false);
+
+  const switchTab = (t: HallTab) => {
+    setTab(t);
+    sessionStorage.setItem(TAB_KEY, t);
+  };
 
   useEffect(() => {
     console.log(`[Game] hall mounted, version=${HALL_VERSION} path=${location.pathname}${location.hash}`);
@@ -79,21 +93,18 @@ export function HallPage() {
       .finally(() => setLoaded(true));
   }, []);
 
-  // 内嵌模式只带 token 未拉用户资料；有游戏链接需要 {uid} 时补一次
+  // 内嵌模式只带 token 未拉用户资料；同城搭子入口按性别不同、游戏链接可能要 {uid}，补一次
   useEffect(() => {
-    if (user || !projects.some((p) => p.type === 'game' && p.entry.includes('{uid}'))) return;
+    if (user) return;
     api<UserProfile>('/user/me').then(setUser).catch(() => {});
-  }, [projects, user]);
+  }, [user]);
 
-  const banners = projects.filter((p) => p.type !== 'game');
+  // 除地陪（已内联）之外后台配置的其它横幅项目
+  const extraBanners = projects.filter((p) => p.type !== 'game' && p.entry !== 'guide');
   const games = projects.filter((p) => p.type === 'game');
 
-  const open = (p: ProjectItem) => {
-    if (p.type === 'h5') {
-      location.href = p.entry;
-    } else if (p.entry === 'guide') {
-      nav('/project/guide');
-    }
+  const openBanner = (p: ProjectItem) => {
+    if (p.type === 'h5') location.href = p.entry;
   };
 
   const openGame = (g: ProjectItem) => {
@@ -103,68 +114,62 @@ export function HallPage() {
 
   return (
     <>
-      <div className="page-title">大厅</div>
-      <div style={{ padding: '4px 16px' }}>
-        {banners.map((p, i) => (
-          <div
-            key={p.id}
-            onClick={() => open(p)}
-            style={{
-              position: 'relative', borderRadius: 16, overflow: 'hidden', cursor: 'pointer',
-              marginBottom: 14, height: 132,
-              background: p.cover ? `url(${p.cover}) center/cover` : COVERS[i % COVERS.length],
-            }}
-          >
-            {/* 左下信息 */}
-            <div style={{ position: 'absolute', left: 18, bottom: 16, right: 100 }}>
-              <div style={{ fontSize: 20, fontWeight: 700, color: '#fff', letterSpacing: 1 }}>{p.name}</div>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 5 }}>{p.desc}</div>
-            </div>
-            {/* 右下进入按钮 */}
-            <span style={{
-              position: 'absolute', right: 16, bottom: 16,
-              padding: '7px 20px', borderRadius: 16, fontSize: 13, fontWeight: 600,
-              background: 'rgba(255,255,255,0.92)', color: '#111',
-            }}>
-              进入
-            </span>
-            {/* 顶部微光 */}
-            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(255,255,255,0.08), transparent 40%)' }} />
-          </div>
+      <div className="top-tabs">
+        {TABS.map((t) => (
+          <span key={t.key} className={`top-tab${tab === t.key ? ' active' : ''}`} onClick={() => switchTab(t.key)}>
+            {t.label}
+          </span>
         ))}
+      </div>
 
-        {games.length > 0 && (
-          <div className="card" style={{ padding: '14px 8px 6px', marginTop: banners.length ? 4 : 0 }}>
-            <div className="row" style={{ padding: '0 8px 12px', alignItems: 'baseline' }}>
-              <span style={{ fontSize: 16, fontWeight: 700 }}>小游戏</span>
-              <span style={{ fontSize: 12, color: 'var(--text-2)', marginLeft: 8 }}>随时开一局</span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', rowGap: 14 }}>
-              {games.map((g) => (
-                <div
-                  key={g.id}
-                  onClick={() => openGame(g)}
-                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', padding: '0 4px' }}
-                >
-                  <img
-                    src={g.icon}
-                    alt={g.name}
-                    style={{ width: 56, height: 56, borderRadius: 16, objectFit: 'cover', background: 'var(--bg-input)' }}
-                  />
-                  <div style={{ fontSize: 13, marginTop: 8, maxWidth: '100%' }} className="ellipsis">{g.name}</div>
-                  {g.desc && (
-                    <div style={{ fontSize: 10, color: 'var(--text-2)', marginTop: 3, maxWidth: '100%', textAlign: 'center' }} className="ellipsis">
-                      {g.desc}
-                    </div>
-                  )}
+      <div style={{ padding: '4px 16px' }}>
+        {tab === 'guide' && (
+          <>
+            <GuideProjectBody />
+            {extraBanners.map((p, i) => (
+              <div
+                key={p.id}
+                onClick={() => openBanner(p)}
+                style={{
+                  position: 'relative', borderRadius: 16, overflow: 'hidden', cursor: 'pointer',
+                  marginTop: 14, height: 120,
+                  background: p.cover ? `url(${p.cover}) center/cover` : COVERS[i % COVERS.length],
+                }}
+              >
+                <div style={{ position: 'absolute', left: 18, bottom: 16, right: 100 }}>
+                  <div style={{ fontSize: 19, fontWeight: 700, color: '#fff', letterSpacing: 1 }}>{p.name}</div>
+                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 5 }}>{p.desc}</div>
                 </div>
-              ))}
-            </div>
-          </div>
+                <span style={{
+                  position: 'absolute', right: 16, bottom: 16,
+                  padding: '7px 20px', borderRadius: 16, fontSize: 13, fontWeight: 600,
+                  background: 'rgba(255,255,255,0.92)', color: '#111',
+                }}>
+                  进入
+                </span>
+              </div>
+            ))}
+          </>
         )}
 
-        {loaded && projects.length === 0 && <div className="empty">暂无项目</div>}
-        <div className="hint" style={{ marginTop: 4 }}>更多项目筹备中</div>
+        {tab === 'games' && (
+          <>
+            {games.length > 0 && (
+              <div className="game-grid">
+                {games.map((g) => (
+                  <div key={g.id} className="game-cell" onClick={() => openGame(g)}>
+                    <img src={g.icon} alt={g.name} />
+                    <div className="name ellipsis">{g.name}</div>
+                    {g.desc && <div className="desc">{g.desc}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+            {loaded && games.length === 0 && <div className="empty">游戏正在筹备中<br />敬请期待</div>}
+          </>
+        )}
+
+        {tab === 'treehole' && <TreeholeFeed />}
       </div>
     </>
   );

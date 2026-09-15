@@ -9,6 +9,7 @@ import DisputesView from './views/DisputesView.vue';
 import ModulesView from './views/ModulesView.vue';
 import LedgerView from './views/LedgerView.vue';
 import CallLogsView from './views/CallLogsView.vue';
+import TreeholeView from './views/TreeholeView.vue';
 
 const logged = ref(!!getToken());
 const username = ref('');
@@ -25,6 +26,7 @@ const tabs = [
   { key: 'guide', label: '地陪审核' },
   { key: 'disputes', label: '约单仲裁' },
   { key: 'modules', label: '大厅 / 小游戏' },
+  { key: 'treehole', label: '私密树洞' },
 ];
 
 async function login() {
@@ -81,6 +83,7 @@ function logout() {
       <GuideReviewView v-if="tab === 'guide'" />
       <DisputesView v-if="tab === 'disputes'" />
       <ModulesView v-if="tab === 'modules'" />
+      <TreeholeView v-if="tab === 'treehole'" />
     </div>
   </div>
 </template>

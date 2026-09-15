@@ -87,6 +87,7 @@ fun MainScreen(
             }
             Pane(active = tab == 1) {
                 HallScreen(
+                    active = tab == 1,
                     onOpenProject = { entry -> if (entry == "guide") onNav("project/guide") },
                     onOpenChat = { convId, convType, targetId, title ->
                         onNav("chatroom/$convId?convType=$convType&targetId=$targetId&title=${android.net.Uri.encode(title)}")

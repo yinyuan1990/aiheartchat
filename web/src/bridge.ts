@@ -35,6 +35,17 @@ export function inNativeApp(): boolean {
   return !!(w.webkit?.messageHandlers?.peiwan || w.PeiwanNative);
 }
 
+const EMBED_KEY = 'pw_embed';
+
+/** 内嵌模式（App 大厅 WebView，无网页底栏）：hall-embed 入口记录一次，后续页面沿用 */
+export function markEmbedded() {
+  sessionStorage.setItem(EMBED_KEY, '1');
+}
+
+export function isEmbedded(): boolean {
+  return sessionStorage.getItem(EMBED_KEY) === '1' || inNativeApp();
+}
+
 export type WebOrientation = 'portrait' | 'landscape';
 
 /**

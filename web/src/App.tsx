@@ -28,6 +28,8 @@ import { TransferPage } from './pages/Transfer';
 import { GiftsReceivedPage } from './pages/GiftsReceived';
 import { AgreementPage } from './pages/Agreement';
 import { UserHomePage } from './pages/UserHome';
+import { TreeholeDetailPage, TreeholePublishPage } from './pages/Treehole';
+import { markEmbedded } from './bridge';
 
 function Shell() {
   const nav = useNavigate();
@@ -94,6 +96,8 @@ function EmbedHallPage() {
   useEffect(() => {
     const t = params.get('token');
     if (t) setToken(t);
+    // 记录内嵌模式：树洞详情/发布等子页面据此调整布局（无网页底栏）
+    markEmbedded();
     setReady(true);
   }, []);
 
@@ -156,6 +160,8 @@ export function App() {
         <Route path="/publish" element={<PublishPage />} />
         <Route path="/chatroom/:id" element={<ChatRoomPage />} />
         <Route path="/ai-chat" element={<AiChatPage />} />
+        <Route path="/treehole/publish" element={<TreeholePublishPage />} />
+        <Route path="/treehole/:id" element={<TreeholeDetailPage />} />
         <Route path="/news" element={<NewsListPage />} />
         <Route path="/news/:id" element={<NewsDetailPage />} />
         <Route path="/people/:mode" element={<PeoplePage />} />

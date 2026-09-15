@@ -432,6 +432,41 @@ model MomentComment {
   @@map("moment_comment")
 }
 
+// ---------- 业务模块：私密树洞（匿名投稿 + 评论，大厅 tab） ----------
+
+model TreeholePost {
+  id           BigInt   @id @default(autoincrement())
+  /// 投稿人；后台手动录入为 null。对外永不下发（匿名）
+  authorId     BigInt?  @map("author_id")
+  /// 0=用户投稿 1=后台录入
+  source       Int      @default(0) @db.TinyInt
+  content      String   @db.Text
+  viewCount    Int      @default(0) @map("view_count")
+  commentCount Int      @default(0) @map("comment_count")
+  /// 0=正常 1=隐藏（后台下架 / 作者删除）
+  status       Int      @default(0) @db.TinyInt
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([status, id])
+  @@index([authorId])
+  @@map("treehole_post")
+}
+
+model TreeholeComment {
+  id        BigInt   @id @default(autoincrement())
+  postId    BigInt   @map("post_id")
+  userId    BigInt   @map("user_id")
+  content   String   @db.VarChar(500)
+  /// 回复的评论 id
+  replyToId BigInt?  @map("reply_to_id")
+  /// 0=正常 1=删除
+  status    Int      @default(0) @db.TinyInt
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([postId, id])
+  @@map("treehole_comment")
+}
+
 // ---------- 业务模块：约单/接单（男发单、女接单） ----------
 
 model TaskOrder {

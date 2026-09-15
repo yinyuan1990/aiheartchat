@@ -20,6 +20,7 @@ import { NotifyModule } from './notify/notify.module';
 import { IntimacyModule } from './intimacy/intimacy.module';
 import { AiModule } from './ai/ai.module';
 import { NewsModule } from './news/news.module';
+import { TreeholeModule } from './treehole/treehole.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { NewsModule } from './news/news.module';
     IntimacyModule,
     AiModule,
     NewsModule,
+    TreeholeModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: RateLimitGuard }],
 })
