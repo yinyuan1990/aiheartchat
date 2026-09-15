@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, getToken, UserProfile } from '../api';
-import { inNativeApp, openNativeWeb, WebOrientation } from '../bridge';
+import { inNativeApp, isEmbedded, openNativeWeb, WebOrientation } from '../bridge';
 import { useApp } from '../store';
 import { GuideProjectBody } from './GuideProject';
 import { TreeholeFeed } from './Treehole';
@@ -20,15 +20,20 @@ interface ProjectItem {
 }
 
 /** 大厅页版本标记，日志里用来确认 App 加载到的是不是新部署的 H5 */
-const HALL_VERSION = '2026-09-15-hall-tabs-v3';
+const HALL_VERSION = '2026-09-15-hall-tabs-v4';
 
 type HallTab = 'guide' | 'games' | 'treehole';
-const TABS: { key: HallTab; label: string }[] = [
+const ALL_TABS: { key: HallTab; label: string }[] = [
   { key: 'guide', label: '同城搭子' },
   { key: 'games', label: '休闲游戏' },
   { key: 'treehole', label: '私密树洞' },
 ];
 const TAB_KEY = 'hall_tab';
+
+/** App 内嵌大厅不显示私密树洞（iOS/Android 已在广场做了原生版本），仅浏览器网页版保留 */
+function visibleTabs() {
+  return isEmbedded() ? ALL_TABS.filter((t) => t.key !== 'treehole') : ALL_TABS;
+}
 
 const COVERS = [
   'linear-gradient(120deg, #3d0f1f 0%, #7a1f3d 55%, #b32b53 100%)',
@@ -71,7 +76,11 @@ function openGameUrl(url: string, title: string, orientation: WebOrientation) {
 export function HallPage() {
   const user = useApp((s) => s.user);
   const setUser = useApp((s) => s.setUser);
-  const [tab, setTab] = useState<HallTab>(() => (sessionStorage.getItem(TAB_KEY) as HallTab) || 'guide');
+  const tabs = visibleTabs();
+  const [tab, setTab] = useState<HallTab>(() => {
+    const saved = sessionStorage.getItem(TAB_KEY) as HallTab | null;
+    return saved && tabs.some((t) => t.key === saved) ? saved : 'guide';
+  });
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [loaded, setLoaded] = useState(false);
 
@@ -122,7 +131,7 @@ export function HallPage() {
   return (
     <>
       <div className="top-tabs sticky">
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <span key={t.key} className={`top-tab${tab === t.key ? ' active' : ''}`} onClick={() => switchTab(t.key)}>
             {t.label}
           </span>

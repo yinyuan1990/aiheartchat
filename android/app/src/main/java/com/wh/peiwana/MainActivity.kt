@@ -271,6 +271,13 @@ fun AppRoot() {
             page("moment/{id}", listOf(navArgument("id") { type = NavType.StringType })) { entry ->
                 MomentDetailScreen(entry.arguments!!.getString("id")!!, onBack = { nav.popBackStack() }, onOpenChat = ::openChatWithUser)
             }
+            // 私密树洞（广场 tab）：详情评论 / 匿名发布
+            page("treehole/{id}", listOf(navArgument("id") { type = NavType.StringType })) { entry ->
+                TreeholeDetailScreen(entry.arguments!!.getString("id")!!, onBack = { nav.popBackStack() })
+            }
+            page("treehole-publish") {
+                TreeholePublishScreen(onBack = { nav.popBackStack() }, onDone = { nav.popBackStack() })
+            }
             page("news") {
                 NewsListScreen(onOpenNews = { nav.navigate("news/$it") }, onBack = { nav.popBackStack() })
             }

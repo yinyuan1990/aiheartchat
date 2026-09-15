@@ -210,6 +210,10 @@ enum Route: Hashable {
     case newsList
     /// 花边新闻详情
     case newsDetail(String)
+    /// 私密树洞详情（评论）
+    case treehole(String)
+    /// 私密树洞匿名发布
+    case treeholePublish
 }
 
 @ViewBuilder
@@ -237,6 +241,8 @@ func routeView(_ route: Route) -> some View {
     case .aiChat: AiChatView()
     case .newsList: NewsListView()
     case .newsDetail(let id): NewsDetailView(newsId: id)
+    case .treehole(let id): TreeholeDetailView(postId: id)
+    case .treeholePublish: TreeholePublishView()
     }
 }
 

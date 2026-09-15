@@ -83,7 +83,7 @@ fun MainScreen(
         // 四个页面常驻保活（对齐 iOS）：切 tab 不销毁重建，状态/数据/滚动位置全保留
         Box(Modifier.padding(pad)) {
             Pane(active = tab == 0) {
-                PlazaScreen(onOpenDetail = { onNav("moment/$it") }, onOpenChat = onOpenChatWithUser, onOpenTiktok = { onNav("tiktok") }, onOpenUser = { onNav("u/$it") })
+                PlazaScreen(onOpenDetail = { onNav("moment/$it") }, onOpenChat = onOpenChatWithUser, onOpenTiktok = { onNav("tiktok") }, onOpenUser = { onNav("u/$it") }, onNav = onNav)
             }
             Pane(active = tab == 1) {
                 HallScreen(

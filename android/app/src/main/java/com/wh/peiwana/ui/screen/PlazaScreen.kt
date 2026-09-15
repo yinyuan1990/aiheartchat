@@ -82,8 +82,16 @@ fun distanceText(m: Moment): String? {
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun PlazaScreen(modifier: Modifier = Modifier, onOpenDetail: (String) -> Unit, onOpenChat: (String, String) -> Unit, onOpenTiktok: () -> Unit = {}, onOpenUser: (String) -> Unit = {}) {
-    var tab by remember { mutableStateOf(if (PlazaCache.tab in listOf("meet", "quotes")) PlazaCache.tab else "feed") }
+fun PlazaScreen(
+    modifier: Modifier = Modifier,
+    onOpenDetail: (String) -> Unit,
+    onOpenChat: (String, String) -> Unit,
+    onOpenTiktok: () -> Unit = {},
+    onOpenUser: (String) -> Unit = {},
+    /** 通用路由跳转（私密树洞详情 / 发布） */
+    onNav: (String) -> Unit = {},
+) {
+    var tab by remember { mutableStateOf(if (PlazaCache.tab in listOf("meet", "quotes", "treehole")) PlazaCache.tab else "feed") }
     var items by remember { mutableStateOf(PlazaCache.items) }
     var city by remember { mutableStateOf(PlazaCache.city) }
     var locating by remember { mutableStateOf(false) }
@@ -164,7 +172,7 @@ fun PlazaScreen(modifier: Modifier = Modifier, onOpenDetail: (String) -> Unit, o
 
     Column(modifier = modifier.fillMaxSize()) {
         Row(modifier = Modifier.padding(16.dp, 14.dp, 16.dp, 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            listOf("feed" to "动态", "meet" to "遇见", "quotes" to "励志行").forEach { (k, label) ->
+            listOf("feed" to "动态", "meet" to "遇见", "quotes" to "励志行", "treehole" to "私密树洞").forEach { (k, label) ->
                 Text(
                     label,
                     color = if (tab == k) TextMain else TextSub,
@@ -202,6 +210,11 @@ fun PlazaScreen(modifier: Modifier = Modifier, onOpenDetail: (String) -> Unit, o
         if (tab == "quotes") {
             // 励志行：AI 每天一句励志话，按天累积
             QuoteSection()
+            return@Column
+        }
+        if (tab == "treehole") {
+            // 私密树洞：匿名投稿信息流（原生实现，大厅 H5 内不再展示）
+            TreeholeSection(onOpen = { onNav("treehole/$it") }, onPublish = { onNav("treehole-publish") })
             return@Column
         }
         // 下拉刷新（对齐 iOS）

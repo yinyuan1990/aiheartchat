@@ -132,6 +132,7 @@ struct PlazaView: View {
                     TextTab(text: "动态", selected: tab == "feed") { tab = "feed"; Task { await load() } }
                     TextTab(text: "遇见", selected: tab == "meet") { tab = "meet" }
                     TextTab(text: "励志行", selected: tab == "quotes") { tab = "quotes" }
+                    TextTab(text: "私密树洞", selected: tab == "treehole") { tab = "treehole" }
                     Spacer(minLength: 0)
                     // 视频（抖音模式）入口只属于动态板块
                     if tab == "feed" {
@@ -156,6 +157,9 @@ struct PlazaView: View {
                 } else if tab == "quotes" {
                     // 励志行：AI 每天一句励志话，按天累积
                     QuotesSectionView()
+                } else if tab == "treehole" {
+                    // 私密树洞：匿名投稿信息流（原生实现，大厅 H5 内不再展示）
+                    TreeholeSectionView()
                 } else if items.isEmpty {
                     EmptyHint(text: "暂无动态\n自己发布的仅异性可见")
                 } else {
