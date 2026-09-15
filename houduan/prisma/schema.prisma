@@ -193,11 +193,37 @@ model CallRecord {
   startedAt  DateTime? @map("started_at")
   endedAt    DateTime? @map("ended_at")
   durationSec Int      @default(0) @map("duration_sec")
+  /// 本通话分配到的 SRS 节点 IP（空=用环境变量 SRS_SERVER）；负载统计与接听时下发同一节点
+  srsNode    String    @default("") @map("srs_node") @db.VarChar(64)
   createdAt  DateTime  @default(now()) @map("created_at")
 
   @@index([callerId])
   @@index([calleeId])
+  @@index([status, srsNode])
   @@map("call_record")
+}
+
+/// SRS 流媒体节点（后台管理）：通话/语音房按 priority 顺序选第一个未满的节点，全满则取负载率最低者
+model SrsNode {
+  id             Int      @id @default(autoincrement())
+  name           String   @default("") @db.VarChar(40)
+  /// 公网 IP（唯一）；所有节点安装路径/端口一致
+  ip             String   @unique @db.VarChar(64)
+  /// HTTP API / WHIP / WHEP 端口
+  apiPort        Int      @default(1985) @map("api_port")
+  /// 越小越优先
+  priority       Int      @default(100)
+  /// 最大连接数（同时在该节点上通话/语音房的人数），超了自动落到下一个节点
+  maxConnections Int      @default(40) @map("max_connections")
+  enabled        Boolean  @default(true)
+  /// 默认（源）节点：部署新节点时以它为模板复制源码与配置；全局仅一个
+  isDefault      Boolean  @default(false) @map("is_default")
+  remark         String   @default("") @db.VarChar(200)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([enabled, priority])
+  @@map("srs_node")
 }
 
 /// 客户端通话日志上报（排查视频/语音概率性问题，双端各自分批上报）

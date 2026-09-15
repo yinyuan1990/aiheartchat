@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { ConnectionRegistry } from './connection.registry';
+import { SrsService } from '../srs/srs.service';
 
 /** 心跳超时（毫秒）：超过视为已退出（杀进程/断网兜底） */
 const MEMBER_TTL_MS = 90_000;
@@ -30,6 +31,7 @@ export class VoiceRoomService {
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
     private readonly registry: ConnectionRegistry,
+    private readonly srs: SrsService,
     config: ConfigService,
   ) {
     this.srsApi = config.get<string>('SRS_API') ?? '';
@@ -181,14 +183,18 @@ export class VoiceRoomService {
       }
     }
 
-    // 空房间首个成员进入 = 新场次：生成场次 ID（日志归类）+ 二维码 token（扫码免密进房凭证）
+    // 空房间首个成员进入 = 新场次：生成场次 ID（日志归类）+ 二维码 token（扫码免密进房凭证）+ 分配 SRS 节点
     let sid = await this.currentSid(groupId);
-    if (ids.length === 0 || !sid) {
+    const newSession = ids.length === 0 || !sid;
+    if (newSession) {
       sid = `vr_${groupId}_${randomUUID().replace(/-/g, '').slice(0, 8)}`;
       await this.redis.client.set(this.sidKey(groupId), sid, 'EX', 86_400);
       await this.redis.client.set(this.qrKey(groupId), randomUUID().replace(/-/g, '').slice(0, 12), 'EX', 86_400);
       this.serverLog(sid, `新场次开始: group=${groupId} 群主=${uid} 上限=${max}`);
     }
+    // 同一场次所有成员用同一节点（新场次按负载选，后续加入者复用）
+    const endpoint = await this.srs.pickForVoiceRoom(groupId, newSession);
+    if (newSession) this.serverLog(sid, `SRS 节点: ${endpoint.srsServer || '(env)'}`);
 
     await this.redis.client.hset(key, uid, this.encodeVal(Date.now(), false));
     await this.redis.client.expire(key, 86_400);
@@ -200,8 +206,8 @@ export class VoiceRoomService {
       max,
       roomId: sid,
       qrToken: (await this.redis.client.get(this.qrKey(groupId))) ?? '',
-      whipUrl: `${this.srsApi}/rtc/v1/whip/`,
-      whepUrl: `${this.srsApi}/rtc/v1/whep/`,
+      whipUrl: endpoint.whipUrl || `${this.srsApi}/rtc/v1/whip/`,
+      whepUrl: endpoint.whepUrl || `${this.srsApi}/rtc/v1/whep/`,
       stream: `vr_${groupId}_${uid}`,
     };
   }
@@ -245,6 +251,7 @@ export class VoiceRoomService {
       this.serverLog(await this.currentSid(groupId), `leave: user=${userId} 剩余=${ids.length}`);
       if (ids.length === 0) {
         this.serverLog(await this.currentSid(groupId), `场次结束: group=${groupId} 房间已清空`);
+        await this.srs.releaseVoiceRoom(groupId);
       }
       await this.broadcast(groupId);
     }

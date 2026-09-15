@@ -10,6 +10,7 @@ import ModulesView from './views/ModulesView.vue';
 import LedgerView from './views/LedgerView.vue';
 import CallLogsView from './views/CallLogsView.vue';
 import TreeholeView from './views/TreeholeView.vue';
+import SrsNodesView from './views/SrsNodesView.vue';
 
 const logged = ref(!!getToken());
 const username = ref('');
@@ -27,6 +28,7 @@ const tabs = [
   { key: 'disputes', label: '约单仲裁' },
   { key: 'modules', label: '大厅 / 小游戏' },
   { key: 'treehole', label: '私密树洞' },
+  { key: 'srs', label: 'SRS 节点' },
 ];
 
 async function login() {
@@ -84,6 +86,7 @@ function logout() {
       <DisputesView v-if="tab === 'disputes'" />
       <ModulesView v-if="tab === 'modules'" />
       <TreeholeView v-if="tab === 'treehole'" />
+      <SrsNodesView v-if="tab === 'srs'" />
     </div>
   </div>
 </template>

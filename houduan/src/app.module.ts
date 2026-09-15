@@ -21,12 +21,14 @@ import { IntimacyModule } from './intimacy/intimacy.module';
 import { AiModule } from './ai/ai.module';
 import { NewsModule } from './news/news.module';
 import { TreeholeModule } from './treehole/treehole.module';
+import { SrsModule } from './srs/srs.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
     RedisModule,
+    SrsModule,
     AuthModule,
     UserModule,
     ModuleConfigModule,

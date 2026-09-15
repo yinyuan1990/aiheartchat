@@ -14,6 +14,7 @@ import { WalletService } from '../wallet/wallet.service';
 import { ConnectionRegistry } from '../im/connection.registry';
 import { ImService } from '../im/im.service';
 import { IntimacyService } from '../intimacy/intimacy.service';
+import { SrsEndpoint, SrsService } from '../srs/srs.service';
 
 /** 接通时预冻结的最大分钟数（余额更多也只锁这么多，tick 里按需续冻） */
 const MAX_FREEZE_MIN = 30n;
@@ -59,26 +60,35 @@ export class CallService implements OnModuleInit, OnModuleDestroy {
     private readonly wallets: WalletService,
     private readonly im: ImService,
     private readonly intimacy: IntimacyService,
+    private readonly srs: SrsService,
     config: ConfigService,
   ) {
     this.srsServer = config.get<string>('SRS_SERVER') ?? '';
     this.srsApi = config.get<string>('SRS_API') ?? '';
   }
 
-  /** 通话参数（后台可调：分辨率/帧率/码率）+ 计费信息 */
-  async getConfig() {
+  /**
+   * 通话参数（后台可调：分辨率/帧率/码率）+ 计费信息 + 媒体入口。
+   * endpoint 不传时用环境变量 SRS（/call/config 只读展示用）；真正通话的节点在 invite 时按负载分配。
+   */
+  async getConfig(endpoint?: SrsEndpoint) {
     const [cfg, price] = await Promise.all([
       this.prisma.callConfig.findFirst(),
       this.prisma.priceConfig.findFirst(),
     ]);
+    const ep = endpoint ?? {
+      srsServer: this.srsServer,
+      whipUrl: `${this.srsApi}/rtc/v1/whip/`,
+      whepUrl: `${this.srsApi}/rtc/v1/whep/`,
+    };
     return {
       width: cfg?.width ?? 640,
       height: cfg?.height ?? 480,
       fps: cfg?.fps ?? 25,
       bitrate: cfg?.bitrate ?? 800,
-      srsServer: this.srsServer,
-      whipUrl: `${this.srsApi}/rtc/v1/whip/`,
-      whepUrl: `${this.srsApi}/rtc/v1/whep/`,
+      srsServer: ep.srsServer,
+      whipUrl: ep.whipUrl,
+      whepUrl: ep.whepUrl,
       msgPriceFen: price?.msgPriceFen ?? 10,
       videoBaseFenPerMin: price?.videoBaseFenPerMin ?? 2,
       videoPlatformX: price?.videoPlatformX ?? 2,
@@ -137,11 +147,14 @@ export class CallService implements OnModuleInit, OnModuleDestroy {
     }
 
     const callId = randomUUID().replace(/-/g, '');
+    // 按各节点负载分配 SRS，记在通话记录上：双方（含接听时）拿到同一节点
+    const endpoint = await this.srs.pick(`call ${callId}`);
     const record = await this.prisma.callRecord.create({
-      data: { callId, callerId, calleeId, type, status: 0 },
+      data: { callId, callerId, calleeId, type, status: 0, srsNode: endpoint.srsServer },
     });
+    this.logger.log(`invite: callId=${callId} type=${type} srs=${endpoint.srsServer || '(env)'}`);
 
-    const config = await this.getConfig();
+    const config = await this.getConfig(endpoint);
     await this.registry.deliver([calleeId], {
       op: 'call',
       event: 'invite',
@@ -179,7 +192,8 @@ export class CallService implements OnModuleInit, OnModuleDestroy {
       where: { callId },
       data: { status: 1, startedAt: new Date() },
     });
-    const config = await this.getConfig();
+    // 与 invite 同一节点
+    const config = await this.getConfig(await this.srs.endpointFor(record.srsNode));
     await this.registry.deliver([record.callerId], { op: 'call', event: 'accept', data: { callId } });
     return { callId, config };
   }

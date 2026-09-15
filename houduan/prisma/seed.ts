@@ -12,6 +12,17 @@ async function main() {
     await prisma.callConfig.update({ where: { id: cfg.id }, data: { fps: 25 } });
   }
 
+  // SRS 节点表为空时，把环境变量里的现网 SRS 录为默认节点（后台可继续增删；部署工具以默认节点为复制源）
+  if ((await prisma.srsNode.count()) === 0) {
+    const ip = (process.env.SRS_SERVER ?? '').trim();
+    if (ip) {
+      const port = Number(process.env.SRS_API?.match(/:(\d+)\/?$/)?.[1] ?? 1985) || 1985;
+      await prisma.srsNode.create({
+        data: { name: '节点1', ip, apiPort: port, priority: 100, maxConnections: 40, enabled: true, isDefault: true, remark: '由环境变量 SRS_SERVER 自动录入' },
+      });
+    }
+  }
+
   // 计费配置：消息 0.1 积分/条；视频成本价 2 分/分钟（640x480@800kbps 双向流量费），平台倍率 x2
   const price = await prisma.priceConfig.findFirst();
   if (!price) {

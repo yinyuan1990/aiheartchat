@@ -3,6 +3,7 @@ import type { Request } from 'express';
 import { Throttle } from '../common/rate-limit.guard';
 import { NewsService } from '../news/news.service';
 import { TreeholeService } from '../treehole/treehole.service';
+import { SrsService } from '../srs/srs.service';
 import { AdminGuard } from './admin.guard';
 import { AdminService } from './admin.service';
 
@@ -12,7 +13,48 @@ export class AdminController {
     private readonly admin: AdminService,
     private readonly news: NewsService,
     private readonly treehole: TreeholeService,
+    private readonly srs: SrsService,
   ) {}
+
+  // ---------- SRS 节点管理 ----------
+
+  /** 节点列表 + 当前连接数 + 环境变量兜底值 */
+  @Get('srs-nodes')
+  @UseGuards(AdminGuard)
+  srsNodes() {
+    return this.srs.adminList();
+  }
+
+  /** 默认（源）节点：部署工具拉这个决定从哪台复制 */
+  @Get('srs-nodes/default')
+  @UseGuards(AdminGuard)
+  srsDefault() {
+    return this.srs.defaultNode();
+  }
+
+  @Post('srs-nodes')
+  @UseGuards(AdminGuard)
+  srsCreate(@Body() body: any) {
+    return this.srs.adminCreate(body);
+  }
+
+  @Post('srs-nodes/:id')
+  @UseGuards(AdminGuard)
+  srsUpdate(@Param('id') id: string, @Body() body: any) {
+    return this.srs.adminUpdate(Number(id), body);
+  }
+
+  @Post('srs-nodes/:id/default')
+  @UseGuards(AdminGuard)
+  srsSetDefault(@Param('id') id: string) {
+    return this.srs.adminSetDefault(Number(id));
+  }
+
+  @Post('srs-nodes/:id/delete')
+  @UseGuards(AdminGuard)
+  srsDelete(@Param('id') id: string) {
+    return this.srs.adminDelete(Number(id));
+  }
 
   // ---------- 私密树洞 ----------
 

@@ -8,6 +8,15 @@ node_modules/
 .env
 .env.*
 deploy/app/docker-compose.yml
+本地凭据-勿提交.md
+*凭据*.md
+# SRS 部署工具本地产物（exe / 部署日志 / 记住的 IP）
+deploy/srs-deploy-tool/dist/
+deploy/srs-deploy-tool/build/
+deploy/srs-deploy-tool/*.spec
+deploy/srs-deploy-tool/*.log
+deploy/srs-deploy-tool/srs-deploy-tool.json
+__pycache__/
 
 # ---- 构建产物 ----
 dist/
