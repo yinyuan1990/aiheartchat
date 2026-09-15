@@ -4,6 +4,7 @@ import { inNativeApp, openNativeWeb, WebOrientation } from '../bridge';
 import { useApp } from '../store';
 import { GuideProjectBody } from './GuideProject';
 import { TreeholeFeed } from './Treehole';
+import { PullToRefresh } from '../components/PullToRefresh';
 
 interface ProjectItem {
   id: number;
@@ -79,8 +80,10 @@ export function HallPage() {
     sessionStorage.setItem(TAB_KEY, t);
   };
 
-  useEffect(() => {
-    console.log(`[Game] hall mounted, version=${HALL_VERSION} path=${location.pathname}${location.hash}`);
+  // 同城搭子 tab 下拉刷新：换 key 让 GuideProjectBody 重新挂载拉数据
+  const [guideKey, setGuideKey] = useState(0);
+
+  const loadProjects = () =>
     api<ProjectItem[]>('/modules')
       .then((list) => {
         console.log(
@@ -91,6 +94,10 @@ export function HallPage() {
       })
       .catch((e) => console.error('[Game] /modules failed', e?.message ?? e))
       .finally(() => setLoaded(true));
+
+  useEffect(() => {
+    console.log(`[Game] hall mounted, version=${HALL_VERSION} path=${location.pathname}${location.hash}`);
+    loadProjects();
   }, []);
 
   // 内嵌模式只带 token 未拉用户资料；同城搭子入口按性别不同、游戏链接可能要 {uid}，补一次
@@ -114,7 +121,7 @@ export function HallPage() {
 
   return (
     <>
-      <div className="top-tabs">
+      <div className="top-tabs sticky">
         {TABS.map((t) => (
           <span key={t.key} className={`top-tab${tab === t.key ? ' active' : ''}`} onClick={() => switchTab(t.key)}>
             {t.label}
@@ -124,8 +131,8 @@ export function HallPage() {
 
       <div style={{ padding: '4px 16px' }}>
         {tab === 'guide' && (
-          <>
-            <GuideProjectBody />
+          <PullToRefresh onRefresh={() => { setGuideKey((k) => k + 1); return loadProjects(); }}>
+            <GuideProjectBody key={guideKey} />
             {extraBanners.map((p, i) => (
               <div
                 key={p.id}
@@ -149,11 +156,11 @@ export function HallPage() {
                 </span>
               </div>
             ))}
-          </>
+          </PullToRefresh>
         )}
 
         {tab === 'games' && (
-          <>
+          <PullToRefresh onRefresh={loadProjects}>
             {games.length > 0 && (
               <div className="game-grid">
                 {games.map((g) => (
@@ -165,8 +172,8 @@ export function HallPage() {
                 ))}
               </div>
             )}
-            {loaded && games.length === 0 && <div className="empty">游戏正在筹备中<br />敬请期待</div>}
-          </>
+            {loaded && games.length === 0 && <div className="empty">游戏正在筹备中<br />敬请期待<br /><span className="small">下拉可刷新</span></div>}
+          </PullToRefresh>
         )}
 
         {tab === 'treehole' && <TreeholeFeed />}

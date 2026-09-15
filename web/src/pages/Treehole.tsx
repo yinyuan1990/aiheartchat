@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { isEmbedded } from '../bridge';
+import { PullToRefresh } from '../components/PullToRefresh';
 
 /** 私密树洞帖子（匿名，无作者信息） */
 export interface TreeholePost {
@@ -109,12 +110,12 @@ export function TreeholeFeed() {
   }, []);
 
   return (
-    <>
+    <PullToRefresh onRefresh={() => load()}>
       {posts.map((p) => (
         <TreeholeCard key={p.id} post={p} clamp onOpen={() => nav(`/treehole/${p.id}`)} />
       ))}
       {loaded && posts.length === 0 && (
-        <div className="empty">树洞还是空的<br />说点只想让陌生人听见的话吧</div>
+        <div className="empty">树洞还是空的<br />说点只想让陌生人听见的话吧<br /><span className="small">下拉可刷新</span></div>
       )}
       {hasMore && (
         <div className="hint" style={{ cursor: 'pointer', padding: '6px 0 14px' }} onClick={() => { setLoadingMore(true); load(true); }}>
@@ -129,7 +130,7 @@ export function TreeholeFeed() {
       >
         ✎ 写树洞
       </button>
-    </>
+    </PullToRefresh>
   );
 }
 

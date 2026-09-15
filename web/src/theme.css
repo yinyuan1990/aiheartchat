@@ -291,6 +291,11 @@ textarea.input { resize: none; min-height: 90px; }
 .module-card .name { font-size: 16px; font-weight: 600; }
 .module-card .desc { color: var(--text-2); font-size: 12px; margin-top: 6px; }
 
+/* 大厅顶部 tab：吸顶，列表滚动时不跟着跑出屏幕 */
+.top-tabs.sticky {
+  position: sticky; top: 0; z-index: 20; background: var(--bg);
+}
+
 /* 大厅：休闲游戏九宫格 */
 .game-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .game-cell {
