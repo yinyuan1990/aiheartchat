@@ -4,8 +4,8 @@ import { PrismaService } from '../prisma/prisma.service';
 /**
  * 花边新闻（消息页入口）+ 每日一句励志（主页「遇见」右边）
  *
- * 新闻：每小时按受众关键词从 360 新闻搜索采集一篇真实报道（抓原文正文，抓不到用摘要+原文链接），
- *       采集彻底失败时兜底 AI 生成，保证不断更。
+ * 新闻：一天一个故事（东八区按天）。每天每个受众先由 AI 写一篇新闻风格的故事；
+ *       AI 不可用/失败时才退回按关键词从 360 新闻搜索采集一篇真实报道兜底，保证不断更。
  *       （源选型：Google/Bing RSS 在国内服务器不可达/被重定向，360 新闻实测稳定）
  * 每日一句：AI 每天生成一句，男女不同。
  * 受众按性别分流：
@@ -17,11 +17,10 @@ export class NewsService implements OnModuleInit {
   private readonly logger = new Logger('NewsService');
   private generating = false;
 
-  private static readonly INTERVAL_MS = 60 * 60 * 1000;
-  /** 列表最多保留条数（每受众），旧的自动清理 */
+  /** 列表最多保留条数（每受众），旧的自动清理（一天一篇 ≈ 保留半年多） */
   private static readonly KEEP_PER_AUDIENCE = 200;
 
-  /** 采集关键词（按小时轮换，一次跑不出结果就换下一组） */
+  /** 兜底采集关键词（按天轮换，一次跑不出结果就换下一组） */
   private static readonly KEYWORDS: Record<number, string[]> = {
     1: ['情侣 一起吃苦 打拼 励志', '女友 陪男友 奋斗 感动', '夫妻 白手起家 励志', '女企业家 励志 生活'],
     2: ['农村女孩 逆袭', '农村姑娘 创业 逆袭', '打工妹 逆袭 励志', '女孩 逆袭 改变命运'],
@@ -39,7 +38,7 @@ export class NewsService implements OnModuleInit {
   constructor(private readonly prisma: PrismaService) {}
 
   onModuleInit() {
-    // 启动后先补一轮（表空或超过 1 小时没更新时立即采集），之后每 10 分钟检查一次是否到点
+    // 启动后先补一轮（今天还没有故事就立即生成），之后每 10 分钟检查一次是否跨天
     setTimeout(() => void this.tick(), 10_000);
     setInterval(() => void this.tick(), 10 * 60 * 1000);
   }
@@ -83,21 +82,32 @@ export class NewsService implements OnModuleInit {
     });
   }
 
-  /** 管理端手动触发：立即采集一轮新闻（两性别，不看间隔；采不到走 AI 兜底） */
+  /** 管理端手动触发：立即再出一篇故事（两性别，不看当天是否已有） */
   async forceCrawl() {
     const result: Record<string, string> = {};
     for (const audience of [1, 2]) {
-      const ok = await this.crawlOne(audience).catch(() => false);
-      if (ok) {
-        result[`audience${audience}`] = 'crawled';
-      } else if (process.env.AI_API_KEY) {
-        await this.generateFallback(audience).catch(() => {});
-        result[`audience${audience}`] = 'fallback';
-      } else {
-        result[`audience${audience}`] = 'failed';
-      }
+      result[`audience${audience}`] = await this.produceOne(audience);
     }
     return result;
+  }
+
+  /**
+   * 出一篇：先 AI 写故事，失败再采集真实报道兜底。
+   * 返回 story / crawled / failed
+   */
+  private async produceOne(audience: number): Promise<string> {
+    if (process.env.AI_API_KEY) {
+      const ok = await this.generateStory(audience).catch((e) => {
+        this.logger.warn(`AI 故事生成异常（audience=${audience}）: ${(e as Error).message}`);
+        return false;
+      });
+      if (ok) return 'story';
+    }
+    const crawled = await this.crawlOne(audience).catch((e) => {
+      this.logger.warn(`采集异常（audience=${audience}）: ${(e as Error).message}`);
+      return false;
+    });
+    return crawled ? 'crawled' : 'failed';
   }
 
   /** 管理端手动触发：重新生成今天的励志语句（两性别，覆盖当天已有） */
@@ -139,14 +149,9 @@ export class NewsService implements OnModuleInit {
           orderBy: { id: 'desc' },
           select: { createdAt: true },
         });
-        const stale = !latest || Date.now() - latest.createdAt.getTime() >= NewsService.INTERVAL_MS;
-        if (stale) {
-          const ok = await this.crawlOne(audience).catch((e) => {
-            this.logger.warn(`采集异常（audience=${audience}）: ${(e as Error).message}`);
-            return false;
-          });
-          if (!ok && process.env.AI_API_KEY) await this.generateFallback(audience);
-        }
+        // 一天一个故事：最新一篇不是今天（东八区）的就出一篇
+        const stale = !latest || this.dayCN(latest.createdAt) !== day;
+        if (stale) await this.produceOne(audience);
         // 每日一句：当天缺了就补（AI 生成）
         if (process.env.AI_API_KEY) {
           const quote = await this.prisma.dailyQuote.findUnique({ where: { audience_day: { audience, day } } });
@@ -160,13 +165,13 @@ export class NewsService implements OnModuleInit {
     }
   }
 
-  // ---------- 新闻采集 ----------
+  // ---------- 新闻采集（兜底） ----------
 
-  /** 从 360 新闻搜索采集一篇（去重、抓正文），成功返回 true */
+  /** 从 360 新闻搜索采集一篇（去重），成功返回 true */
   private async crawlOne(audience: number): Promise<boolean> {
     const keywords = NewsService.KEYWORDS[audience] ?? [];
-    const start = new Date().getHours() % keywords.length;
-    // 从本小时对应的关键词开始轮，一组没有新内容就换下一组
+    const start = Math.floor(Date.now() / 86_400_000) % keywords.length;
+    // 从今天对应的关键词开始轮，一组没有新内容就换下一组
     for (let i = 0; i < keywords.length; i++) {
       const kw = keywords[(start + i) % keywords.length];
       const items = await this.fetchSearch(kw).catch(() => [] as RssItem[]);
@@ -242,36 +247,51 @@ export class NewsService implements OnModuleInit {
     }
   }
 
-  // ---------- AI 兜底与每日一句 ----------
+  // ---------- AI 每日故事与每日一句 ----------
 
-  /** 采集失败时的兜底：AI 写一篇新闻风格软文 */
-  private async generateFallback(audience: number) {
+  /** 每天的故事：AI 写一篇新闻风格的故事（带上最近标题避免雷同），成功返回 true */
+  private async generateStory(audience: number): Promise<boolean> {
     const themes =
       audience === 2
         ? [
             '一个农村出身的女孩通过自己的努力逆袭改变命运的真实感新闻故事（进城打拼、直播带货、考学、创业等方向任选）',
             '一个大山里的女孩靠拼劲走出农村、让全家过上好日子的励志新闻故事',
+            '一个普通女孩在低谷里靠一门手艺翻身、活得越来越有底气的故事',
+            '一个被看轻的打工妹用几年时间把小生意做起来、带着家人搬进新家的故事',
           ]
         : [
             '一个女生陪男朋友从一无所有一起吃苦打拼、不离不弃最终苦尽甘来的暖心新闻故事',
             '一位白手起家的富豪女企业家的日常生活见闻与情感观（对感情专一、欣赏踏实肯干的男生）',
+            '一对小夫妻在城市里从合租房起步、互相托底把日子越过越好的故事',
+            '一个女生在男友最难的时候选择留下、几年后两人共同把事业做成的故事',
           ];
     const theme = themes[Math.floor(Math.random() * themes.length)];
+    const recent = await this.prisma.newsArticle.findMany({
+      where: { audience },
+      orderBy: { id: 'desc' },
+      take: 15,
+      select: { title: true },
+    });
 
     const raw = await this.callModel([
       {
         role: 'system',
         content:
-          '你是一名资讯编辑，为社交 App 的资讯栏目撰写新闻风格的软文。要求：新闻报道口吻、有具体人物（化名）和细节、真实感强、正能量、通俗易读；正文 500-800 字，分 4-6 个自然段。' +
+          '你是一名资讯编辑，为社交 App 的「花边新闻」栏目撰写每天一篇新闻风格的故事。要求：新闻报道口吻、有具体人物（化名）、地点和细节、真实感强、正能量、通俗易读；正文 500-800 字，分 4-6 个自然段。' +
           '严格只输出 JSON 对象：{"title":"标题（18字内）","summary":"摘要（40字内）","tag":"分类标签（2-4字，如 励志/情感/逆袭）","content":"正文，段落之间用\\n\\n分隔"}',
       },
-      { role: 'user', content: `写一篇：${theme}。` },
+      {
+        role: 'user',
+        content:
+          `写一篇：${theme}。` +
+          (recent.length ? `\n最近已经发过这些标题，人物、行业、情节都不要雷同：\n${recent.map((r) => r.title).join('\n')}` : ''),
+      },
     ]);
 
     const parsed = this.parseJson(raw);
     if (!parsed?.title || !parsed?.content) {
-      this.logger.warn(`AI 兜底返回无法解析（audience=${audience}）: ${raw.slice(0, 120)}`);
-      return;
+      this.logger.warn(`AI 故事返回无法解析（audience=${audience}）: ${raw.slice(0, 120)}`);
+      return false;
     }
     await this.prisma.newsArticle.create({
       data: {
@@ -282,8 +302,9 @@ export class NewsService implements OnModuleInit {
         content: String(parsed.content).slice(0, 12000),
       },
     });
-    this.logger.log(`AI 兜底已生成（audience=${audience}）: ${parsed.title}`);
+    this.logger.log(`今日故事已生成（audience=${audience}）: ${parsed.title}`);
     await this.trim(audience);
+    return true;
   }
 
   /** 生成当天的每日一句（force=true 覆盖当天已有） */
@@ -328,7 +349,12 @@ export class NewsService implements OnModuleInit {
 
   /** 东八区今天的 YYYY-MM-DD */
   private todayCN(): string {
-    return new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10);
+    return this.dayCN(new Date());
+  }
+
+  /** 某时刻在东八区的 YYYY-MM-DD */
+  private dayCN(d: Date): string {
+    return new Date(d.getTime() + 8 * 3600_000).toISOString().slice(0, 10);
   }
 
   private fetchWithTimeout(url: string): Promise<Response> {

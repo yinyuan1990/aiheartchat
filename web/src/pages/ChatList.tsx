@@ -368,7 +368,7 @@ export function ChatListPage() {
               </div>
             </div>
           )}
-          {/* 花边新闻置顶入口（每小时更新） */}
+          {/* 花边新闻置顶入口（每天一个故事） */}
           {tab === 'single' && (
             <div className="row" style={{ padding: '10px 16px', cursor: 'pointer' }} onClick={() => nav('/news')}>
               <div style={{
@@ -379,7 +379,7 @@ export function ChatListPage() {
               <div className="grow" style={{ borderBottom: '1px solid var(--line)', paddingBottom: 10 }}>
                 <div className="row">
                   <span className="grow" style={{ fontSize: 15 }}>花边新闻</span>
-                  <span style={{ fontSize: 10, color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 4, padding: '1px 5px' }}>每小时更新</span>
+                  <span style={{ fontSize: 10, color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 4, padding: '1px 5px' }}>每天一个故事</span>
                 </div>
                 <div className="muted ellipsis" style={{ marginTop: 3 }}>逆袭·励志·情感，看看别人的故事</div>
               </div>

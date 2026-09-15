@@ -186,7 +186,7 @@ struct NewsListView: View {
     }
 }
 
-/// 花边新闻列表（按性别分流，后端每小时采集更新）
+/// 花边新闻列表（按性别分流，后端每天生成一个故事）
 struct NewsSectionView: View {
     @State private var items: [NewsArticleModel] = []
     @State private var loaded = false

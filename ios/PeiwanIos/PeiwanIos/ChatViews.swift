@@ -180,7 +180,7 @@ struct MessagesView: View {
         .buttonStyle(.plain)
     }
 
-    /// 花边新闻置顶入口（每小时更新）
+    /// 花边新闻置顶入口（每天一个故事）
     private var newsEntryRow: some View {
         RouteLink(.newsList) {
             VStack(spacing: 0) {
@@ -194,7 +194,7 @@ struct MessagesView: View {
                         Text("逆袭·励志·情感，看看别人的故事").font(.system(size: 13)).foregroundStyle(Theme.textSub).lineLimit(1)
                     }
                     Spacer()
-                    Text("每小时更新").font(.system(size: 10)).foregroundStyle(Theme.accent)
+                    Text("每天一个故事").font(.system(size: 10)).foregroundStyle(Theme.accent)
                         .padding(.horizontal, 5).padding(.vertical, 2)
                         .background(RoundedRectangle(cornerRadius: 4).fill(Theme.accent.opacity(0.12)))
                 }

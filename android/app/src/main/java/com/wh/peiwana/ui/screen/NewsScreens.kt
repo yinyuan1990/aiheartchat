@@ -175,7 +175,7 @@ fun NewsListScreen(onOpenNews: (String) -> Unit, onBack: () -> Unit) {
     }
 }
 
-/** 花边新闻列表（按性别分流，后端每小时采集更新），支持下拉刷新与翻页 */
+/** 花边新闻列表（按性别分流，后端每天生成一个故事），支持下拉刷新与翻页 */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun NewsSection(onOpenNews: (String) -> Unit) {

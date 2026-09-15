@@ -37,7 +37,7 @@ function TagChip({ text }: { text: string }) {
   );
 }
 
-/** 花边新闻列表（消息页入口，按性别分流，后端每小时采集更新） */
+/** 花边新闻列表（消息页入口，按性别分流，后端每天生成一个故事） */
 export function NewsListPage() {
   const PAGE = 20;
   const nav = useNavigate();

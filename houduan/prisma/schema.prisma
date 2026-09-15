@@ -621,7 +621,7 @@ model Notification {
   @@map("notification")
 }
 
-/// 花边新闻（消息页入口，每小时采集一篇真实报道，采集失败兜底 AI 生成）
+/// 花边新闻（消息页入口，一天一个故事：AI 生成，失败时采集一篇真实报道兜底）
 model NewsArticle {
   id        BigInt   @id @default(autoincrement())
   /// 受众：1=男方看（共苦励志/鼓励/富豪女生活） 2=女方看（农村女逆袭）
