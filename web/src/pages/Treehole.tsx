@@ -61,7 +61,10 @@ function TreeholeCard({ post, clamp, onOpen }: { post: TreeholePost; clamp: bool
         {post.content}
       </div>
       <div className="th-meta">
-        <span>👁 {fmtCount(post.viewCount)}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+          <svg width="13" height="10" viewBox="0 0 24 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round"><path d="M1 8C5 1.5 19 1.5 23 8C19 14.5 5 14.5 1 8Z" /><circle cx="12" cy="8" r="3.4" fill="currentColor" stroke="none" /></svg>
+          {fmtCount(post.viewCount)}
+        </span>
         <span>{fmtTime(post.createdAt)}</span>
       </div>
       {onOpen && (

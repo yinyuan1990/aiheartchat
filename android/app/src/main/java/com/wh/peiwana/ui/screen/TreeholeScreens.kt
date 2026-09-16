@@ -217,8 +217,9 @@ fun TreeholeCard(post: TreeholePost, clamp: Boolean, onOpen: (() -> Unit)? = nul
             overflow = if (clamp) TextOverflow.Ellipsis else TextOverflow.Clip,
         )
         Spacer(Modifier.height(6.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            Text("👁 ${fmtCount(post.viewCount)}   ${fmtTreeholeTime(post.createdAt)}", color = TextDim, fontSize = 11.sp)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+            EyeIcon(TextDim, 13.dp)
+            Text(" ${fmtCount(post.viewCount)}   ${fmtTreeholeTime(post.createdAt)}", color = TextDim, fontSize = 11.sp)
         }
         if (onOpen != null) {
             Spacer(Modifier.height(10.dp))

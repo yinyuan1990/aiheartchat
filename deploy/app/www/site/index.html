@@ -59,6 +59,12 @@
   .trust span { display: inline-flex; align-items: center; gap: 6px; }
   .trust svg { width: 14px; height: 14px; color: var(--green); }
 
+  /* 竖排标语：爱情和金钱无关，与内心相连（书法条幅式，右起竖读） */
+  .vslogan { flex-shrink: 0; display: flex; flex-direction: row-reverse; align-items: flex-start; gap: 12px; padding: 0 10px; position: relative; }
+  .vslogan span { writing-mode: vertical-rl; text-orientation: upright; font-size: 22px; letter-spacing: 9px; font-weight: 500; color: #fff; line-height: 1; padding: 26px 10px 28px; border-radius: 22px; background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015)); border: 1px solid var(--line); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05); }
+  .vslogan span:last-child { font-size: 17px; letter-spacing: 8px; color: var(--text2); margin-top: 54px; }
+  .vslogan .seal { position: absolute; left: 50%; bottom: -46px; transform: translateX(-50%); width: 30px; height: 30px; border-radius: 6px; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; letter-spacing: 0; box-shadow: 0 6px 16px rgba(254,44,85,0.4); }
+
   /* 手机组 */
   .phones { flex-shrink: 0; position: relative; width: 470px; height: 600px; }
   .phone { position: absolute; width: 262px; height: 548px; border-radius: 42px; padding: 10px; background: #0f0f13; border: 1px solid #2a2a33; box-shadow: 0 40px 100px rgba(0,0,0,0.7), inset 0 0 0 1px rgba(255,255,255,0.04); }
@@ -194,6 +200,10 @@
     .hero .slogan { text-align: center; margin-left: auto; margin-right: auto; }
     .btns { justify-content: center; }
     .trust { justify-content: center; }
+    .vslogan { gap: 10px; margin: -6px 0 24px; }
+    .vslogan span { font-size: 17px; letter-spacing: 6px; padding: 16px 8px 18px; }
+    .vslogan span:last-child { font-size: 14px; letter-spacing: 5px; margin-top: 40px; }
+    .vslogan .seal { bottom: -38px; width: 26px; height: 26px; font-size: 11px; }
     .phones { width: 100%; max-width: 380px; height: 520px; }
     .phone { width: 230px; height: 480px; }
     .phone.p1 { left: 0; top: 30px; }
@@ -264,6 +274,12 @@
           <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>消息 AES-256 加密</span>
           <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>线下搭子实名认证</span>
         </div>
+      </div>
+
+      <div class="vslogan" aria-label="爱情和金钱无关，与内心相连">
+        <span>爱情和金钱无关</span>
+        <span>与内心相连</span>
+        <i class="seal">心</i>
       </div>
 
       <div class="phones">

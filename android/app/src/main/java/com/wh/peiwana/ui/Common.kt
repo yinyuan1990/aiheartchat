@@ -160,6 +160,24 @@ fun ScanIcon(tint: Color, size: androidx.compose.ui.unit.Dp = 20.dp) {
     }
 }
 
+/** 眼睛图标（线性：杏仁形轮廓 + 实心瞳孔），用于阅读数，替代显示效果不稳定的 👁 emoji */
+@Composable
+fun EyeIcon(tint: Color, size: androidx.compose.ui.unit.Dp = 14.dp) {
+    androidx.compose.foundation.Canvas(Modifier.size(size, size * 0.7f)) {
+        val w = this.size.width
+        val h = this.size.height
+        val sw = w * 0.09f
+        val outline = androidx.compose.ui.graphics.Path().apply {
+            moveTo(w * 0.04f, h * 0.5f)
+            quadraticBezierTo(w * 0.5f, -h * 0.12f, w * 0.96f, h * 0.5f)
+            quadraticBezierTo(w * 0.5f, h * 1.12f, w * 0.04f, h * 0.5f)
+            close()
+        }
+        drawPath(outline, tint, style = androidx.compose.ui.graphics.drawscope.Stroke(width = sw, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+        drawCircle(tint, radius = w * 0.15f, center = androidx.compose.ui.geometry.Offset(w * 0.5f, h * 0.5f))
+    }
+}
+
 /** 全屏图片查看器（Telephoto）：双指/双击缩放 + 平移，横滑切换，单击关闭 */
 @Composable
 fun ImageViewer(urls: List<String>, startIndex: Int = 0, onClose: () -> Unit) {

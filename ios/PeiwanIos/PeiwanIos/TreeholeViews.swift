@@ -173,7 +173,11 @@ struct TreeholeCardView: View {
                 .padding(.top, 6)
             HStack(spacing: 6) {
                 Spacer()
-                Text("👁 \(fmtCount(post.viewCount ?? 0))")
+                // 系统线性眼睛图标替代 👁 emoji
+                HStack(spacing: 3) {
+                    Image(systemName: "eye").font(.system(size: 10))
+                    Text(fmtCount(post.viewCount ?? 0))
+                }
                 Text(fmtTreeholeTime(post.createdAt))
             }
             .font(.system(size: 11)).foregroundStyle(Theme.textDim)
