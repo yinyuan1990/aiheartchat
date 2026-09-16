@@ -10,6 +10,9 @@
 	</dict>
 	<key>CFBundleDisplayName</key>
 	<string>心之音</string>
+	<!-- 出口合规：只用 HTTPS / 系统加密，属豁免；免去每次上传 TestFlight 手动回答 -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSCameraUsageDescription</key>
 	<string>视频通话与扫描二维码需要使用摄像头</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
