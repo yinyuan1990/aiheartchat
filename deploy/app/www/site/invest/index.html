@@ -38,6 +38,33 @@
   .cover .to { margin-top: 30px; display: inline-flex; align-items: center; gap: 12px; padding: 10px 16px 10px 10px; border-radius: 30px; background: var(--bg2); border: 1px solid var(--line); font-size: 13px; color: var(--text2); }
   .cover .to i { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(160deg, #ff8ba7, #5a1d33); display: inline-block; }
   .cover .to b { color: var(--text); }
+  /* 封面：左文案 + 右首位女生名片 */
+  .cover-in { display: flex; align-items: center; gap: 48px; position: relative; }
+  .cover-in .ctext { flex: 1; min-width: 0; }
+  .first { flex: 0 0 300px; }
+  .fcard { position: relative; border-radius: 26px; overflow: hidden; aspect-ratio: 9 / 15; background: var(--bg2); border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 40px 90px rgba(0,0,0,0.6), 0 0 0 1px rgba(254,44,85,0.15); transform: rotate(2deg); }
+  .fcard img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .fcard::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0.25), transparent 30%, transparent 55%, rgba(10,10,12,0.92)); }
+  .fcard .tag, .fcard .price { position: absolute; top: 14px; z-index: 2; font-size: 11px; padding: 5px 10px; border-radius: 10px; backdrop-filter: blur(8px); }
+  .fcard .tag { left: 14px; background: var(--grad); color: #fff; font-weight: 700; }
+  .fcard .price { right: 14px; background: rgba(0,0,0,0.5); color: var(--gold); border: 1px solid rgba(245,198,107,0.35); font-weight: 700; }
+  .fcard .fmeta { position: absolute; left: 16px; right: 16px; bottom: 16px; z-index: 2; }
+  .fcard .n { font-size: 22px; font-weight: 800; }
+  .fcard .n small { font-size: 12px; font-weight: 500; color: rgba(255,255,255,0.75); margin-left: 6px; }
+  .fcard .s { margin-top: 4px; font-size: 12px; color: rgba(255,255,255,0.7); line-height: 1.5; }
+  .fnote { margin-top: 22px; font-size: 12.5px; color: var(--text2); line-height: 1.8; text-align: center; padding: 0 6px; }
+
+  /* 真实照片墙条 */
+  .wall { margin-top: 30px; display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr; gap: 12px; }
+  .wall .w { position: relative; border-radius: 18px; overflow: hidden; aspect-ratio: 3 / 4; background: var(--bg2); border: 1px solid var(--line); }
+  .wall .w img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .4s ease; }
+  .wall .w:hover img { transform: scale(1.04); }
+  .wall .w span { position: absolute; left: 12px; bottom: 12px; font-size: 11.5px; padding: 4px 9px; border-radius: 8px; background: rgba(0,0,0,0.55); backdrop-filter: blur(6px); }
+  .wall .w.txt { display: flex; flex-direction: column; justify-content: center; padding: 22px; background: linear-gradient(160deg, rgba(254,44,85,0.16), var(--bg2) 60%); border-color: rgba(254,44,85,0.3); }
+  .wall .w.txt b { font-size: 20px; font-weight: 800; line-height: 1.3; }
+  .wall .w.txt p { margin-top: 10px; font-size: 13px; color: var(--text2); line-height: 1.8; }
+  .wall .w.txt em { font-style: normal; color: var(--accent2); }
+
   .kpis { margin-top: 48px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
   .kpi { background: var(--bg2); border: 1px solid var(--line); border-radius: 18px; padding: 20px 18px; }
   .kpi b { font-size: 26px; font-weight: 900; display: block; }
@@ -210,6 +237,11 @@
     .nav .toc { display: none; }
     .cover { padding: 60px 0 48px; }
     .cover h1 { font-size: 34px; }
+    .cover-in { flex-direction: column; align-items: stretch; gap: 36px; }
+    .first { flex: none; max-width: 300px; margin: 0 auto; }
+    .fcard { transform: none; }
+    .wall { grid-template-columns: 1fr 1fr; }
+    .wall .w.txt { grid-column: span 2; aspect-ratio: auto; }
     .kpis { grid-template-columns: 1fr 1fr; }
     section { padding: 56px 0; }
     .ch { flex-direction: column; gap: 6px; }
@@ -248,7 +280,8 @@
 <!-- 封面 -->
 <div class="cover">
   <div class="glow"></div><div class="glow2"></div>
-  <div class="wrap">
+  <div class="wrap cover-in">
+    <div class="ctext">
     <div class="kicker">PITCH · 心之音</div>
     <h1>把「陪伴」做成一门<br /><span class="em">线上线下打通</span>的正经生意</h1>
     <p>
@@ -256,6 +289,22 @@
       平台在每一次互动中收取明码标价的服务费。线上聊得来，线下见得着——我们把陌生人社交、陪玩经济和线下陪玩店三件事，做成了一条闭环。
     </p>
     <div class="to"><i></i><span>本页为 <b>小美</b> 准备 · 阅读约 10 分钟 · 请勿外传</span></div>
+    </div>
+    <!-- 平台首位入驻女生（真实用户）：名片式展示 -->
+    <div class="first">
+      <div class="fcard">
+        <img src="img/lulu-1.jpg" alt="露露" />
+        <span class="tag">首位入驻女生 · 真实用户</span>
+        <span class="price">视频 5 积分 / 分钟</span>
+        <div class="fmeta">
+          <div class="n">露露 <small>28 岁 · 成都</small></div>
+          <div class="s">「温柔 大方 美丽」 · 照片墙 8 张 · 通话评分 5.0</div>
+        </div>
+      </div>
+      <p class="fnote">第一位在心之音完成入驻、上传照片墙并接到视频通话的女生。她自己定价、自己接单，平台只收成本倍率的服务费。</p>
+    </div>
+  </div>
+  <div class="wrap">
     <div class="kpis">
       <div class="kpi"><b>iOS + Android + H5</b><span>三端产品已上线，后台可运营</span></div>
       <div class="kpi"><b>1 积分 = 1 元</b><span>统一计价体系，每一笔可对账</span></div>
@@ -442,6 +491,18 @@
       <div class="sh"><div class="k">STEP 3</div><h4>每周拍摄</h4><p>运营带脚本到店，一人 20 分钟拍 3 条；同时拍摄店内环境素材</p></div>
       <div class="sh"><div class="k">STEP 4</div><h4>剪辑分发</h4><p>统一模板剪辑，发布到动态广场、矩阵账号、女生专属推广页</p></div>
       <div class="sh"><div class="k">STEP 5</div><h4>转化履约</h4><p>男生看到 → 下载 → 私聊 / 视频 → 约单到店；数据回流优化下周内容</p></div>
+    </div>
+
+    <!-- 真实内容：平台首位入驻女生的照片墙 -->
+    <div class="wall">
+      <div class="w txt">
+        <b>内容不用编，<em>女生自己就会拍</em></b>
+        <p>这是平台第一位入驻女生 <em>露露</em>（28 · 成都）自己上传的照片墙。她入驻当天就完成了 8 张照片、自主定价视频 5 积分/分钟，并接到第一通视频通话、拿到 5.0 评分。</p>
+        <p>线下拍摄点做的是把这种自发内容标准化、批量化，再分发到矩阵账号与专属推广页。</p>
+      </div>
+      <div class="w"><img src="img/lulu-2.jpg" alt="" /><span>照片墙 · 1</span></div>
+      <div class="w"><img src="img/lulu-3.jpg" alt="" /><span>照片墙 · 2</span></div>
+      <div class="w"><img src="img/lulu-4.jpg" alt="" /><span>照片墙 · 3</span></div>
     </div>
   </div>
 </section>
