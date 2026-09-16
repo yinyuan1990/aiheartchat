@@ -24,11 +24,11 @@ export class AuthService {
     return { registered: true, token: this.sign(user.id), user: this.toProfile(user) };
   }
 
-  async register(dto: RegisterDto) {
+  async register(dto: RegisterDto, ip = '') {
     const exists = await this.prisma.user.findUnique({ where: { deviceId: dto.deviceId } });
     if (exists) {
       // 一机一号：已注册直接恢复，不允许二次注册
-      return { registered: true, token: this.sign(exists.id), user: this.toProfile(exists) };
+      return { registered: true, token: this.sign(exists.id), user: this.toProfile(exists), inviter: null };
     }
 
     // 账号 = BNB 链(BSC)地址，私钥主密钥加密托管
@@ -46,7 +46,59 @@ export class AuthService {
         wallet: { create: {} },
       },
     });
-    return { registered: true, token: this.sign(user.id), user: this.toProfile(user) };
+    const inviter = await this.attributeInvite(user, dto.inviteCode, ip).catch(() => null);
+    return { registered: true, token: this.sign(user.id), user: this.toProfile(user), inviter };
+  }
+
+  /**
+   * 邀请归因（注册时执行一次）：
+   * 1. 带了邀请码 → 按短号/ID 找邀请人；
+   * 2. 否则找 48h 内「同 IP + 同平台（按 deviceId 前缀 and_/ios_）」最近一条未消费的邀请页访问记录。
+   * 命中后写 user.inviterId、消费该记录；若邀请人是异性则新用户自动关注 TA，
+   * 并把邀请人简况返回给客户端（客户端据此直接打开 TA 主页）。
+   */
+  private async attributeInvite(user: { id: bigint; gender: number; deviceId: string }, inviteCode: string | undefined, ip: string) {
+    let inviterId: bigint | null = null;
+    let clickId: bigint | null = null;
+
+    const code = (inviteCode ?? '').trim();
+    if (code) {
+      const byCode = /^\d{6}$/.test(code)
+        ? await this.prisma.user.findUnique({ where: { shortId: code } })
+        : /^\d{1,19}$/.test(code) ? await this.prisma.user.findUnique({ where: { id: BigInt(code) } }) : null;
+      if (byCode) inviterId = byCode.id;
+    }
+    if (!inviterId && ip) {
+      const platform = user.deviceId.startsWith('ios_') ? 'ios' : user.deviceId.startsWith('and_') ? 'android' : 'other';
+      const click = await this.prisma.inviteClick.findFirst({
+        where: { ip, platform, claimedBy: null, createdAt: { gt: new Date(Date.now() - 48 * 3600_000) } },
+        orderBy: { id: 'desc' },
+      });
+      if (click) {
+        inviterId = click.inviterId;
+        clickId = click.id;
+      }
+    }
+    if (!inviterId || inviterId === user.id) return null;
+
+    const inviter = await this.prisma.user.findUnique({ where: { id: inviterId } });
+    if (!inviter || inviter.status !== 0) return null;
+
+    await this.prisma.user.update({ where: { id: user.id }, data: { inviterId } });
+    if (clickId) await this.prisma.inviteClick.update({ where: { id: clickId }, data: { claimedBy: user.id } });
+
+    // 性别隔离：同性不可见，只记录归因不建立关系
+    const visible = inviter.gender !== user.gender;
+    if (visible) {
+      await this.prisma.follow.upsert({
+        where: { followerId_targetId: { followerId: user.id, targetId: inviterId } },
+        update: {},
+        create: { followerId: user.id, targetId: inviterId },
+      });
+    }
+    return visible
+      ? { id: inviter.id, nickname: inviter.nickname, avatar: inviter.avatar, gender: inviter.gender }
+      : null;
   }
 
   private sign(userId: bigint): string {

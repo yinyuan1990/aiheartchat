@@ -171,6 +171,8 @@ fun RegisterScreen(onDone: (UserProfile) -> Unit) {
                         val resp = Api.json.decodeFromJsonElement(EnterResp.serializer(), data!!)
                         Api.token = resp.token
                         onDone(resp.user!!)
+                        // 通过 TA 的专属邀请页装的：进主页后直接打开 TA 的个人主页（MainActivity 监听 openUserHome）
+                        resp.inviter?.let { com.wh.peiwana.rtc.CallManager.openUserHome.value = it.id }
                     } catch (e: Exception) {
                         error = e.message ?: "注册失败"
                     } finally {

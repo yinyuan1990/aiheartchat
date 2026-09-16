@@ -201,6 +201,8 @@ enum Route: Hashable {
     /// 加入群聊（扫码/输邀请码），关联值为预填的邀请码
     case joinGroup(String?)
     case realname
+    /// 我的邀请名片（专属网页链接 + 二维码）
+    case inviteCard
     case userHome(String)
     /// 关注/粉丝列表：type = following | fans
     case followList(String)
@@ -236,6 +238,7 @@ func routeView(_ route: Route) -> some View {
     case .createGroup: CreateGroupView()
     case .joinGroup(let code): JoinGroupView(initialCode: code)
     case .realname: RealnameView()
+    case .inviteCard: InviteCardView()
     case .userHome(let id): UserHomeView(userId: id)
     case .followList(let type): FollowListView(type: type)
     case .aiChat: AiChatView()

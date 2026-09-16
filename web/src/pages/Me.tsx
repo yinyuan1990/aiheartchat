@@ -175,6 +175,7 @@ export function MePage() {
       {/* 菜单分组 */}
       <div className="card" style={{ margin: '14px 16px 0', padding: '4px 0' }}>
         <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/edit-profile')}>编辑资料</div>
+        <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/invite-card')}>我的邀请名片</div>
         <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/my-moments')}>我的动态</div>
         <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/follow-moments')}>关注动态</div>
         <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/task/mine')}>{me.gender === 2 ? '我的接单' : '我的约单'}</div>

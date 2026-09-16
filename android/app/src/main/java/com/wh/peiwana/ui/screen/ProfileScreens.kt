@@ -157,6 +157,8 @@ fun MeScreen(modifier: Modifier = Modifier, initialUser: UserProfile?, onNav: (S
         }
         val rows = buildList {
             add("编辑资料" to "edit-profile")
+            // 专属邀请网页（链接 + 二维码）：女生发给男生 / 男生发给女生，下载后自动归因到我
+            add("我的邀请名片" to "invite-card")
             add("我的动态" to "my-moments")
             // 关注的人动态（原主页「关注」tab 移到这里）
             add("关注动态" to "follow-moments")

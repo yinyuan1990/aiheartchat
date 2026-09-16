@@ -319,6 +319,7 @@ fun AppRoot() {
             page("wallet") { WalletScreen(onBack = { nav.popBackStack() }, onNav = { nav.navigate(it) }) }
             page("transfer") { TransferScreen(user?.shortId, onBack = { nav.popBackStack() }) }
             page("edit-profile") { EditProfileScreen(onBack = { nav.popBackStack() }) }
+            page("invite-card") { InviteCardScreen(me = user, onBack = { nav.popBackStack() }) }
             page("guide-apply") { GuideApplyScreen(onBack = { nav.popBackStack() }) }
             page("realname") { RealnameScreen(onBack = { nav.popBackStack() }) }
             page("gifts-received") { GiftsReceivedScreen(onBack = { nav.popBackStack() }) }

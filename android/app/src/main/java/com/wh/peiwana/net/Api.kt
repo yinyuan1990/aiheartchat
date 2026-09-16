@@ -52,8 +52,12 @@ fun fmtPoints(fen: String?): String {
     return if (s.isEmpty()) "0" else s
 }
 
+/** 注册归因到的邀请人（通过 TA 的专属邀请页下载安装）；仅异性时返回，客户端据此直接打开 TA 主页 */
 @Serializable
-data class EnterResp(val registered: Boolean, val token: String? = null, val user: UserProfile? = null)
+data class InviterBrief(val id: String, val nickname: String = "", val avatar: String = "", val gender: Int = 0)
+
+@Serializable
+data class EnterResp(val registered: Boolean, val token: String? = null, val user: UserProfile? = null, val inviter: InviterBrief? = null)
 
 @Serializable
 data class AppModuleItem(val id: Int, val name: String, val icon: String, val type: String, val entry: String)

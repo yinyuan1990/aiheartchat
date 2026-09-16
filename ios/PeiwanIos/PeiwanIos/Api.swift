@@ -24,10 +24,19 @@ struct UserProfile: Codable {
     var albums: [AlbumItem]?
 }
 
+/// 注册归因到的邀请人（通过 TA 的专属邀请页下载安装）；仅异性时返回，客户端据此直接打开 TA 主页
+struct InviterBrief: Codable {
+    let id: String
+    var nickname: String?
+    var avatar: String?
+    var gender: Int?
+}
+
 struct EnterResp: Codable {
     let registered: Bool
     let token: String?
     let user: UserProfile?
+    var inviter: InviterBrief?
 }
 
 struct AppModuleItem: Codable, Identifiable {

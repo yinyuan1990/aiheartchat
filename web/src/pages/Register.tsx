@@ -103,13 +103,15 @@ export function RegisterPage() {
       const uploadJson = await uploadRes.json();
       if (uploadJson.code !== 0) throw new Error(uploadJson.msg || '头像上传失败');
 
-      const r = await api<{ token: string; user: UserProfile }>('/auth/register', {
+      const r = await api<{ token: string; user: UserProfile; inviter?: { id: string } | null }>('/auth/register', {
         method: 'POST',
         body: { deviceId: getDeviceId(), nickname: nickname.trim(), age, gender, avatar: uploadJson.data.url },
       });
       setToken(r.token);
       setUser(r.user);
       nav('/plaza', { replace: true });
+      // 通过 TA 的专属邀请页来的：直接打开 TA 的主页
+      if (r.inviter?.id) nav(`/u/${r.inviter.id}`);
     } catch (e: any) {
       setError(e.message);
     } finally {

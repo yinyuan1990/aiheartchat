@@ -22,6 +22,7 @@ import { AiModule } from './ai/ai.module';
 import { NewsModule } from './news/news.module';
 import { TreeholeModule } from './treehole/treehole.module';
 import { SrsModule } from './srs/srs.module';
+import { InviteModule } from './invite/invite.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { SrsModule } from './srs/srs.module';
     AiModule,
     NewsModule,
     TreeholeModule,
+    InviteModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: RateLimitGuard }],
 })

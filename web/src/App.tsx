@@ -24,6 +24,7 @@ import { FollowsPage } from './pages/Follows';
 import { MomentDetailPage } from './pages/MomentDetail';
 import { GuideProjectPage } from './pages/GuideProject';
 import { EditProfilePage } from './pages/EditProfile';
+import { InviteCardPage } from './pages/InviteCard';
 import { TransferPage } from './pages/Transfer';
 import { GiftsReceivedPage } from './pages/GiftsReceived';
 import { AgreementPage } from './pages/Agreement';
@@ -178,6 +179,7 @@ export function App() {
         <Route path="/moment/:id" element={<MomentDetailPage />} />
         <Route path="/project/guide" element={<GuideProjectPage />} />
         <Route path="/edit-profile" element={<EditProfilePage />} />
+        <Route path="/invite-card" element={<InviteCardPage />} />
         <Route path="/transfer" element={<TransferPage />} />
         <Route path="/gifts-received" element={<GiftsReceivedPage />} />
         <Route path="/u/:id" element={<UserHomePage />} />

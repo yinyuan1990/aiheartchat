@@ -171,6 +171,11 @@ struct RegisterView: View {
                 Api.token = resp.token
                 state.user = resp.user
                 state.stage = .main
+                // 通过 TA 的专属邀请页装的：主页出现后直接打开 TA 的个人主页（RootView 监听 openUserHome）
+                if let inviter = resp.inviter {
+                    try? await Task.sleep(nanoseconds: 600_000_000)
+                    CallManager.shared.openUserHome = inviter.id
+                }
             } catch {
                 self.error = error.localizedDescription
             }

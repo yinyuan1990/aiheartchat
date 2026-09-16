@@ -42,6 +42,8 @@ model User {
   idCard       String?  @unique @map("id_card") @db.VarChar(18)
   /// 0=正常 1=封禁
   status       Int      @default(0) @db.TinyInt
+  /// 邀请人 id：通过 TA 的专属邀请页（/t/?u=短号）下载注册时归因，注册时写入一次
+  inviterId    BigInt?  @map("inviter_id")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
@@ -49,7 +51,26 @@ model User {
   albums       UserAlbum[]
 
   @@index([gender, isGuide, cityCode])
+  @@index([inviterId])
   @@map("user")
+}
+
+/// 专属邀请页访问记录：页面加载/点下载时记一条（IP + 平台），
+/// 新设备注册时用「同 IP + 同平台 + 48h 内最近一条未消费」做安装归因（无需剪贴板）
+model InviteClick {
+  id        BigInt    @id @default(autoincrement())
+  inviterId BigInt    @map("inviter_id")
+  ip        String    @db.VarChar(64)
+  /// ios / android / other（按访问页面的 UA 判断）
+  platform  String    @db.VarChar(10)
+  ua        String    @default("") @db.VarChar(300)
+  /// 归因到的新用户 id（消费后不再参与匹配）
+  claimedBy BigInt?   @map("claimed_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([ip, platform, createdAt])
+  @@index([inviterId, createdAt])
+  @@map("invite_click")
 }
 
 /// 亲密度（有向对：owner 视角对 peer 的分数）。
