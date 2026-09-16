@@ -160,11 +160,22 @@
   .fd p { font-size: 13.5px; color: #e6e6ee; line-height: 1.7; flex: 1; word-break: break-word; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .fd .ph2 { flex-shrink: 0; width: 56px; height: 56px; border-radius: 10px; object-fit: cover; background: var(--bg3); }
 
-  .dims { margin: 12px 16px 0; padding: 14px 16px; border-radius: 14px; background: var(--bg2); border: 1px solid var(--line); display: grid; gap: 10px; }
-  .dim { display: grid; grid-template-columns: 70px 1fr 34px; align-items: center; gap: 10px; font-size: 12.5px; color: var(--text2); }
-  .dim .t { height: 6px; border-radius: 3px; background: var(--bg3); overflow: hidden; }
-  .dim .t i { display: block; height: 100%; border-radius: 3px; background: var(--gradR); }
-  .dim b { color: var(--text); text-align: right; font-variant-numeric: tabular-nums; }
+  /* 通话评分：左侧总分 + 星级，右侧五维雷达图 */
+  .rate { margin: 12px 16px 0; padding: 16px 16px 8px; border-radius: 16px; background: linear-gradient(160deg, rgba(254,44,85,0.14), var(--bg2) 50%); border: 1px solid rgba(254,44,85,0.22); }
+  .rate .sc { display: flex; align-items: center; gap: 14px; }
+  .rate .sc b { font-size: 46px; line-height: 1; font-weight: 900; letter-spacing: -1.5px; background: var(--gradR); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .rate .sc .st { font-size: 14px; letter-spacing: 2px; color: var(--gold); line-height: 1; }
+  .rate .sc .st i { color: rgba(255,255,255,0.18); font-style: normal; }
+  .rate .sc small { display: block; margin-top: 6px; font-size: 11.5px; color: var(--text2); line-height: 1.5; }
+  .rate .sc .top { margin-left: auto; align-self: flex-start; font-size: 10.5px; padding: 3px 8px; border-radius: 8px; background: rgba(245,198,107,0.12); color: var(--gold); border: 1px solid rgba(245,198,107,0.3); white-space: nowrap; }
+  .rate svg { width: 100%; height: auto; display: block; overflow: visible; margin-top: 4px; }
+  .rate .ax { stroke: rgba(255,255,255,0.09); stroke-width: 1; }
+  .rate .grid { fill: none; stroke: rgba(255,255,255,0.09); stroke-width: 1; }
+  .rate .grid.outer { stroke: rgba(255,255,255,0.16); }
+  .rate .area { fill: url(#rg); stroke: #ff6b81; stroke-width: 2; stroke-linejoin: round; }
+  .rate .pt { fill: #fff; stroke: #fe2c55; stroke-width: 2; }
+  .rate .lb-t { font-size: 11px; fill: #c9c9d4; }
+  .rate .lb-v { font-size: 11px; font-weight: 800; fill: #fff; }
 
   .steps { margin: 12px 16px 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .steps div { padding: 14px 10px 12px; border-radius: 14px; background: linear-gradient(170deg, rgba(254,44,85,0.1), var(--bg2) 70%); border: 1px solid rgba(254,44,85,0.2); text-align: center; }
@@ -263,6 +274,30 @@
         return '<div class="fd"><div class="t">' + esc(ago(x.createdAt)) + '</div><p>' + esc(x.content || (x.type === 2 ? '发布了一条视频' : '发布了一组照片')) + '</p>' + (x.cover ? '<img class="ph2" src="' + esc(url(x.cover)) + '" alt="" data-lb="m' + esc(x.id) + '" />' : '') + '</div>';
       }).join('') + '</div>';
   }
+  /** 通话评分面板：总分 + 星级 + 五维雷达图（dims: [[label, 0-100], ...]） */
+  function ratePanel(d, dims) {
+    var avg = Number(d.ratingAvg || 0), score = stars(avg), full = Math.round(avg / 20);
+    var starHtml = '';
+    for (var k = 1; k <= 5; k++) starHtml += k <= full ? '★' : '<i>★</i>';
+    var W = 320, H = 200, cx = 160, cy = 104, R = 66;
+    function pt(i, r) { var a = -Math.PI / 2 + i * 2 * Math.PI / 5; return [cx + r * Math.cos(a), cy + r * Math.sin(a)]; }
+    function poly(r) { var s = []; for (var i = 0; i < 5; i++) s.push(pt(i, r).map(function (n) { return n.toFixed(1); }).join(',')); return s.join(' '); }
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '"><defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff6b81" stop-opacity=".55"/><stop offset="1" stop-color="#fe2c55" stop-opacity=".2"/></linearGradient></defs>';
+    [0.25, 0.5, 0.75].forEach(function (f) { svg += '<polygon class="grid" points="' + poly(R * f) + '"/>'; });
+    svg += '<polygon class="grid outer" points="' + poly(R) + '"/>';
+    for (var i = 0; i < 5; i++) { var o = pt(i, R); svg += '<line class="ax" x1="' + cx + '" y1="' + cy + '" x2="' + o[0].toFixed(1) + '" y2="' + o[1].toFixed(1) + '"/>'; }
+    var pts = dims.map(function (r, i) { var v = Math.max(8, Math.min(100, Number(r[1] || 0))); return pt(i, R * v / 100); });
+    svg += '<polygon class="area" points="' + pts.map(function (p) { return p.map(function (n) { return n.toFixed(1); }).join(','); }).join(' ') + '"/>';
+    pts.forEach(function (p) { svg += '<circle class="pt" cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="3"/>'; });
+    dims.forEach(function (r, i) {
+      var p = pt(i, R + 18), a = -Math.PI / 2 + i * 2 * Math.PI / 5, cos = Math.cos(a);
+      var anchor = Math.abs(cos) < 0.3 ? 'middle' : cos > 0 ? 'start' : 'end';
+      var y = p[1] + (i === 0 ? -4 : 4);
+      svg += '<text class="lb-t" x="' + p[0].toFixed(1) + '" y="' + y.toFixed(1) + '" text-anchor="' + anchor + '">' + esc(r[0]) + ' <tspan class="lb-v">' + Number(r[1] || 0) + '</tspan></text>';
+    });
+    svg += '</svg>';
+    return '<div class="rate"><div class="sc"><b>' + score + '</b><div><div class="st">' + starHtml + '</div><small>满分 5.0 · 视频通话结束后由对方匿名打分</small></div>' + (avg >= 90 ? '<span class="top">好评率高</span>' : '') + '</div>' + svg + '</div>';
+  }
   function foot() {
     return '<p class="foot">一机一号 · 不用手机号注册 · <a href="https://app.yyheart.com/#/agreement/user">用户协议</a> · <a href="https://app.yyheart.com/#/agreement/privacy">隐私政策</a></p>';
   }
@@ -303,8 +338,7 @@
         '<div><b>' + (d.fans || 0) + '</b><span>粉丝</span></div>' +
       '</div>' +
       photos(d) + moments(d) +
-      (hasRating ? '<div class="fsec"><h3>通话评分</h3><span class="more">' + d.ratingCount + ' 人评过</span></div><div class="dims">' +
-        dimRows.map(function (r) { var v = Number(r[1] || 0); return '<div class="dim"><span>' + r[0] + '</span><span class="t"><i style="width:' + v + '%"></i></span><b>' + v + '</b></div>'; }).join('') + '</div>' : '') +
+      (hasRating ? '<div class="fsec"><h3>通话评分</h3><span class="more">来自 ' + d.ratingCount + ' 位和她视频过的人</span></div>' + ratePanel(d, dimRows) : '') +
       '<div class="fsec"><h3>下载后怎么找到她</h3></div>' +
       '<div class="steps"><div><img class="ic" src="../icon.png" alt="" /><span>下载打开心之音</span><small>一机一号，不用注册</small></div><div><b>2</b><span>自动打开她的主页</span><small>或在「遇见」搜 ' + esc(d.nickname) + '</small></div><div><b>3</b><span>先发消息聊聊</span><small>聊得来再视频</small></div></div>' +
       '<div class="safe">身份证实名认证，聊天 AES-256 加密、可双向清空；同城约单积分平台托管，见面完成才结算。</div>' +
