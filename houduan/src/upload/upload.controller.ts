@@ -1,6 +1,7 @@
 import { Controller, Post, UploadedFile, UseGuards, UseInterceptors, Param, BadRequestException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AdminGuard } from '../admin/admin.guard';
 import { Throttle } from '../common/rate-limit.guard';
 import { UploadService } from './upload.service';
 
@@ -15,6 +16,18 @@ export class UploadController {
   avatar(@UploadedFile() file?: Express.Multer.File) {
     if (!file) throw new BadRequestException('缺少文件');
     return this.uploads.upload('image', file);
+  }
+
+  /**
+   * 后台上传 Android 安装包（管理员）：存到 MinIO apk/ 目录，返回可直接填进「APK 地址」的完整下载链接。
+   * 放在 /api/upload/ 下是为了复用 nginx 对上传路径放开的 210m 包体限制。
+   */
+  @Post('apk')
+  @UseGuards(AdminGuard)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 200 * 1024 * 1024 } }))
+  apk(@UploadedFile() file?: Express.Multer.File) {
+    if (!file) throw new BadRequestException('缺少文件');
+    return this.uploads.uploadApk(file);
   }
 
   /** kind: image | video | audio，form-data 字段名 file */

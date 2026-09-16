@@ -179,10 +179,16 @@ fun TreeholeSection(onOpen: (String) -> Unit, onPublish: () -> Unit) {
                     }
                 }
             } else {
-                LazyColumn(state = listState, contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 2.dp, bottom = 90.dp)) {
+                // 频道式：reverseLayout 让接口的「最新在前」数据显示为最新在最底部、进入时停在底部，
+                // 往上滑到顶部（数据末尾）自动加载更早的
+                LazyColumn(
+                    state = listState,
+                    reverseLayout = true,
+                    contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 90.dp),
+                ) {
                     items(items, key = { it.id }) { p ->
-                        TreeholeCard(p, clamp = true, onOpen = { onOpen(p.id) })
                         Spacer(Modifier.height(12.dp))
+                        TreeholeCard(p, clamp = true, onOpen = { onOpen(p.id) })
                     }
                     if (loadingMore) {
                         item { Text("加载中…", color = TextDim, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(8.dp)) }
@@ -326,6 +332,8 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
             item { Spacer(Modifier.height(12.dp)) }
         }
 
+        // 底部区域（回复提示 + 输入栏）：与聊天页一致，imePadding 让输入框贴在键盘上方（App 是 edge-to-edge，adjustResize 不会自动顶起）
+        Column(Modifier.fillMaxWidth().background(Bg).imePadding().navigationBarsPadding()) {
         replyTo?.let { r ->
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("回复 @${r.user?.nickname ?: ""}", color = Accent, fontSize = 12.sp, modifier = Modifier.weight(1f))
@@ -335,7 +343,7 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
 
         // 底部输入栏
         Row(
-            Modifier.fillMaxWidth().background(Bg).padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
+            Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).background(Bg3).padding(horizontal = 14.dp, vertical = 10.dp)) {
@@ -381,6 +389,7 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             ) { Text("发送", color = Color.White, fontSize = 13.sp) }
         }
+        } // 底部区域 Column
     }
 
     if (toast.isNotEmpty()) {

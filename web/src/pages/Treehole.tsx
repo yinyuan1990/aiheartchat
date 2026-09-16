@@ -94,10 +94,17 @@ export function TreeholeFeed() {
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
 
+  // 频道式排序：最新在最底部，进入时停在底部；顶部「加载更早」时保持当前阅读位置不跳
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const pendingScroll = useRef<'bottom' | { keepHeight: number } | null>(null);
+  const scroller = () => (anchorRef.current?.closest('.page') as HTMLElement | null);
+
   const load = async (more = false) => {
     const before = more && posts.length ? `?beforeId=${posts[posts.length - 1].id}` : '';
     try {
       const list = await api<TreeholePost[]>(`/treehole${before}`);
+      const el = scroller();
+      pendingScroll.current = more ? { keepHeight: el?.scrollHeight ?? 0 } : 'bottom';
       setPosts((prev) => (more ? [...prev, ...list] : list));
       setHasMore(list.length >= 20);
     } catch {
@@ -112,18 +119,28 @@ export function TreeholeFeed() {
     load();
   }, []);
 
+  useEffect(() => {
+    const el = scroller();
+    const p = pendingScroll.current;
+    if (!el || !p) return;
+    pendingScroll.current = null;
+    if (p === 'bottom') el.scrollTop = el.scrollHeight;
+    else el.scrollTop += el.scrollHeight - p.keepHeight;
+  }, [posts]);
+
   return (
     <PullToRefresh onRefresh={() => load()}>
-      {posts.map((p) => (
+      <div ref={anchorRef} />
+      {hasMore && (
+        <div className="hint" style={{ cursor: 'pointer', padding: '10px 0 14px' }} onClick={() => { setLoadingMore(true); load(true); }}>
+          {loadingMore ? '加载中…' : '查看更早的树洞'}
+        </div>
+      )}
+      {[...posts].reverse().map((p) => (
         <TreeholeCard key={p.id} post={p} clamp onOpen={() => nav(`/treehole/${p.id}`)} />
       ))}
       {loaded && posts.length === 0 && (
         <div className="empty">树洞还是空的<br />说点只想让陌生人听见的话吧<br /><span className="small">下拉可刷新</span></div>
-      )}
-      {hasMore && (
-        <div className="hint" style={{ cursor: 'pointer', padding: '6px 0 14px' }} onClick={() => { setLoadingMore(true); load(true); }}>
-          {loadingMore ? '加载中…' : '加载更多'}
-        </div>
       )}
       <div style={{ height: 72 }} />
       <button

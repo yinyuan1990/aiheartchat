@@ -119,25 +119,30 @@ struct TreeholeSectionView: View {
                 }
                 .refreshable { await store.refresh() }
             } else {
+                // 频道式：最新在最底部、进入时停在底部。iOS15 没有 defaultScrollAnchor，
+                // 用「整体上下翻转 + 每行再翻转回来」实现：数据仍是最新在前，index 0 显示在最底部
                 ScrollView {
                     LazyVStack(spacing: 12) {
+                        Color.clear.frame(height: 80)   // 翻转后在视觉底部，给「写树洞」按钮留位
                         ForEach(store.items) { p in
                             RouteLink(.treehole(p.id)) {
                                 TreeholeCardView(post: p, clamp: true, showCommentsBar: true)
                             }
                             .buttonStyle(.plain)
+                            .scaleEffect(x: 1, y: -1)
                             .onAppear {
-                                // 滚到倒数第二条时加载更多
+                                // 滚到（视觉上的顶部）倒数第二条时加载更早的
                                 if let idx = store.items.firstIndex(where: { $0.id == p.id }), idx >= store.items.count - 2 {
                                     Task { await store.loadMore() }
                                 }
                             }
                         }
-                        Color.clear.frame(height: 80)
+                        Color.clear.frame(height: 8)
                     }
-                    .padding(.horizontal, 14).padding(.top, 2)
+                    .padding(.horizontal, 14)
                 }
-                .refreshable { await store.refresh() }
+                .scaleEffect(x: 1, y: -1)
+                // 翻转后系统下拉刷新控件会跑到视觉底部，去掉；改为每次进入 tab 时静默刷新
             }
 
             RouteLink(.treeholePublish) {
@@ -152,7 +157,8 @@ struct TreeholeSectionView: View {
             .padding(.trailing, 16).padding(.bottom, 20)
         }
         .task {
-            if !store.loaded { await store.refresh() }
+            // 每次进入 tab 静默刷新（有缓存时先显示旧内容）
+            await store.refresh()
         }
     }
 }

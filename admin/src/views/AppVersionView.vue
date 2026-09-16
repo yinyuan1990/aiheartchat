@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
-import { api } from '../api';
+import { api, getToken } from '../api';
 
 interface Ver {
   platform: 'android' | 'ios';
@@ -44,6 +44,68 @@ async function simulate(p: 'android' | 'ios') {
   testResult.value[p] = await api(`/app/version?platform=${p}&version=${encodeURIComponent(testVer.value)}`);
 }
 
+// ---------- APK 拖拽上传（存 MinIO，上传完自动填入「APK 地址」，仍需点保存生效） ----------
+const dragging = ref(false);
+const uploading = ref(false);
+const progress = ref(0);
+const uploadedInfo = ref('');
+
+function pickFile(e: MouseEvent) {
+  if (uploading.value) return;
+  // v-for 内不用模板 ref（会变成数组），直接找容器里的 input
+  (e.currentTarget as HTMLElement).querySelector('input')?.click();
+}
+
+function fmtSize(n: number) {
+  return n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.round(n / 1024)} KB`;
+}
+
+function uploadApk(file: File) {
+  if (!/\.apk$/i.test(file.name)) return showToast('只能上传 .apk 文件');
+  if (file.size > 200 * 1024 * 1024) return showToast('安装包超过 200MB');
+  uploading.value = true;
+  progress.value = 0;
+  uploadedInfo.value = '';
+  const form = new FormData();
+  form.append('file', file);
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/api/upload/apk');
+  const token = getToken();
+  if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+  xhr.upload.onprogress = (e) => {
+    if (e.lengthComputable) progress.value = Math.round((e.loaded / e.total) * 100);
+  };
+  xhr.onload = () => {
+    uploading.value = false;
+    try {
+      const json = JSON.parse(xhr.responseText);
+      if (json.code !== 0) return showToast(json.msg || '上传失败');
+      rows.android.url = json.data.url;
+      uploadedInfo.value = `${file.name} · ${fmtSize(file.size)} · 已填入地址，记得改版本号后点「保存」`;
+      showToast('安装包已上传');
+    } catch {
+      showToast('上传失败');
+    }
+  };
+  xhr.onerror = () => {
+    uploading.value = false;
+    showToast('上传失败，请检查网络');
+  };
+  xhr.send(form);
+}
+
+function onDrop(e: DragEvent) {
+  dragging.value = false;
+  const f = e.dataTransfer?.files?.[0];
+  if (f) uploadApk(f);
+}
+
+function onPick(e: Event) {
+  const f = (e.target as HTMLInputElement).files?.[0];
+  if (f) uploadApk(f);
+  (e.target as HTMLInputElement).value = '';
+}
+
 onMounted(load);
 </script>
 
@@ -80,10 +142,32 @@ onMounted(load);
           {{ p === 'ios' ? '跳转链接' : 'APK 地址' }}
           <input
             v-model="rows[p].url"
-            :placeholder="p === 'ios' ? 'https://testflight.apple.com/join/xxxx 或 https://apps.apple.com/cn/app/idxxxx' : 'https://yyheart.com/app/peiwan.apk'"
+            :placeholder="p === 'ios' ? 'https://testflight.apple.com/join/xxxx 或 https://apps.apple.com/cn/app/idxxxx' : '拖 apk 到下方上传后自动填入，或手填地址'"
             style="flex: 1"
           />
         </label>
+      </div>
+      <!-- Android：拖拽上传 apk -->
+      <div
+        v-if="p === 'android'"
+        class="dropzone"
+        :class="{ on: dragging, busy: uploading }"
+        @dragover.prevent="dragging = true"
+        @dragleave.prevent="dragging = false"
+        @drop.prevent="onDrop"
+        @click="pickFile"
+      >
+        <input type="file" accept=".apk" hidden @change="onPick" @click.stop />
+        <template v-if="uploading">
+          <div class="bar"><i :style="{ width: progress + '%' }"></i></div>
+          <div>正在上传 {{ progress }}%…请勿关闭页面</div>
+        </template>
+        <template v-else>
+          <div style="font-size: 22px; line-height: 1">⇪</div>
+          <div><b>把 .apk 拖到这里</b>，或点击选择文件</div>
+          <div class="muted" style="font-size: 12px">上传到对象存储后自动填入上方「APK 地址」（最大 200MB）</div>
+          <div v-if="uploadedInfo" style="font-size: 12px; color: #0bd07d">{{ uploadedInfo }}</div>
+        </template>
       </div>
       <div class="row" style="margin-top: 12px">
         <label class="muted" style="flex: 1; display: flex; align-items: flex-start; gap: 8px">
@@ -104,3 +188,15 @@ onMounted(load);
     <div v-if="toast" class="toast">{{ toast }}</div>
   </div>
 </template>
+
+<style scoped>
+.dropzone {
+  margin-top: 12px; padding: 22px 16px; border-radius: 10px; text-align: center; cursor: pointer;
+  border: 1.5px dashed var(--line); background: var(--bg-input); color: var(--text);
+  display: flex; flex-direction: column; align-items: center; gap: 6px; transition: border-color .15s, background .15s;
+}
+.dropzone:hover, .dropzone.on { border-color: var(--accent); background: rgba(254,44,85,0.06); }
+.dropzone.busy { cursor: progress; }
+.dropzone .bar { width: 100%; max-width: 420px; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.dropzone .bar i { display: block; height: 100%; background: var(--accent); border-radius: 4px; transition: width .2s; }
+</style>

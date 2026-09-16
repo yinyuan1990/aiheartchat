@@ -64,4 +64,24 @@ export class UploadService implements OnModuleInit {
     });
     return { url: `/res/${this.bucket}/${object}` };
   }
+
+  /**
+   * 后台上传 apk：校验 zip 魔数（apk 就是 zip），按时间戳命名避免 CDN/浏览器缓存旧包，
+   * 返回完整下载地址（PUBLIC_RES_BASE，默认 https://api.yyheart.com）供「App 版本」页直接保存。
+   */
+  async uploadApk(file: { buffer: Buffer; mimetype: string; size: number; originalname?: string }) {
+    const b = file.buffer;
+    const isZip = b.length > 4 && b[0] === 0x50 && b[1] === 0x4b && (b[2] === 0x03 || b[2] === 0x05 || b[2] === 0x07);
+    if (!isZip || !/\.apk$/i.test(file.originalname ?? '.apk')) throw new BadRequestException('请上传 .apk 安装包');
+    if (file.size > 200 * 1024 * 1024) throw new BadRequestException('安装包超过 200MB');
+
+    const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+    const object = `apk/peiwan-${stamp}.apk`;
+    await this.client.putObject(this.bucket, object, b, file.size, {
+      'Content-Type': 'application/vnd.android.package-archive',
+      'Content-Disposition': 'attachment; filename="peiwan.apk"',
+    });
+    const base = (process.env.PUBLIC_RES_BASE || 'https://api.yyheart.com').replace(/\/$/, '');
+    return { url: `${base}/res/${this.bucket}/${object}`, size: file.size, object };
+  }
 }
