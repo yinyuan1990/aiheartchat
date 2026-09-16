@@ -142,56 +142,113 @@ struct CallOverlay: View {
         }
     }
 
+    /// 小窗交互状态：拖动移动 / 双击与大画面互换 / 「—」缩成小圆点、点小圆点还原
+    @State private var swapped = false
+    @State private var minimized = false
+    @State private var smallPos: CGPoint?          // 小窗左上角（容器坐标），nil = 默认右上
+    @State private var dragOffset: CGSize = .zero
+
     private var videoActive: some View {
-        ZStack {
-            RTCVideoViewRepresentable(track: manager.remoteVideoTrack, label: "remote")
-                .ignoresSafeArea()
+        GeometryReader { geo in
+            let winSize = minimized ? CGSize(width: 48, height: 48) : CGSize(width: 110, height: 150)
+            let margin: CGFloat = 12, topMin: CGFloat = 96, bottomMin: CGFloat = 170
+            let clamp: (CGPoint) -> CGPoint = { p in
+                CGPoint(
+                    x: min(max(p.x, margin), max(margin, geo.size.width - winSize.width - margin)),
+                    y: min(max(p.y, topMin), max(topMin, geo.size.height - winSize.height - bottomMin))
+                )
+            }
+            let base = clamp(smallPos ?? CGPoint(x: geo.size.width - 110 - margin, y: topMin + 4))
+            let shown = clamp(CGPoint(x: base.x + dragOffset.width, y: base.y + dragOffset.height))
 
-            VStack {
-                Text(timeText)
-                    .font(.system(size: 14)).foregroundStyle(.white)
-                    .padding(.horizontal, 12).padding(.vertical, 5)
-                    .background(Capsule().fill(Color.black.opacity(0.4)))
-                    .padding(.top, 60)
+            ZStack(alignment: .topLeading) {
+                RTCVideoViewRepresentable(track: swapped ? manager.localVideoTrack : manager.remoteVideoTrack, label: swapped ? "local(big)" : "remote")
+                    .ignoresSafeArea()
 
-                HStack {
+                VStack {
+                    Text(timeText)
+                        .font(.system(size: 14)).foregroundStyle(.white)
+                        .padding(.horizontal, 12).padding(.vertical, 5)
+                        .background(Capsule().fill(Color.black.opacity(0.4)))
+                        .padding(.top, 60)
                     Spacer()
-                    RTCVideoViewRepresentable(track: manager.localVideoTrack, label: "local")
-                        .frame(width: 110, height: 150)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .padding(.trailing, 12)
+                    videoControls
                 }
-                .padding(.top, 8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                Spacer()
-
-                HStack {
-                    Spacer()
-                    circleButton(icon: manager.muted ? "mic.slash.fill" : "mic.fill", label: "静音",
-                                 bg: manager.muted ? .white : Color.white.opacity(0.25),
-                                 fg: manager.muted ? .black : .white) {
-                        manager.toggleMute()
+                // 小窗
+                Group {
+                    if minimized {
+                        Circle().fill(Color.black.opacity(0.55))
+                            .overlay(Circle().stroke(Color.white.opacity(0.35), lineWidth: 1))
+                            .overlay(Image(systemName: "video.fill").font(.system(size: 16)).foregroundStyle(.white))
+                    } else {
+                        RTCVideoViewRepresentable(track: swapped ? manager.remoteVideoTrack : manager.localVideoTrack, label: swapped ? "remote(small)" : "local")
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .overlay(alignment: .topTrailing) {
+                                Button { minimized = true } label: {
+                                    Rectangle().fill(.white).frame(width: 10, height: 2)
+                                        .frame(width: 22, height: 22)
+                                        .background(Circle().fill(Color.black.opacity(0.45)))
+                                }
+                                .buttonStyle(.plain)
+                                .padding(5)
+                            }
+                            .overlay(alignment: .bottom) {
+                                Text("双击切换").font(.system(size: 9)).foregroundStyle(.white.opacity(0.7))
+                                    .padding(.horizontal, 5).padding(.vertical, 1)
+                                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.35)))
+                                    .padding(.bottom, 5)
+                            }
                     }
-                    Spacer()
-                    circleButton(icon: manager.cameraOff ? "video.slash.fill" : "video.fill", label: "摄像头",
-                                 bg: manager.cameraOff ? .white : Color.white.opacity(0.25),
-                                 fg: manager.cameraOff ? .black : .white) {
-                        manager.toggleCameraOff()
-                    }
-                    Spacer()
-                    circleButton(icon: "phone.down.fill", label: "挂断", bg: Color(red: 0.98, green: 0.27, blue: 0.27)) {
-                        manager.hangup()
-                    }
-                    Spacer()
-                    circleButton(icon: "arrow.triangle.2.circlepath.camera.fill", label: "翻转",
-                                 bg: Color.white.opacity(0.25)) {
-                        manager.switchCamera()
-                    }
-                    Spacer()
                 }
-                .padding(.bottom, 70)
+                .frame(width: winSize.width, height: winSize.height)
+                .contentShape(Rectangle())
+                .offset(x: shown.x, y: shown.y)
+                .onTapGesture(count: 2) { if !minimized { swapped.toggle() } }
+                .onTapGesture { if minimized { minimized = false } }
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 4)
+                        .onChanged { dragOffset = $0.translation }
+                        .onEnded { v in
+                            smallPos = clamp(CGPoint(x: base.x + v.translation.width, y: base.y + v.translation.height))
+                            dragOffset = .zero
+                        }
+                )
+                .animation(.easeOut(duration: 0.15), value: minimized)
             }
         }
+        // 每次进入视频通话都恢复默认布局（CallOverlay 常驻，状态不会自动重置）
+        .onAppear { swapped = false; minimized = false; smallPos = nil; dragOffset = .zero }
+    }
+
+    /// 视频通话底部按钮行
+    private var videoControls: some View {
+        HStack {
+            Spacer()
+            circleButton(icon: manager.muted ? "mic.slash.fill" : "mic.fill", label: "静音",
+                         bg: manager.muted ? .white : Color.white.opacity(0.25),
+                         fg: manager.muted ? .black : .white) {
+                manager.toggleMute()
+            }
+            Spacer()
+            circleButton(icon: manager.cameraOff ? "video.slash.fill" : "video.fill", label: "摄像头",
+                         bg: manager.cameraOff ? .white : Color.white.opacity(0.25),
+                         fg: manager.cameraOff ? .black : .white) {
+                manager.toggleCameraOff()
+            }
+            Spacer()
+            circleButton(icon: "phone.down.fill", label: "挂断", bg: Color(red: 0.98, green: 0.27, blue: 0.27)) {
+                manager.hangup()
+            }
+            Spacer()
+            circleButton(icon: "arrow.triangle.2.circlepath.camera.fill", label: "翻转",
+                         bg: Color.white.opacity(0.25)) {
+                manager.switchCamera()
+            }
+            Spacer()
+        }
+        .padding(.bottom, 70)
     }
 
     // MARK: - 组件
@@ -368,5 +425,11 @@ struct RTCVideoViewRepresentable: UIViewRepresentable {
         context.coordinator.boundTrack?.remove(view)
         track?.add(view)
         context.coordinator.boundTrack = track
+    }
+
+    /// 小窗缩小 / 通话结束离开视图树时解绑轨道，避免渲染器一直挂在 track 上
+    static func dismantleUIView(_ view: RTCMTLVideoView, coordinator: Coordinator) {
+        coordinator.boundTrack?.remove(view)
+        coordinator.boundTrack = nil
     }
 }

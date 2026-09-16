@@ -4,6 +4,13 @@ import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -224,21 +231,81 @@ private fun ActiveCall(state: CallState.Active, peerName: String, peerAvatar: St
     val remoteTrack by CallManager.remoteVideoTrack.collectAsState()
     val localTrack by CallManager.localVideoTrack.collectAsState()
 
-    Box(Modifier.fillMaxSize()) {
+    // 小窗交互：拖动移动 / 双击与大画面互换 / 「—」缩成小圆点、点小圆点还原
+    var swapped by remember { androidx.compose.runtime.mutableStateOf(false) }
+    var minimized by remember { androidx.compose.runtime.mutableStateOf(false) }
+    var containerSize by remember { androidx.compose.runtime.mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    var smallPos by remember { androidx.compose.runtime.mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+
+    Box(Modifier.fillMaxSize().onSizeChanged { containerSize = it }) {
         if (state.type == 2) {
-            VideoView(track = remoteTrack, label = "remote", modifier = Modifier.fillMaxSize())
+            VideoView(track = if (swapped) localTrack else remoteTrack, label = if (swapped) "local(big)" else "remote", modifier = Modifier.fillMaxSize())
             Column(Modifier.fillMaxWidth().padding(top = 60.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     timeText, color = Color.White, fontSize = 14.sp,
                     modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = 0.4f)).padding(horizontal = 12.dp, vertical = 5.dp),
                 )
             }
-            Box(modifier = Modifier.align(Alignment.TopEnd).padding(top = 100.dp, end = 12.dp)) {
-                VideoView(
-                    track = localTrack,
-                    label = "local",
-                    modifier = Modifier.width(110.dp).height(150.dp).clip(RoundedCornerShape(10.dp)),
+            if (containerSize != androidx.compose.ui.unit.IntSize.Zero) {
+                val winW = with(density) { 110.dp.toPx() }
+                val winH = with(density) { 150.dp.toPx() }
+                val mini = with(density) { 48.dp.toPx() }
+                val margin = with(density) { 12.dp.toPx() }
+                val topMin = with(density) { 96.dp.toPx() }      // 不遮计时
+                val bottomMin = with(density) { 170.dp.toPx() }  // 不遮底部按钮
+                val curW = if (minimized) mini else winW
+                val curH = if (minimized) mini else winH
+                fun clamp(p: androidx.compose.ui.geometry.Offset, w: Float, h: Float) = androidx.compose.ui.geometry.Offset(
+                    p.x.coerceIn(margin, (containerSize.width - w - margin).coerceAtLeast(margin)),
+                    p.y.coerceIn(topMin, (containerSize.height - h - bottomMin).coerceAtLeast(topMin)),
                 )
+                val pos = clamp(smallPos ?: androidx.compose.ui.geometry.Offset(containerSize.width - winW - margin, topMin + with(density) { 4.dp.toPx() }), curW, curH)
+
+                Box(
+                    Modifier
+                        .offset { androidx.compose.ui.unit.IntOffset(pos.x.roundToInt(), pos.y.roundToInt()) }
+                        .size(with(density) { curW.toDp() }, with(density) { curH.toDp() })
+                        .pointerInput(minimized) {
+                            detectDragGestures { change, drag ->
+                                change.consume()
+                                smallPos = clamp((smallPos ?: pos) + drag, curW, curH)
+                            }
+                        }
+                        .pointerInput(minimized) {
+                            detectTapGestures(
+                                onDoubleTap = { if (!minimized) swapped = !swapped },
+                                onTap = { if (minimized) minimized = false },
+                            )
+                        },
+                ) {
+                    if (minimized) {
+                        // 缩到最小：半透明小圆点，点一下还原
+                        Box(
+                            Modifier.fillMaxSize().clip(CircleShape).background(Color.Black.copy(alpha = 0.55f))
+                                .border(1.dp, Color.White.copy(alpha = 0.35f), CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) { com.wh.peiwana.ui.VideoIcon(Color.White, 20.dp) }
+                    } else {
+                        VideoView(
+                            track = if (swapped) remoteTrack else localTrack,
+                            label = if (swapped) "remote(small)" else "local",
+                            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)),
+                            overlay = true,
+                        )
+                        // 右上角「—」缩小
+                        Box(
+                            Modifier.align(Alignment.TopEnd).padding(5.dp).size(22.dp).clip(CircleShape)
+                                .background(Color.Black.copy(alpha = 0.45f)).noRippleClick { minimized = true },
+                            contentAlignment = Alignment.Center,
+                        ) { Box(Modifier.width(10.dp).height(2.dp).background(Color.White)) }
+                        Text(
+                            "双击切换", color = Color.White.copy(alpha = 0.7f), fontSize = 9.sp,
+                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 5.dp)
+                                .clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.35f)).padding(horizontal = 5.dp, vertical = 1.dp),
+                        )
+                    }
+                }
             }
         } else {
             Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -284,11 +351,13 @@ private fun ActiveCall(state: CallState.Active, peerName: String, peerAvatar: St
 }
 
 @Composable
-private fun VideoView(track: VideoTrack?, label: String, modifier: Modifier = Modifier) {
+private fun VideoView(track: VideoTrack?, label: String, modifier: Modifier = Modifier, overlay: Boolean = false) {
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
             SurfaceViewRenderer(ctx).apply {
+                // 小窗盖在大画面（另一个 SurfaceView）之上必须声明 media overlay，否则 z 序不可控
+                if (overlay) setZOrderMediaOverlay(true)
                 // 首帧/分辨率回调打进通话日志：确认解码帧真正渲染出来了
                 init(
                     CallManager.eglBase.eglBaseContext,
@@ -310,6 +379,12 @@ private fun VideoView(track: VideoTrack?, label: String, modifier: Modifier = Mo
                 track?.addSink(view)
                 view.tag = track
             }
+        },
+        // 小窗缩小/通话结束时离开组合：解绑轨道并释放渲染器（否则 sink 一直挂在 track 上）
+        onRelease = { view ->
+            runCatching { (view.tag as? VideoTrack)?.removeSink(view) }
+            view.tag = null
+            runCatching { view.release() }
         },
     )
 }
