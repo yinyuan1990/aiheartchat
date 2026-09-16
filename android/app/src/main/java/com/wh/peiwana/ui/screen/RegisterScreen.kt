@@ -4,7 +4,9 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,7 +51,9 @@ import kotlinx.serialization.json.put
 @Composable
 fun RegisterScreen(onDone: (UserProfile) -> Unit) {
     var nickname by rememberSaveable { mutableStateOf("") }
-    var age by rememberSaveable { mutableStateOf("") }
+    // 0 = 未选择；年纪用滚轮选择而不是输入（与网页一致）
+    var age by rememberSaveable { mutableStateOf(0) }
+    var showAgePicker by remember { mutableStateOf(false) }
     var gender by rememberSaveable { mutableStateOf(0) }
     var loading by rememberSaveable { mutableStateOf(false) }
     var error by rememberSaveable { mutableStateOf("") }
@@ -109,14 +113,21 @@ fun RegisterScreen(onDone: (UserProfile) -> Unit) {
         )
         Spacer(Modifier.height(12.dp))
 
-        OutlinedTextField(
-            value = age,
-            onValueChange = { age = it.filter { c -> c.isDigit() }.take(2) },
-            label = { Text("年纪") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth(),
-        )
+        // 年纪：点击弹滚轮选择（外观对齐上面的 OutlinedTextField）
+        Box(
+            Modifier.fillMaxWidth().height(56.dp)
+                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(4.dp))
+                .noRippleClick { showAgePicker = true }
+                .padding(horizontal = 16.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Text(
+                if (age > 0) "$age 岁" else "年纪（点击选择）",
+                color = if (age > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.titleMedium, modifier = Modifier.align(Alignment.CenterEnd))
+        }
         Spacer(Modifier.height(16.dp))
 
         Text("性别（注册后不可修改）", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -148,8 +159,8 @@ fun RegisterScreen(onDone: (UserProfile) -> Unit) {
                     error = "请选择头像"
                     return@Button
                 }
-                if (nickname.isBlank() || age.isBlank() || gender == 0) {
-                    error = "请填写昵称、年纪并选择性别"
+                if (nickname.isBlank() || age == 0 || gender == 0) {
+                    error = "请填写昵称、选择年纪和性别"
                     return@Button
                 }
                 loading = true
@@ -163,7 +174,7 @@ fun RegisterScreen(onDone: (UserProfile) -> Unit) {
                             buildJsonObject {
                                 put("deviceId", Api.deviceId)
                                 put("nickname", nickname.trim())
-                                put("age", age.toInt())
+                                put("age", age)
                                 put("gender", gender)
                                 put("avatar", avatarUrl)
                             },
@@ -221,5 +232,12 @@ fun RegisterScreen(onDone: (UserProfile) -> Unit) {
 
     if (showAgreement) {
         AgreementDialog(isPrivacy = agreementIsPrivacy, onClose = { showAgreement = false })
+    }
+    if (showAgePicker) {
+        AgePickerSheet(
+            initial = if (age > 0) age else 22,
+            onDismiss = { showAgePicker = false },
+            onConfirm = { age = it; showAgePicker = false },
+        )
     }
 }

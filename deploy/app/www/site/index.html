@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="description" content="心之音 App 官方下载：一对一高清视频、加密私聊、同城搭子约单、私密树洞、休闲小游戏。一机一号，安装即用。" />
 <meta name="theme-color" content="#0a0a0c" />
+<link rel="icon" type="image/png" href="favicon.png" />
+<link rel="apple-touch-icon" href="icon.png" />
 <title>心之音 App - 遇见有趣的人 · 官方下载</title>
 <style>
   :root {
@@ -24,8 +26,8 @@
   header { position: sticky; top: 0; z-index: 20; background: rgba(10,10,12,0.72); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid var(--line); }
   .nav { display: flex; align-items: center; height: 64px; gap: 28px; }
   .logo { display: flex; align-items: center; gap: 10px; font-size: 19px; font-weight: 800; letter-spacing: 3px; }
-  .logo i { width: 30px; height: 30px; border-radius: 9px; background: var(--grad); display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 6px 18px rgba(254,44,85,0.4); }
-  .logo i svg { width: 16px; height: 16px; }
+  .logo img { width: 30px; height: 30px; border-radius: 9px; display: block; box-shadow: 0 6px 18px rgba(254,44,85,0.35); }
+  .dl .appicon { width: 72px; height: 72px; border-radius: 18px; display: block; margin-bottom: 18px; box-shadow: 0 14px 34px rgba(254,44,85,0.3), 0 0 0 1px rgba(255,255,255,0.08); }
   .nav-links { display: flex; gap: 26px; font-size: 14px; color: var(--text2); margin-left: 12px; }
   .nav-links a:hover { color: var(--text); }
   .nav .cta-mini { margin-left: auto; height: 36px; padding: 0 18px; border-radius: 18px; background: var(--grad); color: #fff; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; box-shadow: 0 6px 18px rgba(254,44,85,0.3); }
@@ -221,7 +223,7 @@
 <body>
   <header>
     <div class="wrap nav">
-      <a class="logo" href="#"><i><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg></i>心之音</a>
+      <a class="logo" href="#"><img src="icon.png" alt="心之音" />心之音</a>
       <nav class="nav-links">
         <a href="#features">功能</a>
         <a href="#offline">同城搭子</a>
@@ -411,6 +413,7 @@
     <div class="wrap">
       <div class="dl">
         <div class="txt">
+          <img class="appicon" src="icon.png" alt="心之音 App" />
           <h2>现在下载，开始遇见</h2>
           <p>iOS 通过 <b id="iosChanText">TestFlight</b> 安装 · Android 直接下载安装包 · 不用手机号，装好就能用</p>
           <div class="btns">

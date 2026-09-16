@@ -5,7 +5,10 @@ import SwiftUI
 struct RegisterView: View {
     @EnvironmentObject var state: AppState
     @State private var nickname = ""
-    @State private var age = ""
+    /// 年纪用滚轮选择而不是输入（与网页一致），nil = 未选择
+    @State private var age: Int?
+    @State private var showAgeSheet = false
+    @State private var pendingAge = 22
     @State private var gender = 0
     @State private var loading = false
     @State private var error = ""
@@ -47,11 +50,21 @@ struct RegisterView: View {
             .padding(.bottom, 8)
 
             field("昵称", text: $nickname)
-            field("年纪", text: $age)
-                .keyboardType(.numberPad)
-                .onChange(of: age) { v in
-                    age = String(v.filter(\.isNumber).prefix(2))
+            // 年纪：点击弹滚轮选择
+            Button {
+                pendingAge = age ?? 22
+                showAgeSheet = true
+            } label: {
+                HStack {
+                    Text(age.map { "\($0) 岁" } ?? "年纪（点击选择）")
+                        .foregroundStyle(age == nil ? Theme.textSub : Theme.text)
+                    Spacer()
+                    Text("›").font(.system(size: 20)).foregroundStyle(Theme.textDim)
                 }
+                .padding(13)
+                .background(RoundedRectangle(cornerRadius: 14).fill(Theme.bg3))
+            }
+            .buttonStyle(.plain)
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("性别（注册后不可修改）")
@@ -121,6 +134,29 @@ struct RegisterView: View {
         .sheet(isPresented: $showAgreement) {
             AgreementSheet(isPrivacy: agreementIsPrivacy)
         }
+        // 年纪滚轮：底部弹层，取消/确定（与编辑资料一致）
+        .sheet(isPresented: $showAgeSheet) {
+            VStack(spacing: 0) {
+                HStack {
+                    Button("取消") { showAgeSheet = false }
+                        .font(.system(size: 14)).foregroundStyle(Theme.textSub)
+                    Spacer()
+                    Text("选择年纪").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text)
+                    Spacer()
+                    Button("确定") { age = pendingAge; showAgeSheet = false }
+                        .font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.accent)
+                }
+                .padding(16)
+                Picker("", selection: $pendingAge) {
+                    ForEach(18...70, id: \.self) {
+                        Text("\($0)").foregroundStyle(Theme.text).tag($0)
+                    }
+                }
+                .pickerStyle(.wheel)
+            }
+            .compatDetents(height: 300)
+            .compatSheetBackground(Theme.bg2)
+        }
     }
 
     private func field(_ label: String, text: Binding<String>) -> some View {
@@ -152,8 +188,8 @@ struct RegisterView: View {
             error = "请选择头像"
             return
         }
-        guard !nickname.trimmingCharacters(in: .whitespaces).isEmpty, !age.isEmpty, gender != 0 else {
-            error = "请填写昵称、年纪并选择性别"
+        guard !nickname.trimmingCharacters(in: .whitespaces).isEmpty, let age, gender != 0 else {
+            error = "请填写昵称、选择年纪和性别"
             return
         }
         loading = true
@@ -164,7 +200,7 @@ struct RegisterView: View {
                 let resp: EnterResp = try await Api.request("/auth/register", method: "POST", body: [
                     "deviceId": Api.deviceId,
                     "nickname": nickname.trimmingCharacters(in: .whitespaces),
-                    "age": Int(age) ?? 18,
+                    "age": age,
                     "gender": gender,
                     "avatar": avatarUrl,
                 ])

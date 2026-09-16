@@ -4,6 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="robots" content="noindex" />
+<link rel="icon" type="image/png" href="../favicon.png" />
+<link rel="apple-touch-icon" href="../icon.png" />
 <title>心之音 · 专属邀请</title>
 <style>
   :root {
@@ -27,7 +29,7 @@
 
   .page { max-width: 480px; margin: 0 auto; min-height: 100vh; position: relative; overflow: hidden; padding-bottom: 110px; }
   .state { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--text2); font-size: 14px; text-align: center; padding: 24px; }
-  .state .lg { width: 46px; height: 46px; border-radius: 14px; background: var(--grad); }
+  .state .lg { width: 46px; height: 46px; border-radius: 14px; }
   .state a.btn { margin-top: 10px; }
 
   .cta { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: linear-gradient(180deg, transparent, var(--bg) 30%); }
@@ -52,7 +54,9 @@
   .fhero .fph::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10,10,12,0.45) 0%, transparent 25%, transparent 45%, rgba(10,10,12,0.75) 78%, var(--bg) 100%); }
   .ftop { position: absolute; top: 44px; left: 16px; right: 16px; display: flex; align-items: center; justify-content: space-between; z-index: 2; }
   .brand { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700; letter-spacing: 2px; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,0.4); }
-  .brand i { width: 20px; height: 20px; border-radius: 6px; background: var(--grad); display: inline-block; }
+  .brand img { width: 22px; height: 22px; border-radius: 6px; display: block; box-shadow: 0 4px 12px rgba(254,44,85,0.35); }
+  .state .lg { width: 56px; height: 56px; border-radius: 16px; }
+  .steps .ic { width: 24px; height: 24px; border-radius: 7px; display: inline-block; vertical-align: top; }
   .live { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; padding: 5px 10px; border-radius: 12px; background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.12); backdrop-filter: blur(6px); }
   .live b { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); display: inline-block; }
   .live.off b { background: var(--text3); box-shadow: none; }
@@ -170,7 +174,7 @@
 </style>
 </head>
 <body>
-<div id="app"><div class="state"><span class="lg"></span>正在加载…</div></div>
+<div id="app"><div class="state"><img class="lg" src="../icon.png" alt="" />正在加载…</div></div>
 <div class="wx" id="wx" onclick="this.classList.remove('on')"><div><b>↗</b>点右上角「…」<br />选择「在浏览器打开」即可下载<span>微信内无法直接安装 App</span></div></div>
 
 <script>
@@ -209,7 +213,7 @@
     } else { media = ''; }
     var blur = !(first && first.url) && d.avatar ? ' blur' : '';
     return '<div class="fhero"><div class="fph' + blur + '">' + media + '</div>' +
-      '<div class="ftop"><span class="brand"><i></i>心之音</span><span class="live' + (d.online ? '' : ' off') + '"><b></b>' + (d.online ? '在线' : '最近在线') + (d.cityName ? ' · ' + esc(d.cityName) : '') + '</span></div>' +
+      '<div class="ftop"><span class="brand"><img src="../icon.png" alt="" />心之音</span><span class="live' + (d.online ? '' : ' off') + '"><b></b>' + (d.online ? '在线' : '最近在线') + (d.cityName ? ' · ' + esc(d.cityName) : '') + '</span></div>' +
       '<div class="fhead"><div class="fname">' + esc(d.nickname) + (badge ? ' <span class="vf">' + badge + '</span>' : '') + '</div><div class="fmeta">' + metaHtml + '</div></div></div>';
   }
   function badges(d, list) {
@@ -272,7 +276,7 @@
       (hasRating ? '<div class="fsec"><h3>通话评分</h3><span class="more">' + d.ratingCount + ' 人评过</span></div><div class="dims">' +
         dimRows.map(function (r) { var v = Number(r[1] || 0); return '<div class="dim"><span>' + r[0] + '</span><span class="t"><i style="width:' + v + '%"></i></span><b>' + v + '</b></div>'; }).join('') + '</div>' : '') +
       '<div class="fsec"><h3>下载后怎么找到她</h3></div>' +
-      '<div class="steps"><div><b>1</b><span>下载打开心之音</span><small>一机一号，不用注册</small></div><div><b>2</b><span>自动打开她的主页</span><small>或在「遇见」搜 ' + esc(d.nickname) + '</small></div><div><b>3</b><span>先发消息聊聊</span><small>聊得来再视频</small></div></div>' +
+      '<div class="steps"><div><img class="ic" src="../icon.png" alt="" /><span>下载打开心之音</span><small>一机一号，不用注册</small></div><div><b>2</b><span>自动打开她的主页</span><small>或在「遇见」搜 ' + esc(d.nickname) + '</small></div><div><b>3</b><span>先发消息聊聊</span><small>聊得来再视频</small></div></div>' +
       '<div class="safe">身份证实名认证，聊天 AES-256 加密、可双向清空；同城约单积分平台托管，见面完成才结算。</div>' +
       foot() +
       cta(esc(d.nickname) + (d.online ? ' 正在线上等你' : ' 在心之音等你'), '下载心之音，找到她开始聊', '下载和她视频') +
@@ -313,7 +317,7 @@
       '</div>' +
       photos(d) + moments(d) +
       '<div class="fsec"><h3>下载后怎么开始</h3></div>' +
-      '<div class="steps"><div><b>1</b><span>下载打开心之音</span><small>一机一号，不用注册</small></div><div><b>2</b><span>自动和 ' + esc(d.nickname) + ' 成为好友</span><small>打开他的主页</small></div><div><b>3</b><span>设定你的价格</span><small>他发的第一条消息就是收入</small></div></div>' +
+      '<div class="steps"><div><img class="ic" src="../icon.png" alt="" /><span>下载打开心之音</span><small>一机一号，不用注册</small></div><div><b>2</b><span>自动和 ' + esc(d.nickname) + ' 成为好友</span><small>打开他的主页</small></div><div><b>3</b><span>设定你的价格</span><small>他发的第一条消息就是收入</small></div></div>' +
       foot() +
       cta(esc(d.nickname) + ' 邀请你加入心之音', '注册即送新人曝光，聊天就有收入', '下载开始赚积分') +
     '</div>';
@@ -338,7 +342,7 @@
   }
 
   function fail(msg) {
-    app.innerHTML = '<div class="state"><span class="lg"></span><div>' + esc(msg) + '</div><a class="btn" href="../">去官网下载心之音</a></div>';
+    app.innerHTML = '<div class="state"><img class="lg" src="../icon.png" alt="" /><div>' + esc(msg) + '</div><a class="btn" href="../">去官网下载心之音</a></div>';
   }
 
   // ---------- 设计稿假数据（无 u 参数时） ----------

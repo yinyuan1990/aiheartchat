@@ -220,8 +220,6 @@ fun EditProfileScreen(onBack: () -> Unit) {
     var toast by remember { mutableStateOf("") }
     // 年纪滚轮选择
     var showAgePicker by remember { mutableStateOf(false) }
-    var pendingAge by remember { mutableIntStateOf(18) }
-
     Column(Modifier.fillMaxSize()) {
         NavBar("编辑资料", onBack) {
             Text(if (saving) "保存中" else "保存", color = Accent, fontSize = 14.sp, modifier = Modifier.noRippleClick {
@@ -268,7 +266,7 @@ fun EditProfileScreen(onBack: () -> Unit) {
             EditCard {
                 EditRow("昵称") { EditField(nickname, { nickname = it.take(16) }, "填写昵称") }
                 EditDivider()
-                EditRow("年纪", onClick = { pendingAge = age.toIntOrNull() ?: 18; showAgePicker = true }) {
+                EditRow("年纪", onClick = { showAgePicker = true }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("$age 岁", color = TextMain, fontSize = 15.sp, modifier = Modifier.weight(1f))
                         Text("›", color = TextDim, fontSize = 20.sp)
@@ -375,24 +373,35 @@ fun EditProfileScreen(onBack: () -> Unit) {
     }
     // ===== 年纪滚轮选择（底部弹层） =====
     if (showAgePicker) {
-        androidx.compose.ui.window.Dialog(
-            onDismissRequest = { showAgePicker = false },
-            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
-        ) {
-            Box(Modifier.fillMaxSize().noRippleClick { showAgePicker = false }, contentAlignment = Alignment.BottomCenter) {
-                Column(
-                    Modifier.fillMaxWidth().noRippleClick { }
-                        .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)).background(Bg2)
-                        .navigationBarsPadding(),
-                ) {
-                    Row(Modifier.fillMaxWidth().padding(16.dp, 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("取消", color = TextSub, fontSize = 14.sp, modifier = Modifier.noRippleClick { showAgePicker = false })
-                        Text("选择年纪", color = TextMain, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
-                        Text("确定", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.noRippleClick { age = pendingAge.toString(); showAgePicker = false })
-                    }
-                    AgeWheel(initial = age.toIntOrNull() ?: 18, onCentered = { pendingAge = it })
-                    Spacer(Modifier.height(12.dp))
+        AgePickerSheet(
+            initial = age.toIntOrNull() ?: 18,
+            onDismiss = { showAgePicker = false },
+            onConfirm = { age = it.toString(); showAgePicker = false },
+        )
+    }
+}
+
+/** 年纪选择底部弹层（注册页 / 编辑资料共用）：取消 / 确定 + 滚轮 */
+@Composable
+fun AgePickerSheet(initial: Int, onDismiss: () -> Unit, onConfirm: (Int) -> Unit) {
+    var pending by remember { mutableStateOf(initial) }
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Box(Modifier.fillMaxSize().noRippleClick(onDismiss), contentAlignment = Alignment.BottomCenter) {
+            Column(
+                Modifier.fillMaxWidth().noRippleClick { }
+                    .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)).background(Bg2)
+                    .navigationBarsPadding(),
+            ) {
+                Row(Modifier.fillMaxWidth().padding(16.dp, 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("取消", color = TextSub, fontSize = 14.sp, modifier = Modifier.noRippleClick(onDismiss))
+                    Text("选择年纪", color = TextMain, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                    Text("确定", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.noRippleClick { onConfirm(pending) })
                 }
+                AgeWheel(initial = initial, onCentered = { pending = it })
+                Spacer(Modifier.height(12.dp))
             }
         }
     }
