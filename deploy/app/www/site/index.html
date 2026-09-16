@@ -507,7 +507,8 @@
     ['', '2'].forEach(function (s) { if (url) document.getElementById('btnAndroid' + s).href = url; });
     if (ver) { var t = document.getElementById('andTag'); t.textContent = 'v' + ver; t.style.display = 'inline-flex'; }
   }
-  fetch('/api/app/download', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
+  // 官网域名 yyheart.com 不代理 /api（同路径会回落到首页 HTML），必须走接口域名
+  fetch('https://api.yyheart.com/api/app/download', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
     var d = j && j.data ? j.data : j;
     if (!d) throw 0;
     setIos(d.ios && d.ios.url, d.ios && d.ios.channel, d.ios && d.ios.latest);
