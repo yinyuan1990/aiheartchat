@@ -6,9 +6,9 @@ export default defineConfig({
   server: {
     port: 5180,
     proxy: {
-      '/api': { target: 'http://8.162.5.160:20080', changeOrigin: true },
-      '/ws': { target: 'ws://8.162.5.160:20080', ws: true },
-      '/res': { target: 'http://8.162.5.160:20080', changeOrigin: true },
+      '/api': { target: 'https://api.yyheart.com', changeOrigin: true },
+      '/ws': { target: 'wss://api.yyheart.com', ws: true },
+      '/res': { target: 'https://api.yyheart.com', changeOrigin: true },
     },
   },
   build: { outDir: 'dist' },

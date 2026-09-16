@@ -1,7 +1,7 @@
 /* IM WebSocket 链路自测：男号发消息，女号应实时收到 */
 const WebSocket = require('ws');
 
-const BASE = 'http://8.162.5.160:20080';
+const BASE = 'https://api.yyheart.com';
 
 async function getToken(deviceId) {
   const res = await fetch(`${BASE}/api/auth/enter`, {
@@ -19,8 +19,8 @@ async function main() {
     getToken('test_device_f_00000001'),
   ]);
 
-  const wsF = new WebSocket(`ws://8.162.5.160:20080/ws?token=${tf}`);
-  const wsM = new WebSocket(`ws://8.162.5.160:20080/ws?token=${tm}`);
+  const wsF = new WebSocket(`wss://api.yyheart.com/ws?token=${tf}`);
+  const wsM = new WebSocket(`wss://api.yyheart.com/ws?token=${tm}`);
 
   const done = new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('超时未收到消息')), 10000);

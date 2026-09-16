@@ -11,14 +11,14 @@
 #        /etc/systemd/system/srs.service      systemd 单元（源节点没有则自动生成）
 #      → 所有节点安装路径、端口、配置逐字一致，只有 rtc_server.candidate 改成本机公网 IP
 #   3. systemd 托管 + sysctl UDP 缓冲 + ufw 放行 22 与 srs.conf 里所有 listen 端口
-#   4. 登录【主服务器】(8.162.5.160) 的 peiwan-mysql 容器，把本机写进 srs_node 表（幂等）
+#   4. 登录【主服务器】(45.205.18.158) 的 peiwan-mysql 容器，把本机写进 srs_node 表（幂等）
 #      → 后台「SRS 节点」立刻能看到；通话/语音房按优先级 + 最大连接数自动分配
 #   5. 打印端口监听情况（目前不做校验，只展示）
 #
 # 用法（在新机上；只需要"源节点 + 主服务器"的 root 密码，本机不需要）：
 #   SRC_PW='源节点root密码' MAIN_PW='主服务器root密码' bash srs-node-install.sh
 #   ... SRC_NODE=47.122.115.33          指定源节点（默认：问主服务器要「默认节点」）
-#   ... MAIN_SRV=8.162.5.160            主服务器 IP（默认就是它）
+#   ... MAIN_SRV=45.205.18.158            主服务器 IP（默认就是它）
 #   ... PUBLIC_IP=1.2.3.4               公网 IP 自动探测不准时手工指定
 #   ... PRIORITY=200 MAX_CONN=40 NAME='香港CN2' REMARK='...'
 #   ... FORCE_BUILD=1                   不用源节点二进制，强制本机编译
@@ -29,7 +29,7 @@ if grep -q $'\r' "$0" 2>/dev/null; then sed -i 's/\r$//' "$0"; exec bash "$0" "$
 set -o pipefail
 
 # ---------- 可覆盖参数 ----------
-MAIN_SRV="${MAIN_SRV:-8.162.5.160}"
+MAIN_SRV="${MAIN_SRV:-45.205.18.158}"
 SRC_NODE="${SRC_NODE:-}"
 PRIORITY="${PRIORITY:-200}"
 MAX_CONN="${MAX_CONN:-40}"

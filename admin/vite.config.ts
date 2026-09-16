@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     port: 5181,
     proxy: {
-      '/api': { target: 'http://8.162.5.160:20080', changeOrigin: true },
+      '/api': { target: 'https://api.yyheart.com', changeOrigin: true },
     },
   },
 });

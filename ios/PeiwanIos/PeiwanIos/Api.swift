@@ -46,7 +46,7 @@ struct ApiError: Error, LocalizedError {
 
 
 enum Api {
-    static let baseURL = "http://8.162.5.160:20080"
+    static let baseURL = "https://api.yyheart.com"
 
     // 一机一号：设备 ID 存 Keychain，卸载重装后仍在，凭此恢复账号
     static var deviceId: String {

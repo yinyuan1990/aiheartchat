@@ -94,7 +94,7 @@ class ProgressRequestBody(
 }
 
 object Api {
-    const val BASE_URL = "http://8.162.5.160:20080"
+    const val BASE_URL = "https://api.yyheart.com"
 
     val json = Json { ignoreUnknownKeys = true }
     private val client = OkHttpClient.Builder()

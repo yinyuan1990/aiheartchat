@@ -30,7 +30,7 @@ REMOTE_SCRIPT = "/root/srs-node-install.sh"
 REMOTE_RUNNER = "/root/.srs_deploy_runner.sh"
 REMOTE_PW_SRC = "/root/.srs_deploy_pw_src_in"
 REMOTE_PW_MAIN = "/root/.srs_deploy_pw_main_in"
-DEFAULT_MAIN = "8.162.5.160"
+DEFAULT_MAIN = "45.205.18.158"
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 
