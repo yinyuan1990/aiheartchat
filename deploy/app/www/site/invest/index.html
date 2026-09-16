@@ -140,15 +140,59 @@
   .ph .done { color: var(--green); font-size: 11px; margin-left: 6px; }
 
   /* 用途 */
-  .use { margin-top: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: center; }
-  .donut { position: relative; width: 240px; height: 240px; margin: 0 auto; border-radius: 50%; background: conic-gradient(var(--accent) 0 40%, var(--purple) 40% 65%, var(--blue) 65% 85%, var(--gold) 85% 100%); }
-  .donut::after { content: ""; position: absolute; inset: 42px; border-radius: 50%; background: var(--bg); }
+  .fkpis { margin-top: 30px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .fkpis .kpi b { font-size: 24px; }
+  .fkpis .kpi b.g { color: var(--gold); }
+  .use { margin-top: 30px; display: grid; grid-template-columns: 1fr 1.3fr; gap: 24px; align-items: center; }
+  .donut { position: relative; width: 250px; height: 250px; margin: 0 auto; border-radius: 50%; background: conic-gradient(var(--accent) 0 37.8%, var(--purple) 37.8% 67.8%, var(--gold) 67.8% 79.8%, var(--blue) 79.8% 87.8%, var(--green) 87.8% 93.8%, #4a4a58 93.8% 100%); }
+  .donut::after { content: ""; position: absolute; inset: 44px; border-radius: 50%; background: var(--bg); }
   .donut b { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 13px; color: var(--text2); font-weight: 500; z-index: 1; }
-  .donut b strong { font-size: 22px; color: var(--text); }
-  .legend { display: grid; gap: 12px; }
-  .legend div { display: flex; align-items: center; gap: 12px; font-size: 14px; color: var(--text2); }
-  .legend i { width: 12px; height: 12px; border-radius: 4px; flex-shrink: 0; }
-  .legend b { color: var(--text); min-width: 42px; }
+  .donut b strong { font-size: 30px; color: var(--text); font-weight: 900; }
+  .legend { display: grid; gap: 10px; }
+  .legend div { display: grid; grid-template-columns: 12px 64px 1fr auto; align-items: center; gap: 12px; font-size: 14px; color: var(--text2); padding: 8px 12px; border-radius: 12px; background: var(--bg2); border: 1px solid var(--line); }
+  .legend i { width: 12px; height: 12px; border-radius: 4px; }
+  .legend b { color: var(--text); }
+  .legend em { font-style: normal; color: var(--gold); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  /* 预算明细表 */
+  .budget { margin-top: 40px; }
+  .budget h3, .pace h3 { font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 10px; }
+  .budget h3 i, .pace h3 i { width: 4px; height: 18px; border-radius: 2px; background: var(--grad); display: inline-block; }
+  .budget table { margin-top: 18px; }
+  .budget td.cat { font-weight: 800; color: var(--text); white-space: nowrap; }
+  .budget td.cat small { display: block; font-weight: 400; color: var(--text2); font-size: 12px; margin-top: 2px; }
+  .budget td.cat i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; margin-right: 8px; vertical-align: 1px; }
+  .budget td.amt { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .budget td.amt b { color: var(--gold); }
+  .budget td.sub { color: var(--text2); font-size: 13.5px; }
+  .budget tr.sum td { border-bottom: 0; border-top: 2px solid rgba(255,255,255,0.18); font-size: 16px; padding-top: 18px; }
+  .budget tr.sum td.amt b { font-size: 22px; }
+  .budget tr.grp td { background: rgba(255,255,255,0.025); }
+  .budget td .calc { color: var(--text3); font-size: 12.5px; margin-left: 8px; }
+
+  /* 使用节奏 */
+  .pace { margin-top: 48px; }
+  .paces { margin-top: 18px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .pc { background: var(--bg2); border: 1px solid var(--line); border-radius: 20px; padding: 22px 20px; position: relative; overflow: hidden; }
+  .pc::before { content: ""; position: absolute; left: 0; top: 0; right: 0; height: 3px; background: var(--accent); }
+  .pc:nth-child(2)::before { background: var(--purple); } .pc:nth-child(3)::before { background: var(--gold); }
+  .pc .when { font-size: 12px; letter-spacing: 2px; color: var(--text2); }
+  .pc h4 { margin-top: 6px; font-size: 18px; font-weight: 800; display: flex; justify-content: space-between; align-items: baseline; }
+  .pc h4 span { font-size: 14px; color: var(--gold); font-weight: 700; }
+  .pc .lab { margin-top: 14px; font-size: 11.5px; letter-spacing: 1.5px; color: var(--text3); }
+  .pc ul { margin-top: 6px; list-style: none; display: grid; gap: 6px; }
+  .pc li { font-size: 13.5px; color: var(--text2); display: flex; gap: 9px; line-height: 1.7; }
+  .pc li::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--text3); flex-shrink: 0; margin-top: 10px; }
+  .pc ul.ms li::before { background: var(--green); }
+  .pc ul.ms li { color: var(--text); }
+  .cash { margin-top: 18px; padding: 18px 22px; border-radius: 18px; background: var(--bg2); border: 1px solid var(--line); }
+  .cash .l { display: flex; justify-content: space-between; font-size: 13px; color: var(--text2); }
+  .cash .bars6 { margin-top: 10px; display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; align-items: end; height: 90px; }
+  .cash .bars6 div { background: linear-gradient(180deg, var(--accent2), var(--accent)); border-radius: 6px 6px 3px 3px; position: relative; }
+  .cash .bars6 div span { position: absolute; left: 0; right: 0; top: -20px; text-align: center; font-size: 11.5px; color: var(--text2); font-variant-numeric: tabular-nums; }
+  .cash .bars6 div small { position: absolute; left: 0; right: 0; bottom: -20px; text-align: center; font-size: 11px; color: var(--text3); }
+  .cash .bars6 { margin-bottom: 22px; padding-top: 20px; }
+  .why { margin-top: 30px; }
 
   .cta { margin-top: 20px; border-radius: 26px; padding: 48px 40px; background: linear-gradient(160deg, rgba(254,44,85,0.2), rgba(107,147,255,0.08) 60%, var(--bg2)); border: 1px solid rgba(254,44,85,0.3); display: flex; align-items: center; gap: 30px; }
   .cta .t { flex: 1; }
@@ -169,7 +213,11 @@
     section { padding: 56px 0; }
     .ch { flex-direction: column; gap: 6px; }
     .ch h2 { font-size: 26px; }
-    .grid2, .grid3, .unit, .use, .road, .shoot { grid-template-columns: 1fr; }
+    .grid2, .grid3, .unit, .use, .road, .shoot, .paces { grid-template-columns: 1fr; }
+    .fkpis { grid-template-columns: 1fr 1fr; }
+    .legend div { grid-template-columns: 12px 56px 1fr; }
+    .legend em { grid-column: 2 / -1; }
+    .budget td .calc { display: block; margin-left: 0; }
     .market { grid-template-columns: 1fr; }
     .mid { flex-direction: row; flex-wrap: wrap; }
     .mid .arrow { transform: rotate(90deg); }
@@ -191,7 +239,7 @@
     <a class="logo" href="../"><i></i>心之音</a>
     <span class="tag">商业计划 · 2026.09</span>
     <nav class="toc">
-      <a href="#why">问题</a><a href="#model">模式</a><a href="#chain">链路</a><a href="#money">收入</a><a href="#o2o">线上线下</a><a href="#road">规划</a><a href="#moat">壁垒</a><a href="#use">资金</a>
+      <a href="#why">问题</a><a href="#model">模式</a><a href="#chain">链路</a><a href="#money">收入</a><a href="#o2o">线上线下</a><a href="#road">规划</a><a href="#moat">壁垒</a><a href="#use">融资 100 万</a>
     </nav>
   </div>
 </header>
@@ -206,7 +254,7 @@
       心之音是一个真人一对一社交平台：男生为「有人陪我聊、陪我视频、陪我出门」付费，女生把时间与陪伴安全地变成收入，
       平台在每一次互动中收取明码标价的服务费。线上聊得来，线下见得着——我们把陌生人社交、陪玩经济和线下陪玩店三件事，做成了一条闭环。
     </p>
-    <div class="to"><i></i><span>本页为 <b>小美</b> 准备 · 阅读约 8 分钟 · 请勿外传</span></div>
+    <div class="to"><i></i><span>本页为 <b>小美</b> 准备 · 阅读约 10 分钟 · 请勿外传</span></div>
     <div class="kpis">
       <div class="kpi"><b>iOS + Android + H5</b><span>三端产品已上线，后台可运营</span></div>
       <div class="kpi"><b>1 积分 = 1 元</b><span>统一计价体系，每一笔可对账</span></div>
@@ -403,7 +451,7 @@
     <div class="ch"><span class="no">06 / 规划</span><h2>三期走：先把一座城跑通，再复制</h2></div>
     <div class="road">
       <div class="ph"><span class="dot"></span><div class="box">
-        <div class="when">第一期 · 现在 → 6 个月</div><h3>成都单城闭环</h3><div class="goal">目标：500 认证女生 · 3,000 日活男生 · 5 家合作陪玩店</div>
+        <div class="when">第一期 · 现在 → 6 个月 · 预算 100 万</div><h3>成都单城闭环</h3><div class="goal">目标：500 认证女生 · 3,000 日活男生 · 5 家合作陪玩店 · 月 GMV 100 万+</div>
         <ul>
           <li>产品三端上线，后台可运营<span class="done">✓ 已完成</span></li>
           <li>消息 / 视频 / 礼物 / 约单 / 提现计费闭环<span class="done">✓ 已完成</span></li>
@@ -411,6 +459,7 @@
           <li>iOS TestFlight 灰度 → App Store 上架</li>
           <li>签约首批陪玩店，建立拍摄点与内容 SOP</li>
           <li>专属推广页（男版 / 女版）上线，短视频矩阵起号</li>
+          <li>组建 7 人地面团队（运营 / 内容 / BD / 客服 / 研发），详见 <a href="#use" style="color:var(--accent2)">资金去向</a></li>
         </ul>
       </div></div>
       <div class="ph"><span class="dot"></span><div class="box">
@@ -454,14 +503,128 @@
 <!-- 08 资金 -->
 <section id="use">
   <div class="wrap">
-    <div class="ch"><span class="no">08 / 资金用途</span><h2>钱花在把第一座城跑通上</h2></div>
+    <div class="ch"><span class="no">08 / 融资与资金去向</span><h2>第一期融资 100 万，全部花在把成都跑通</h2></div>
+    <p class="lead">
+      双边市场最贵的一段是冷启动：女生来了没人付费就走，男生来了没人回也走，两边必须同时拉起来。第一期要在 6 个月里同时做四件事——
+      养一支 7 人的地面团队、把两侧的补贴和投放打满、在陪玩店里建起线下拍摄点、把合规手续办齐。这些事没法分先后、也没法省，所以第一期需要一次性投够 100 万。下面是每一块钱的去向。
+    </p>
+
+    <div class="fkpis">
+      <div class="kpi"><b class="g">100 万</b><span>第一期总预算（人民币），只用于成都单城</span></div>
+      <div class="kpi"><b>6 个月</b><span>使用周期 · 月均 16.7 万 · 峰值月 19 万</span></div>
+      <div class="kpi"><b>500 / 3,000</b><span>期末目标：认证女生 / 日活男生</span></div>
+      <div class="kpi"><b>≈ 23 万 / 月</b><span>期末目标月抽成，覆盖 8.6 万 / 月固定支出</span></div>
+    </div>
+
     <div class="use">
-      <div class="donut"><b><strong>12 个月</strong>首轮资金规划</b></div>
+      <div class="donut"><b><strong>100 万</strong>6 个月 · 六大去向</b></div>
       <div class="legend">
-        <div><i style="background:var(--accent)"></i><b>40%</b>市场获客：短视频投放、地推、老带新奖励、KOC 分佣</div>
-        <div><i style="background:var(--purple)"></i><b>25%</b>线下与内容：陪玩店签约补贴、拍摄点建设、内容团队</div>
-        <div><i style="background:var(--blue)"></i><b>20%</b>技术与直播：直播 / 连麦研发、SRS 节点扩容、商家后台</div>
-        <div><i style="background:var(--gold)"></i><b>15%</b>运营储备：合规、客服仲裁、财务与风险准备金</div>
+        <div><i style="background:var(--accent)"></i><b>37.8%</b><span>团队人力：7 人地面团队 6 个月工资</span><em>37.8 万</em></div>
+        <div><i style="background:var(--purple)"></i><b>30%</b><span>市场获客：短视频投放、地推、两侧新人补贴</span><em>30 万</em></div>
+        <div><i style="background:var(--gold)"></i><b>12%</b><span>线下与内容：陪玩店签约、拍摄点、设备、拍摄补贴</span><em>12 万</em></div>
+        <div><i style="background:var(--blue)"></i><b>8%</b><span>技术与基础设施：服务器、SRS 音视频节点、上架、安全</span><em>8 万</em></div>
+        <div><i style="background:var(--green)"></i><b>6%</b><span>合规与行政：ICP / 网文许可、法务、代账、办公</span><em>6 万</em></div>
+        <div><i style="background:#4a4a58"></i><b>6.2%</b><span>风险准备金：约单赔付垫付、提现资金池、突发</span><em>6.2 万</em></div>
+      </div>
+    </div>
+
+    <div class="budget">
+      <h3><i></i>预算明细（单位：万元）</h3>
+      <table>
+        <thead><tr><th style="width:22%">类别</th><th>明细</th><th style="text-align:right;width:12%">金额</th></tr></thead>
+        <tbody>
+          <tr class="grp"><td class="cat" rowspan="5"><i style="background:var(--accent)"></i>团队人力<small>7 人 × 6 个月 · 创始人零薪</small></td><td class="sub">运营负责人 ×1：统筹陪玩店、女生招募、活动与数据复盘<span class="calc">1.2 万/月 × 6</span></td><td class="amt"><b>7.2</b></td></tr>
+          <tr class="grp"><td class="sub">内容运营 / 剪辑 ×2：每周到店拍摄、剪辑、矩阵账号日更分发<span class="calc">0.8 万/月 × 2 人 × 6</span></td><td class="amt"><b>9.6</b></td></tr>
+          <tr class="grp"><td class="sub">地推 / 商务 BD ×2：陪玩店签约维护、高校商圈电竞酒店地推<span class="calc">0.7 万/月 × 2 人 × 6，提成计入获客</span></td><td class="amt"><b>8.4</b></td></tr>
+          <tr class="grp"><td class="sub">客服 / 审核 / 仲裁 ×1：实名与内容审核、约单纠纷处理、提现审核<span class="calc">0.6 万/月 × 6</span></td><td class="amt"><b>3.6</b></td></tr>
+          <tr class="grp"><td class="sub">研发 ×1：三端迭代、专属推广页动态化、商家后台雏形、线上故障响应<span class="calc">1.5 万/月 × 6</span></td><td class="amt"><b>9.0</b></td></tr>
+
+          <tr><td class="cat" rowspan="4"><i style="background:var(--purple)"></i>市场获客<small>两侧同时补贴</small></td><td class="sub">短视频投放：抖音 DOU+ / 快手 / 信息流，成都定向，素材来自线下拍摄<span class="calc">2.5 万/月 × 6</span></td><td class="amt"><b>15.0</b></td></tr>
+          <tr><td class="sub">地推：物料、场地、临时人员、扫码礼品（高校 / 商圈 / 夜市 / 网吧 / 电竞酒店）</td><td class="amt"><b>4.0</b></td></tr>
+          <tr><td class="sub">男生新人补贴：首条消息免费、新人积分、老带新奖励（平台承担的积分成本）</td><td class="amt"><b>6.0</b></td></tr>
+          <tr><td class="sub">女生冷启动补贴：前 100 名认证女生首月收入保底 + 保底曝光位</td><td class="amt"><b>5.0</b></td></tr>
+
+          <tr class="grp"><td class="cat" rowspan="5"><i style="background:var(--gold)"></i>线下与内容<small>5 家陪玩店 · 内容工业化</small></td><td class="sub">陪玩店合作签约补贴：入驻礼包、联名物料、首月分成保底<span class="calc">1 万 × 5 家</span></td><td class="amt"><b>5.0</b></td></tr>
+          <tr class="grp"><td class="sub">拍摄点建设：包间改造，灯光 + 背景 + 支架<span class="calc">0.2 万 × 5 家</span></td><td class="amt"><b>1.0</b></td></tr>
+          <tr class="grp"><td class="sub">拍摄设备 2 套：手机、稳定器、麦克风、补光灯</td><td class="amt"><b>2.0</b></td></tr>
+          <tr class="grp"><td class="sub">女生拍摄劳务 / 交通补贴<span class="calc">60 元 × 500 人次</span></td><td class="amt"><b>3.0</b></td></tr>
+          <tr class="grp"><td class="sub">剪辑模板、音乐版权、矩阵账号运营工具</td><td class="amt"><b>1.0</b></td></tr>
+
+          <tr><td class="cat" rowspan="5"><i style="background:var(--blue)"></i>技术与基础设施<small>产品已上线，只算运行与扩容</small></td><td class="sub">服务器 + SRS 音视频节点（3–5 节点）+ 带宽 / CDN<span class="calc">0.6 万/月 × 6</span></td><td class="amt"><b>3.6</b></td></tr>
+          <tr><td class="sub">对象存储、推送、AI 接口、内容安全审核（鉴黄 / 鉴政）<span class="calc">0.25 万/月 × 6</span></td><td class="amt"><b>1.5</b></td></tr>
+          <tr><td class="sub">Apple 开发者账号、应用商店上架、软件著作权、第三方 SDK</td><td class="amt"><b>0.8</b></td></tr>
+          <tr><td class="sub">安全渗透测试一次（上架前）</td><td class="amt"><b>1.1</b></td></tr>
+          <tr><td class="sub">紧急扩容备用（活动 / 投放峰值）</td><td class="amt"><b>1.0</b></td></tr>
+
+          <tr class="grp"><td class="cat" rowspan="4"><i style="background:var(--green)"></i>合规与行政<small>先办齐，再放量</small></td><td class="sub">增值电信 ICP 许可、公安备案、网络文化经营许可咨询代办</td><td class="amt"><b>2.5</b></td></tr>
+          <tr class="grp"><td class="sub">法务：用户协议 / 隐私政策复核、陪玩店合作合同、劳务合同模板</td><td class="amt"><b>1.0</b></td></tr>
+          <tr class="grp"><td class="sub">财务代账 / 税务<span class="calc">0.1 万/月 × 6</span></td><td class="amt"><b>0.6</b></td></tr>
+          <tr class="grp"><td class="sub">办公：联合办公 6 工位<span class="calc">约 530 元/工位/月 × 6 × 6</span></td><td class="amt"><b>1.9</b></td></tr>
+
+          <tr><td class="cat"><i style="background:#4a4a58"></i>风险准备金<small>不动用则滚入第二期</small></td><td class="sub">约单爽约赔付垫付、提现资金池垫底、纠纷仲裁退款、不可预见支出</td><td class="amt"><b>6.2</b></td></tr>
+
+          <tr class="sum"><td class="cat">合计</td><td class="sub">6 个月 · 成都单城 · 全部为运营性支出，不含创始人薪酬与已完成的产品研发投入</td><td class="amt"><b>100.0</b></td></tr>
+        </tbody>
+      </table>
+      <p class="note">* 人力按月薪包干（含基础社保）估算，成都市场价；投放与补贴为上限预算，按月根据 ROI 调节；所有支出按月向投资人出对账单，平台侧的积分补贴在「平台账本」表逐笔可查。</p>
+    </div>
+
+    <div class="pace">
+      <h3><i></i>资金使用节奏与里程碑</h3>
+      <div class="cash">
+        <div class="l"><span>月度支出计划（万元）</span><span>合计 100 万 · 前两月偏筹备，中间两月投放拉满</span></div>
+        <div class="bars6">
+          <div style="height:74%"><span>14</span><small>M1</small></div>
+          <div style="height:79%"><span>15</span><small>M2</small></div>
+          <div style="height:95%"><span>18</span><small>M3</small></div>
+          <div style="height:100%"><span>19</span><small>M4</small></div>
+          <div style="height:95%"><span>18</span><small>M5</small></div>
+          <div style="height:84%"><span>16</span><small>M6</small></div>
+        </div>
+      </div>
+      <div class="paces">
+        <div class="pc">
+          <div class="when">M1 – M2 · 筹备起步</div><h4>把地面搭起来<span>支出 29 万</span></h4>
+          <div class="lab">花在哪</div>
+          <ul><li>7 人团队到位，合规申报同步启动</li><li>签约 5 家陪玩店，建成 5 个拍摄点</li><li>前 100 名女生认证 + 首月保底</li><li>投放小预算试跑，测素材与转化</li></ul>
+          <div class="lab">期末里程碑</div>
+          <ul class="ms"><li>100 名认证女生 · 日活男生 500</li><li>iOS App Store 正式上架</li><li>专属推广页动态版上线</li></ul>
+        </div>
+        <div class="pc">
+          <div class="when">M3 – M4 · 起量</div><h4>把两边拉起来<span>支出 37 万</span></h4>
+          <div class="lab">花在哪</div>
+          <ul><li>短视频投放拉满，地推铺开高校与商圈</li><li>矩阵账号日更，每周每人 3 条</li><li>男生新人补贴、老带新奖励全量开放</li></ul>
+          <div class="lab">期末里程碑</div>
+          <ul class="ms"><li>300 名认证女生 · 日活男生 1,500</li><li>月 GMV 40 万 · 开启礼物 / 约单分成</li><li>获客成本、留存、付费率三张表定型</li></ul>
+        </div>
+        <div class="pc">
+          <div class="when">M5 – M6 · 验证</div><h4>把模型算清楚<span>支出 34 万</span></h4>
+          <div class="lab">花在哪</div>
+          <ul><li>投放按 ROI 收窄到高效渠道</li><li>复购、亲密度、约单履约优化</li><li>整理单城 SOP，准备第二城方案</li></ul>
+          <div class="lab">期末里程碑</div>
+          <ul class="ms"><li>500 名认证女生 · 日活男生 3,000</li><li>月 GMV 100 万+ · 月抽成 ≥ 15 万</li><li>月抽成覆盖固定支出，启动第二期融资</li></ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid2 why">
+      <div class="card gd">
+        <h3><i class="g"></i>出资节奏建议（可商议）</h3>
+        <p>建议分两笔到账，与里程碑挂钩，投资人可在 M3 看到真实数据后再放第二笔：</p>
+        <ul>
+          <li><b style="color:var(--text)">第一笔 60 万</b>：签约后到账，覆盖 M1–M3 全部支出与合规费用</li>
+          <li><b style="color:var(--text)">第二笔 40 万</b>：M3 末达成「300 认证女生 / 日活 1,500 / 月 GMV 40 万」中任意两项后到账，覆盖 M4–M6</li>
+          <li>每月 5 日前提供上月支出对账单与运营数据看板（后台可直接查看）</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3><i class="gr"></i>如果数据不达预期</h3>
+        <ul>
+          <li>M3 末复盘：核心指标不足目标 60%，立即暂停投放（−2.5 万/月）、地推转 KOC 分佣制</li>
+          <li>保留人力与技术核心，月固定支出压到约 7 万，剩余资金可延长运营至 M9，用于调整模型再验证</li>
+          <li>6.2 万准备金不用于日常运营；未动用部分滚入第二期</li>
+          <li>产品三端与后台已建成，第一期的钱全部是运营性支出，不存在「钱花完产品还没做出来」的风险</li>
+        </ul>
       </div>
     </div>
 

@@ -10,12 +10,15 @@
     --bg: #0a0a0c; --bg2: #14141a; --bg3: #1d1d25; --line: rgba(255,255,255,0.08);
     --text: #fff; --text2: #a0a0ac; --text3: #626270;
     --accent: #fe2c55; --accent2: #ff6b81; --gold: #f5c66b; --blue: #6b93ff; --green: #0bd07d;
+    --rose: #ff5c8a; --rosegold: #f4b7a6;
     --grad: linear-gradient(120deg, #fe2c55, #ff6b81);
     --gradB: linear-gradient(120deg, #4c7dff, #8b6bff);
+    --gradR: linear-gradient(135deg, #ff6b81 0%, #f5c66b 50%, #fe2c55 100%);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { background: var(--bg); color: var(--text); font-family: "PingFang SC", "HarmonyOS Sans", "Microsoft YaHei", -apple-system, sans-serif; -webkit-text-size-adjust: 100%; }
   a { color: inherit; text-decoration: none; }
+  button { font: inherit; color: inherit; background: none; border: 0; }
 
   /* 设计稿切换条（正式版不显示） */
   .demo { position: fixed; top: 0; left: 0; right: 0; z-index: 50; display: flex; justify-content: center; gap: 8px; padding: 8px; background: rgba(0,0,0,0.55); backdrop-filter: blur(10px); font-size: 12px; }
@@ -25,78 +28,7 @@
 
   .page { max-width: 480px; margin: 0 auto; min-height: 100vh; position: relative; overflow: hidden; padding-bottom: 110px; }
 
-  /* ===== 顶部大图（她/他的主照） ===== */
-  .hero { position: relative; height: 62vh; min-height: 440px; max-height: 620px; }
-  .hero .ph { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 30%, #7a2a4a, #1a0a12 75%); }
-  .m .hero .ph { background: radial-gradient(ellipse at 50% 30%, #2a3f7a, #0a0e1a 75%); }
-  .hero .ph::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10,10,12,0.35) 0%, transparent 30%, transparent 55%, var(--bg) 100%); }
-  .hero .ph i { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); width: 150px; height: 150px; border-radius: 50%; background: rgba(255,255,255,0.1); border: 3px solid rgba(255,255,255,0.28); }
-  .hero .ph i::after { content: "照片 / 15s 竖屏视频"; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 11px; color: rgba(255,255,255,0.55); white-space: nowrap; }
-  .top { position: absolute; top: 44px; left: 16px; right: 16px; display: flex; align-items: center; justify-content: space-between; }
-  .brand { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700; letter-spacing: 2px; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,0.4); }
-  .brand i { width: 20px; height: 20px; border-radius: 6px; background: var(--grad); display: inline-block; }
-  .live { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; padding: 5px 10px; border-radius: 12px; background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.12); backdrop-filter: blur(6px); }
-  .live b { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); display: inline-block; }
-
-  /* 名片 */
-  .card { position: relative; margin: -90px 16px 0; padding: 18px 18px 16px; border-radius: 22px; background: rgba(20,20,26,0.88); border: 1px solid var(--line); backdrop-filter: blur(16px); box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
-  .who { display: flex; align-items: center; gap: 12px; }
-  .av { width: 58px; height: 58px; border-radius: 50%; background: linear-gradient(160deg, #ff8ba7, #5a1d33); border: 2px solid rgba(255,255,255,0.2); flex-shrink: 0; }
-  .m .av { background: linear-gradient(160deg, #8bb3ff, #1d2a5a); }
-  .who .n { font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
-  .who .n .tag { font-size: 10px; padding: 2px 7px; border-radius: 6px; background: var(--grad); color: #fff; font-weight: 700; }
-  .m .who .n .tag { background: var(--gradB); }
-  .who .meta { margin-top: 4px; font-size: 12px; color: var(--text2); display: flex; gap: 10px; flex-wrap: wrap; }
-  .who .meta span::before { content: "·"; margin-right: 6px; color: var(--text3); }
-  .who .meta span:first-child::before { content: none; }
-  .say { margin-top: 14px; font-size: 14.5px; line-height: 1.75; color: #eaeaf0; }
-  .say::before { content: "“"; color: var(--accent2); font-size: 22px; font-weight: 900; margin-right: 2px; }
-  .m .say::before { color: var(--blue); }
-  .stats { margin-top: 14px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .st { text-align: center; background: var(--bg3); border-radius: 12px; padding: 10px 6px; }
-  .st b { display: block; font-size: 16px; font-weight: 800; }
-  .st b.g { color: var(--gold); }
-  .st span { display: block; font-size: 10.5px; color: var(--text2); margin-top: 2px; }
-
-  /* 照片墙 */
-  .wall { margin: 16px 16px 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .wall i { aspect-ratio: 3/4; border-radius: 12px; display: block; }
-  .wall i:nth-child(1) { background: linear-gradient(160deg, #5a1d33, #1a0a10); }
-  .wall i:nth-child(2) { background: linear-gradient(160deg, #3d1d5a, #120a1a); }
-  .wall i:nth-child(3) { background: linear-gradient(160deg, #1d5a3d, #0a1a12); position: relative; }
-  .wall i:nth-child(3)::after { content: "+6"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800; background: rgba(0,0,0,0.45); border-radius: 12px; font-style: normal; }
-  .m .wall i:nth-child(1) { background: linear-gradient(160deg, #1d2a5a, #0a0e1a); }
-  .m .wall i:nth-child(2) { background: linear-gradient(160deg, #1d4a5a, #0a141a); }
-
-  /* 卖点 */
-  .sec { margin: 22px 16px 0; }
-  .sec h3 { font-size: 16px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
-  .sec h3::before { content: ""; width: 4px; height: 16px; border-radius: 2px; background: var(--grad); }
-  .m .sec h3::before { background: var(--gradB); }
-  .pts { margin-top: 12px; display: grid; gap: 8px; }
-  .pt { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 14px; background: var(--bg2); border: 1px solid var(--line); }
-  .pt .ic { width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; background: rgba(254,44,85,0.14); color: var(--accent2); font-size: 15px; }
-  .m .pt .ic { background: rgba(107,147,255,0.14); color: var(--blue); }
-  .pt b { font-size: 14px; display: block; }
-  .pt span { font-size: 12px; color: var(--text2); line-height: 1.6; display: block; margin-top: 2px; }
-
-  /* 收益（女版） */
-  .earn { margin: 22px 16px 0; padding: 18px; border-radius: 18px; background: linear-gradient(150deg, rgba(245,198,107,0.18), var(--bg2) 65%); border: 1px solid rgba(245,198,107,0.3); }
-  .earn h3 { font-size: 16px; font-weight: 800; color: var(--gold); }
-  .earn p { margin-top: 6px; font-size: 12.5px; color: var(--text2); line-height: 1.7; }
-  .earn .rows { margin-top: 12px; display: grid; gap: 8px; }
-  .earn .r { display: flex; justify-content: space-between; align-items: center; font-size: 13px; padding: 9px 12px; border-radius: 10px; background: rgba(0,0,0,0.3); }
-  .earn .r b { color: var(--gold); }
-  .earn .sum { margin-top: 10px; text-align: right; font-size: 13px; color: var(--text2); }
-  .earn .sum b { font-size: 20px; color: var(--gold); font-weight: 900; margin-left: 6px; }
-
-  /* 好评 */
-  .rev { margin: 22px 16px 0; display: grid; gap: 8px; }
-  .rv { padding: 12px 14px; border-radius: 14px; background: var(--bg2); border: 1px solid var(--line); font-size: 13px; color: var(--text2); line-height: 1.7; }
-  .rv b { color: var(--text); font-weight: 600; }
-  .rv .stars { color: var(--gold); font-size: 11px; letter-spacing: 1px; margin-left: 6px; }
-
-  /* 底部固定 CTA */
+  /* 底部固定 CTA（两版共用） */
   .cta { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: linear-gradient(180deg, transparent, var(--bg) 30%); }
   .cta .in { max-width: 448px; margin: 0 auto; display: flex; gap: 10px; align-items: center; }
   .cta .txt { flex: 1; min-width: 0; }
@@ -106,61 +38,259 @@
   .m .btn { background: var(--gradB); box-shadow: 0 10px 26px rgba(76,125,255,0.4); }
   .btn small { display: block; font-size: 10px; font-weight: 400; opacity: .85; line-height: 1; margin-bottom: 3px; }
   .btn span { display: block; line-height: 1.05; }
-
   .foot { margin: 28px 16px 0; text-align: center; font-size: 11px; color: var(--text3); line-height: 1.8; }
   .foot a { color: var(--text2); }
+
+  /* =====================================================================
+     女版 v2：更像一张「她的名片」——大图 + 名片本体（语音签名 / 标签 / 价目）
+     ===================================================================== */
+  .f { background: radial-gradient(ellipse at 50% 0%, #2a0f1c 0%, var(--bg) 55%); }
+  .fhero { position: relative; height: 68vh; min-height: 470px; max-height: 660px; }
+  .fhero .fph { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 28%, #8a2f52, #1a0a12 78%); }
+  .fhero .fph::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10,10,12,0.45) 0%, transparent 25%, transparent 45%, rgba(10,10,12,0.75) 78%, var(--bg) 100%); }
+  .fhero .fph i { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); width: 160px; height: 160px; border-radius: 50%; background: rgba(255,255,255,0.08); border: 3px solid rgba(255,255,255,0.25); }
+  .fhero .fph i::after { content: "她的主图 / 15s 竖屏视频"; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 11px; color: rgba(255,255,255,0.55); white-space: nowrap; font-style: normal; }
+  .ftop { position: absolute; top: 44px; left: 16px; right: 16px; display: flex; align-items: center; justify-content: space-between; }
+  .brand { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700; letter-spacing: 2px; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+  .brand i { width: 20px; height: 20px; border-radius: 6px; background: var(--grad); display: inline-block; }
+  .live { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; padding: 5px 10px; border-radius: 12px; background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.12); backdrop-filter: blur(6px); }
+  .live b { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); display: inline-block; }
+  .fdots { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); display: grid; gap: 6px; }
+  .fdots i { width: 4px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.35); display: block; }
+  .fdots i:first-child { height: 16px; background: #fff; }
+  .fhead { position: absolute; left: 20px; right: 20px; bottom: 118px; }
+  .fhead .fname { font-size: 32px; font-weight: 900; letter-spacing: 1px; display: flex; align-items: center; gap: 10px; text-shadow: 0 2px 12px rgba(0,0,0,0.5); }
+  .fhead .fname .vf { font-size: 11px; font-weight: 700; letter-spacing: 0; padding: 3px 8px; border-radius: 8px; background: var(--grad); text-shadow: none; }
+  .fhead .fmeta { margin-top: 6px; font-size: 13px; color: rgba(255,255,255,0.85); display: flex; gap: 6px; flex-wrap: wrap; text-shadow: 0 1px 6px rgba(0,0,0,0.5); }
+  .fhead .fmeta span + span::before { content: "·"; margin-right: 6px; color: rgba(255,255,255,0.45); }
+  .fhead .fmeta .near { color: var(--gold); }
+
+  /* 名片本体 */
+  .ncard { position: relative; margin: -96px 16px 0; border-radius: 24px; padding: 1.5px; background: var(--gradR); box-shadow: 0 24px 60px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04); }
+  .ncard::before { content: ""; position: absolute; inset: -1px; border-radius: 25px; background: var(--gradR); filter: blur(18px); opacity: .35; z-index: -1; }
+  .ncard .nin { border-radius: 22.5px; background: linear-gradient(170deg, #1c1219 0%, #121216 60%); padding: 18px 18px 0; overflow: hidden; position: relative; }
+  .ncard .nin::after { content: "心之音"; position: absolute; right: -6px; bottom: 62px; font-size: 64px; font-weight: 900; letter-spacing: 6px; color: rgba(255,255,255,0.025); pointer-events: none; }
+  .nrow { display: flex; align-items: center; gap: 12px; }
+  .nav-av { width: 56px; height: 56px; border-radius: 18px; background: linear-gradient(160deg, #ff8ba7, #5a1d33); border: 2px solid rgba(255,255,255,0.18); flex-shrink: 0; position: relative; }
+  .nav-av::after { content: ""; position: absolute; right: -2px; bottom: -2px; width: 14px; height: 14px; border-radius: 50%; background: var(--green); border: 2.5px solid #14141a; }
+  .ninfo { flex: 1; min-width: 0; }
+  .ninfo .ntitle { font-size: 12px; color: var(--text2); letter-spacing: 1px; }
+  .ninfo .nid { font-size: 15px; font-weight: 800; margin-top: 1px; }
+  .ninfo .nid small { font-size: 11px; color: var(--text3); font-weight: 500; margin-left: 6px; }
+  .nbadges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .nbadges span { font-size: 11px; padding: 4px 9px; border-radius: 8px; background: rgba(255,255,255,0.06); border: 1px solid var(--line); color: #e6e6ee; display: inline-flex; align-items: center; gap: 5px; }
+  .nbadges span::before { content: "✓"; color: var(--green); font-size: 10px; font-weight: 900; }
+  .nbadges span.gold { border-color: rgba(245,198,107,0.35); color: var(--gold); background: rgba(245,198,107,0.08); }
+  .nbadges span.gold::before { content: "★"; color: var(--gold); }
+
+  .voice { margin-top: 14px; width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 10px; border-radius: 14px; background: linear-gradient(120deg, rgba(254,44,85,0.22), rgba(255,107,129,0.08)); border: 1px solid rgba(254,44,85,0.35); text-align: left; }
+  .voice .pl { width: 34px; height: 34px; border-radius: 50%; background: var(--grad); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 6px 16px rgba(254,44,85,0.45); }
+  .voice .pl::after { content: ""; border-left: 11px solid #fff; border-top: 7px solid transparent; border-bottom: 7px solid transparent; margin-left: 3px; }
+  .voice .vt { flex: 1; min-width: 0; }
+  .voice .vt b { display: block; font-size: 13px; }
+  .voice .vt span { display: block; font-size: 11px; color: var(--text2); margin-top: 1px; }
+  .wave { display: inline-flex; align-items: center; gap: 2.5px; height: 22px; }
+  .wave b { width: 3px; border-radius: 2px; background: var(--accent2); height: 40%; animation: wv 1.1s ease-in-out infinite; }
+  .wave b:nth-child(2) { height: 80%; animation-delay: .12s; } .wave b:nth-child(3) { height: 55%; animation-delay: .24s; }
+  .wave b:nth-child(4) { height: 100%; animation-delay: .36s; } .wave b:nth-child(5) { height: 65%; animation-delay: .48s; }
+  .wave b:nth-child(6) { height: 35%; animation-delay: .6s; } .wave b:nth-child(7) { height: 75%; animation-delay: .72s; }
+  @keyframes wv { 0%, 100% { transform: scaleY(.55); } 50% { transform: scaleY(1); } }
+  .voice .dur { font-size: 12px; color: var(--text2); font-variant-numeric: tabular-nums; }
+
+  .nsay { margin-top: 14px; font-size: 14.5px; line-height: 1.8; color: #eaeaf0; position: relative; padding-left: 14px; }
+  .nsay::before { content: ""; position: absolute; left: 0; top: 4px; bottom: 4px; width: 3px; border-radius: 2px; background: var(--gradR); }
+  .ntags { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .ntags span { font-size: 12px; color: var(--accent2); padding: 4px 10px; border-radius: 20px; background: rgba(254,44,85,0.1); }
+
+  .nprice { margin: 16px -18px 0; display: grid; grid-template-columns: repeat(3, 1fr); background: rgba(0,0,0,0.35); border-top: 1px dashed rgba(255,255,255,0.12); position: relative; }
+  .nprice::before, .nprice::after { content: ""; position: absolute; top: -9px; width: 18px; height: 18px; border-radius: 50%; background: var(--bg); }
+  .nprice::before { left: -9px; } .nprice::after { right: -9px; }
+  .nprice div { text-align: center; padding: 14px 6px 12px; position: relative; }
+  .nprice div + div::before { content: ""; position: absolute; left: 0; top: 16px; bottom: 16px; width: 1px; background: var(--line); }
+  .nprice b { font-size: 22px; font-weight: 900; color: #fff; letter-spacing: -0.5px; }
+  .nprice small { font-size: 10.5px; color: var(--text2); margin-left: 2px; }
+  .nprice span { display: block; font-size: 11.5px; color: var(--text2); margin-top: 3px; }
+  .nprice div.hl b { background: var(--gradR); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .nprice div.hl span { color: var(--gold); }
+  .nfoot { margin: 0 -18px; padding: 8px; text-align: center; font-size: 10.5px; color: var(--text3); background: rgba(0,0,0,0.35); border-top: 1px solid var(--line); }
+
+  /* 数据 */
+  .fnum { margin: 14px 16px 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .fnum div { text-align: center; padding: 10px 4px; border-radius: 12px; background: var(--bg2); border: 1px solid var(--line); }
+  .fnum b { display: block; font-size: 15px; font-weight: 800; }
+  .fnum span { display: block; font-size: 10px; color: var(--text2); margin-top: 2px; }
+
+  /* 区块标题 */
+  .fsec { margin: 24px 16px 0; display: flex; align-items: baseline; justify-content: space-between; }
+  .fsec h3 { font-size: 16px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+  .fsec h3::before { content: ""; width: 4px; height: 16px; border-radius: 2px; background: var(--gradR); }
+  .fsec .more { font-size: 12px; color: var(--text3); }
+
+  /* 照片横滑 */
+  .strip { margin-top: 12px; padding: 0 16px; display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; scroll-snap-type: x mandatory; }
+  .strip::-webkit-scrollbar { display: none; }
+  .strip i { flex: 0 0 132px; height: 176px; border-radius: 14px; display: block; scroll-snap-align: start; position: relative; }
+  .strip i:nth-child(1) { flex-basis: 176px; background: linear-gradient(160deg, #6a1d3d, #1a0a10); }
+  .strip i:nth-child(2) { background: linear-gradient(160deg, #3d1d5a, #120a1a); }
+  .strip i:nth-child(3) { background: linear-gradient(160deg, #1d5a3d, #0a1a12); }
+  .strip i:nth-child(4) { background: linear-gradient(160deg, #5a3d1d, #1a120a); }
+  .strip i.vid::after { content: "▶ 15s"; position: absolute; left: 8px; bottom: 8px; font-size: 10px; font-style: normal; padding: 2px 7px; border-radius: 8px; background: rgba(0,0,0,0.55); }
+  .strip i.rest { background: var(--bg3); }
+  .strip i.rest::after { content: "+5"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800; font-style: normal; color: var(--text2); }
+
+  /* 近况 */
+  .feed { margin: 12px 16px 0; display: grid; gap: 8px; }
+  .fd { padding: 12px 14px; border-radius: 14px; background: var(--bg2); border: 1px solid var(--line); display: flex; gap: 12px; }
+  .fd .t { flex-shrink: 0; width: 44px; font-size: 11px; color: var(--text3); line-height: 1.5; padding-top: 2px; }
+  .fd p { font-size: 13.5px; color: #e6e6ee; line-height: 1.7; flex: 1; }
+  .fd .ph2 { flex-shrink: 0; width: 56px; height: 56px; border-radius: 10px; background: linear-gradient(160deg, #5a1d33, #1a0a10); }
+
+  /* 评价 */
+  .rev { margin: 12px 16px 0; display: grid; gap: 8px; }
+  .rv { padding: 12px 14px; border-radius: 14px; background: var(--bg2); border: 1px solid var(--line); font-size: 13px; color: var(--text2); line-height: 1.7; }
+  .rv .h { display: flex; align-items: center; gap: 8px; }
+  .rv .h i { width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(160deg, #8bb3ff, #1d2a5a); display: inline-block; }
+  .rv b { color: var(--text); font-weight: 600; }
+  .rv .stars { color: var(--gold); font-size: 11px; letter-spacing: 1px; }
+  .rv .dur { margin-left: auto; font-size: 11px; color: var(--text3); }
+  .rv p { margin-top: 6px; }
+
+  /* 怎么找到她 */
+  .steps { margin: 12px 16px 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .steps div { padding: 14px 10px 12px; border-radius: 14px; background: linear-gradient(170deg, rgba(254,44,85,0.1), var(--bg2) 70%); border: 1px solid rgba(254,44,85,0.2); text-align: center; }
+  .steps b { width: 24px; height: 24px; border-radius: 50%; background: var(--grad); color: #fff; font-size: 12px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }
+  .steps span { display: block; margin-top: 8px; font-size: 12px; color: #e6e6ee; line-height: 1.6; }
+  .steps small { display: block; font-size: 10.5px; color: var(--text3); margin-top: 2px; }
+
+  .safe { margin: 14px 16px 0; padding: 10px 14px; border-radius: 12px; background: var(--bg2); border: 1px solid var(--line); font-size: 11.5px; color: var(--text2); line-height: 1.7; display: flex; gap: 8px; }
+  .safe::before { content: "🔒"; }
+
+  /* =====================================================================
+     男版（保持原设计）
+     ===================================================================== */
+  .hero { position: relative; height: 62vh; min-height: 440px; max-height: 620px; }
+  .hero .ph { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 30%, #2a3f7a, #0a0e1a 75%); }
+  .hero .ph::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10,10,12,0.35) 0%, transparent 30%, transparent 55%, var(--bg) 100%); }
+  .hero .ph i { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); width: 150px; height: 150px; border-radius: 50%; background: rgba(255,255,255,0.1); border: 3px solid rgba(255,255,255,0.28); }
+  .hero .ph i::after { content: "照片 / 15s 竖屏视频"; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 11px; color: rgba(255,255,255,0.55); white-space: nowrap; }
+  .top { position: absolute; top: 44px; left: 16px; right: 16px; display: flex; align-items: center; justify-content: space-between; }
+  .card { position: relative; margin: -90px 16px 0; padding: 18px 18px 16px; border-radius: 22px; background: rgba(20,20,26,0.88); border: 1px solid var(--line); backdrop-filter: blur(16px); box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+  .who { display: flex; align-items: center; gap: 12px; }
+  .av { width: 58px; height: 58px; border-radius: 50%; background: linear-gradient(160deg, #8bb3ff, #1d2a5a); border: 2px solid rgba(255,255,255,0.2); flex-shrink: 0; }
+  .who .n { font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+  .who .n .tag { font-size: 10px; padding: 2px 7px; border-radius: 6px; background: var(--gradB); color: #fff; font-weight: 700; }
+  .who .meta { margin-top: 4px; font-size: 12px; color: var(--text2); display: flex; gap: 10px; flex-wrap: wrap; }
+  .who .meta span::before { content: "·"; margin-right: 6px; color: var(--text3); }
+  .who .meta span:first-child::before { content: none; }
+  .say { margin-top: 14px; font-size: 14.5px; line-height: 1.75; color: #eaeaf0; }
+  .say::before { content: "“"; color: var(--blue); font-size: 22px; font-weight: 900; margin-right: 2px; }
+  .stats { margin-top: 14px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .st { text-align: center; background: var(--bg3); border-radius: 12px; padding: 10px 6px; }
+  .st b { display: block; font-size: 16px; font-weight: 800; }
+  .st b.g { color: var(--gold); }
+  .st span { display: block; font-size: 10.5px; color: var(--text2); margin-top: 2px; }
+  .sec { margin: 22px 16px 0; }
+  .sec h3 { font-size: 16px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+  .sec h3::before { content: ""; width: 4px; height: 16px; border-radius: 2px; background: var(--gradB); }
+  .pts { margin-top: 12px; display: grid; gap: 8px; }
+  .pt { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 14px; background: var(--bg2); border: 1px solid var(--line); }
+  .pt .ic { width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; background: rgba(107,147,255,0.14); color: var(--blue); font-size: 15px; }
+  .pt b { font-size: 14px; display: block; }
+  .pt span { font-size: 12px; color: var(--text2); line-height: 1.6; display: block; margin-top: 2px; }
+  .earn { margin: 22px 16px 0; padding: 18px; border-radius: 18px; background: linear-gradient(150deg, rgba(245,198,107,0.18), var(--bg2) 65%); border: 1px solid rgba(245,198,107,0.3); }
+  .earn h3 { font-size: 16px; font-weight: 800; color: var(--gold); }
+  .earn p { margin-top: 6px; font-size: 12.5px; color: var(--text2); line-height: 1.7; }
+  .earn .rows { margin-top: 12px; display: grid; gap: 8px; }
+  .earn .r { display: flex; justify-content: space-between; align-items: center; font-size: 13px; padding: 9px 12px; border-radius: 10px; background: rgba(0,0,0,0.3); }
+  .earn .r b { color: var(--gold); }
+  .earn .sum { margin-top: 10px; text-align: right; font-size: 13px; color: var(--text2); }
+  .earn .sum b { font-size: 20px; color: var(--gold); font-weight: 900; margin-left: 6px; }
+  .m .rev { margin-top: 22px; }
 
   @media (min-width: 481px) { .page { border-left: 1px solid var(--line); border-right: 1px solid var(--line); } }
 </style>
 </head>
 <body>
-<div class="demo"><span>设计稿切换：</span><a href="?g=f" id="tf">女生分享给男生看</a><a href="?g=m" id="tm">男生分享给女生看</a></div>
+<div class="demo"><span>设计稿切换：</span><a href="?g=f" id="tf">女 → 男（名片 v2）</a><a href="?g=m" id="tm">男 → 女</a></div>
 
-<!-- ============ 女版：女生的专属页，分享给男生（目标：让男生下载来和她聊/视频） ============ -->
+<!-- ============ 女版 v2：她的名片，分享给男生（目标：让男生下载来和她聊/视频） ============ -->
 <div class="page f" id="pageF">
-  <div class="hero">
-    <div class="ph"><i></i></div>
-    <div class="top">
+  <div class="fhero">
+    <div class="fph"><i></i></div>
+    <div class="ftop">
       <span class="brand"><i></i>心之音</span>
-      <span class="live"><b></b>在线 · 成都 · 距你 1.2km</span>
+      <span class="live"><b></b>在线 · 通常 1 分钟内回复</span>
+    </div>
+    <div class="fdots"><i></i><i></i><i></i><i></i></div>
+    <div class="fhead">
+      <div class="fname">小柔 <span class="vf">真人认证</span></div>
+      <div class="fmeta"><span>24 岁</span><span>射手座</span><span>幼师</span><span>成都 · 高新区</span><span class="near">距你 1.2 km</span></div>
     </div>
   </div>
-  <div class="card">
-    <div class="who">
-      <span class="av"></span>
-      <div>
-        <div class="n">小柔 <span class="tag">真人认证</span></div>
-        <div class="meta"><span>24 岁</span><span>成都</span><span>射手座</span><span>幼师</span></div>
+
+  <!-- 名片 -->
+  <div class="ncard"><div class="nin">
+    <div class="nrow">
+      <span class="nav-av"></span>
+      <div class="ninfo">
+        <div class="ntitle">心之音 · 专属名片</div>
+        <div class="nid">小柔 <small>ID 100238</small></div>
       </div>
     </div>
-    <p class="say">下班后想找个人聊聊天，也可以陪你逛逛成都。声音好听是别人说的，你来听听就知道了。</p>
-    <div class="stats">
-      <div class="st"><b class="g">2 积分</b><span>视频 / 分钟</span></div>
-      <div class="st"><b>4.9</b><span>通话评分</span></div>
-      <div class="st"><b>236</b><span>人和她聊过</span></div>
-    </div>
-  </div>
-  <div class="wall"><i></i><i></i><i></i></div>
+    <div class="nbadges"><span>身份证实名</span><span>真人视频认证</span><span>接同城约单</span><span class="gold">本周人气 TOP 20</span></div>
 
-  <div class="sec">
-    <h3>为什么在心之音和她聊</h3>
-    <div class="pts">
-      <div class="pt"><span class="ic">✓</span><div><b>真人认证，不是机器人</b><span>身份证实名 + 真人视频认证，她就是照片上的她</span></div></div>
-      <div class="pt"><span class="ic">¥</span><div><b>按分钟明码标价，花多少自己定</b><span>视频 2 积分/分钟，1 积分 = 1 元，随时挂断随时停</span></div></div>
-      <div class="pt"><span class="ic">📍</span><div><b>同城，聊得来可以约出来</b><span>发布同城约单，积分平台托管，见面完成才结算</span></div></div>
-      <div class="pt"><span class="ic">🔒</span><div><b>聊天全程加密</b><span>AES-256 加密，聊天记录可随时双向清空</span></div></div>
+    <button class="voice" type="button">
+      <span class="pl"></span>
+      <span class="vt"><b>听听她的声音</b><span>语音签名 · 别人说好听，你来评</span></span>
+      <span class="wave"><b></b><b></b><b></b><b></b><b></b><b></b><b></b></span>
+      <span class="dur">8"</span>
+    </button>
+
+    <p class="nsay">下班后想找个人聊聊天，也可以陪你逛逛成都。周末一般在太古里附近，火锅要微辣的那种。</p>
+    <div class="ntags"><span>#火锅</span><span>#养猫</span><span>#看展</span><span>#剧本杀</span><span>#夜跑</span><span>#声音好听</span></div>
+
+    <div class="nprice">
+      <div><b>0.1</b><small>积分/条</small><span>给她发消息</span></div>
+      <div class="hl"><b>2</b><small>积分/分钟</small><span>和她视频</span></div>
+      <div><b>80</b><small>积分/小时</small><span>同城约她</span></div>
     </div>
+    <div class="nfoot">1 积分 = 1 元 · 她自己定的价 · 随时挂断随时停 · 第一条消息免费</div>
+  </div></div>
+
+  <div class="fnum">
+    <div><b>4.9</b><span>通话评分</span></div>
+    <div><b>236</b><span>人和她聊过</span></div>
+    <div><b>12 分</b><span>平均通话</span></div>
+    <div><b>98%</b><span>回复率</span></div>
   </div>
 
+  <div class="fsec"><h3>她的照片</h3><span class="more">9 张 · 1 条视频</span></div>
+  <div class="strip"><i class="vid"></i><i></i><i></i><i></i><i class="rest"></i></div>
+
+  <div class="fsec"><h3>她的近况</h3><span class="more">动态广场</span></div>
+  <div class="feed">
+    <div class="fd"><div class="t">2 小时前</div><p>班上小朋友送了我一朵纸花，开心一整天。晚上 9 点后在线，来找我聊～</p><span class="ph2"></span></div>
+    <div class="fd"><div class="t">昨天</div><p>周末想去看新开的那个展，有人一起吗？先视频认识一下也行。</p></div>
+  </div>
+
+  <div class="fsec"><h3>和她聊过的人怎么说</h3><span class="more">128 条评价</span></div>
   <div class="rev">
-    <div class="rv"><b>阿泽</b><span class="stars">★★★★★</span><br />声音真的好听，聊了 40 分钟一点不尴尬，下周约了逛太古里。</div>
-    <div class="rv"><b>Leo</b><span class="stars">★★★★★</span><br />第一次用这种 App，没想到是真人，价格也透明，比某些平台良心多了。</div>
+    <div class="rv"><div class="h"><i></i><b>阿泽</b><span class="stars">★★★★★</span><span class="dur">视频 41 分钟</span></div><p>声音真的好听，聊了 40 分钟一点不尴尬，下周约了逛太古里。</p></div>
+    <div class="rv"><div class="h"><i></i><b>Leo</b><span class="stars">★★★★★</span><span class="dur">视频 18 分钟</span></div><p>第一次用这种 App，没想到真是本人，价格透明，想停就停，比某些平台良心。</p></div>
   </div>
 
-  <p class="foot">下载后在「遇见」里搜索 <b style="color:#fff">小柔</b>，或直接打开会自动跳到她的主页<br />一机一号 · 不用手机号注册 · <a href="https://app.yyheart.com/#/agreement/user">用户协议</a> · <a href="https://app.yyheart.com/#/agreement/privacy">隐私政策</a></p>
+  <div class="fsec"><h3>下载后怎么找到她</h3></div>
+  <div class="steps">
+    <div><b>1</b><span>下载打开心之音</span><small>一机一号，不用注册</small></div>
+    <div><b>2</b><span>自动跳到她的主页</span><small>或在「遇见」搜 小柔</small></div>
+    <div><b>3</b><span>第一条消息免费</span><small>聊得来再视频</small></div>
+  </div>
+  <div class="safe">身份证实名 + 真人视频双重认证，她就是照片上的她；聊天 AES-256 加密、可双向清空；同城约单积分平台托管，见面完成才结算。</div>
+
+  <p class="foot">一机一号 · 不用手机号注册 · <a href="https://app.yyheart.com/#/agreement/user">用户协议</a> · <a href="https://app.yyheart.com/#/agreement/privacy">隐私政策</a></p>
 
   <div class="cta"><div class="in">
-    <div class="txt"><b>小柔 正在线上等你</b><span>下载心之音，第一条消息免费</span></div>
+    <div class="txt"><b>小柔 正在线上等你</b><span>下载心之音 · 第一条消息免费</span></div>
     <a class="btn" href="../#download" id="dlF"><small>iOS / Android</small><span>下载和她视频</span></a>
   </div></div>
 </div>
@@ -213,8 +343,8 @@
   </div>
 
   <div class="rev">
-    <div class="rv"><b>Momo · 杭州</b><span class="stars">★★★★★</span><br />下班后聊两个小时，一个月多了三千多的零花钱，比做兼职轻松。</div>
-    <div class="rv"><b>一一 · 重庆</b><span class="stars">★★★★★</span><br />最喜欢的是价格自己定，不想聊直接挂，没有人能免费骚扰你。</div>
+    <div class="rv"><div class="h"><b>Momo · 杭州</b><span class="stars">★★★★★</span></div><p>下班后聊两个小时，一个月多了三千多的零花钱，比做兼职轻松。</p></div>
+    <div class="rv"><div class="h"><b>一一 · 重庆</b><span class="stars">★★★★★</span></div><p>最喜欢的是价格自己定，不想聊直接挂，没有人能免费骚扰你。</p></div>
   </div>
 
   <p class="foot">下载后自动和 <b style="color:#fff">阿泽</b> 成为好友，他发的第一条消息就是你的第一笔收入<br />一机一号 · 不用手机号注册 · <a href="https://app.yyheart.com/#/agreement/user">用户协议</a> · <a href="https://app.yyheart.com/#/agreement/privacy">隐私政策</a></p>
