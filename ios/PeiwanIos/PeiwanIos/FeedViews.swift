@@ -128,12 +128,17 @@ struct PlazaView: View {
     var body: some View {
         NavStack {
             VStack(spacing: 0) {
-                HStack(spacing: 16) {
-                    TextTab(text: "动态", selected: tab == "feed") { tab = "feed"; Task { await load() } }
-                    TextTab(text: "遇见", selected: tab == "meet") { tab = "meet" }
-                    TextTab(text: "励志行", selected: tab == "quotes") { tab = "quotes" }
-                    TextTab(text: "私密树洞", selected: tab == "treehole") { tab = "treehole" }
-                    Spacer(minLength: 0)
+                HStack(spacing: 12) {
+                    // 左侧 tab 横向滑动，占剩余宽度；右侧按钮固定尺寸不被压缩（否则「视频」会被挤成两行）
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 16) {
+                            TextTab(text: "动态", selected: tab == "feed") { tab = "feed"; Task { await load() } }
+                            TextTab(text: "遇见", selected: tab == "meet") { tab = "meet" }
+                            TextTab(text: "励志行", selected: tab == "quotes") { tab = "quotes" }
+                            TextTab(text: "私密树洞", selected: tab == "treehole") { tab = "treehole" }
+                        }
+                        .padding(.trailing, 4)
+                    }
                     // 视频（抖音模式）入口只属于动态板块
                     if tab == "feed" {
                         Button {
@@ -141,13 +146,17 @@ struct PlazaView: View {
                             showTikTok = true
                         } label: {
                             Text("视频").font(.system(size: 13)).foregroundStyle(Theme.accent)
+                                .lineLimit(1).fixedSize()
                                 .padding(.horizontal, 10).padding(.vertical, 4)
                                 .background(Capsule().stroke(Theme.accent, lineWidth: 1))
                         }
                         .buttonStyle(.plain)
+                        .layoutPriority(1)
                     }
                     Button(locating ? "定位中…" : (city.isEmpty ? "定位" : "\(city) ▾")) { locate() }
                         .font(.system(size: 13)).foregroundStyle(Theme.textSub)
+                        .lineLimit(1).fixedSize()
+                        .layoutPriority(1)
                 }
                 .padding(.horizontal, 16).padding(.vertical, 12)
 

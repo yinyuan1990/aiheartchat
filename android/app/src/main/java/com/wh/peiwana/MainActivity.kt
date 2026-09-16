@@ -33,6 +33,7 @@ import com.wh.peiwana.net.Api
 import com.wh.peiwana.net.UserProfile
 import com.wh.peiwana.net.WsClient
 import com.wh.peiwana.rtc.CallManager
+import com.wh.peiwana.ui.clearFocusOnTap
 import com.wh.peiwana.ui.screen.*
 import com.wh.peiwana.ui.theme.PeiwanATheme
 import kotlinx.coroutines.launch
@@ -190,7 +191,8 @@ fun AppRoot() {
         }
     }
 
-    Box {
+    // clearFocusOnTap：全 App 点击空白处收起键盘（Dialog/BottomSheet 是独立窗口，需各自再挂一次）
+    Box(Modifier.fillMaxSize().clearFocusOnTap()) {
       Box(Modifier.fillMaxSize().statusBarsPadding()) {
         // 主页常驻底层（像老 Activity：被子页面覆盖时不销毁、返回时不重建）
         if (user != null) {

@@ -373,7 +373,7 @@ fun JoinGroupScreen(onBack: () -> Unit, onJoined: (convId: String, groupId: Stri
     pwdTarget?.let { g ->
         androidx.compose.ui.window.Dialog(onDismissRequest = { pwdTarget = null }) {
             Column(
-                Modifier.clip(RoundedCornerShape(16.dp)).background(Bg2).padding(20.dp),
+                Modifier.clip(RoundedCornerShape(16.dp)).background(Bg2).clearFocusOnTap().padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(g.name, color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)

@@ -9,7 +9,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -172,20 +174,26 @@ fun PlazaScreen(
 
     Column(modifier = modifier.fillMaxSize()) {
         Row(modifier = Modifier.padding(16.dp, 14.dp, 16.dp, 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            listOf("feed" to "动态", "meet" to "遇见", "quotes" to "励志行", "treehole" to "私密树洞").forEach { (k, label) ->
-                Text(
-                    label,
-                    color = if (tab == k) TextMain else TextSub,
-                    fontSize = if (tab == k) 17.sp else 16.sp,
-                    fontWeight = if (tab == k) FontWeight.Bold else FontWeight.Normal,
-                    modifier = Modifier.padding(end = 20.dp).noRippleClick { tab = k },
-                )
+            // 左侧 tab 横向滑动占剩余宽度；右侧按钮单行不换行，窄屏下不会被挤压
+            Row(
+                Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                listOf("feed" to "动态", "meet" to "遇见", "quotes" to "励志行", "treehole" to "私密树洞").forEach { (k, label) ->
+                    Text(
+                        label,
+                        color = if (tab == k) TextMain else TextSub,
+                        fontSize = if (tab == k) 17.sp else 16.sp,
+                        fontWeight = if (tab == k) FontWeight.Bold else FontWeight.Normal,
+                        maxLines = 1, softWrap = false,
+                        modifier = Modifier.padding(end = 20.dp).noRippleClick { tab = k },
+                    )
+                }
             }
-            Spacer(Modifier.weight(1f))
             // 视频（抖音模式）入口只属于动态板块
             if (tab == "feed") {
                 Text(
-                    "视频", color = Accent, fontSize = 13.sp,
+                    "视频", color = Accent, fontSize = 13.sp, maxLines = 1, softWrap = false,
                     modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Accent.copy(alpha = 0.14f))
                         .noRippleClick {
                             PlazaCache.tiktokStartId = nearestVideoId()
@@ -196,7 +204,7 @@ fun PlazaScreen(
             }
             Text(
                 if (locating) "定位中…" else (if (city.isEmpty()) "定位" else "$city ▾"),
-                color = TextSub, fontSize = 13.sp,
+                color = TextSub, fontSize = 13.sp, maxLines = 1, softWrap = false,
                 modifier = Modifier.noRippleClick {
                     locPerm.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
                 },

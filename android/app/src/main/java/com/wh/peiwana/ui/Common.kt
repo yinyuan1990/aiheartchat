@@ -92,6 +92,21 @@ fun Modifier.noRippleClick(onClick: () -> Unit): Modifier = composed {
     this.clickable(interactionSource = src, indication = null, onClick = onClick)
 }
 
+/**
+ * 点击空白处收起键盘。挂在页面根节点（AppRoot 已挂，覆盖全部路由页）或独立窗口的弹层根节点（Dialog / BottomSheet）。
+ * 输入框、按钮等会消费按下事件，父节点这里收不到 → 只有真正点到空白处才会清焦点收键盘。
+ */
+fun Modifier.clearFocusOnTap(): Modifier = composed {
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    this.pointerInput(Unit) {
+        detectTapGestures(onTap = {
+            focus.clearFocus()
+            keyboard?.hide()
+        })
+    }
+}
+
 @Composable
 fun PageTitle(text: String, action: (@Composable () -> Unit)? = null) {
     Row(

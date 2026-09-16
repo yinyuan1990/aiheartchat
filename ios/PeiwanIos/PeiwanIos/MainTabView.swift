@@ -24,6 +24,9 @@ struct MainTabView: View {
                 bottomBar
             }
         }
+        // 大厅是 WebView：H5 里聚焦输入框弹键盘时，SwiftUI 的键盘避让会把整个 VStack 压缩、底栏被顶到键盘上方。
+        // WKWebView 自己会滚动让输入框可见，所以大厅 tab 下不做键盘避让；其它 tab（树洞评论等原生输入）保持默认。
+        .ignoresSafeArea(.keyboard, edges: tab == 1 ? .bottom : [])
         .background(Theme.bg.ignoresSafeArea())
         .fullScreenCover(isPresented: $showPublish) {
             PublishView()

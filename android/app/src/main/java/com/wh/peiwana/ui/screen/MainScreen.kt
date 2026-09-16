@@ -86,7 +86,10 @@ fun MainScreen(
                 PlazaScreen(onOpenDetail = { onNav("moment/$it") }, onOpenChat = onOpenChatWithUser, onOpenTiktok = { onNav("tiktok") }, onOpenUser = { onNav("u/$it") }, onNav = onNav)
             }
             Pane(active = tab == 1) {
+                // 大厅 H5 内输入框弹键盘：只让网页区域上缩（扣掉底栏已占高度，正好贴着键盘），底栏保持原位不被顶起
+                val imeBottom = with(androidx.compose.ui.platform.LocalDensity.current) { WindowInsets.ime.getBottom(this).toDp() }
                 HallScreen(
+                    modifier = Modifier.padding(bottom = (imeBottom - pad.calculateBottomPadding()).coerceAtLeast(0.dp)),
                     active = tab == 1,
                     onOpenProject = { entry -> if (entry == "guide") onNav("project/guide") },
                     onOpenChat = { convId, convType, targetId, title ->

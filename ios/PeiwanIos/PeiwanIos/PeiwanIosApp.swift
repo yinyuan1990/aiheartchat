@@ -11,6 +11,63 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
         AppDelegate.orientationMask
     }
+
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        KeyboardDismisser.shared.start()
+        return true
+    }
+}
+
+/**
+ * 全局「点空白处收起键盘」：给 App 自己的每个 UIWindow（主窗口、通话/语音房悬浮窗）挂一个不拦截触摸的 tap 手势，
+ * 点到的位置不是文本输入（UITextField / UITextView / WKWebView 内容）时 endEditing。
+ * 所有 SwiftUI 页面（含 sheet / fullScreenCover）都在同一个 window 里，一处生效全 App 生效。
+ */
+@MainActor
+final class KeyboardDismisser: NSObject, UIGestureRecognizerDelegate {
+    static let shared = KeyboardDismisser()
+    private let attached = NSHashTable<UIWindow>.weakObjects()
+
+    func start() {
+        NotificationCenter.default.addObserver(self, selector: #selector(onWindowVisible(_:)), name: UIWindow.didBecomeVisibleNotification, object: nil)
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .forEach(attach)
+    }
+
+    @objc private func onWindowVisible(_ n: Notification) {
+        guard let w = n.object as? UIWindow else { return }
+        attach(w)
+    }
+
+    private func attach(_ window: UIWindow) {
+        // 系统键盘 / 文本特效窗口绝不能挂（否则点键盘本身就把键盘收了）
+        let cls = NSStringFromClass(type(of: window))
+        guard !cls.hasPrefix("UIRemoteKeyboard"), !cls.hasPrefix("UITextEffects"), !cls.hasPrefix("_") else { return }
+        guard !attached.contains(window) else { return }
+        attached.add(window)
+        let tap = UITapGestureRecognizer(target: self, action: #selector(onTap(_:)))
+        tap.cancelsTouchesInView = false
+        tap.delaysTouchesEnded = false
+        tap.delegate = self
+        window.addGestureRecognizer(tap)
+    }
+
+    @objc private func onTap(_ g: UITapGestureRecognizer) {
+        guard g.state == .ended, let window = g.view as? UIWindow else { return }
+        var v = window.hitTest(g.location(in: window), with: nil)
+        while let cur = v {
+            // 点在输入框自己（或 WKWebView 网页内容，其内部 view 也实现 UIKeyInput）上：不处理，交给系统
+            if cur is UIKeyInput { return }
+            v = cur.superview
+        }
+        window.endEditing(true)
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        true
+    }
 }
 
 @MainActor
