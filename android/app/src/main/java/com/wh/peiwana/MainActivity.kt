@@ -348,5 +348,7 @@ fun AppRoot() {
         }
       }
         CallOverlay()
+        // 启动检查更新（后台配置；强制时弹框不可关闭）
+        com.wh.peiwana.ui.UpdateChecker()
     }
 }

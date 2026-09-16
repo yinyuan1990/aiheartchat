@@ -4,6 +4,7 @@ import { Throttle } from '../common/rate-limit.guard';
 import { NewsService } from '../news/news.service';
 import { TreeholeService } from '../treehole/treehole.service';
 import { SrsService } from '../srs/srs.service';
+import { AppVersionService } from '../module/app-version.service';
 import { AdminGuard } from './admin.guard';
 import { AdminService } from './admin.service';
 
@@ -14,7 +15,25 @@ export class AdminController {
     private readonly news: NewsService,
     private readonly treehole: TreeholeService,
     private readonly srs: SrsService,
+    private readonly appVersion: AppVersionService,
   ) {}
+
+  // ---------- App 版本 / 强制更新 ----------
+
+  @Get('app-version')
+  @UseGuards(AdminGuard)
+  appVersions() {
+    return this.appVersion.adminList();
+  }
+
+  @Put('app-version/:platform')
+  @UseGuards(AdminGuard)
+  saveAppVersion(
+    @Param('platform') platform: string,
+    @Body() body: { latest?: string; minVersion?: string; force?: boolean; url?: string; channel?: string; notes?: string },
+  ) {
+    return this.appVersion.adminSave(platform, body);
+  }
 
   // ---------- SRS 节点管理 ----------
 

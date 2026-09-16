@@ -145,7 +145,10 @@ struct RootView: View {
             case .main: MainTabView()
             }
             // 通话界面由 CallWindow（独立 UIWindow）承载，可盖住任何弹层
+            // 版本更新弹框（强制时不可关闭）
+            UpdateOverlay().zIndex(99)
         }
+        .task { await UpdateChecker.shared.check() }
         // 评分完成后留在/进入女方个人主页
         .fullScreenCover(isPresented: Binding(
             get: { callManager.openUserHome != nil },

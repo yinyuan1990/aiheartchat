@@ -281,6 +281,30 @@ model CallConfig {
   @@map("call_config")
 }
 
+/// App 版本与更新（后台配置，每个平台一行）。客户端启动时 GET /app/version?platform=&version= 比对：
+/// 低于 latest 提示更新；force=true 或 版本低于 minVersion 时强制（弹框不可关闭，只能去更新）。
+/// iOS 的 url 前期填 TestFlight 公开链接，上架后改成 App Store 链接即可，客户端不用改。
+model AppVersion {
+  id         Int      @id @default(autoincrement())
+  /// android / ios
+  platform   String   @unique @db.VarChar(10)
+  /// 最新版本号，如 1.2.0
+  latest     String   @default("1.0") @db.VarChar(20)
+  /// 低于此版本必须更新（空=不按版本强制）
+  minVersion String   @default("") @map("min_version") @db.VarChar(20)
+  /// 所有低于 latest 的版本都强制更新
+  force      Boolean  @default(false)
+  /// 下载/跳转地址：android=apk 直链；ios=TestFlight 或 App Store 链接
+  url        String   @default("") @db.VarChar(500)
+  /// ios 渠道：testflight / appstore（决定弹框按钮文案）
+  channel    String   @default("testflight") @db.VarChar(20)
+  /// 更新说明（弹框内展示，\n 换行）
+  notes      String   @default("") @db.VarChar(1000)
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("app_version")
+}
+
 /// 计费配置（金额单位：分，100分=1积分=1元）
 /// 平台账本：每笔平台抽成收入落账，用于与女生对账
 model PlatformLedger {

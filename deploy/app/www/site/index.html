@@ -2,225 +2,306 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="description" content="心之音 App 官方下载：遇见有趣的人，一对一加密聊天、高清视频通话、动态广场、同城搭子。" />
-<title>心之音 App - 官方下载</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="description" content="心之音 App 官方下载：一对一高清视频、加密私聊、同城搭子约单、私密树洞、休闲小游戏。一机一号，安装即用。" />
+<meta name="theme-color" content="#0a0a0c" />
+<title>心之音 App - 遇见有趣的人 · 官方下载</title>
 <style>
   :root {
-    --bg: #0a0a0c;
-    --bg2: #161619;
-    --bg3: #212126;
-    --line: #1f1f24;
-    --text: #ffffff;
-    --text2: #8a8a93;
-    --text3: #4a4a52;
-    --accent: #fe2c55;
-    --accent2: #ff6b81;
+    --bg: #0a0a0c; --bg2: #14141a; --bg3: #1d1d25; --line: rgba(255,255,255,0.07);
+    --text: #fff; --text2: #9a9aa6; --text3: #5c5c68;
+    --accent: #fe2c55; --accent2: #ff6b81; --gold: #f5c66b; --green: #0bd07d;
     --grad: linear-gradient(120deg, #fe2c55, #ff6b81);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: "PingFang SC", "Microsoft YaHei", -apple-system, sans-serif;
-    overflow-x: hidden;
-  }
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; overflow-x: hidden; }
+  body { background: var(--bg); color: var(--text); font-family: "PingFang SC", "HarmonyOS Sans", "Microsoft YaHei", -apple-system, sans-serif; overflow-x: hidden; }
   a { text-decoration: none; color: inherit; }
-  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+  .em { background: var(--grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 
   /* 顶栏 */
-  header {
-    position: sticky; top: 0; z-index: 10;
-    background: rgba(10,10,12,0.85); backdrop-filter: blur(12px);
-    border-bottom: 1px solid var(--line);
-  }
-  .nav { display: flex; align-items: center; height: 60px; }
-  .logo {
-    font-size: 20px; font-weight: 800; letter-spacing: 2px;
-    background: var(--grad);
-    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
-  }
-  .nav-right { margin-left: auto; display: flex; gap: 22px; font-size: 14px; color: var(--text2); }
-  .nav-right a:hover { color: var(--text); }
+  header { position: sticky; top: 0; z-index: 20; background: rgba(10,10,12,0.72); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid var(--line); }
+  .nav { display: flex; align-items: center; height: 64px; gap: 28px; }
+  .logo { display: flex; align-items: center; gap: 10px; font-size: 19px; font-weight: 800; letter-spacing: 3px; }
+  .logo i { width: 30px; height: 30px; border-radius: 9px; background: var(--grad); display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 6px 18px rgba(254,44,85,0.4); }
+  .logo i svg { width: 16px; height: 16px; }
+  .nav-links { display: flex; gap: 26px; font-size: 14px; color: var(--text2); margin-left: 12px; }
+  .nav-links a:hover { color: var(--text); }
+  .nav .cta-mini { margin-left: auto; height: 36px; padding: 0 18px; border-radius: 18px; background: var(--grad); color: #fff; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; box-shadow: 0 6px 18px rgba(254,44,85,0.3); }
 
   /* Hero */
-  .hero { position: relative; padding: 72px 0 80px; }
-  .hero-glow {
-    position: absolute; width: 560px; height: 560px; border-radius: 50%;
-    background: radial-gradient(circle, rgba(254,44,85,0.16), transparent 65%);
-    top: -140px; right: -120px; pointer-events: none;
-  }
-  .hero-inner { display: flex; align-items: center; gap: 48px; position: relative; }
+  .hero { position: relative; padding: 80px 0 60px; overflow: hidden; }
+  .glow { position: absolute; border-radius: 50%; pointer-events: none; filter: blur(10px); }
+  .glow.a { width: 640px; height: 640px; background: radial-gradient(circle, rgba(254,44,85,0.22), transparent 62%); top: -220px; right: -160px; }
+  .glow.b { width: 520px; height: 520px; background: radial-gradient(circle, rgba(120,80,255,0.16), transparent 62%); bottom: -260px; left: -180px; }
+  .hero-inner { display: flex; align-items: center; gap: 40px; position: relative; }
   .hero-left { flex: 1; min-width: 0; }
-  .hero h1 { font-size: 46px; line-height: 1.25; font-weight: 800; }
-  .hero h1 .em {
-    background: var(--grad);
-    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
-  }
-  .hero .slogan { margin-top: 16px; color: var(--text2); font-size: 16px; line-height: 1.9; }
-  .btns { margin-top: 36px; display: flex; gap: 14px; flex-wrap: wrap; }
-  .btn {
-    display: inline-flex; align-items: center; justify-content: center;
-    height: 50px; padding: 0 34px; border-radius: 25px; font-size: 15px; font-weight: 600;
-    transition: transform .15s ease, opacity .15s ease;
-  }
+  .pill { display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px 0 6px; border-radius: 15px; background: rgba(254,44,85,0.1); border: 1px solid rgba(254,44,85,0.3); font-size: 12px; color: #ffb3c1; }
+  .pill b { height: 20px; padding: 0 8px; border-radius: 10px; background: var(--grad); color: #fff; font-size: 11px; display: inline-flex; align-items: center; }
+  .hero h1 { margin-top: 20px; font-size: 54px; line-height: 1.18; font-weight: 900; letter-spacing: -0.5px; }
+  .hero .slogan { margin-top: 18px; color: var(--text2); font-size: 16px; line-height: 1.95; max-width: 520px; }
+  .btns { margin-top: 34px; display: flex; gap: 12px; flex-wrap: wrap; }
+  .btn { position: relative; display: inline-flex; align-items: center; gap: 10px; height: 54px; padding: 0 22px; border-radius: 16px; font-size: 15px; font-weight: 600; transition: transform .18s ease, box-shadow .18s ease, border-color .18s; white-space: nowrap; }
   .btn:hover { transform: translateY(-2px); }
-  .btn-main { background: var(--grad); color: #fff; box-shadow: 0 8px 24px rgba(254,44,85,0.35); }
-  .btn-ghost { border: 1px solid #2a2a30; color: var(--text2); }
-  .btn-ghost:hover { color: var(--text); border-color: #3a3a42; }
-  .hero-note { margin-top: 18px; font-size: 12px; color: var(--text3); }
+  .btn svg { width: 22px; height: 22px; flex-shrink: 0; }
+  .btn small { display: block; font-size: 11px; font-weight: 400; opacity: .75; line-height: 1.1; margin-bottom: 2px; }
+  .btn span { display: block; line-height: 1.15; text-align: left; }
+  .btn-main { background: var(--grad); color: #fff; box-shadow: 0 10px 28px rgba(254,44,85,0.35); }
+  .btn-dark { background: #fff; color: #000; }
+  .btn-dark:hover { box-shadow: 0 10px 28px rgba(255,255,255,0.15); }
+  .btn-ghost { border: 1px solid rgba(255,255,255,0.14); color: var(--text2); background: rgba(255,255,255,0.03); }
+  .btn-ghost:hover { color: var(--text); border-color: rgba(255,255,255,0.3); }
+  .btn .tag { position: absolute; top: -9px; right: 10px; height: 18px; padding: 0 7px; border-radius: 9px; background: var(--gold); color: #3a2a00; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; }
+  .trust { margin-top: 26px; display: flex; gap: 18px; flex-wrap: wrap; font-size: 12.5px; color: var(--text3); }
+  .trust span { display: inline-flex; align-items: center; gap: 6px; }
+  .trust svg { width: 14px; height: 14px; color: var(--green); }
 
-  /* 手机模型（纯 CSS） */
-  .phone-col { flex-shrink: 0; display: flex; justify-content: center; }
-  .phone {
-    width: 270px; height: 552px; border-radius: 40px; padding: 10px;
-    background: #101014; border: 1px solid #26262c;
-    box-shadow: 0 30px 80px rgba(0,0,0,0.6), 0 0 60px rgba(254,44,85,0.12);
-  }
-  .screen {
-    width: 100%; height: 100%; border-radius: 32px; background: var(--bg);
-    overflow: hidden; display: flex; flex-direction: column; border: 1px solid var(--line);
-  }
-  .s-top { display: flex; gap: 18px; padding: 20px 18px 12px; align-items: baseline; }
-  .s-tab { color: var(--text3); font-size: 14px; }
-  .s-tab.on { color: var(--text); font-size: 16px; font-weight: 700; position: relative; }
-  .s-tab.on::after {
-    content: ""; position: absolute; left: 50%; transform: translateX(-50%);
-    bottom: -6px; width: 18px; height: 3px; border-radius: 2px; background: var(--grad);
-  }
-  .s-subtabs { display: flex; gap: 8px; padding: 10px 18px 4px; }
-  .s-chip { font-size: 10px; color: var(--text2); background: var(--bg2); border-radius: 10px; padding: 3px 10px; white-space: nowrap; }
+  /* 手机组 */
+  .phones { flex-shrink: 0; position: relative; width: 470px; height: 600px; }
+  .phone { position: absolute; width: 262px; height: 548px; border-radius: 42px; padding: 10px; background: #0f0f13; border: 1px solid #2a2a33; box-shadow: 0 40px 100px rgba(0,0,0,0.7), inset 0 0 0 1px rgba(255,255,255,0.04); }
+  .phone.p1 { left: 0; top: 40px; z-index: 2; transform: rotate(-4deg); }
+  .phone.p2 { right: 0; top: 0; z-index: 1; transform: rotate(5deg) scale(.94); opacity: .95; }
+  .phone::before { content: ""; position: absolute; top: 18px; left: 50%; transform: translateX(-50%); width: 92px; height: 26px; border-radius: 13px; background: #000; z-index: 5; }
+  .screen { width: 100%; height: 100%; border-radius: 34px; background: var(--bg); overflow: hidden; display: flex; flex-direction: column; position: relative; }
+  .s-top { display: flex; gap: 11px; padding: 54px 14px 8px; align-items: baseline; white-space: nowrap; }
+  .s-tab { color: var(--text3); font-size: 11.5px; }
+  .s-tab.on { color: var(--text); font-size: 14px; font-weight: 700; position: relative; }
+  .s-tab.on::after { content: ""; position: absolute; left: 50%; transform: translateX(-50%); bottom: -6px; width: 16px; height: 3px; border-radius: 2px; background: var(--grad); }
+  .s-loc { margin-left: auto; font-size: 10px; color: var(--text2); }
+  .s-chips { display: flex; gap: 7px; padding: 12px 16px 4px; }
+  .s-chip { font-size: 10px; color: var(--text2); background: var(--bg2); border-radius: 10px; padding: 3px 9px; }
   .s-chip.on { color: #fff; background: var(--grad); }
   .s-grid { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px 12px; }
-  .s-card { border-radius: 12px; position: relative; overflow: hidden; background: var(--bg2); }
-  .s-card::before { content: ""; position: absolute; inset: 0; }
-  .s-card.c1::before { background: linear-gradient(160deg, #3a1220, #1a0a10 70%); }
-  .s-card.c2::before { background: linear-gradient(160deg, #16213a, #0a0e1a 70%); }
-  .s-card.c3::before { background: linear-gradient(160deg, #2a1a3a, #120a1a 70%); }
-  .s-card.c4::before { background: linear-gradient(160deg, #123a2a, #0a1a12 70%); }
-  .s-name {
-    position: absolute; left: 8px; bottom: 8px; font-size: 10px; color: #fff;
-    display: flex; align-items: center; gap: 4px;
-  }
-  .s-dot { width: 5px; height: 5px; border-radius: 50%; background: #0bd07d; }
-  .s-badge {
-    position: absolute; top: 8px; left: 8px; font-size: 8px; color: #fff;
-    background: var(--grad); border-radius: 3px; padding: 1px 5px;
-  }
-  .s-bottom { display: flex; justify-content: space-around; padding: 10px 0 16px; border-top: 1px solid var(--line); }
-  .s-nav { font-size: 9px; color: var(--text3); }
-  .s-nav.on { color: var(--accent); }
+  .s-card { border-radius: 14px; position: relative; overflow: hidden; }
+  .s-card.c1 { background: linear-gradient(160deg, #5a1d33, #1a0a10 75%); }
+  .s-card.c2 { background: linear-gradient(160deg, #1d2a5a, #0a0e1a 75%); }
+  .s-card.c3 { background: linear-gradient(160deg, #3d1d5a, #120a1a 75%); }
+  .s-card.c4 { background: linear-gradient(160deg, #1d5a3d, #0a1a12 75%); }
+  .s-card .av { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); width: 46px; height: 46px; border-radius: 50%; background: rgba(255,255,255,0.12); border: 2px solid rgba(255,255,255,0.25); }
+  .s-name { position: absolute; left: 9px; bottom: 9px; font-size: 10.5px; color: #fff; display: flex; align-items: center; gap: 4px; }
+  .s-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--green); }
+  .s-badge { position: absolute; top: 8px; left: 8px; font-size: 8px; color: #fff; background: var(--grad); border-radius: 4px; padding: 1px 5px; }
+  .s-price { position: absolute; top: 8px; right: 8px; font-size: 8px; color: var(--gold); background: rgba(0,0,0,0.45); border-radius: 4px; padding: 1px 5px; }
+  .s-bottom { display: flex; justify-content: space-around; align-items: center; padding: 10px 0 18px; border-top: 1px solid var(--line); }
+  .s-nav { font-size: 9.5px; color: var(--text3); }
+  .s-nav.on { color: var(--text); font-weight: 700; }
+  .s-plus { width: 30px; height: 20px; border-radius: 6px; background: var(--grad); color: #fff; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; }
+  /* 视频通话屏 */
+  .call { background: linear-gradient(180deg, #2a1220, #0a0a0c 60%); }
+  .call .remote { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 35%, #6a2a44, #1a0a12 70%); }
+  .call .local { position: absolute; right: 14px; top: 56px; width: 74px; height: 104px; border-radius: 12px; background: linear-gradient(160deg, #1d2a5a, #0a0e1a); border: 1px solid rgba(255,255,255,0.15); }
+  .call .who { position: absolute; left: 0; right: 0; top: 130px; text-align: center; }
+  .call .who .n { font-size: 15px; font-weight: 700; }
+  .call .who .t { margin-top: 6px; font-size: 11px; color: var(--text2); }
+  .call .ctl { position: absolute; left: 0; right: 0; bottom: 34px; display: flex; justify-content: center; gap: 22px; }
+  .call .ctl i { width: 46px; height: 46px; border-radius: 50%; background: rgba(255,255,255,0.14); display: inline-flex; align-items: center; justify-content: center; }
+  .call .ctl i.end { background: var(--accent); }
+  .call .ctl svg { width: 20px; height: 20px; color: #fff; }
+  .call .gift { position: absolute; left: 14px; bottom: 100px; display: flex; align-items: center; gap: 6px; font-size: 10px; background: rgba(0,0,0,0.45); padding: 5px 9px; border-radius: 12px; }
+  .call .gift b { color: var(--gold); }
+  /* 悬浮卡 */
+  .float { position: absolute; z-index: 3; background: rgba(20,20,26,0.92); border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; box-shadow: 0 16px 40px rgba(0,0,0,0.5); backdrop-filter: blur(10px); animation: floaty 5s ease-in-out infinite; }
+  .float .fa { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(160deg, #ff8ba7, #5a1d33); }
+  .float .ft { font-size: 12px; line-height: 1.4; }
+  .float .ft small { display: block; color: var(--text2); font-size: 10.5px; }
+  .float.f1 { left: -30px; top: 190px; }
+  .float.f2 { right: -22px; bottom: 120px; animation-delay: -2.5s; }
+  .float .pt { color: var(--gold); font-weight: 700; }
+  @keyframes floaty { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
 
-  /* 功能区 */
-  section { padding: 64px 0; }
-  .sec-title { text-align: center; font-size: 30px; font-weight: 800; }
-  .sec-sub { text-align: center; color: var(--text2); font-size: 14px; margin-top: 10px; }
-  .features { margin-top: 44px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-  .feature {
-    background: var(--bg2); border: 1px solid var(--line); border-radius: 16px; padding: 26px 22px;
-    transition: transform .15s ease, border-color .15s ease;
-  }
-  .feature:hover { transform: translateY(-4px); border-color: rgba(254,44,85,0.35); }
-  .f-mark { width: 34px; height: 6px; border-radius: 3px; background: var(--grad); }
-  .feature h3 { margin-top: 16px; font-size: 17px; }
-  .feature p { margin-top: 8px; color: var(--text2); font-size: 13px; line-height: 1.9; }
+  /* 数字条 */
+  .stats { margin-top: 30px; display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line); border-radius: 20px; background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent); overflow: hidden; }
+  .stat { padding: 22px 18px; text-align: center; border-right: 1px solid var(--line); }
+  .stat:last-child { border-right: 0; }
+  .stat b { font-size: 24px; font-weight: 900; display: block; }
+  .stat span { font-size: 12.5px; color: var(--text2); margin-top: 4px; display: block; }
 
-  /* 三步开始 */
-  .steps { margin-top: 44px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-  .step { text-align: center; padding: 30px 18px; background: var(--bg2); border-radius: 16px; border: 1px solid var(--line); }
-  .step .num {
-    width: 44px; height: 44px; border-radius: 50%; margin: 0 auto;
-    display: flex; align-items: center; justify-content: center;
-    background: var(--grad); color: #fff; font-size: 18px; font-weight: 800;
-  }
-  .step h3 { margin-top: 16px; font-size: 16px; }
-  .step p { margin-top: 8px; color: var(--text2); font-size: 13px; line-height: 1.8; }
+  /* 通用 section */
+  section { padding: 84px 0; }
+  .eyebrow { font-size: 12px; letter-spacing: 3px; color: var(--accent2); text-align: center; font-weight: 600; }
+  .sec-title { text-align: center; font-size: 36px; font-weight: 900; margin-top: 10px; letter-spacing: -0.3px; }
+  .sec-sub { text-align: center; color: var(--text2); font-size: 15px; margin-top: 12px; line-height: 1.8; }
 
-  /* 底部下载条 */
-  .cta {
-    margin: 20px 0 0; border-radius: 20px; padding: 48px 24px; text-align: center;
-    background: linear-gradient(160deg, rgba(254,44,85,0.16), rgba(254,44,85,0.04));
-    border: 1px solid rgba(254,44,85,0.25);
-  }
-  .cta h2 { font-size: 26px; font-weight: 800; }
-  .cta p { color: var(--text2); font-size: 14px; margin-top: 10px; }
-  .cta .btns { justify-content: center; }
+  /* 功能 */
+  .features { margin-top: 48px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .feature { position: relative; background: var(--bg2); border: 1px solid var(--line); border-radius: 20px; padding: 28px 24px; overflow: hidden; transition: transform .2s ease, border-color .2s ease; }
+  .feature::after { content: ""; position: absolute; width: 180px; height: 180px; border-radius: 50%; right: -70px; top: -70px; background: radial-gradient(circle, rgba(254,44,85,0.14), transparent 70%); opacity: 0; transition: opacity .25s; }
+  .feature:hover { transform: translateY(-5px); border-color: rgba(254,44,85,0.35); }
+  .feature:hover::after { opacity: 1; }
+  .f-ico { width: 46px; height: 46px; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; background: rgba(254,44,85,0.12); color: var(--accent2); }
+  .f-ico svg { width: 22px; height: 22px; }
+  .feature h3 { margin-top: 18px; font-size: 18px; font-weight: 700; }
+  .feature p { margin-top: 10px; color: var(--text2); font-size: 13.5px; line-height: 1.9; }
+  .feature.big { grid-column: span 2; display: flex; gap: 26px; align-items: center; background: linear-gradient(135deg, rgba(254,44,85,0.14), var(--bg2) 60%); }
+  .feature.big .txt { flex: 1; }
+  .feature.big .mini { flex-shrink: 0; width: 150px; height: 150px; border-radius: 18px; background: #0a0a0c; border: 1px solid var(--line); display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; padding: 10px; }
+  .feature.big .mini i { border-radius: 10px; background: linear-gradient(160deg, #3a3a48, #1a1a22); }
+  .feature.big .mini i:nth-child(1) { background: linear-gradient(160deg, #fe2c55, #7a1a30); }
+  .feature.big .mini i:nth-child(5) { background: linear-gradient(160deg, #4c7dff, #1a2a5a); }
+  .feature.big .mini i:nth-child(9) { background: linear-gradient(160deg, #f5c66b, #6a4a10); }
 
-  footer { border-top: 1px solid var(--line); margin-top: 72px; padding: 28px 0 40px; }
-  .foot { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; color: var(--text3); font-size: 12px; }
+  /* 线下 */
+  .flow { margin-top: 48px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; position: relative; }
+  .flow::before { content: ""; position: absolute; top: 40px; left: 12%; right: 12%; height: 1px; background: linear-gradient(90deg, transparent, rgba(254,44,85,0.5), transparent); }
+  .fstep { text-align: center; padding: 26px 16px 24px; background: var(--bg2); border-radius: 18px; border: 1px solid var(--line); position: relative; }
+  .fstep .num { width: 30px; height: 30px; border-radius: 50%; margin: 0 auto; display: flex; align-items: center; justify-content: center; background: var(--grad); color: #fff; font-size: 13px; font-weight: 800; box-shadow: 0 6px 16px rgba(254,44,85,0.4); }
+  .fstep h3 { margin-top: 16px; font-size: 16px; }
+  .fstep p { margin-top: 8px; color: var(--text2); font-size: 13px; line-height: 1.8; }
+  .safe { margin-top: 26px; display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; }
+  .safe span { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text2); background: var(--bg2); border: 1px solid var(--line); border-radius: 20px; padding: 8px 14px; }
+  .safe svg { width: 15px; height: 15px; color: var(--green); }
+
+  /* 双方视角 */
+  .two { margin-top: 48px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .side { border-radius: 22px; padding: 32px 28px; border: 1px solid var(--line); position: relative; overflow: hidden; }
+  .side.m { background: linear-gradient(160deg, rgba(76,125,255,0.16), var(--bg2) 60%); }
+  .side.f { background: linear-gradient(160deg, rgba(254,44,85,0.18), var(--bg2) 60%); }
+  .side .lab { font-size: 12px; letter-spacing: 2px; color: var(--text2); }
+  .side h3 { margin-top: 8px; font-size: 24px; font-weight: 800; }
+  .side ul { margin-top: 18px; list-style: none; display: grid; gap: 10px; }
+  .side li { display: flex; gap: 10px; font-size: 14px; color: var(--text2); line-height: 1.7; }
+  .side li::before { content: ""; flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; margin-top: 9px; background: var(--accent2); }
+  .side.m li::before { background: #6b93ff; }
+
+  /* 下载区 */
+  .dl { border-radius: 28px; padding: 56px 40px; position: relative; overflow: hidden; background: linear-gradient(160deg, rgba(254,44,85,0.2), rgba(120,80,255,0.08) 60%, var(--bg2)); border: 1px solid rgba(254,44,85,0.3); display: flex; align-items: center; gap: 40px; }
+  .dl .txt { flex: 1; }
+  .dl h2 { font-size: 34px; font-weight: 900; }
+  .dl p { color: var(--text2); font-size: 14.5px; margin-top: 12px; line-height: 1.8; }
+  .dl .btns { margin-top: 26px; }
+  .dl .ver { margin-top: 16px; font-size: 12px; color: var(--text3); }
+  .dl .ver b { color: var(--text2); font-weight: 500; }
+  .qr { flex-shrink: 0; width: 200px; text-align: center; }
+  .qr .box { width: 168px; height: 168px; margin: 0 auto; border-radius: 18px; background: #fff; padding: 10px; display: flex; align-items: center; justify-content: center; }
+  .qr canvas, .qr img { width: 148px; height: 148px; display: block; image-rendering: pixelated; }
+  .qr p { margin-top: 12px; font-size: 12px; color: var(--text2); }
+
+  footer { border-top: 1px solid var(--line); padding: 30px 0 46px; }
+  .foot { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; color: var(--text3); font-size: 12.5px; }
   .foot a:hover { color: var(--text2); }
   .foot .cr { margin-left: auto; }
 
-  @media (max-width: 860px) {
-    .hero { padding: 44px 0 56px; }
-    .hero-inner { flex-direction: column-reverse; gap: 40px; }
-    .hero h1 { font-size: 32px; text-align: center; }
-    .hero .slogan { text-align: center; }
+  @media (max-width: 960px) {
+    .nav-links { display: none; }
+    .hero { padding: 40px 0 40px; }
+    .hero-inner { flex-direction: column; gap: 44px; }
+    .hero-left { width: 100%; }
+    .hero h1 { font-size: 36px; text-align: center; }
+    .hero .pill { display: flex; width: max-content; margin: 0 auto; }
+    .hero .slogan { text-align: center; margin-left: auto; margin-right: auto; }
     .btns { justify-content: center; }
-    .hero-note { text-align: center; }
-    .features, .steps { grid-template-columns: 1fr; }
-    .phone { width: 240px; height: 492px; }
+    .trust { justify-content: center; }
+    .phones { width: 100%; max-width: 380px; height: 520px; }
+    .phone { width: 230px; height: 480px; }
+    .phone.p1 { left: 0; top: 30px; }
+    .phone.p2 { right: 0; top: 0; }
+    .float.f1 { left: -6px; }
+    .float.f2 { right: -6px; }
+    .stats { grid-template-columns: 1fr 1fr; }
+    .stat:nth-child(2) { border-right: 0; }
+    .stat:nth-child(1), .stat:nth-child(2) { border-bottom: 1px solid var(--line); }
+    section { padding: 60px 0; }
+    .sec-title { font-size: 28px; }
+    .features, .flow, .two { grid-template-columns: 1fr; }
+    .feature.big { grid-column: span 1; flex-direction: column; align-items: flex-start; }
+    .flow::before { display: none; }
+    .dl { flex-direction: column; text-align: center; padding: 40px 24px; }
+    .dl h2 { font-size: 26px; }
+    .dl .btns { justify-content: center; }
+    .foot .cr { margin-left: 0; }
+  }
+  @media (max-width: 420px) {
+    .phones { height: 470px; }
+    .phone { width: 205px; height: 430px; }
+    .btn { padding: 0 16px; height: 50px; }
   }
 </style>
 </head>
 <body>
   <header>
     <div class="wrap nav">
-      <span class="logo">心之音</span>
-      <nav class="nav-right">
+      <a class="logo" href="#"><i><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg></i>心之音</a>
+      <nav class="nav-links">
         <a href="#features">功能</a>
+        <a href="#offline">同城搭子</a>
+        <a href="#roles">男生 / 女生</a>
         <a href="#download">下载</a>
         <a href="https://app.yyheart.com/">网页版</a>
       </nav>
+      <a class="cta-mini" href="#download">下载 App</a>
     </div>
   </header>
 
   <!-- Hero -->
   <div class="hero">
-    <div class="hero-glow"></div>
+    <div class="glow a"></div><div class="glow b"></div>
     <div class="wrap hero-inner">
       <div class="hero-left">
+        <div class="pill"><b>NEW</b> 私密树洞 · 休闲小游戏 已上线</div>
         <h1>遇见有趣的人<br /><span class="em">聊得来，见得着</span></h1>
         <p class="slogan">
-          心之音是一款一对一社交 App：在「遇见」里发现同城与新人，
-          在动态广场分享生活，聊得投缘随时发起高清视频通话。
-          消息全程加密，隐私无忧。
+          心之音是一款「线上一对一 + 线下同城」的真人社交 App。
+          在遇见里发现同城与新人，聊得投缘随时高清视频；想线下见面，就约一个实名认证的同城搭子。
+          消息全程加密，一机一号，安装即用。
         </p>
         <div class="btns">
-          <a class="btn btn-main" href="app/peiwan.apk">Android 下载</a>
-          <a class="btn btn-ghost" href="javascript:void(0)" onclick="alert('iOS 版本正在上架审核，敬请期待')">iOS 敬请期待</a>
-          <a class="btn btn-ghost" href="https://app.yyheart.com/">打开网页版</a>
+          <a class="btn btn-main" id="btnIos" href="#download">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.4 12.6c0-2.4 2-3.6 2.1-3.6-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9.9-3.7.9-.8 0-1.9-.9-3.2-.8-1.6 0-3.1 1-4 2.4-1.7 3-.4 7.3 1.2 9.7.8 1.2 1.8 2.5 3 2.4 1.2 0 1.7-.8 3.2-.8s1.9.8 3.2.8c1.3 0 2.2-1.2 3-2.4.9-1.4 1.3-2.7 1.3-2.8 0 0-2.6-1-2.6-3.9zM14.1 5.5c.7-.8 1.1-2 1-3.1-1 0-2.2.7-2.9 1.5-.6.7-1.2 1.9-1 3 1.1.1 2.2-.6 2.9-1.4z"/></svg>
+            <span><small id="iosSmall">iOS</small><b id="iosLabel">即将上线</b></span>
+          </a>
+          <a class="btn btn-dark" id="btnAndroid" href="app/peiwan.apk">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.5 8.6l1.6-2.8c.1-.2 0-.4-.1-.5-.2-.1-.4 0-.5.1l-1.6 2.9C15.6 7.7 13.9 7.3 12 7.3s-3.6.4-4.9 1L5.5 5.4c-.1-.2-.3-.2-.5-.1-.2.1-.2.3-.1.5l1.6 2.8C3.7 10 1.9 12.6 1.7 15.6h20.6c-.2-3-2-5.6-4.8-7zM7 13.2a.9.9 0 1 1 0-1.8.9.9 0 0 1 0 1.8zm10 0a.9.9 0 1 1 0-1.8.9.9 0 0 1 0 1.8z"/></svg>
+            <span><small>Android</small><b>下载安装包</b></span>
+            <em class="tag" id="andTag" style="display:none"></em>
+          </a>
+          <a class="btn btn-ghost" href="https://app.yyheart.com/"><span><small>浏览器</small><b>打开网页版</b></span></a>
         </div>
-        <p class="hero-note">网页版不支持语音/视频通话，完整体验请下载 App · 一机一号，安装即用无需注册账号密码</p>
+        <div class="trust">
+          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>一机一号，无需手机号注册</span>
+          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>消息 AES-256 加密</span>
+          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>线下搭子实名认证</span>
+        </div>
       </div>
-      <div class="phone-col">
-        <div class="phone">
+
+      <div class="phones">
+        <div class="float f1"><i class="fa"></i><div class="ft">小柔 邀请你视频通话<small>成都 · 距你 1.2km · 在线</small></div></div>
+        <div class="float f2"><div class="ft">收到一束玫瑰 <span class="pt">+2 积分</span><small>亲密度 +12 · 贡献榜第 3 名</small></div></div>
+        <div class="phone p1">
           <div class="screen">
-            <div class="s-top">
-              <span class="s-tab">动态</span>
-              <span class="s-tab on">遇见</span>
-            </div>
-            <div class="s-subtabs">
-              <span class="s-chip on">所有</span>
-              <span class="s-chip">新人</span>
-              <span class="s-chip">同城</span>
-              <span class="s-chip">亲密度</span>
-            </div>
+            <div class="s-top"><span class="s-tab">动态</span><span class="s-tab on">遇见</span><span class="s-tab">励志行</span><span class="s-tab">树洞</span><span class="s-loc">成都 ▾</span></div>
+            <div class="s-chips"><span class="s-chip on">所有</span><span class="s-chip">新人</span><span class="s-chip">同城</span><span class="s-chip">亲密度</span></div>
             <div class="s-grid">
-              <div class="s-card c1"><span class="s-badge">认证</span><span class="s-name"><span class="s-dot"></span>小柔 · 成都</span></div>
-              <div class="s-card c2"><span class="s-badge">新人</span><span class="s-name"><span class="s-dot"></span>一一 · 重庆</span></div>
-              <div class="s-card c3"><span class="s-name"><span class="s-dot"></span>Momo · 杭州</span></div>
-              <div class="s-card c4"><span class="s-badge">认证</span><span class="s-name"><span class="s-dot"></span>阿禾 · 上海</span></div>
+              <div class="s-card c1"><span class="s-badge">认证</span><span class="s-price">视频 2/分</span><i class="av"></i><span class="s-name"><span class="s-dot"></span>小柔 · 成都</span></div>
+              <div class="s-card c2"><span class="s-badge">新人</span><i class="av"></i><span class="s-name"><span class="s-dot"></span>一一 · 重庆</span></div>
+              <div class="s-card c3"><span class="s-price">视频 3/分</span><i class="av"></i><span class="s-name"><span class="s-dot"></span>Momo · 杭州</span></div>
+              <div class="s-card c4"><span class="s-badge">认证</span><i class="av"></i><span class="s-name"><span class="s-dot"></span>阿禾 · 上海</span></div>
             </div>
-            <div class="s-bottom">
-              <span class="s-nav on">广场</span>
-              <span class="s-nav">搭子</span>
-              <span class="s-nav">消息</span>
-              <span class="s-nav">我的</span>
+            <div class="s-bottom"><span class="s-nav on">广场</span><span class="s-nav">大厅</span><span class="s-plus">+</span><span class="s-nav">消息</span><span class="s-nav">我的</span></div>
+          </div>
+        </div>
+        <div class="phone p2">
+          <div class="screen call">
+            <div class="remote"></div>
+            <div class="local"></div>
+            <div class="who"><div class="n">小柔</div><div class="t">通话中 08:24 · 2 积分/分钟</div></div>
+            <div class="gift">🌹 送出玫瑰 <b>x3</b></div>
+            <div class="ctl">
+              <i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v10M8 9a4 4 0 0 0 8 0M5 12a7 7 0 0 0 14 0M12 19v2"/></svg></i>
+              <i class="end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.6a2 2 0 0 1-.5 2.1L8.1 9.7a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.8.3 1.7.5 2.6.7a2 2 0 0 1 1.9 2.2z"/></svg></i>
+              <i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></i>
             </div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <div class="stats">
+        <div class="stat"><b>1v1</b><span>高清视频 · 按分钟明码标价</span></div>
+        <div class="stat"><b>同城</b><span>实名搭子 · 积分托管约单</span></div>
+        <div class="stat"><b>加密</b><span>AES-256 · 记录可双向清空</span></div>
+        <div class="stat"><b>0 门槛</b><span>不用手机号 · 安装即有账号</span></div>
       </div>
     </div>
   </div>
@@ -228,77 +309,125 @@
   <!-- 功能 -->
   <section id="features">
     <div class="wrap">
+      <div class="eyebrow">FEATURES</div>
       <h2 class="sec-title">为「聊得来」而生</h2>
-      <p class="sec-sub">从遇见到畅聊，每一步都简单直接</p>
+      <p class="sec-sub">从遇见到畅聊，从线上到线下，每一步都简单直接</p>
       <div class="features">
+        <div class="feature big">
+          <div class="txt">
+            <div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></div>
+            <h3>一对一高清视频通话</h3>
+            <p>低延迟高清视频，女生自主定价、按分钟计费明码标价；通话结束互相评价，优质的人自然排在前面。通话中可送礼物，心意即时到账。</p>
+          </div>
+          <div class="mini"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        </div>
         <div class="feature">
-          <div class="f-mark"></div>
+          <div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></div>
           <h3>遇见</h3>
-          <p>所有 / 新人 / 同城 / 亲密度四个维度发现新朋友，在线状态、认证徽章一目了然，看对眼直接发起视频。</p>
+          <p>所有 / 新人 / 同城 / 亲密度四个维度发现新朋友，在线状态、认证徽章、距离一目了然。</p>
         </div>
         <div class="feature">
-          <div class="f-mark"></div>
-          <h3>高清视频通话</h3>
-          <p>一对一低延迟高清视频，按分钟计费明码标价，通话结束互相评价，优质的人自然排在前面。</p>
+          <div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+          <h3>加密私聊</h3>
+          <p>消息 AES-256 加密存储与传输，聊天记录可随时双向清空；图片、视频、语音全都支持。</p>
         </div>
         <div class="feature">
-          <div class="f-mark"></div>
-          <h3>动态广场</h3>
-          <p>图文与短视频动态，普通流和全屏视频两种浏览模式；点赞评论都会累积你们的亲密度。</p>
-        </div>
-        <div class="feature">
-          <div class="f-mark"></div>
-          <h3>加密聊天</h3>
-          <p>消息内容 AES-256 加密存储传输，聊天记录可随时双向清空，隐私安全放在第一位。</p>
-        </div>
-        <div class="feature">
-          <div class="f-mark"></div>
+          <div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 12-9 12S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></div>
           <h3>同城搭子</h3>
-          <p>实名认证的同城搭子，约单积分托管、完成结算，安全有保障，爽约自动退回。</p>
+          <p>逛街看展、吃饭唱歌、陪玩陪拍——发布约单，实名认证的搭子来接单，积分托管完成结算。</p>
         </div>
         <div class="feature">
-          <div class="f-mark"></div>
+          <div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H5.2L4 17.2z"/><path d="M8 9h8M8 12h5"/></svg></div>
+          <h3>动态广场 · 私密树洞</h3>
+          <p>图文与短视频动态，全屏视频流；说不出口的心事匿名放进树洞，评论互动不露身份。</p>
+        </div>
+        <div class="feature">
+          <div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="4"/><path d="M6 12h4M8 10v4M15 11h.01M18 13h.01"/></svg></div>
+          <h3>群聊语音房 · 休闲游戏</h3>
+          <p>建群、多人语音房一起聊；大厅里的休闲小游戏边玩边聊，不尴尬的破冰方式。</p>
+        </div>
+        <div class="feature">
+          <div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v10H4V12M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg></div>
           <h3>积分与礼物</h3>
-          <p>统一积分体系，送花送礼表达心意；贡献榜、亲密度榜，让每一次互动都有迹可循。</p>
+          <p>统一积分体系（1 积分 = 1 元），送花送礼表达心意；贡献榜、亲密度榜，让每一次互动都有迹可循。</p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- 三步开始 -->
-  <section>
+  <!-- 线下 -->
+  <section id="offline" style="padding-top: 20px">
     <div class="wrap">
-      <h2 class="sec-title">三步开始</h2>
-      <p class="sec-sub">不需要手机号，不需要记密码</p>
-      <div class="steps">
-        <div class="step">
-          <div class="num">1</div>
-          <h3>下载安装</h3>
-          <p>一机一号，打开即自动创建账号，卸载重装自动恢复</p>
+      <div class="eyebrow">ONLINE → OFFLINE</div>
+      <h2 class="sec-title">线上聊得来，线下见得着</h2>
+      <p class="sec-sub">同城搭子约单：四步完成一次安全、明码标价的线下陪伴</p>
+      <div class="flow">
+        <div class="fstep"><div class="num">1</div><h3>发布约单</h3><p>写清做什么、什么时候、在哪、报酬多少；积分先托管在平台</p></div>
+        <div class="fstep"><div class="num">2</div><h3>搭子接单</h3><p>实名认证的同城搭子报名，看资料、看评价、聊几句再确认</p></div>
+        <div class="fstep"><div class="num">3</div><h3>线下见面</h3><p>按约定时间地点见面，全程可在 App 内沟通、定位</p></div>
+        <div class="fstep"><div class="num">4</div><h3>确认结算</h3><p>完成后双方确认，积分自动结算给搭子；爽约自动退回</p></div>
+      </div>
+      <div class="safe">
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>搭子须身份证实名认证</span>
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>积分平台托管，完成才结算</span>
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>纠纷平台仲裁</span>
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>互评体系，劣质用户自然出清</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 男女视角 -->
+  <section id="roles" style="padding-top: 20px">
+    <div class="wrap">
+      <div class="eyebrow">FOR YOU</div>
+      <h2 class="sec-title">他来这里遇见，她来这里被看见</h2>
+      <div class="two">
+        <div class="side m">
+          <div class="lab">FOR HIM</div>
+          <h3>想认识有趣的她</h3>
+          <ul>
+            <li>遇见里按同城 / 新人 / 亲密度发现她，看在线状态直接发起视频</li>
+            <li>价格全部明码标价，每一分钱花在哪都看得见</li>
+            <li>送花送礼、聊天视频都累积亲密度，越聊越熟</li>
+            <li>想线下见面，发一个同城约单，实名搭子来接</li>
+          </ul>
         </div>
-        <div class="step">
-          <div class="num">2</div>
-          <h3>完善资料</h3>
-          <p>上传头像和照片墙，写一句签名，让别人认识你</p>
-        </div>
-        <div class="step">
-          <div class="num">3</div>
-          <h3>开始遇见</h3>
-          <p>刷动态、逛遇见，聊得来就视频，同城还能约搭子</p>
+        <div class="side f">
+          <div class="lab">FOR HER</div>
+          <h3>聊天、视频、陪玩，时间就是收入</h3>
+          <ul>
+            <li>视频通话价格自己定，每分钟收入实时到账</li>
+            <li>男生发来的每条消息、每份礼物都是积分收入</li>
+            <li>实名认证后接同城约单，逛街吃饭陪拍都可以是工作</li>
+            <li>积分随时提现，平台账本每一笔都可对账</li>
+          </ul>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- 底部下载 -->
-  <section id="download" style="padding-top: 20px;">
+  <!-- 下载 -->
+  <section id="download" style="padding-top: 20px">
     <div class="wrap">
-      <div class="cta">
-        <h2>现在下载，开始遇见</h2>
-        <p>Android 直接安装 · iOS 正在上架审核</p>
-        <div class="btns">
-          <a class="btn btn-main" href="app/peiwan.apk">Android 下载</a>
-          <a class="btn btn-ghost" href="https://app.yyheart.com/">打开网页版</a>
+      <div class="dl">
+        <div class="txt">
+          <h2>现在下载，开始遇见</h2>
+          <p>iOS 通过 <b id="iosChanText">TestFlight</b> 安装 · Android 直接下载安装包 · 不用手机号，装好就能用</p>
+          <div class="btns">
+            <a class="btn btn-main" id="btnIos2" href="#">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.4 12.6c0-2.4 2-3.6 2.1-3.6-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9.9-3.7.9-.8 0-1.9-.9-3.2-.8-1.6 0-3.1 1-4 2.4-1.7 3-.4 7.3 1.2 9.7.8 1.2 1.8 2.5 3 2.4 1.2 0 1.7-.8 3.2-.8s1.9.8 3.2.8c1.3 0 2.2-1.2 3-2.4.9-1.4 1.3-2.7 1.3-2.8 0 0-2.6-1-2.6-3.9zM14.1 5.5c.7-.8 1.1-2 1-3.1-1 0-2.2.7-2.9 1.5-.6.7-1.2 1.9-1 3 1.1.1 2.2-.6 2.9-1.4z"/></svg>
+              <span><small id="iosSmall2">iOS</small><b id="iosLabel2">即将上线</b></span>
+            </a>
+            <a class="btn btn-dark" id="btnAndroid2" href="app/peiwan.apk">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.5 8.6l1.6-2.8c.1-.2 0-.4-.1-.5-.2-.1-.4 0-.5.1l-1.6 2.9C15.6 7.7 13.9 7.3 12 7.3s-3.6.4-4.9 1L5.5 5.4c-.1-.2-.3-.2-.5-.1-.2.1-.2.3-.1.5l1.6 2.8C3.7 10 1.9 12.6 1.7 15.6h20.6c-.2-3-2-5.6-4.8-7zM7 13.2a.9.9 0 1 1 0-1.8.9.9 0 0 1 0 1.8zm10 0a.9.9 0 1 1 0-1.8.9.9 0 0 1 0 1.8z"/></svg>
+              <span><small>Android</small><b>下载安装包</b></span>
+            </a>
+          </div>
+          <div class="ver" id="verLine">版本信息加载中…</div>
+        </div>
+        <div class="qr">
+          <div class="box"><canvas id="qr" width="148" height="148"></canvas></div>
+          <p>手机扫码打开本页下载</p>
         </div>
       </div>
     </div>
@@ -308,9 +437,55 @@
     <div class="wrap foot">
       <a href="https://app.yyheart.com/#/agreement/user">用户协议</a>
       <a href="https://app.yyheart.com/#/agreement/privacy">隐私政策</a>
+      <a href="invest/">商务合作</a>
       <span>网页版不支持语音视频通话，请下载 App 体验完整功能</span>
-      <span class="cr">© 2026 心之音</span>
+      <span class="cr">© 2026 心之音 yyheart.com</span>
     </div>
   </footer>
+
+<script src="qrcode.min.js"></script>
+<script>
+(function () {
+  // ---- 下载地址：读后台「App 版本 / 强制更新」配置（同域 /api），失败则用静态默认 ----
+  var isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  var isAndroid = /Android/i.test(navigator.userAgent);
+  function setIos(url, channel, ver) {
+    var tf = (channel || 'testflight').toLowerCase() === 'testflight';
+    var label = url ? (tf ? '通过 TestFlight 安装' : 'App Store 下载') : '即将上线';
+    var small = url ? (tf ? 'iOS 测试版' : 'iOS') : 'iOS';
+    ['', '2'].forEach(function (s) {
+      var a = document.getElementById('btnIos' + s);
+      document.getElementById('iosLabel' + s).textContent = label;
+      document.getElementById('iosSmall' + s).textContent = small;
+      if (url) { a.href = url; a.removeAttribute('onclick'); }
+      else { a.href = 'javascript:void(0)'; a.onclick = function () { alert('iOS 版本正在准备中，敬请期待'); }; }
+    });
+    document.getElementById('iosChanText').textContent = tf ? 'TestFlight' : 'App Store';
+    return ver;
+  }
+  function setAndroid(url, ver) {
+    ['', '2'].forEach(function (s) { if (url) document.getElementById('btnAndroid' + s).href = url; });
+    if (ver) { var t = document.getElementById('andTag'); t.textContent = 'v' + ver; t.style.display = 'inline-flex'; }
+  }
+  fetch('/api/app/download', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
+    var d = j && j.data ? j.data : j;
+    if (!d) throw 0;
+    setIos(d.ios && d.ios.url, d.ios && d.ios.channel, d.ios && d.ios.latest);
+    setAndroid(d.android && d.android.url, d.android && d.android.latest);
+    var parts = [];
+    if (d.android && d.android.latest) parts.push('Android <b>v' + d.android.latest + '</b>');
+    if (d.ios && d.ios.url) parts.push('iOS <b>v' + d.ios.latest + '</b>（' + ((d.ios.channel || '') === 'appstore' ? 'App Store' : 'TestFlight 测试版') + '）');
+    document.getElementById('verLine').innerHTML = parts.length ? '当前版本：' + parts.join(' · ') : '';
+  }).catch(function () {
+    setIos('', 'testflight', '');
+    document.getElementById('verLine').textContent = '';
+  });
+  // 当前设备是哪个平台就把对应按钮放前面
+  if (isAndroid) { ['', '2'].forEach(function (s) { var a = document.getElementById('btnAndroid' + s); a.parentNode.insertBefore(a, a.parentNode.firstChild); a.classList.remove('btn-dark'); a.classList.add('btn-main'); var i = document.getElementById('btnIos' + s); i.classList.remove('btn-main'); i.classList.add('btn-dark'); }); }
+
+  // ---- 二维码（本页地址）----
+  try { QRCode.toCanvas(document.getElementById('qr'), location.origin + location.pathname, { width: 148, margin: 0, color: { dark: '#000000', light: '#ffffff' } }); } catch (e) {}
+})();
+</script>
 </body>
 </html>

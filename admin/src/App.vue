@@ -11,6 +11,7 @@ import LedgerView from './views/LedgerView.vue';
 import CallLogsView from './views/CallLogsView.vue';
 import TreeholeView from './views/TreeholeView.vue';
 import SrsNodesView from './views/SrsNodesView.vue';
+import AppVersionView from './views/AppVersionView.vue';
 
 const logged = ref(!!getToken());
 const username = ref('');
@@ -29,6 +30,7 @@ const tabs = [
   { key: 'modules', label: '大厅 / 小游戏' },
   { key: 'treehole', label: '私密树洞' },
   { key: 'srs', label: 'SRS 节点' },
+  { key: 'appver', label: 'App 版本 / 强制更新' },
 ];
 
 async function login() {
@@ -87,6 +89,7 @@ function logout() {
       <ModulesView v-if="tab === 'modules'" />
       <TreeholeView v-if="tab === 'treehole'" />
       <SrsNodesView v-if="tab === 'srs'" />
+      <AppVersionView v-if="tab === 'appver'" />
     </div>
   </div>
 </template>
