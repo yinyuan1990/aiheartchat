@@ -87,6 +87,24 @@
   .s-card.c3 { background: linear-gradient(160deg, #3d1d5a, #120a1a 75%); }
   .s-card.c4 { background: linear-gradient(160deg, #1d5a3d, #0a1a12 75%); }
   .s-card .av { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); width: 46px; height: 46px; border-radius: 50%; background: rgba(255,255,255,0.12); border: 2px solid rgba(255,255,255,0.25); }
+  /* 第一台手机：平台首位入驻女生的个人主页（真实照片） */
+  .uh-hero { position: relative; margin: 46px 0 0; height: 56%; overflow: hidden; }
+  .uh-hero img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 15%; display: block; }
+  .uh-hero::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0.3), transparent 30%, transparent 55%, var(--bg)); }
+  .uh-hero .s-badge, .uh-hero .s-price { top: 12px; z-index: 2; font-size: 8.5px; }
+  .uh-name { position: absolute; left: 12px; right: 12px; bottom: 8px; z-index: 2; }
+  .uh-name b { font-size: 18px; font-weight: 800; display: block; }
+  .uh-name small { display: flex; align-items: center; gap: 4px; font-size: 10px; color: rgba(255,255,255,0.8); margin-top: 2px; }
+  .uh-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; padding: 8px 12px 0; }
+  .uh-stats div { text-align: center; background: var(--bg2); border-radius: 9px; padding: 6px 0; }
+  .uh-stats b { display: block; font-size: 12px; font-weight: 800; }
+  .uh-stats span { display: block; font-size: 8px; color: var(--text2); margin-top: 1px; }
+  .uh-wall { flex: 1; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; padding: 8px 12px 0; min-height: 0; }
+  .uh-wall img { width: 100%; height: 100%; object-fit: cover; border-radius: 9px; min-height: 0; }
+  .uh-act { display: flex; gap: 8px; padding: 10px 12px 16px; }
+  .uh-act span { flex: 1; text-align: center; font-size: 10.5px; font-weight: 700; padding: 8px 0; border-radius: 14px; }
+  .uh-act .ghost { background: var(--bg2); color: var(--text2); }
+  .uh-act .main { background: var(--grad); color: #fff; }
   .s-name { position: absolute; left: 9px; bottom: 9px; font-size: 10.5px; color: #fff; display: flex; align-items: center; gap: 4px; }
   .s-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--green); }
   .s-badge { position: absolute; top: 8px; left: 8px; font-size: 8px; color: #fff; background: var(--grad); border-radius: 4px; padding: 1px 5px; }
@@ -98,8 +116,11 @@
   /* 视频通话屏 */
   .call { background: linear-gradient(180deg, #2a1220, #0a0a0c 60%); }
   .call .remote { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 35%, #6a2a44, #1a0a12 70%); }
+  .call .remote img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; display: block; }
+  .call .remote::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0.35), transparent 30%, transparent 55%, rgba(10,10,12,0.85)); }
+  .call .who { text-shadow: 0 2px 8px rgba(0,0,0,0.6); }
   .call .local { position: absolute; right: 14px; top: 56px; width: 74px; height: 104px; border-radius: 12px; background: linear-gradient(160deg, #1d2a5a, #0a0e1a); border: 1px solid rgba(255,255,255,0.15); }
-  .call .who { position: absolute; left: 0; right: 0; top: 130px; text-align: center; }
+  .call .who { position: absolute; left: 0; right: 0; top: auto; bottom: 150px; text-align: center; }
   .call .who .n { font-size: 15px; font-weight: 700; }
   .call .who .t { margin-top: 6px; font-size: 11px; color: var(--text2); }
   .call .ctl { position: absolute; left: 0; right: 0; bottom: 34px; display: flex; justify-content: center; gap: 22px; }
@@ -110,10 +131,10 @@
   .call .gift b { color: var(--gold); }
   /* 悬浮卡 */
   .float { position: absolute; z-index: 3; background: rgba(20,20,26,0.92); border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; box-shadow: 0 16px 40px rgba(0,0,0,0.5); backdrop-filter: blur(10px); animation: floaty 5s ease-in-out infinite; }
-  .float .fa { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(160deg, #ff8ba7, #5a1d33); }
+  .float .fa { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(160deg, #ff8ba7, #5a1d33); object-fit: cover; flex-shrink: 0; }
   .float .ft { font-size: 12px; line-height: 1.4; }
   .float .ft small { display: block; color: var(--text2); font-size: 10.5px; }
-  .float.f1 { left: -30px; top: 190px; }
+  .float.f1 { left: -30px; top: 128px; }
   .float.f2 { right: -22px; bottom: 120px; animation-delay: -2.5s; }
   .float .pt { color: var(--gold); font-weight: 700; }
   @keyframes floaty { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
@@ -143,11 +164,11 @@
   .feature p { margin-top: 10px; color: var(--text2); font-size: 13.5px; line-height: 1.9; }
   .feature.big { grid-column: span 2; display: flex; gap: 26px; align-items: center; background: linear-gradient(135deg, rgba(254,44,85,0.14), var(--bg2) 60%); }
   .feature.big .txt { flex: 1; }
-  .feature.big .mini { flex-shrink: 0; width: 150px; height: 150px; border-radius: 18px; background: #0a0a0c; border: 1px solid var(--line); display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; padding: 10px; }
-  .feature.big .mini i { border-radius: 10px; background: linear-gradient(160deg, #3a3a48, #1a1a22); }
-  .feature.big .mini i:nth-child(1) { background: linear-gradient(160deg, #fe2c55, #7a1a30); }
-  .feature.big .mini i:nth-child(5) { background: linear-gradient(160deg, #4c7dff, #1a2a5a); }
-  .feature.big .mini i:nth-child(9) { background: linear-gradient(160deg, #f5c66b, #6a4a10); }
+  .feature.big .mini { flex-shrink: 0; width: 150px; height: 150px; border-radius: 18px; background: #0a0a0c; border: 1px solid var(--line); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 10px; overflow: hidden; }
+  .feature.big .mini i { border-radius: 10px; background: linear-gradient(160deg, #2a2a34, #16161c); }
+  .feature.big .mini img { border-radius: 10px; width: 100%; height: 100%; object-fit: cover; display: block; }
+  .feature.big .mini i.hd { background: var(--grad); position: relative; }
+  .feature.big .mini i.hd::after { content: "HD"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; color: #fff; font-style: normal; }
 
   /* 线下 */
   .flow { margin-top: 48px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; position: relative; }
@@ -283,26 +304,26 @@
       </div>
 
       <div class="phones">
-        <div class="float f1"><i class="fa"></i><div class="ft">小柔 邀请你视频通话<small>成都 · 距你 1.2km · 在线</small></div></div>
+        <div class="float f1"><img class="fa" src="img/lulu-1.jpg" alt="" /><div class="ft">露露 邀请你视频通话<small>成都 · 距你 1.2km · 在线</small></div></div>
         <div class="float f2"><div class="ft">收到一束玫瑰 <span class="pt">+2 积分</span><small>亲密度 +12 · 贡献榜第 3 名</small></div></div>
         <div class="phone p1">
           <div class="screen">
-            <div class="s-top"><span class="s-tab">动态</span><span class="s-tab on">遇见</span><span class="s-tab">励志行</span><span class="s-tab">树洞</span><span class="s-loc">成都 ▾</span></div>
-            <div class="s-chips"><span class="s-chip on">所有</span><span class="s-chip">新人</span><span class="s-chip">同城</span><span class="s-chip">亲密度</span></div>
-            <div class="s-grid">
-              <div class="s-card c1"><span class="s-badge">认证</span><span class="s-price">视频 2/分</span><i class="av"></i><span class="s-name"><span class="s-dot"></span>小柔 · 成都</span></div>
-              <div class="s-card c2"><span class="s-badge">新人</span><i class="av"></i><span class="s-name"><span class="s-dot"></span>一一 · 重庆</span></div>
-              <div class="s-card c3"><span class="s-price">视频 3/分</span><i class="av"></i><span class="s-name"><span class="s-dot"></span>Momo · 杭州</span></div>
-              <div class="s-card c4"><span class="s-badge">认证</span><i class="av"></i><span class="s-name"><span class="s-dot"></span>阿禾 · 上海</span></div>
+            <!-- 平台首位入驻女生的个人主页（真实照片） -->
+            <div class="uh-hero">
+              <img src="img/lulu-2.jpg" alt="" />
+              <span class="s-badge">首位入驻</span><span class="s-price">视频 5 积分/分</span>
+              <div class="uh-name"><b>露露</b><small>28 · 成都 · <i class="s-dot"></i>在线</small></div>
             </div>
-            <div class="s-bottom"><span class="s-nav on">广场</span><span class="s-nav">大厅</span><span class="s-plus">+</span><span class="s-nav">消息</span><span class="s-nav">我的</span></div>
+            <div class="uh-stats"><div><b>5.0</b><span>通话评分</span></div><div><b>8</b><span>照片</span></div><div><b>0.1</b><span>积分/条</span></div></div>
+            <div class="uh-wall"><img src="img/lulu-3.jpg" alt="" /><img src="img/lulu-4.jpg" alt="" /><img src="img/lulu-1.jpg" alt="" /></div>
+            <div class="uh-act"><span class="ghost">私聊</span><span class="main">视频通话</span></div>
           </div>
         </div>
         <div class="phone p2">
           <div class="screen call">
-            <div class="remote"></div>
+            <div class="remote"><img src="img/lulu-1.jpg" alt="" /></div>
             <div class="local"></div>
-            <div class="who"><div class="n">小柔</div><div class="t">通话中 08:24 · 2 积分/分钟</div></div>
+            <div class="who"><div class="n">露露</div><div class="t">通话中 08:24 · 5 积分/分钟</div></div>
             <div class="gift">🌹 送出玫瑰 <b>x3</b></div>
             <div class="ctl">
               <i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v10M8 9a4 4 0 0 0 8 0M5 12a7 7 0 0 0 14 0M12 19v2"/></svg></i>
@@ -337,7 +358,7 @@
             <h3>一对一高清视频通话</h3>
             <p>低延迟高清视频，女生自主定价、按分钟计费明码标价；通话结束互相评价，优质的人自然排在前面。通话中可送礼物，心意即时到账。</p>
           </div>
-          <div class="mini"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="mini"><img src="img/lulu-1.jpg" alt="" /><i></i><img src="img/lulu-2.jpg" alt="" /><i></i><img src="img/lulu-3.jpg" alt="" /><i></i><img src="img/lulu-4.jpg" alt="" /><i></i><i class="hd"></i></div>
         </div>
         <div class="feature">
           <div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></div>
