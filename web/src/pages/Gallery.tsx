@@ -180,7 +180,8 @@ export function GalleryFeed() {
       {data && data.list.length > 0 && (
         <div className="small" style={{ padding: '6px 0 8px' }}>只保留最近 {data.days} 天</div>
       )}
-      {data?.list.map((p) => <GalleryCard key={p.id} post={p} channel={data.source?.title ?? ''} />)}
+      {/* 卡片不显示频道名（频道名多带引流字样），与 Telegram 帖子样式一致 */}
+      {data?.list.map((p) => <GalleryCard key={p.id} post={p} channel="" />)}
       <div ref={sentinel} style={{ height: 1 }} />
       {loadingMore && <div className="small" style={{ textAlign: 'center', padding: 12 }}>加载中…</div>}
     </PullToRefresh>
