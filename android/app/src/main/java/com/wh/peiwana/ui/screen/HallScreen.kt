@@ -68,7 +68,8 @@ fun HallScreen(
             w.invalidate()
             // 页面侧自检：视口尺寸 / DOM 是否有内容 / 是否被判定为不可见。view 尺寸正常但仍黑屏时，用这条区分「没渲染」还是「画不出来」
             w.evaluateJavascript(
-                "(function(){try{var r=document.getElementById('root');return JSON.stringify({vw:innerWidth,vh:innerHeight,sh:document.body.scrollHeight,root:r?r.children.length:-1,text:(document.body.innerText||'').length,vis:document.visibilityState,bg:getComputedStyle(document.body).backgroundColor})}catch(e){return 'err:'+e}})()",
+                "(function(){try{var h=function(s){var e=document.querySelector(s);if(!e)return null;var r=e.getBoundingClientRect();return Math.round(r.height)};" +
+                    "return JSON.stringify({vw:innerWidth,vh:innerHeight,icb:document.documentElement.clientHeight,html:h('html'),body:h('body'),root:h('#root'),app:h('.app'),page:h('.page'),tabs:h('.top-tabs'),text:(document.body.innerText||'').length,vis:document.visibilityState,ua:(navigator.userAgent.match(/Chrome\\/[\\d.]+/)||[''])[0]})}catch(e){return 'err:'+e}})()",
             ) { GameLog.d("hall: dom $it") }
         }
     }
@@ -88,13 +89,6 @@ fun HallScreen(
                     settings.domStorageEnabled = true
                     // 深色底避免加载白闪
                     setBackgroundColor(0xFF141418.toInt())
-                    // 华为内核（com.huawei.webview）在 Compose 里硬件合成常画不出来（页面已加载、尺寸正常但整块黑）：
-                    // 改用软件图层让 WebView 自己光栅化到位图再交给 Compose 绘制。大厅是普通网页，软件渲染够用
-                    val pkg = if (android.os.Build.VERSION.SDK_INT >= 26) runCatching { android.webkit.WebView.getCurrentWebViewPackage()?.packageName }.getOrNull() else null
-                    if (pkg?.startsWith("com.huawei") == true || android.os.Build.MANUFACTURER.equals("HUAWEI", true) || android.os.Build.MANUFACTURER.equals("HONOR", true)) {
-                        setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
-                        GameLog.d("hall: vendor webview $pkg / ${android.os.Build.MANUFACTURER} -> software layer")
-                    }
                     webViewClient = GameLog.webViewClient("hall") { canGoBack = it }
                     // H5 的 console.log / JS 报错转到 logcat（tag=YGameXd），排查黑屏/点击无反应
                     webChromeClient = GameLog.chromeClient("hall")

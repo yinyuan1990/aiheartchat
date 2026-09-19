@@ -99,7 +99,17 @@ function EmbedHallPage() {
     if (t) setToken(t);
     // 记录内嵌模式：树洞详情/发布等子页面据此调整布局（无网页底栏）
     markEmbedded();
+    // App 内嵌 WebView：#root 直接钉成窗口像素高度，不依赖 html→body→#root 的 height:100% 链。
+    // 华为/荣耀内核里这条链解析成了十几像素（.page 只剩 padding 高度、内容全被裁掉 → 大厅黑屏），innerHeight 却是对的。
+    // #root 有了确定高度，之后在同一 WebView 里打开的子页面（.app{height:100%}）也一并正常
+    const pin = () => {
+      const root = document.getElementById('root');
+      if (root && window.innerHeight > 0) root.style.height = `${window.innerHeight}px`;
+    };
+    pin();
+    window.addEventListener('resize', pin);
     setReady(true);
+    return () => window.removeEventListener('resize', pin);
   }, []);
 
   if (!ready) return null;
