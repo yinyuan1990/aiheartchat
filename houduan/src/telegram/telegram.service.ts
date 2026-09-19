@@ -84,6 +84,8 @@ export class TelegramClientService implements OnModuleInit, OnModuleDestroy {
         connectionRetries: 5,
         autoReconnect: true,
         floodSleepThreshold: 60,
+        // 大文件分块并行下载：默认 1 路只有 ~0.4MB/s，100MB 一首要 4 分钟
+        maxConcurrentDownloads: 8,
         deviceModel: 'yyheart-server',
         systemVersion: 'Linux',
         appVersion: '1.0',

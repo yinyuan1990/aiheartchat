@@ -9,7 +9,7 @@ const RETENTION_MS = 3 * 24 * 3600 * 1000;
 /** 单个音频文件上限（频道里的 DJ 曲一般 80~120MB） */
 const MAX_FILE_BYTES = 300 * 1024 * 1024;
 /** 每个来源每轮最多下载的条数（一首 100MB 要下载几十秒，别一次拖太多） */
-const MAX_PER_ROUND = 8;
+const MAX_PER_ROUND = 10;
 /** 曲目总量上限（磁盘保护），超出删最旧 */
 const MAX_TRACKS = 200;
 
@@ -56,7 +56,7 @@ export class MusicService implements OnModuleInit {
     const [tracks, sources] = await Promise.all([
       this.prisma.musicTrack.findMany({
         where: { postedAt: { gte: cutoff }, ...(beforeId ? { id: { lt: beforeId } } : {}) },
-        orderBy: { id: 'desc' },
+        orderBy: [{ postedAt: 'desc' }, { id: 'desc' }],
         take: 50,
         select: { id: true, title: true, performer: true, duration: true, size: true, url: true, cover: true, postedAt: true, playCount: true },
       }),
@@ -76,8 +76,9 @@ export class MusicService implements OnModuleInit {
 
   // ---------- 后台：来源管理 ----------
 
-  listSources() {
-    return this.prisma.musicSource.findMany({ orderBy: { id: 'asc' } });
+  async listSources() {
+    const rows = await this.prisma.musicSource.findMany({ orderBy: { id: 'asc' } });
+    return rows.map((r) => ({ ...r, syncing: this.running }));
   }
 
   /**
@@ -126,11 +127,30 @@ export class MusicService implements OnModuleInit {
     return { ok: true };
   }
 
-  /** 手动同步一个来源（后台按钮） */
+  /**
+   * 手动同步一个来源（后台按钮）：下载十几首 100MB 的文件要好几分钟，超过 nginx 超时，
+   * 所以后台异步跑，立刻返回；前端轮询 sources 的 lastSyncAt / importedCount 看进度。
+   */
   async syncOne(id: number) {
     const src = await this.prisma.musicSource.findUnique({ where: { id } });
     if (!src) throw new NotFoundException('来源不存在');
-    return this.syncSource(src);
+    if (this.running) return { started: false, running: true };
+    this.running = true;
+    void (async () => {
+      try {
+        await this.syncSource(src);
+      } catch (e: any) {
+        this.logger.warn(`manual sync ${src.channel} failed: ${e?.message ?? e}`);
+      } finally {
+        this.running = false;
+      }
+    })();
+    return { started: true, running: true };
+  }
+
+  /** 当前是否有同步任务在跑（后台轮询用） */
+  get syncing() {
+    return this.running;
   }
 
   /** 后台曲目列表（含来源） */
@@ -219,6 +239,16 @@ export class MusicService implements OnModuleInit {
         const key = `tg:${src.channel}:${audio.msgId}`;
         const exists = await this.prisma.musicTrack.findUnique({ where: { sourceKey: key }, select: { id: true } });
         if (exists) { maxId = Math.max(maxId, audio.msgId); continue; }
+        // 频道隔一两天会把同一批歌重发：同标题 + 同大小视为同一首，把已有那条的发布时间刷新即可，不再下载
+        const dup = await this.prisma.musicTrack.findFirst({
+          where: { sourceId: src.id, title: audio.title.slice(0, 200), size: audio.size },
+          select: { id: true, postedAt: true },
+        });
+        if (dup) {
+          if (audio.date > dup.postedAt) await this.prisma.musicTrack.update({ where: { id: dup.id }, data: { postedAt: audio.date } });
+          maxId = Math.max(maxId, audio.msgId); skipped++;
+          continue;
+        }
 
         const started = Date.now();
         const buf = await client.downloadMedia(msg, {});

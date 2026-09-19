@@ -91,6 +91,8 @@ async function logoutTg() {
 interface Source {
   id: number; channel: string; title: string; subscribers: number; enabled: boolean;
   lastMsgId: number; lastSyncAt: string | null; lastError: string; importedCount: number;
+  /** 服务端正在同步（后台任务） */
+  syncing?: boolean;
 }
 interface PreviewAudio { msgId: number; title: string; performer: string; duration: number; size: number; date: string; hasCover: boolean }
 interface Preview {
@@ -149,11 +151,23 @@ async function removeSource(s: Source) {
   loadSources();
   loadTracks();
 }
+/** 同步在服务端后台跑（一首 100MB 要几十秒），这里轮询来源表直到 syncing 变 false */
 async function syncNow(s: Source) {
   syncing.value = s.id;
   try {
-    const r = await api<{ imported: number; skipped: number }>(`/admin/music/sources/${s.id}/sync`, { method: 'POST' });
-    showToast(`同步完成：新增 ${r.imported} 首，跳过 ${r.skipped} 条`);
+    const r = await api<{ started: boolean; running: boolean }>(`/admin/music/sources/${s.id}/sync`, { method: 'POST' });
+    showToast(r.started ? '已开始后台同步，下载较慢请稍等…' : '已有同步任务在跑，等它结束');
+    const before = s.importedCount;
+    for (let i = 0; i < 240; i++) {
+      await new Promise((res) => setTimeout(res, 5000));
+      await loadSources();
+      loadTracks();
+      const cur = sources.value.find((x) => x.id === s.id);
+      if (cur && !cur.syncing) {
+        showToast(cur.lastError ? `同步出错：${cur.lastError}` : `同步完成：新增 ${cur.importedCount - before} 首`);
+        break;
+      }
+    }
   } catch (e: any) {
     showToast(e.message);
   } finally {
@@ -288,7 +302,7 @@ onMounted(() => { loadTg(); loadSources(); loadTracks(); });
             <td class="muted" style="max-width: 240px; color: #ff6b6b">{{ s.lastError }}</td>
             <td>
               <div class="row">
-                <button class="small" :disabled="syncing === s.id || !tg?.loggedIn" @click="syncNow(s)">{{ syncing === s.id ? '同步中（下载较慢）…' : '立即同步' }}</button>
+                <button class="small" :disabled="syncing === s.id || s.syncing || !tg?.loggedIn" @click="syncNow(s)">{{ syncing === s.id || s.syncing ? '同步中（下载较慢）…' : '立即同步' }}</button>
                 <button class="small ghost" @click="editSource(s)">编辑</button>
                 <button class="small ghost" @click="removeSource(s)">删除</button>
               </div>
