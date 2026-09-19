@@ -320,6 +320,17 @@ textarea.input { resize: none; min-height: 90px; }
   display: -webkit-box; -webkit-line-clamp: 10; -webkit-box-orient: vertical; overflow: hidden;
 }
 .th-card .th-meta { display: flex; justify-content: flex-end; gap: 6px; color: var(--text-3); font-size: 11px; margin-top: 6px; }
+/* 配图：单图通栏（卡片左右出血，像 Telegram），多图网格 */
+.th-card .th-img-single { display: block; width: calc(100% + 28px); margin: 0 -14px 8px; max-height: 420px; object-fit: cover; background: var(--bg-input); cursor: zoom-in; }
+.th-card .th-img-grid { display: grid; gap: 3px; margin-bottom: 8px; border-radius: 10px; overflow: hidden; }
+.th-card .th-img-grid.c3 { grid-template-columns: repeat(3, 1fr); }
+.th-card .th-img-grid.c2 { grid-template-columns: repeat(2, 1fr); }
+.th-card .th-img-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: var(--bg-input); cursor: zoom-in; }
+.th-card .th-img-grid.c2 img { aspect-ratio: 4 / 3; }
+/* 发布页选图 */
+.th-pick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 10px 0; }
+.th-pick img, .th-pick label { aspect-ratio: 1; border-radius: 10px; object-fit: cover; background: var(--bg-input); }
+.th-pick label { display: flex; align-items: center; justify-content: center; color: var(--text-3); font-size: 26px; border: 1px dashed var(--line); cursor: pointer; }
 .th-comments-bar {
   display: flex; align-items: center; gap: 10px; margin-top: 10px; padding-top: 10px;
   border-top: 1px solid var(--line); cursor: pointer;

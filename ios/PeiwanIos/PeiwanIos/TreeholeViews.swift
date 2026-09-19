@@ -10,7 +10,9 @@ struct TreeholeCommenter: Codable, Hashable {
 struct TreeholePost: Codable, Identifiable, Hashable {
     var id: String = ""
     var content: String = ""
-    /// 0=用户投稿 1=后台录入
+    /// 配图（最多 9 张）
+    var images: [String]? = []
+    /// 0=用户投稿 1=后台录入 2=Telegram 同步
     var source: Int? = 0
     var viewCount: Int? = 0
     var commentCount: Int? = 0
@@ -168,15 +170,45 @@ struct TreeholeCardView: View {
     let post: TreeholePost
     var clamp = false
     var showCommentsBar = false
+    @State private var fullImage: String?
 
     var body: some View {
+        let imgs = post.images ?? []
         VStack(alignment: .leading, spacing: 0) {
             Text(channelName).font(.system(size: 13, weight: .semibold)).foregroundStyle(channelColor)
-            Text(post.content)
-                .font(.system(size: 15)).lineSpacing(6).foregroundStyle(Theme.text)
-                .lineLimit(clamp ? 10 : nil)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 6)
+                .padding(.horizontal, 14)
+            // 配图：单图通栏（Telegram 式，左右出血），多图网格
+            if imgs.count == 1 {
+                RemoteImage(url: imgs[0])
+                    .frame(maxWidth: .infinity).frame(height: 300)
+                    .clipped()
+                    .background(Theme.bg3)
+                    .contentShape(Rectangle())
+                    .onTapGesture { fullImage = imgs[0] }
+                    .padding(.top, 6)
+            } else if imgs.count > 1 {
+                let cols = (imgs.count == 2 || imgs.count == 4) ? 2 : 3
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: cols), spacing: 3) {
+                    ForEach(imgs, id: \.self) { u in
+                        RemoteImage(url: u)
+                            .aspectRatio(cols == 2 ? 4 / 3 : 1, contentMode: .fill)
+                            .frame(maxWidth: .infinity)
+                            .clipped()
+                            .contentShape(Rectangle())
+                            .onTapGesture { fullImage = u }
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .padding(.horizontal, 14).padding(.top, 6)
+            }
+            if !post.content.isEmpty {
+                Text(post.content)
+                    .font(.system(size: 15)).lineSpacing(6).foregroundStyle(Theme.text)
+                    .lineLimit(clamp ? 10 : nil)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14).padding(.top, imgs.isEmpty ? 6 : 8)
+            }
+            VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
                 Spacer()
                 // 系统线性眼睛图标替代 👁 emoji
@@ -208,9 +240,15 @@ struct TreeholeCardView: View {
                 }
                 .padding(.top, 10)
             }
+            } // 内边距区
+            .padding(.horizontal, 14)
         }
-        .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 10)
+        .padding(.top, 12).padding(.bottom, 10)
         .background(RoundedRectangle(cornerRadius: 14).fill(Theme.bg2))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .fullScreenCover(item: $fullImage) { img in
+            ImageViewerView(images: imgs, initial: max(0, imgs.firstIndex(of: img) ?? 0)) { fullImage = nil }
+        }
     }
 }
 
@@ -396,13 +434,15 @@ struct TreeholeDetailView: View {
 struct TreeholePublishView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var content = ""
+    @State private var images: [String] = []
+    @State private var uploading = false
     @State private var busy = false
     @State private var toastMsg: String?
     @FocusState private var focused: Bool
     private let maxLen = 3000
 
     private var canSubmit: Bool {
-        !busy && content.trimmingCharacters(in: .whitespacesAndNewlines).count >= 5
+        !busy && !uploading && (content.trimmingCharacters(in: .whitespacesAndNewlines).count >= 5 || !images.isEmpty)
     }
 
     var body: some View {
@@ -419,12 +459,41 @@ struct TreeholePublishView: View {
                     .foregroundStyle(Theme.text)
                     .scrollContentBackgroundHidden()
                     .padding(10)
-                    .frame(minHeight: 260)
+                    .frame(minHeight: 200)
                     .onChange(of: content) { v in
                         if v.count > maxLen { content = String(v.prefix(maxLen)) }
                     }
             }
             .background(RoundedRectangle(cornerRadius: 12).fill(Theme.bg3))
+
+            // 配图（最多 9 张，点已选图片移除）
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
+                ForEach(images, id: \.self) { u in
+                    RemoteImage(url: u)
+                        .aspectRatio(1, contentMode: .fill)
+                        .frame(maxWidth: .infinity)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .contentShape(Rectangle())
+                        .onTapGesture { images.removeAll { $0 == u } }
+                }
+                if images.count < 9 {
+                    CompatPhotoPicker(kind: .images, maxCount: 9 - images.count, onPicked: { datas in
+                        Task {
+                            uploading = true
+                            for data in datas where images.count < 9 {
+                                if let url = try? await Api.upload("image", data: data, filename: "img.jpg", mime: "image/jpeg") {
+                                    images.append(url)
+                                }
+                            }
+                            uploading = false
+                        }
+                    }) {
+                        RoundedRectangle(cornerRadius: 10).fill(Theme.bg3)
+                            .aspectRatio(1, contentMode: .fit)
+                            .overlay(Text(uploading ? "…" : "+").font(.system(size: 26)).foregroundStyle(Theme.textDim))
+                    }
+                }
+            }
 
             HStack {
                 Text("匿名发布：其他人只能看到内容，不会显示你的昵称和头像")
@@ -452,13 +521,13 @@ struct TreeholePublishView: View {
 
     private func submit() {
         let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !busy else { return }
-        guard text.count >= 5 else { toastMsg = "至少写 5 个字"; return }
+        guard !busy, !uploading else { return }
+        guard text.count >= 5 || !images.isEmpty else { toastMsg = "至少写 5 个字，或配一张图"; return }
         busy = true
         Task {
             struct IdResp: Codable { var id: String? }
             do {
-                let _: IdResp = try await Api.request("/treehole", method: "POST", body: ["content": text])
+                let _: IdResp = try await Api.request("/treehole", method: "POST", body: ["content": text, "images": images])
                 await TreeholeStore.shared.refresh()
                 dismiss()
             } catch {

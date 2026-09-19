@@ -509,9 +509,13 @@ model TreeholePost {
   id           BigInt   @id @default(autoincrement())
   /// 投稿人；后台手动录入为 null。对外永不下发（匿名）
   authorId     BigInt?  @map("author_id")
-  /// 0=用户投稿 1=后台录入
+  /// 0=用户投稿 1=后台录入 2=Telegram 频道自动同步
   source       Int      @default(0) @db.TinyInt
   content      String   @db.Text
+  /// 图片 url JSON 数组（最多 9 张）
+  images       String   @default("[]") @db.VarChar(3000)
+  /// 外部来源唯一键（如 tg:频道名:消息id），用于同步去重
+  sourceKey    String?  @unique @map("source_key") @db.VarChar(120)
   viewCount    Int      @default(0) @map("view_count")
   commentCount Int      @default(0) @map("comment_count")
   /// 0=正常 1=隐藏（后台下架 / 作者删除）
@@ -521,6 +525,28 @@ model TreeholePost {
   @@index([status, id])
   @@index([authorId])
   @@map("treehole_post")
+}
+
+/// 私密树洞外部来源：Telegram 公开频道（无需管理员，只要频道有 @用户名，抓 t.me/s/频道 网页预览）
+model TreeholeSource {
+  id            Int      @id @default(autoincrement())
+  /// 频道用户名（不带 @），如 xxx_treehole
+  channel       String   @unique @db.VarChar(64)
+  enabled       Boolean  @default(true)
+  /// 只同步阅读数 ≥ 此值的帖子（0=不限）
+  minViews      Int      @default(0) @map("min_views")
+  /// 去掉含 @用户名 / t.me 链接的行（频道签名/引流）
+  stripLinks    Boolean  @default(true) @map("strip_links")
+  /// 含这些词的帖子跳过（逗号分隔）
+  blockWords    String   @default("") @map("block_words") @db.VarChar(500)
+  /// 已同步到的最大消息 id
+  lastMsgId     Int      @default(0) @map("last_msg_id")
+  lastSyncAt    DateTime? @map("last_sync_at")
+  lastError     String   @default("") @map("last_error") @db.VarChar(300)
+  importedCount Int      @default(0) @map("imported_count")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("treehole_source")
 }
 
 model TreeholeComment {

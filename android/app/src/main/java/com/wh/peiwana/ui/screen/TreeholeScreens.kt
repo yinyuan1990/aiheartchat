@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -45,7 +47,9 @@ data class TreeholeCommenter(val avatar: String = "")
 data class TreeholePost(
     val id: String,
     val content: String = "",
-    /** 0=用户投稿 1=后台录入 */
+    /** 配图（最多 9 张） */
+    val images: List<String> = emptyList(),
+    /** 0=用户投稿 1=后台录入 2=Telegram 同步 */
     val source: Int = 0,
     val viewCount: Int = 0,
     val commentCount: Int = 0,
@@ -210,18 +214,49 @@ fun TreeholeSection(onOpen: (String) -> Unit, onPublish: () -> Unit) {
 /** 帖子卡：频道名 + 正文 + 阅读/时间 + 评论条（clamp=列表折叠 10 行） */
 @Composable
 fun TreeholeCard(post: TreeholePost, clamp: Boolean, onOpen: (() -> Unit)? = null) {
+    var fullImage by remember { mutableStateOf<String?>(null) }
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Bg2)
             .then(if (onOpen != null) Modifier.noRippleClick(onOpen) else Modifier)
-            .padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 10.dp),
+            .padding(top = 12.dp, bottom = 10.dp),
     ) {
-        Text(CHANNEL_NAME, color = ChannelColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Text(CHANNEL_NAME, color = ChannelColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 14.dp))
         Spacer(Modifier.height(6.dp))
-        Text(
-            post.content, color = TextMain, fontSize = 15.sp, lineHeight = 26.sp,
-            maxLines = if (clamp) 10 else Int.MAX_VALUE,
-            overflow = if (clamp) TextOverflow.Ellipsis else TextOverflow.Clip,
-        )
+        // 配图：单图通栏（Telegram 式，左右出血），多图网格
+        if (post.images.size == 1) {
+            coil.compose.AsyncImage(
+                model = Api.fullUrl(post.images[0]), contentDescription = null,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp).background(Bg3).noRippleClick { fullImage = post.images[0] },
+            )
+            Spacer(Modifier.height(8.dp))
+        } else if (post.images.size > 1) {
+            val cols = if (post.images.size == 2 || post.images.size == 4) 2 else 3
+            Column(Modifier.padding(horizontal = 14.dp).clip(RoundedCornerShape(10.dp)), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                post.images.chunked(cols).forEach { row ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                        row.forEach { u ->
+                            coil.compose.AsyncImage(
+                                model = Api.fullUrl(u), contentDescription = null,
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                modifier = Modifier.weight(1f).aspectRatio(if (cols == 2) 4f / 3f else 1f).background(Bg3).noRippleClick { fullImage = u },
+                            )
+                        }
+                        repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+        if (post.content.isNotEmpty()) {
+            Text(
+                post.content, color = TextMain, fontSize = 15.sp, lineHeight = 26.sp,
+                maxLines = if (clamp) 10 else Int.MAX_VALUE,
+                overflow = if (clamp) TextOverflow.Ellipsis else TextOverflow.Clip,
+                modifier = Modifier.padding(horizontal = 14.dp),
+            )
+        }
+        Column(Modifier.padding(horizontal = 14.dp)) {
         Spacer(Modifier.height(6.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
             EyeIcon(TextDim, 13.dp)
@@ -249,6 +284,15 @@ fun TreeholeCard(post: TreeholePost, clamp: Boolean, onOpen: (() -> Unit)? = nul
                 )
                 Text("›", color = LinkBlue, fontSize = 20.sp)
             }
+        }
+        } // 内边距 Column
+    }
+    fullImage?.let { u ->
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { fullImage = null },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            ImageViewer(post.images, post.images.indexOf(u).coerceAtLeast(0)) { fullImage = null }
         }
     }
 }
@@ -423,11 +467,30 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
 @Composable
 fun TreeholePublishScreen(onBack: () -> Unit, onDone: () -> Unit) {
     var content by remember { mutableStateOf("") }
+    var images by remember { mutableStateOf<List<String>>(emptyList()) }
+    var uploading by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var toast by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     val max = 3000
-    val canSubmit = content.trim().length >= 5 && !busy
+    val canSubmit = (content.trim().length >= 5 || images.isNotEmpty()) && !busy && !uploading
+
+    // 多选配图（最多 9 张）
+    val pickImages = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetMultipleContents()) { uris ->
+        val picked = uris.take(9 - images.size)
+        if (picked.isEmpty()) return@rememberLauncherForActivityResult
+        scope.launch {
+            uploading = true
+            picked.forEach { uri ->
+                runCatching {
+                    val bytes = ctx.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
+                    images = images + Api.upload("image", bytes, "img.jpg", "image/jpeg")
+                }.onFailure { toast = it.message ?: "上传失败" }
+            }
+            uploading = false
+        }
+    }
 
     LaunchedEffect(toast) {
         if (toast.isNotEmpty()) { kotlinx.coroutines.delay(1600); toast = "" }
@@ -439,13 +502,16 @@ fun TreeholePublishScreen(onBack: () -> Unit, onDone: () -> Unit) {
                 if (busy) "发布中" else "发布", color = if (canSubmit) Accent else Accent.copy(alpha = 0.4f), fontSize = 14.sp,
                 modifier = Modifier.noRippleClick {
                     if (!canSubmit) {
-                        if (content.trim().length < 5) toast = "至少写 5 个字"
+                        if (content.trim().length < 5 && images.isEmpty()) toast = "至少写 5 个字，或配一张图"
                         return@noRippleClick
                     }
                     busy = true
                     scope.launch {
                         runCatching {
-                            Api.request("/treehole", "POST", buildJsonObject { put("content", JsonPrimitive(content.trim())) })
+                            Api.request("/treehole", "POST", buildJsonObject {
+                                put("content", JsonPrimitive(content.trim()))
+                                put("images", kotlinx.serialization.json.JsonArray(images.map { JsonPrimitive(it) }))
+                            })
                         }.onSuccess {
                             TreeholeCache.refresh()
                             onDone()
@@ -457,9 +523,9 @@ fun TreeholePublishScreen(onBack: () -> Unit, onDone: () -> Unit) {
                 },
             )
         }
-        Column(Modifier.padding(horizontal = 16.dp)) {
+        Column(Modifier.padding(horizontal = 16.dp).verticalScroll(rememberScrollState())) {
             Box(
-                Modifier.fillMaxWidth().heightIn(min = 260.dp).clip(RoundedCornerShape(12.dp)).background(Bg3).padding(14.dp),
+                Modifier.fillMaxWidth().heightIn(min = 200.dp).clip(RoundedCornerShape(12.dp)).background(Bg3).padding(14.dp),
             ) {
                 if (content.isEmpty()) Text("把想说却无处说的话放进树洞…", color = TextSub, fontSize = 15.sp)
                 BasicTextField(
@@ -468,6 +534,30 @@ fun TreeholePublishScreen(onBack: () -> Unit, onDone: () -> Unit) {
                     cursorBrush = SolidColor(Accent),
                     modifier = Modifier.fillMaxWidth(),
                 )
+            }
+            Spacer(Modifier.height(10.dp))
+            // 配图选择（点已选图片移除）
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                (images + if (images.size < 9) listOf("+") else emptyList()).chunked(4).forEach { row ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { u ->
+                            if (u == "+") {
+                                Box(
+                                    Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(10.dp)).background(Bg3)
+                                        .noRippleClick { if (!uploading) pickImages.launch("image/*") },
+                                    contentAlignment = Alignment.Center,
+                                ) { Text(if (uploading) "…" else "+", color = TextDim, fontSize = 26.sp) }
+                            } else {
+                                coil.compose.AsyncImage(
+                                    model = Api.fullUrl(u), contentDescription = null,
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                    modifier = Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(10.dp)).noRippleClick { images = images - u },
+                                )
+                            }
+                        }
+                        repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
             }
             Spacer(Modifier.height(10.dp))
             Row(Modifier.fillMaxWidth()) {

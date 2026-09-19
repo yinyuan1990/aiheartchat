@@ -65,6 +65,13 @@ export class UploadService implements OnModuleInit {
     return { url: `/res/${this.bucket}/${object}` };
   }
 
+  /** 删除站内资源（只认本 bucket 的 /res/<bucket>/ 路径，其它忽略） */
+  async remove(url: string) {
+    const prefix = `/res/${this.bucket}/`;
+    if (!url?.startsWith(prefix)) return;
+    await this.client.removeObject(this.bucket, url.slice(prefix.length)).catch((e) => this.logger.warn(`remove ${url}: ${e?.message}`));
+  }
+
   /**
    * 后台上传 apk：校验 zip 魔数（apk 就是 zip），按时间戳命名避免 CDN/浏览器缓存旧包，
    * 返回完整下载地址（PUBLIC_RES_BASE，默认 https://api.yyheart.com）供「App 版本」页直接保存。

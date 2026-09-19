@@ -23,8 +23,8 @@ export class TreeholeController {
   /** 玩家匿名投稿；按 IP 限频防刷（10 分钟 5 条） */
   @Post()
   @Throttle(5, 600)
-  publish(@CurrentUser() userId: bigint, @Body() body: { content: string }) {
-    return this.treehole.publish(userId, body?.content ?? '');
+  publish(@CurrentUser() userId: bigint, @Body() body: { content?: string; images?: string[] }) {
+    return this.treehole.publish(userId, body?.content ?? '', body?.images);
   }
 
   @Get(':id')

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api } from '../api';
+import { api, uploadFile } from '../api';
 import { isEmbedded } from '../bridge';
 import { PullToRefresh } from '../components/PullToRefresh';
 
@@ -8,7 +8,9 @@ import { PullToRefresh } from '../components/PullToRefresh';
 export interface TreeholePost {
   id: string;
   content: string;
-  /** 0=用户投稿 1=后台录入 */
+  /** 配图（最多 9 张） */
+  images: string[];
+  /** 0=用户投稿 1=后台录入 2=Telegram 同步 */
   source: number;
   viewCount: number;
   commentCount: number;
@@ -53,13 +55,50 @@ function nameColor(id: string): string {
 }
 
 /** Telegram 频道式帖子卡：频道名 + 正文 + 阅读/时间 + 评论条 */
+const full = (u: string) => (u.startsWith('http') ? u : 'https://api.yyheart.com' + u);
+
+/** 配图：1 张通栏（Telegram 式），2–9 张网格；点图放大 */
+function TreeholeImages({ images, onView }: { images: string[]; onView: (i: number) => void }) {
+  if (!images?.length) return null;
+  if (images.length === 1) {
+    return <img className="th-img-single" src={full(images[0])} alt="" onClick={(e) => { e.stopPropagation(); onView(0); }} />;
+  }
+  return (
+    <div className={`th-img-grid ${images.length === 2 || images.length === 4 ? 'c2' : 'c3'}`}>
+      {images.map((u, i) => <img key={u} src={full(u)} alt="" onClick={(e) => { e.stopPropagation(); onView(i); }} />)}
+    </div>
+  );
+}
+
+/** 全屏看图：左右翻页 */
+function ImageLightbox({ images, index, onClose }: { images: string[]; index: number; onClose: () => void }) {
+  const [i, setI] = useState(index);
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.96)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <img src={full(images[i])} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+      {images.length > 1 && (
+        <>
+          <span style={{ position: 'absolute', top: 'calc(14px + env(safe-area-inset-top))', left: 0, right: 0, textAlign: 'center', color: '#fff', fontSize: 13 }}>{i + 1} / {images.length}</span>
+          <span onClick={(e) => { e.stopPropagation(); setI((i - 1 + images.length) % images.length); }} style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '30%' }} />
+          <span onClick={(e) => { e.stopPropagation(); setI((i + 1) % images.length); }} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '30%' }} />
+        </>
+      )}
+    </div>
+  );
+}
+
 function TreeholeCard({ post, clamp, onOpen }: { post: TreeholePost; clamp: boolean; onOpen?: () => void }) {
+  const [view, setView] = useState<number | null>(null);
   return (
     <div className="th-card">
       <div className="th-channel">{CHANNEL_NAME}</div>
-      <div className={`th-content${clamp ? ' clamp' : ''}`} onClick={onOpen} style={onOpen ? { cursor: 'pointer' } : undefined}>
-        {post.content}
-      </div>
+      <TreeholeImages images={post.images ?? []} onView={setView} />
+      {post.content && (
+        <div className={`th-content${clamp ? ' clamp' : ''}`} onClick={onOpen} style={onOpen ? { cursor: 'pointer' } : undefined}>
+          {post.content}
+        </div>
+      )}
+      {view != null && <ImageLightbox images={post.images} index={view} onClose={() => setView(null)} />}
       <div className="th-meta">
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
           <svg width="13" height="10" viewBox="0 0 24 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round"><path d="M1 8C5 1.5 19 1.5 23 8C19 14.5 5 14.5 1 8Z" /><circle cx="12" cy="8" r="3.4" fill="currentColor" stroke="none" /></svg>
@@ -286,20 +325,39 @@ export function TreeholeDetailPage() {
 export function TreeholePublishPage() {
   const nav = useNavigate();
   const [content, setContent] = useState('');
+  const [images, setImages] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState('');
   const MAX = 3000;
+  const canSubmit = !busy && !uploading && (content.trim().length >= 5 || images.length > 0);
+
+  const pick = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setUploading(true);
+    try {
+      for (const f of Array.from(files).slice(0, 9 - images.length)) {
+        const url = await uploadFile('image', f);
+        setImages((prev) => [...prev, url]);
+      }
+    } catch (e: any) {
+      setToast(e.message || '上传失败');
+      setTimeout(() => setToast(''), 1600);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const submit = async () => {
     const text = content.trim();
-    if (text.length < 5) {
-      setToast('至少写 5 个字');
+    if (text.length < 5 && images.length === 0) {
+      setToast('至少写 5 个字，或配一张图');
       setTimeout(() => setToast(''), 1600);
       return;
     }
     setBusy(true);
     try {
-      await api('/treehole', { method: 'POST', body: { content: text } });
+      await api('/treehole', { method: 'POST', body: { content: text, images } });
       sessionStorage.setItem('hall_tab', 'treehole');
       nav(-1);
     } catch (e: any) {
@@ -314,7 +372,7 @@ export function TreeholePublishPage() {
       <div className="navbar" style={{ borderBottom: 'none' }}>
         <span className="back" onClick={() => nav(-1)}>‹ 取消</span>
         <span className="title">写树洞</span>
-        <span className="action" style={busy || content.trim().length < 5 ? { opacity: 0.4 } : undefined} onClick={() => !busy && submit()}>发布</span>
+        <span className="action" style={!canSubmit ? { opacity: 0.4 } : undefined} onClick={() => canSubmit && submit()}>发布</span>
       </div>
       <div className="page no-scrollbar" style={{ padding: '4px 16px' }}>
         <textarea
@@ -324,8 +382,14 @@ export function TreeholePublishPage() {
           maxLength={MAX}
           onChange={(e) => setContent(e.target.value)}
           placeholder="把想说却无处说的话放进树洞…"
-          style={{ minHeight: 260, lineHeight: 1.7, fontSize: 15 }}
+          style={{ minHeight: 200, lineHeight: 1.7, fontSize: 15 }}
         />
+        <div className="th-pick">
+          {images.map((u) => <img key={u} src={full(u)} alt="" onClick={() => setImages(images.filter((x) => x !== u))} />)}
+          {images.length < 9 && (
+            <label>{uploading ? '…' : '+'}<input type="file" accept="image/*" multiple hidden onChange={(e) => pick(e.target.files)} /></label>
+          )}
+        </div>
         <div className="row">
           <span className="small grow">匿名发布：其他人只能看到内容，不会显示你的昵称和头像</span>
           <span className="small">{content.length} / {MAX}</span>

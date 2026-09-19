@@ -30,6 +30,15 @@ export class UploadController {
     return this.uploads.uploadApk(file);
   }
 
+  /** 后台上传图片（管理员 token；后台录入树洞配图等） */
+  @Post('admin-image')
+  @UseGuards(AdminGuard)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 20 * 1024 * 1024 } }))
+  adminImage(@UploadedFile() file?: Express.Multer.File) {
+    if (!file) throw new BadRequestException('缺少文件');
+    return this.uploads.upload('image', file);
+  }
+
   /** kind: image | video | audio，form-data 字段名 file */
   @Post(':kind')
   @UseGuards(JwtAuthGuard)

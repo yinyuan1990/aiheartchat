@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Param, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { Throttle } from '../common/rate-limit.guard';
 import { NewsService } from '../news/news.service';
 import { TreeholeService } from '../treehole/treehole.service';
+import { TreeholeSyncService } from '../treehole/treehole-sync.service';
 import { SrsService } from '../srs/srs.service';
 import { AppVersionService } from '../module/app-version.service';
 import { AdminGuard } from './admin.guard';
@@ -14,6 +15,7 @@ export class AdminController {
     private readonly admin: AdminService,
     private readonly news: NewsService,
     private readonly treehole: TreeholeService,
+    private readonly treeholeSync: TreeholeSyncService,
     private readonly srs: SrsService,
     private readonly appVersion: AppVersionService,
   ) {}
@@ -84,18 +86,52 @@ export class AdminController {
     return this.treehole.adminList(beforeId ? BigInt(beforeId) : undefined, status != null && status !== '' ? Number(status) : undefined);
   }
 
-  /** 后台手动录入一条（匿名） */
-  @Post('treehole')
+  // ---- Telegram 公开频道自动同步（放在 :id 路由之前，避免被当成 id） ----
+
+  @Get('treehole/sources')
   @UseGuards(AdminGuard)
-  treeholeCreate(@Body() body: { content: string }) {
-    return this.treehole.adminCreate(body.content);
+  treeholeSources() {
+    return this.treeholeSync.listSources();
   }
 
-  /** 编辑后台录入的内容 */
+  @Post('treehole/sources')
+  @UseGuards(AdminGuard)
+  treeholeSaveSource(@Body() body: { id?: number; channel: string; enabled?: boolean; minViews?: number; stripLinks?: boolean; blockWords?: string }) {
+    return this.treeholeSync.saveSource(body);
+  }
+
+  @Delete('treehole/sources/:id')
+  @UseGuards(AdminGuard)
+  treeholeRemoveSource(@Param('id') id: string) {
+    return this.treeholeSync.removeSource(Number(id));
+  }
+
+  /** 预览频道最近的帖子（不入库），用来确认频道名对、能抓到 */
+  @Get('treehole/sources/preview')
+  @UseGuards(AdminGuard)
+  treeholePreview(@Query('channel') channel: string) {
+    return this.treeholeSync.preview(channel ?? '');
+  }
+
+  /** 立即同步；full=1 时往前翻 5 页回灌历史 */
+  @Post('treehole/sources/:id/sync')
+  @UseGuards(AdminGuard)
+  treeholeSyncNow(@Param('id') id: string, @Body() body: { full?: boolean }) {
+    return this.treeholeSync.syncOne(Number(id), !!body?.full);
+  }
+
+  /** 后台手动录入一条（匿名），可带图片 */
+  @Post('treehole')
+  @UseGuards(AdminGuard)
+  treeholeCreate(@Body() body: { content?: string; images?: string[] }) {
+    return this.treehole.adminCreate(body.content ?? '', body.images);
+  }
+
+  /** 编辑后台录入 / 同步的内容与图片 */
   @Post('treehole/:id')
   @UseGuards(AdminGuard)
-  treeholeUpdate(@Param('id') id: string, @Body() body: { content: string }) {
-    return this.treehole.adminUpdate(BigInt(id), body.content);
+  treeholeUpdate(@Param('id') id: string, @Body() body: { content?: string; images?: string[] }) {
+    return this.treehole.adminUpdate(BigInt(id), body.content ?? '', body.images);
   }
 
   /** 上/下架：status 0=显示 1=隐藏 */

@@ -5,7 +5,9 @@ import { PrismaService } from '../prisma/prisma.service';
 export interface TreeholePostView {
   id: bigint;
   content: string;
-  /// 0=用户投稿 1=后台录入
+  /// 图片 url 列表（最多 9 张）
+  images: string[];
+  /// 0=用户投稿 1=后台录入 2=Telegram 同步
   source: number;
   viewCount: number;
   commentCount: number;
@@ -18,6 +20,20 @@ export interface TreeholePostView {
 const POST_MIN = 5;
 const POST_MAX = 3000;
 const COMMENT_MAX = 500;
+const IMAGES_MAX = 9;
+
+/** 清洗图片数组：只收站内 /res/ 相对路径或 http(s)，最多 9 张 */
+export function cleanImages(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((x) => String(x ?? '').trim())
+    .filter((u) => u && u.length <= 255 && (/^\/res\//.test(u) || /^https?:\/\//i.test(u)))
+    .slice(0, IMAGES_MAX);
+}
+
+export function parseImages(s: string | null | undefined): string[] {
+  try { const a = JSON.parse(s || '[]'); return Array.isArray(a) ? a.map(String) : []; } catch { return []; }
+}
 
 /**
  * 私密树洞：匿名投稿 + 实名评论。
@@ -57,13 +73,15 @@ export class TreeholeService {
     return { ...view, viewCount: view.viewCount + 1 };
   }
 
-  async publish(userId: bigint, rawContent: string) {
+  /** 用户投稿：文字（≥5 字）或图片至少有一样；带图时文字可为空 */
+  async publish(userId: bigint, rawContent: string, rawImages?: unknown) {
     const content = (rawContent ?? '').trim();
-    if (content.length < POST_MIN) throw new BadRequestException(`至少写 ${POST_MIN} 个字`);
+    const images = cleanImages(rawImages);
+    if (images.length === 0 && content.length < POST_MIN) throw new BadRequestException(`至少写 ${POST_MIN} 个字，或配一张图`);
     if (content.length > POST_MAX) throw new BadRequestException(`最多 ${POST_MAX} 字`);
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { status: true } });
     if (!user) throw new ForbiddenException('账号异常');
-    const post = await this.prisma.treeholePost.create({ data: { authorId: userId, source: 0, content } });
+    const post = await this.prisma.treeholePost.create({ data: { authorId: userId, source: 0, content, images: JSON.stringify(images) } });
     return { id: post.id };
   }
 
@@ -158,6 +176,7 @@ export class TreeholeService {
     return posts.map((p) => ({
       id: p.id,
       content: p.content,
+      images: parseImages(p.images),
       source: p.source,
       viewCount: p.viewCount,
       commentCount: p.commentCount,
@@ -183,26 +202,29 @@ export class TreeholeService {
     const authorMap = new Map(authors.map((a) => [a.id.toString(), a]));
     return posts.map((p) => ({
       ...p,
+      images: parseImages(p.images),
       author: p.authorId ? authorMap.get(p.authorId.toString()) ?? null : null,
     }));
   }
 
-  /** 后台手动录入（匿名，source=1） */
-  async adminCreate(rawContent: string) {
+  /** 后台手动录入（匿名，source=1）：文字或图片至少一样 */
+  async adminCreate(rawContent: string, rawImages?: unknown) {
     const content = (rawContent ?? '').trim();
-    if (!content) throw new BadRequestException('内容不能为空');
+    const images = cleanImages(rawImages);
+    if (!content && images.length === 0) throw new BadRequestException('内容不能为空');
     if (content.length > POST_MAX) throw new BadRequestException(`最多 ${POST_MAX} 字`);
-    return this.prisma.treeholePost.create({ data: { authorId: null, source: 1, content } });
+    return this.prisma.treeholePost.create({ data: { authorId: null, source: 1, content, images: JSON.stringify(images) } });
   }
 
-  /** 后台编辑内容（仅后台录入的帖子） */
-  async adminUpdate(id: bigint, rawContent: string) {
+  /** 后台编辑内容 / 图片（后台录入与 Telegram 同步的帖子） */
+  async adminUpdate(id: bigint, rawContent: string, rawImages?: unknown) {
     const content = (rawContent ?? '').trim();
-    if (!content) throw new BadRequestException('内容不能为空');
     const post = await this.prisma.treeholePost.findUnique({ where: { id } });
     if (!post) throw new NotFoundException('内容不存在');
-    if (post.source !== 1) throw new BadRequestException('用户投稿不可编辑，只能隐藏');
-    return this.prisma.treeholePost.update({ where: { id }, data: { content } });
+    if (post.source === 0) throw new BadRequestException('用户投稿不可编辑，只能隐藏');
+    const images = rawImages === undefined ? parseImages(post.images) : cleanImages(rawImages);
+    if (!content && images.length === 0) throw new BadRequestException('内容不能为空');
+    return this.prisma.treeholePost.update({ where: { id }, data: { content, images: JSON.stringify(images) } });
   }
 
   async adminSetStatus(id: bigint, status: number) {
