@@ -209,6 +209,77 @@ object MusicCenter {
     fun positionMs(): Long = player?.currentPosition ?: 0L
     fun durationMs(): Long = player?.duration?.takeIf { it > 0 } ?: 0L
     fun seekTo(ratio: Float) { val d = durationMs(); if (d > 0) player?.seekTo((d * ratio.coerceIn(0f, 1f)).toLong()) }
+
+    // ---------- 保存 / 分享 ----------
+
+    /** 分享落地页（不用登录就能听 + 保存 + 下载 App） */
+    fun shareLink(t: MusicTrack) = "https://app.yyheart.com/#/music/share/${t.id}"
+
+    private fun extOf(url: String) = url.substringAfterLast('.', "mp3").take(5).ifEmpty { "mp3" }
+    private fun safeName(t: MusicTrack) = t.title.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(60).ifEmpty { "music" }
+
+    /** 保存到手机：系统下载管理器下到「音乐」目录（Android 10 以下没有存储权限时放 App 私有目录），通知栏可见进度 */
+    fun saveToPhone(ctx: Context, t: MusicTrack) {
+        val name = "${safeName(t)}.${extOf(t.url)}"
+        try {
+            val req = android.app.DownloadManager.Request(android.net.Uri.parse(Api.fullUrl(t.url)))
+                .setTitle(t.title)
+                .setDescription("心之音 · 音乐")
+                .setMimeType("audio/mpeg")
+                .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setAllowedOverMetered(true)
+            if (android.os.Build.VERSION.SDK_INT >= 29) {
+                req.setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_MUSIC, "心之音/$name")
+            } else {
+                req.setDestinationInExternalFilesDir(ctx, android.os.Environment.DIRECTORY_MUSIC, name)
+            }
+            (ctx.getSystemService(Context.DOWNLOAD_SERVICE) as android.app.DownloadManager).enqueue(req)
+            android.widget.Toast.makeText(ctx, "开始下载，完成后在「音乐/心之音」目录", android.widget.Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(ctx, "下载失败：${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** 分享链接（微信/QQ 等以文字发出，点开是落地页） */
+    fun shareLinkTo(ctx: Context, t: MusicTrack) {
+        val text = "${t.title}${if (t.performer.isNotEmpty()) " - ${t.performer}" else ""}\n${shareLink(t)}"
+        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(android.content.Intent.EXTRA_SUBJECT, t.title)
+            putExtra(android.content.Intent.EXTRA_TEXT, text)
+        }
+        ctx.startActivity(android.content.Intent.createChooser(intent, "分享音乐").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
+    /** 分享音乐文件本身：先下到缓存再用 FileProvider 发出（文件大，要等一会） */
+    @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
+    fun shareFileTo(ctx: Context, t: MusicTrack) {
+        val app = ctx.applicationContext
+        android.widget.Toast.makeText(app, "正在准备文件（${"%.0f".format(t.size / 1048576.0)}MB）…", android.widget.Toast.LENGTH_SHORT).show()
+        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val result = runCatching {
+                val dir = java.io.File(app.cacheDir, "share_music").apply { mkdirs() }
+                val file = java.io.File(dir, "${safeName(t)}.${extOf(t.url)}")
+                if (!file.exists() || file.length() != t.size.toLong()) {
+                    java.net.URL(Api.fullUrl(t.url)).openStream().use { input -> file.outputStream().use { input.copyTo(it) } }
+                }
+                androidx.core.content.FileProvider.getUriForFile(app, "${app.packageName}.fileprovider", file)
+            }
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                result.onSuccess { uri ->
+                    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = "audio/*"
+                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                        putExtra(android.content.Intent.EXTRA_SUBJECT, t.title)
+                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    app.startActivity(android.content.Intent.createChooser(intent, "发送音乐文件").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                }.onFailure {
+                    android.widget.Toast.makeText(app, "准备文件失败：${it.message}", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
 }
 
 // ---------- 消息页顶部「正在播放」栏 ----------
@@ -392,6 +463,16 @@ private fun BigPlayer(t: MusicTrack?, subtitleFallback: String) {
                     Text(t.title, color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(t.performer.ifEmpty { "未知艺术家" }, color = TextSub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 3.dp))
                 }
+                // 保存到手机 / 分享（链接 或 文件）
+                Box(Modifier.size(36.dp).noRippleClick { MusicCenter.saveToPhone(ctx, t) }, contentAlignment = Alignment.Center) { DownloadIcon(TextMain) }
+                var showShare by remember { mutableStateOf(false) }
+                Box {
+                    Box(Modifier.size(36.dp).noRippleClick { showShare = true }, contentAlignment = Alignment.Center) { ShareIcon(TextMain) }
+                    androidx.compose.material3.DropdownMenu(expanded = showShare, onDismissRequest = { showShare = false }) {
+                        androidx.compose.material3.DropdownMenuItem(text = { Text("分享链接", fontSize = 14.sp) }, onClick = { showShare = false; MusicCenter.shareLinkTo(ctx, t) })
+                        androidx.compose.material3.DropdownMenuItem(text = { Text("发送音乐文件", fontSize = 14.sp) }, onClick = { showShare = false; MusicCenter.shareFileTo(ctx, t) })
+                    }
+                }
             }
             // 进度条（可点按跳转）+ 圆点
             Box(
@@ -523,6 +604,36 @@ private fun RepeatIcon(tint: Color, one: Boolean) {
             drawLine(tint, Offset(w * 0.28f, w * 0.45f), Offset(w * 0.15f, w * 0.58f), strokeWidth = s, cap = StrokeCap.Round)
         }
         if (one) Text("1", color = tint, fontSize = 7.sp, fontWeight = FontWeight.Bold, modifier = Modifier.background(Bg2).padding(horizontal = 1.dp))
+    }
+}
+
+/** 下载（保存到手机）：向下箭头 + 托盘 */
+@Composable
+private fun DownloadIcon(tint: Color, size: Dp = 20.dp) {
+    Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        val s = w * 0.09f
+        drawLine(tint, Offset(w * 0.5f, w * 0.14f), Offset(w * 0.5f, w * 0.62f), strokeWidth = s, cap = StrokeCap.Round)
+        drawLine(tint, Offset(w * 0.3f, w * 0.44f), Offset(w * 0.5f, w * 0.64f), strokeWidth = s, cap = StrokeCap.Round)
+        drawLine(tint, Offset(w * 0.7f, w * 0.44f), Offset(w * 0.5f, w * 0.64f), strokeWidth = s, cap = StrokeCap.Round)
+        drawLine(tint, Offset(w * 0.18f, w * 0.72f), Offset(w * 0.18f, w * 0.86f), strokeWidth = s, cap = StrokeCap.Round)
+        drawLine(tint, Offset(w * 0.18f, w * 0.86f), Offset(w * 0.82f, w * 0.86f), strokeWidth = s, cap = StrokeCap.Round)
+        drawLine(tint, Offset(w * 0.82f, w * 0.86f), Offset(w * 0.82f, w * 0.72f), strokeWidth = s, cap = StrokeCap.Round)
+    }
+}
+
+/** 分享：向上箭头 + 托盘（iOS 风格） */
+@Composable
+private fun ShareIcon(tint: Color, size: Dp = 20.dp) {
+    Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        val s = w * 0.09f
+        drawLine(tint, Offset(w * 0.5f, w * 0.14f), Offset(w * 0.5f, w * 0.62f), strokeWidth = s, cap = StrokeCap.Round)
+        drawLine(tint, Offset(w * 0.32f, w * 0.32f), Offset(w * 0.5f, w * 0.14f), strokeWidth = s, cap = StrokeCap.Round)
+        drawLine(tint, Offset(w * 0.68f, w * 0.32f), Offset(w * 0.5f, w * 0.14f), strokeWidth = s, cap = StrokeCap.Round)
+        drawLine(tint, Offset(w * 0.22f, w * 0.5f), Offset(w * 0.22f, w * 0.86f), strokeWidth = s, cap = StrokeCap.Round)
+        drawLine(tint, Offset(w * 0.22f, w * 0.86f), Offset(w * 0.78f, w * 0.86f), strokeWidth = s, cap = StrokeCap.Round)
+        drawLine(tint, Offset(w * 0.78f, w * 0.86f), Offset(w * 0.78f, w * 0.5f), strokeWidth = s, cap = StrokeCap.Round)
     }
 }
 

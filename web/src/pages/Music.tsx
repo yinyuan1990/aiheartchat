@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
+import { api } from '../api';
 import { music, useMusic, type MusicTrack } from '../music';
 
 function fmtDur(s: number): string {
@@ -65,8 +66,59 @@ function CloseIcon({ size = 18 }: { size?: number }) {
   );
 }
 
+function DownloadIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+    </svg>
+  );
+}
+
+function ShareIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3v13" /><path d="m7 8 5-5 5 5" /><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" />
+    </svg>
+  );
+}
+
 function Bars() {
   return <span className="music-bars"><i /><i /><i /></span>;
+}
+
+/** 分享落地页地址（不用登录就能打开听 + 下载） */
+export function shareLink(id: string): string {
+  return `${location.origin}/#/music/share/${id}`;
+}
+
+function extOf(url: string): string {
+  return url.match(/\.([a-z0-9]{2,5})$/i)?.[1] ?? 'mp3';
+}
+
+/** 保存到手机：同源 /res/ 走 <a download>，浏览器直接下载 */
+export function saveTrack(t: { title: string; url: string }) {
+  const a = document.createElement('a');
+  a.href = t.url;
+  a.download = `${t.title}.${extOf(t.url)}`;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+/** 分享：系统分享面板，不支持时复制链接 */
+export async function shareTrack(t: { id: string; title: string; performer: string }, toast: (s: string) => void) {
+  const url = shareLink(t.id);
+  const text = `${t.title}${t.performer ? ` - ${t.performer}` : ''}`;
+  if (navigator.share) {
+    try { await navigator.share({ title: text, text, url }); return; } catch { /* 用户取消 */ return; }
+  }
+  try {
+    await navigator.clipboard.writeText(`${text} ${url}`);
+    toast('链接已复制，去粘贴给好友吧');
+  } catch {
+    prompt('复制下面的链接分享给好友', url);
+  }
 }
 
 /** 封面：有图用图，没有用渐变 + 音符 */
@@ -113,6 +165,8 @@ export function NowPlayingBar({ onOpen }: { onOpen: () => void }) {
 export function MusicSheet({ onClose }: { onClose: () => void }) {
   const s = useMusic();
   const [loaded, setLoaded] = useState(!!s.data);
+  const [toast, setToast] = useState('');
+  const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(''), 2000); };
 
   useEffect(() => {
     music.load().finally(() => setLoaded(true));
@@ -179,6 +233,9 @@ export function MusicSheet({ onClose }: { onClose: () => void }) {
                   <div className="ellipsis" style={{ fontSize: 16, fontWeight: 600 }}>{track.title}</div>
                   <div className="muted ellipsis" style={{ marginTop: 3 }}>{track.performer || '未知艺术家'}</div>
                 </div>
+                {/* 保存到手机 / 分享 */}
+                <span className="np-btn" title="保存到手机" onClick={() => { saveTrack(track); showToast('开始下载'); }}><DownloadIcon /></span>
+                <span className="np-btn" title="分享" onClick={() => shareTrack(track, showToast)}><ShareIcon /></span>
               </div>
               <div className="music-progress big" onClick={seek}>
                 <div className="music-progress-fill" style={{ width: `${pct}%` }} />
@@ -203,7 +260,68 @@ export function MusicSheet({ onClose }: { onClose: () => void }) {
             <span className={`music-ctl${s.repeat === 'one' ? ' on' : ''}`} onClick={() => music.toggleRepeat()}><RepeatIcon one={s.repeat === 'one'} /></span>
           </div>
         </div>
+        {toast && <div className="music-toast">{toast}</div>}
       </div>
+    </div>
+  );
+}
+
+// ---------- 分享落地页（不用登录） ----------
+
+interface SharedTrack extends MusicTrack {
+  fullUrl: string;
+  fullCover: string;
+  source: { title: string } | null;
+}
+
+/** /music/share/:id：好友点开链接直接听 + 保存 + 下载 App */
+export function MusicSharePage() {
+  const { id } = useParams<{ id: string }>();
+  const [t, setT] = useState<SharedTrack | null>(null);
+  const [err, setErr] = useState('');
+  const [dl, setDl] = useState<{ android?: string; ios?: string } | null>(null);
+  const [toast, setToast] = useState('');
+  const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(''), 2000); };
+
+  useEffect(() => {
+    if (!id) return;
+    api<SharedTrack>(`/app/music/${id}`).then(setT).catch((e) => setErr(e.message || '这首歌已下架'));
+    api<any>('/app/download').then((d) => setDl({ android: d?.android?.url, ios: d?.ios?.url })).catch(() => {});
+  }, [id]);
+
+  const openApp = () => {
+    const ua = navigator.userAgent;
+    const url = /iPhone|iPad|iPod/i.test(ua) ? dl?.ios : dl?.android;
+    location.href = url || 'https://yyheart.com/';
+  };
+
+  return (
+    <div className="app music-share">
+      {err && <div className="empty">{err}</div>}
+      {!t && !err && <div className="empty">加载中…</div>}
+      {t && (
+        <>
+          <div className="music-share-head">
+            <div className="music-cover square" style={{ width: 160, height: 160, margin: '0 auto' }}>
+              {t.fullCover ? <img src={t.fullCover} alt="" /> : (
+                <svg width={74} height={74} viewBox="0 0 24 24" fill="#fff" opacity={0.9}><path d="M9 3v10.55A4 4 0 1 0 11 17V7h5a3 3 0 0 0 3-3V3H9z" /></svg>
+              )}
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 700, marginTop: 18, textAlign: 'center' }}>{t.title}</div>
+            <div className="muted" style={{ marginTop: 6, textAlign: 'center' }}>
+              {t.performer || '未知艺术家'} · {fmtDur(t.duration)} · {fmtSize(t.size)}
+            </div>
+            {t.source?.title && <div className="small" style={{ marginTop: 6, textAlign: 'center' }}>来自 {t.source.title}</div>}
+          </div>
+          <audio src={t.fullUrl} controls preload="metadata" style={{ width: '100%', marginTop: 22 }} />
+          <div className="row" style={{ gap: 12, marginTop: 22 }}>
+            <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => { saveTrack({ title: t.title, url: t.fullUrl }); showToast('开始下载'); }}>保存到手机</button>
+            <button className="btn" style={{ flex: 1 }} onClick={openApp}>打开心之音 App</button>
+          </div>
+          <div className="hint">心之音 App 里每天都有新歌，边聊边听</div>
+        </>
+      )}
+      {toast && <div className="music-toast">{toast}</div>}
     </div>
   );
 }

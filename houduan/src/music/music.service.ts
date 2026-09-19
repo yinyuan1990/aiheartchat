@@ -67,6 +67,18 @@ export class MusicService implements OnModuleInit {
     };
   }
 
+  /** 分享落地页用：不用登录也能取一首的信息（含来源标题与完整地址） */
+  async publicTrack(id: bigint) {
+    const t = await this.prisma.musicTrack.findUnique({
+      where: { id },
+      select: { id: true, sourceId: true, title: true, performer: true, duration: true, size: true, url: true, cover: true, postedAt: true, playCount: true },
+    });
+    if (!t) throw new NotFoundException('这首歌已下架');
+    const src = await this.prisma.musicSource.findUnique({ where: { id: t.sourceId }, select: { title: true, channel: true } });
+    const base = (process.env.PUBLIC_RES_BASE || 'https://api.yyheart.com').replace(/\/$/, '');
+    return { ...t, fullUrl: base + t.url, fullCover: t.cover ? base + t.cover : '', source: src ? { title: src.title || src.channel } : null };
+  }
+
   /** 播放计数（客户端开始播放时调一下，失败无所谓） */
   async played(id: bigint) {
     await this.prisma.musicTrack.update({ where: { id }, data: { playCount: { increment: 1 } } }).catch(() => {});

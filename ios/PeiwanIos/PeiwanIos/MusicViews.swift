@@ -167,6 +167,43 @@ final class MusicCenter: ObservableObject {
 
     var rateLabel: String { rate == 1 ? "1X" : rate == 1.5 ? "1.5X" : "2X" }
 
+    // MARK: - 保存 / 分享
+
+    /// 正在下载准备保存的曲目 id（按钮转圈）
+    @Published private(set) var savingId: String?
+
+    /// 分享落地页（不用登录就能听 + 保存 + 下载 App）
+    static func shareLink(_ t: MusicTrackModel) -> URL { URL(string: "https://app.yyheart.com/#/music/share/\(t.id)")! }
+
+    /// 分享链接：系统分享面板（微信/QQ/信息…）
+    func shareLink(_ t: MusicTrackModel) {
+        let text = t.title + ((t.performer?.isEmpty == false) ? " - \(t.performer!)" : "")
+        ShareSheet.present([text, Self.shareLink(t)])
+    }
+
+    /// 保存到手机：先把文件下到本地，再弹系统面板（存储到「文件」/ AirDrop / 发给微信好友都在里面）
+    func saveToPhone(_ t: MusicTrackModel) {
+        guard savingId == nil, let u = URL(string: Api.fullUrl(t.url)) else { return }
+        savingId = t.id
+        let ext = (u.pathExtension.isEmpty ? "mp3" : u.pathExtension)
+        let safe = t.title.replacingOccurrences(of: "[\\\\/:*?\"<>|]", with: "_", options: .regularExpression).prefix(60)
+        let dest = FileManager.default.temporaryDirectory.appendingPathComponent("music_share", isDirectory: true).appendingPathComponent("\(safe).\(ext)")
+        Task {
+            defer { Task { @MainActor in self.savingId = nil } }
+            do {
+                try FileManager.default.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+                if !FileManager.default.fileExists(atPath: dest.path) {
+                    let (tmp, _) = try await URLSession.shared.download(from: u)
+                    try? FileManager.default.removeItem(at: dest)
+                    try FileManager.default.moveItem(at: tmp, to: dest)
+                }
+                await MainActor.run { ShareSheet.present([dest]) }
+            } catch {
+                await MainActor.run { ShareSheet.present([Self.shareLink(t)]) }
+            }
+        }
+    }
+
     private func teardownObservers() {
         if let o = timeObserver { player?.removeTimeObserver(o) }
         timeObserver = nil
@@ -391,6 +428,20 @@ struct BigPlayer: View {
                             Text(t.performer?.isEmpty == false ? t.performer! : "未知艺术家").font(.system(size: 13)).foregroundStyle(Theme.textSub).lineLimit(1)
                         }
                         Spacer(minLength: 0)
+                        // 保存到手机（下载后弹系统面板：存到「文件」/ AirDrop / 微信）
+                        Button { center.saveToPhone(t) } label: {
+                            Group {
+                                if center.savingId == t.id { ProgressView().tint(Theme.text) }
+                                else { Image(systemName: "arrow.down.to.line").font(.system(size: 17, weight: .medium)) }
+                            }
+                            .foregroundStyle(Theme.text).frame(width: 36, height: 36)
+                        }
+                        .buttonStyle(.plain)
+                        // 分享链接
+                        Button { center.shareLink(t) } label: {
+                            Image(systemName: "square.and.arrow.up").font(.system(size: 17, weight: .medium)).foregroundStyle(Theme.text).frame(width: 36, height: 36)
+                        }
+                        .buttonStyle(.plain)
                     }
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {

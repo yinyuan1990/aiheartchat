@@ -11,7 +11,7 @@ import { ChatListPage } from './pages/ChatList';
 import { ChatRoomPage } from './pages/ChatRoom';
 import { AiChatPage } from './pages/AiChat';
 import { NewsDetailPage, NewsListPage } from './pages/NewsDetail';
-import { MusicPage } from './pages/Music';
+import { MusicPage, MusicSharePage } from './pages/Music';
 import { MePage } from './pages/Me';
 import { PublishPage } from './pages/Publish';
 import { PeoplePage } from './pages/People';
@@ -163,6 +163,7 @@ export function App() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/agreement/:type" element={<AgreementPage />} />
         <Route path="/hall-embed" element={<EmbedHallPage />} />
+        <Route path="/music/share/:id" element={<MusicSharePage />} />
         <Route element={<Shell />}>
           <Route path="/plaza" element={<PlazaPage />} />
           <Route path="/hall" element={<HallPage />} />
