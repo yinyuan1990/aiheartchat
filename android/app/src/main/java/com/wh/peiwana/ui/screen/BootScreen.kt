@@ -134,7 +134,8 @@ private fun SplashContent() {
                     ) { Text("心", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
                 }
                 Spacer(Modifier.width(26.dp))
-                VerticalChars("爱情和金钱无关", shown, startIndex = 0, size = 24.sp, color = Color.White, weight = FontWeight.Medium)
+                // 浅色主题：主句用正文色（原来写死白色，白底上看不见）
+                VerticalChars("爱情和金钱无关", shown, startIndex = 0, size = 24.sp, color = TextMain, weight = FontWeight.Medium)
             }
         }
 

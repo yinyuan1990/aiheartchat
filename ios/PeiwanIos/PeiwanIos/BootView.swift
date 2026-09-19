@@ -93,7 +93,8 @@ private struct SplashContent: View {
                             .animation(.easeOut(duration: 0.5).delay(1.25), value: shown)
                     }
                     .padding(.top, 56)
-                    VerticalChars(text: "爱情和金钱无关", shown: shown, startIndex: 0, size: 24, color: .white, weight: .medium)
+                    // 浅色主题：主句用正文色（原来写死白色，白底上看不见）
+                    VerticalChars(text: "爱情和金钱无关", shown: shown, startIndex: 0, size: 24, color: Theme.text, weight: .medium)
                 }
             }
             .offset(y: -24)
