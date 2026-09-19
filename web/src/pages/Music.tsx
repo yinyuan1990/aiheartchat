@@ -1,28 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../api';
-
-export interface MusicTrack {
-  id: string;
-  title: string;
-  performer: string;
-  duration: number;
-  size: number;
-  url: string;
-  cover: string;
-  postedAt: string;
-  playCount: number;
-}
-
-interface MusicList {
-  source: { title: string; channel: string } | null;
-  list: MusicTrack[];
-}
+import { music, useMusic, type MusicTrack } from '../music';
 
 function fmtDur(s: number): string {
   if (!s || !isFinite(s)) return '0:00';
-  const m = Math.floor(s / 60);
-  return `${m}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  const v = Math.floor(s);
+  const h = Math.floor(v / 3600);
+  const m = Math.floor((v % 3600) / 60);
+  const sec = String(v % 60).padStart(2, '0');
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
 }
 
 function fmtSize(b: number): string {
@@ -38,7 +24,8 @@ function fmtAgo(iso: string): string {
   return d <= 1 ? '昨天' : `${d} 天前`;
 }
 
-/** 播放/暂停图标（不用 emoji） */
+// ---------- 图标（矢量，不用 emoji） ----------
+
 function PlayIcon({ playing, size = 22 }: { playing: boolean; size?: number }) {
   return playing ? (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
@@ -47,25 +34,45 @@ function PlayIcon({ playing, size = 22 }: { playing: boolean; size?: number }) {
   );
 }
 
-function SkipIcon({ dir }: { dir: 'prev' | 'next' }) {
+function SkipIcon({ dir, size = 26 }: { dir: 'prev' | 'next'; size?: number }) {
   return (
-    <svg width={20} height={20} viewBox="0 0 24 24" fill="currentColor" style={{ transform: dir === 'prev' ? 'scaleX(-1)' : undefined }}>
-      <path d="M5 5.5v13a1 1 0 0 0 1.5.86L15 14.2V18a1 1 0 0 0 2 0V6a1 1 0 0 0-2 0v3.8L6.5 4.64A1 1 0 0 0 5 5.5z" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" style={{ transform: dir === 'prev' ? 'scaleX(-1)' : undefined }}>
+      <path d="M4 5.5v13a1 1 0 0 0 1.5.86L12 15.2v3.3a1 1 0 0 0 1.5.86l8-5.5a1 1 0 0 0 0-1.72l-8-5.5A1 1 0 0 0 12 8.5v3.3L5.5 4.64A1 1 0 0 0 4 5.5z" />
     </svg>
   );
 }
 
-/** 正在播放的动效条 */
-function Bars() {
+function ShuffleIcon({ size = 20 }: { size?: number }) {
   return (
-    <span className="music-bars"><i /><i /><i /></span>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M16 3h5v5" /><path d="M4 20 21 3" /><path d="M21 16v5h-5" /><path d="m15 15 6 6" /><path d="m4 4 5 5" />
+    </svg>
   );
 }
 
-/** 封面：有图用图，没有用渐变 + 音符 */
-function Cover({ track, size, active }: { track: MusicTrack; size: number; active?: boolean }) {
+function RepeatIcon({ one, size = 20 }: { one: boolean; size?: number }) {
   return (
-    <div className={`music-cover${active ? ' spin' : ''}`} style={{ width: size, height: size }}>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m17 2 4 4-4 4" /><path d="M3 11v-1a4 4 0 0 1 4-4h14" /><path d="m7 22-4-4 4-4" /><path d="M21 13v1a4 4 0 0 1-4 4H3" />
+      {one && <text x="12" y="15" fontSize="8" fill="currentColor" stroke="none" textAnchor="middle" fontWeight="700">1</text>}
+    </svg>
+  );
+}
+
+function CloseIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+  );
+}
+
+function Bars() {
+  return <span className="music-bars"><i /><i /><i /></span>;
+}
+
+/** 封面：有图用图，没有用渐变 + 音符 */
+function Cover({ track, size, round = true, active }: { track: MusicTrack; size: number; round?: boolean; active?: boolean }) {
+  return (
+    <div className={`music-cover${active ? ' spin' : ''}${round ? '' : ' square'}`} style={{ width: size, height: size }}>
       {track.cover ? (
         <img src={track.cover} alt="" />
       ) : (
@@ -77,165 +84,136 @@ function Cover({ track, size, active }: { track: MusicTrack; size: number; activ
   );
 }
 
+// ---------- 消息页顶部「正在播放」栏 ----------
+
+/** 播放中固定在消息页顶部：暂停 / 标题·艺术家 / 倍速 / 关闭；点中间打开播放弹层 */
+export function NowPlayingBar({ onOpen }: { onOpen: () => void }) {
+  const s = useMusic();
+  const t = s.current;
+  if (!t) return null;
+  return (
+    <div className="now-playing">
+      <span className="np-btn" onClick={() => music.toggle()}><PlayIcon playing={s.playing} size={20} /></span>
+      <div className="np-text" onClick={onOpen}>
+        <div className="np-title ellipsis">{t.title}</div>
+        <div className="np-sub ellipsis">{t.performer || s.data?.source?.title || '未知艺术家'}{s.buffering ? ' · 缓冲中…' : ''}</div>
+      </div>
+      <span className="np-rate" onClick={() => music.cycleRate()}>{s.rate === 1 ? '1X' : `${s.rate}X`}</span>
+      <span className="np-btn" onClick={() => music.stop()}><CloseIcon /></span>
+    </div>
+  );
+}
+
+// ---------- 播放弹层（列表 + 大播放器） ----------
+
 /**
- * 音乐频道（消息页「私聊」tab 置顶入口）：后端从 Telegram 频道同步最近 3 天的音频，
- * 这里列表 + 底部常驻播放器，单曲结束自动播下一首。
+ * 独立弹层：上半部曲目列表，下半部播放器（封面、标题、进度/时间、倍速、随机/上一首/播放/下一首/循环）。
+ * 数据来自后端从 Telegram 频道同步的最近 3 天曲目。
  */
-export function MusicPage() {
-  const nav = useNavigate();
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const [data, setData] = useState<MusicList | null>(null);
-  const [current, setCurrent] = useState<string | null>(null);
-  const [playing, setPlaying] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const countedRef = useRef<Set<string>>(new Set());
+export function MusicSheet({ onClose }: { onClose: () => void }) {
+  const s = useMusic();
+  const [loaded, setLoaded] = useState(!!s.data);
 
   useEffect(() => {
-    api<MusicList>('/music').then(setData).catch(() => setData({ source: null, list: [] }));
+    music.load().finally(() => setLoaded(true));
   }, []);
 
-  const list = data?.list ?? [];
-  const index = useMemo(() => list.findIndex((t) => t.id === current), [list, current]);
-  const track = index >= 0 ? list[index] : null;
-
-  // 切歌：换 src 并播放
-  const play = (t: MusicTrack) => {
-    const el = audioRef.current;
-    if (!el) return;
-    if (t.id === current) {
-      if (el.paused) el.play().catch(() => {});
-      else el.pause();
-      return;
-    }
-    setCurrent(t.id);
-    setProgress(0);
-    setDuration(t.duration || 0);
-    el.src = t.url;
-    el.play().catch(() => {});
-    if (!countedRef.current.has(t.id)) {
-      countedRef.current.add(t.id);
-      api(`/music/${t.id}/play`, { method: 'POST' }).catch(() => {});
-    }
-  };
-
-  const step = (delta: number) => {
-    if (!list.length) return;
-    const next = index < 0 ? 0 : (index + delta + list.length) % list.length;
-    play(list[next]);
-  };
-
-  const toggle = () => {
-    const el = audioRef.current;
-    if (!el) return;
-    if (!track) { if (list.length) play(list[0]); return; }
-    if (el.paused) el.play().catch(() => {});
-    else el.pause();
-  };
+  const list = s.data?.list ?? [];
+  const track = s.current;
+  const pct = s.duration ? Math.min(100, (s.progress / s.duration) * 100) : 0;
 
   const seek = (e: React.MouseEvent<HTMLDivElement>) => {
-    const el = audioRef.current;
-    if (!el || !duration) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-    el.currentTime = ratio * duration;
+    music.seek((e.clientX - rect.left) / rect.width);
   };
 
-  // 锁屏/通知栏显示曲目信息（支持的浏览器）
-  useEffect(() => {
-    if (!track || !('mediaSession' in navigator)) return;
-    try {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: track.title,
-        artist: track.performer || data?.source?.title || '',
-        artwork: track.cover ? [{ src: track.cover, sizes: '512x512', type: 'image/jpeg' }] : [],
-      });
-      navigator.mediaSession.setActionHandler('play', () => audioRef.current?.play());
-      navigator.mediaSession.setActionHandler('pause', () => audioRef.current?.pause());
-      navigator.mediaSession.setActionHandler('previoustrack', () => step(-1));
-      navigator.mediaSession.setActionHandler('nexttrack', () => step(1));
-    } catch { /* ignore */ }
-  }, [track?.id]);
-
-  const pct = duration ? Math.min(100, (progress / duration) * 100) : 0;
-
   return (
-    <div className="app">
-      <div className="navbar">
-        <span className="back" onClick={() => nav(-1)}>‹</span>
-        <span className="title">
-          音乐
-          {data?.source && <div className="small" style={{ fontWeight: 400, marginTop: 2 }}>{data.source.title}</div>}
-        </span>
-        <span style={{ width: 20 }} />
-      </div>
-
-      <div className="page" style={{ paddingBottom: track ? 96 : 0 }}>
-        {!data && <div className="empty">加载中…</div>}
-        {data && list.length === 0 && <div className="empty">最近 3 天还没有新歌<br />稍后再来看看</div>}
-        {list.length > 0 && (
-          <div className="muted" style={{ padding: '10px 16px 2px', fontSize: 12 }}>只保留最近 3 天 · 共 {list.length} 首</div>
-        )}
-        {list.map((t) => {
-          const active = t.id === current;
-          return (
-            <div key={t.id} className="row music-row" onClick={() => play(t)}>
-              <Cover track={t} size={52} active={active && playing} />
-              <div className="grow">
-                <div className="row" style={{ gap: 6 }}>
-                  <span className="grow ellipsis" style={{ fontSize: 15, color: active ? 'var(--accent)' : 'var(--text)', fontWeight: active ? 600 : 400 }}>{t.title}</span>
-                  {active && playing && <Bars />}
-                </div>
-                <div className="small" style={{ marginTop: 4, display: 'flex', gap: 8 }}>
-                  {t.performer && <span className="ellipsis" style={{ maxWidth: 120 }}>{t.performer}</span>}
-                  <span>{fmtDur(t.duration)}</span>
-                  <span>{fmtSize(t.size)}</span>
-                  <span>{fmtAgo(t.postedAt)}</span>
-                </div>
-              </div>
-              <span style={{ color: active ? 'var(--accent)' : 'var(--text-3)', display: 'flex' }}>
-                <PlayIcon playing={active && playing} size={20} />
-              </span>
+    <div className="mask bottom music-mask" onClick={onClose}>
+      <div className="music-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="music-sheet-head">
+          <div className="music-handle" />
+          <div className="row" style={{ padding: '4px 16px 10px' }}>
+            <div className="grow" style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 16, fontWeight: 600 }} className="ellipsis">{s.data?.source?.title || '音乐'}</div>
+              <div className="small" style={{ marginTop: 2 }}>只保留最近 3 天{list.length ? ` · 共 ${list.length} 首` : ''}</div>
             </div>
-          );
-        })}
-      </div>
-
-      {/* 底部播放器 */}
-      {track && (
-        <div className="music-player">
-          <div className="music-progress" onClick={seek}>
-            <div className="music-progress-fill" style={{ width: `${pct}%` }} />
-          </div>
-          <div className="row" style={{ padding: '10px 14px 12px', gap: 12 }}>
-            <Cover track={track} size={44} active={playing} />
-            <div className="grow" onClick={() => audioRef.current?.play().catch(() => {})}>
-              <div className="ellipsis" style={{ fontSize: 14, fontWeight: 600 }}>{track.title}</div>
-              <div className="small" style={{ marginTop: 3 }}>
-                {track.performer || data?.source?.title || ''} · {fmtDur(progress)} / {fmtDur(duration)}{loading ? ' · 缓冲中…' : ''}
-              </div>
-            </div>
-            <span className="music-ctl" onClick={() => step(-1)}><SkipIcon dir="prev" /></span>
-            <span className="music-ctl main" onClick={toggle}><PlayIcon playing={playing} size={22} /></span>
-            <span className="music-ctl" onClick={() => step(1)}><SkipIcon dir="next" /></span>
+            <span className="np-btn" onClick={onClose}><CloseIcon /></span>
           </div>
         </div>
-      )}
 
-      <audio
-        ref={audioRef}
-        preload="metadata"
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onWaiting={() => setLoading(true)}
-        onPlaying={() => setLoading(false)}
-        onCanPlay={() => setLoading(false)}
-        onTimeUpdate={(e) => setProgress(e.currentTarget.currentTime)}
-        onDurationChange={(e) => { const d = e.currentTarget.duration; if (isFinite(d) && d > 0) setDuration(d); }}
-        onEnded={() => step(1)}
-        onError={() => { setLoading(false); setPlaying(false); }}
-      />
+        <div className="music-list no-scrollbar">
+          {!loaded && <div className="empty">加载中…</div>}
+          {loaded && list.length === 0 && <div className="empty">最近 3 天还没有新歌<br />稍后再来看看</div>}
+          {list.map((t) => {
+            const active = t.id === track?.id;
+            return (
+              <div key={t.id} className="row music-row" onClick={() => music.play(t)}>
+                <Cover track={t} size={48} active={active && s.playing} />
+                <div className="grow">
+                  <div className="row" style={{ gap: 6 }}>
+                    <span className="grow ellipsis" style={{ fontSize: 15, color: active ? 'var(--accent)' : 'var(--text)', fontWeight: active ? 600 : 400 }}>{t.title}</span>
+                    {active && s.playing && <Bars />}
+                  </div>
+                  <div className="small" style={{ marginTop: 4, display: 'flex', gap: 8 }}>
+                    <span>{fmtDur(t.duration)}</span>
+                    {t.performer && <span className="ellipsis" style={{ maxWidth: 120 }}>· {t.performer}</span>}
+                    <span>· {fmtSize(t.size)}</span>
+                    <span>· {fmtAgo(t.postedAt)}</span>
+                  </div>
+                </div>
+                <span style={{ color: active ? 'var(--accent)' : 'var(--text-3)', display: 'flex' }}>
+                  <PlayIcon playing={active && s.playing} size={20} />
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* 大播放器 */}
+        <div className="music-big">
+          {track ? (
+            <>
+              <div className="row" style={{ gap: 12 }}>
+                <Cover track={track} size={52} round={false} />
+                <div className="grow" style={{ minWidth: 0 }}>
+                  <div className="ellipsis" style={{ fontSize: 16, fontWeight: 600 }}>{track.title}</div>
+                  <div className="muted ellipsis" style={{ marginTop: 3 }}>{track.performer || '未知艺术家'}</div>
+                </div>
+              </div>
+              <div className="music-progress big" onClick={seek}>
+                <div className="music-progress-fill" style={{ width: `${pct}%` }} />
+                <div className="music-knob" style={{ left: `${pct}%` }} />
+              </div>
+              <div className="row" style={{ marginTop: 6 }}>
+                <span className="small" style={{ width: 56 }}>{fmtDur(s.progress)}</span>
+                <span className="grow" style={{ textAlign: 'center' }}>
+                  <span className="np-rate" onClick={() => music.cycleRate()}>{s.rate === 1 ? '1X' : `${s.rate}X`}</span>
+                </span>
+                <span className="small" style={{ width: 56, textAlign: 'right' }}>{fmtDur(s.duration)}</span>
+              </div>
+            </>
+          ) : (
+            <div className="muted" style={{ textAlign: 'center', padding: '6px 0 2px' }}>点上面的歌开始播放</div>
+          )}
+          <div className="music-controls">
+            <span className={`music-ctl${s.shuffle ? ' on' : ''}`} onClick={() => music.toggleShuffle()}><ShuffleIcon /></span>
+            <span className="music-ctl" onClick={() => music.step(-1)}><SkipIcon dir="prev" /></span>
+            <span className="music-ctl main" onClick={() => music.toggle()}><PlayIcon playing={s.playing} size={30} /></span>
+            <span className="music-ctl" onClick={() => music.step(1)}><SkipIcon dir="next" /></span>
+            <span className={`music-ctl${s.repeat === 'one' ? ' on' : ''}`} onClick={() => music.toggleRepeat()}><RepeatIcon one={s.repeat === 'one'} /></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 路由页形式（直接访问 /music 时用），关闭即返回 */
+export function MusicPage() {
+  const nav = useNavigate();
+  return (
+    <div className="app">
+      <MusicSheet onClose={() => nav(-1)} />
     </div>
   );
 }

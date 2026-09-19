@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { openNativeChat } from '../bridge';
 import { api, uploadFile } from '../api';
 import { wsManager } from '../ws';
+import { MusicSheet, NowPlayingBar } from './Music';
 
 interface ConversationItem {
   id: string;
@@ -253,6 +254,7 @@ export function ChatListPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [showJoin, setShowJoin] = useState(false);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
+  const [showMusic, setShowMusic] = useState(false);
 
   const loadConvs = () => api<ConversationItem[]>('/im/conversations').then(setConvs).catch(() => {});
   const loadUnread = () => api<Record<string, number>>('/notifications/unread').then(setUnread).catch(() => {});
@@ -289,6 +291,8 @@ export function ChatListPage() {
 
   return (
     <>
+      {/* 播放中：顶部固定「正在播放」栏，点中间打开播放弹层 */}
+      <NowPlayingBar onOpen={() => setShowMusic(true)} />
       {/* 头部：胶囊分类 + 建群按钮 */}
       <div className="row" style={{ padding: '14px 16px 12px', gap: 8 }}>
         {tabs.map((t) => (
@@ -370,7 +374,7 @@ export function ChatListPage() {
           )}
           {/* 音乐频道置顶入口（Telegram 频道同步，只留最近 3 天） */}
           {tab === 'single' && (
-            <div className="row" style={{ padding: '10px 16px', cursor: 'pointer' }} onClick={() => nav('/music')}>
+            <div className="row" style={{ padding: '10px 16px', cursor: 'pointer' }} onClick={() => setShowMusic(true)}>
               <div style={{
                 width: 48, height: 48, borderRadius: 24, flexShrink: 0,
                 background: 'linear-gradient(135deg, #7b5cff, #fe2c55)', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -456,6 +460,8 @@ export function ChatListPage() {
           }}
         />
       )}
+
+      {showMusic && <MusicSheet onClose={() => setShowMusic(false)} />}
 
       {showJoin && (
         <JoinGroupSheet

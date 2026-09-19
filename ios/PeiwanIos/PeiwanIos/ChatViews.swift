@@ -68,10 +68,14 @@ struct MessagesView: View {
     @State private var unread = UnreadCounts()
     @State private var chatTarget: ChatTarget?
     @State private var removeListener: (() -> Void)?
+    /// 音乐播放弹层（顶部「正在播放」栏 / 私聊 tab 入口打开）
+    @State private var showMusic = false
 
     var body: some View {
         NavStack {
             VStack(spacing: 0) {
+                // 播放中：固定在消息页最上面
+                NowPlayingBar { showMusic = true }
                 header
                 if tab == "single" || tab == "group" {
                     // AI 助手 + 花边新闻置顶入口
@@ -99,6 +103,9 @@ struct MessagesView: View {
         }
         .fullScreenCover(item: $chatTarget) { t in
             ChatRoomSheet(target: t)
+        }
+        .sheet(isPresented: $showMusic) {
+            MusicSheetView(onClose: { showMusic = false })
         }
         .task {
             await loadConvs(); await loadUnread()
@@ -180,9 +187,9 @@ struct MessagesView: View {
         .buttonStyle(.plain)
     }
 
-    /// 音乐频道置顶入口（Telegram 频道同步，只留最近 3 天）
+    /// 音乐频道置顶入口（Telegram 频道同步，只留最近 3 天）：弹出播放弹层
     private var newsEntryRow: some View {
-        RouteLink(.music) {
+        Button { showMusic = true } label: {
             VStack(spacing: 0) {
                 HStack(spacing: 12) {
                     Circle()

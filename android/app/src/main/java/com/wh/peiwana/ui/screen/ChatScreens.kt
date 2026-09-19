@@ -154,7 +154,13 @@ fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, c
         Triple("comment", "评论", unread.comment), Triple("task", "接单", unread.task),
     )
 
+    // 音乐播放弹层（顶部「正在播放」栏 / 私聊 tab 入口打开）
+    var showMusic by remember { mutableStateOf(false) }
+    if (showMusic) MusicSheet(onDismiss = { showMusic = false })
+
     Column(modifier = modifier.fillMaxSize()) {
+        // 播放中：固定在消息页最上面
+        NowPlayingBar(onOpen = { showMusic = true })
         Row(modifier = Modifier.fillMaxWidth().padding(16.dp, 14.dp, 16.dp, 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             tabs.forEach { (k, label, badge) -> PillTab(label, tab == k, badge) { tab = k } }
             Spacer(Modifier.weight(1f))
@@ -193,8 +199,8 @@ fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, c
                     }
                     Box(modifier = Modifier.fillMaxWidth().padding(start = 76.dp).height(1.dp).background(Line))
                 }
-                // 音乐频道置顶入口（Telegram 频道同步，只留最近 3 天）
-                Column(Modifier.fillMaxWidth().clickable(onClick = onOpenNews)) {
+                // 音乐频道置顶入口（Telegram 频道同步，只留最近 3 天）：弹出播放弹层
+                Column(Modifier.fillMaxWidth().clickable(onClick = { showMusic = true })) {
                     Row(Modifier.fillMaxWidth().padding(16.dp, 10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             Modifier.size(48.dp).clip(RoundedCornerShape(24.dp))

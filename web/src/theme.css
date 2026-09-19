@@ -371,13 +371,33 @@ textarea.input { resize: none; min-height: 90px; }
   color: #ff8fa3; letter-spacing: 6px; font-size: 14px;
 }
 
-/* 音乐频道（消息页入口）：列表 + 底部常驻播放器 */
+/* 音乐：消息页顶部「正在播放」栏 + 播放弹层（列表 + 大播放器） */
+.now-playing {
+  display: flex; align-items: center; gap: 6px; padding: 6px 8px 6px 6px; margin: 8px 12px 0;
+  background: var(--bg-card); border: 1px solid var(--line); border-radius: 14px;
+}
+.np-btn { width: 34px; height: 34px; border-radius: 17px; display: flex; align-items: center; justify-content: center; color: var(--text); cursor: pointer; flex-shrink: 0; }
+.np-btn:active { background: var(--bg-input); }
+.np-text { flex: 1; min-width: 0; text-align: center; cursor: pointer; }
+.np-title { font-size: 14px; font-weight: 600; }
+.np-sub { font-size: 11px; color: var(--text-2); margin-top: 1px; }
+.np-rate { font-size: 11px; font-weight: 700; color: var(--text-2); border: 1.5px dashed var(--text-3); border-radius: 5px; padding: 1px 5px; cursor: pointer; flex-shrink: 0; }
+
+.music-mask { align-items: flex-end; }
+.music-sheet {
+  width: 100%; max-width: 480px; height: 92%; background: var(--bg-card);
+  border-radius: 18px 18px 0 0; display: flex; flex-direction: column; overflow: hidden;
+}
+.music-sheet-head { flex-shrink: 0; }
+.music-handle { width: 36px; height: 4px; border-radius: 2px; background: var(--text-3); margin: 8px auto 6px; }
+.music-list { flex: 1; overflow-y: auto; }
 .music-row { padding: 10px 16px; cursor: pointer; }
-.music-row:active { background: var(--bg-card); }
+.music-row:active { background: var(--bg-input); }
 .music-cover {
   flex-shrink: 0; border-radius: 50%; overflow: hidden; display: flex; align-items: center; justify-content: center;
-  background: var(--accent-grad); box-shadow: 0 0 0 3px #1c1c22 inset;
+  background: linear-gradient(135deg, #7b5cff, var(--accent)); box-shadow: 0 0 0 3px #1c1c22 inset;
 }
+.music-cover.square { border-radius: 10px; box-shadow: none; }
 .music-cover img { width: 100%; height: 100%; object-fit: cover; }
 .music-cover.spin { animation: music-spin 8s linear infinite; }
 @keyframes music-spin { to { transform: rotate(360deg); } }
@@ -386,14 +406,15 @@ textarea.input { resize: none; min-height: 90px; }
 .music-bars i:nth-child(2) { animation-delay: 0.25s; }
 .music-bars i:nth-child(3) { animation-delay: 0.5s; }
 @keyframes music-bar { 0%, 100% { height: 4px; } 50% { height: 12px; } }
-.music-player {
-  position: fixed; left: 0; right: 0; bottom: 0; max-width: 480px; margin: 0 auto; z-index: 40;
-  background: rgba(22, 22, 25, 0.96); backdrop-filter: blur(12px); border-top: 1px solid var(--line);
-  padding-bottom: env(safe-area-inset-bottom);
-}
+
+.music-big { flex-shrink: 0; padding: 12px 16px 14px; border-top: 1px solid var(--line); background: var(--bg); padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
 .music-progress { height: 3px; background: #2a2a30; cursor: pointer; position: relative; }
-.music-progress::before { content: ""; position: absolute; left: 0; right: 0; top: -8px; bottom: -8px; }
-.music-progress-fill { height: 100%; background: var(--accent-grad); transition: width 0.25s linear; }
-.music-ctl { width: 36px; height: 36px; border-radius: 18px; display: flex; align-items: center; justify-content: center; color: var(--text); cursor: pointer; flex-shrink: 0; }
-.music-ctl.main { width: 42px; height: 42px; border-radius: 21px; background: var(--accent-grad); color: #fff; }
+.music-progress.big { margin-top: 14px; height: 4px; border-radius: 2px; }
+.music-progress::before { content: ""; position: absolute; left: 0; right: 0; top: -10px; bottom: -10px; }
+.music-progress-fill { height: 100%; background: var(--accent-grad); border-radius: 2px; transition: width 0.25s linear; }
+.music-knob { position: absolute; top: 50%; width: 12px; height: 12px; border-radius: 6px; background: #fff; transform: translate(-50%, -50%); box-shadow: 0 1px 4px rgba(0,0,0,0.5); }
+.music-controls { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding: 0 8px; }
+.music-ctl { width: 44px; height: 44px; border-radius: 22px; display: flex; align-items: center; justify-content: center; color: var(--text); cursor: pointer; flex-shrink: 0; }
+.music-ctl.on { color: var(--accent); }
+.music-ctl.main { width: 60px; height: 60px; border-radius: 30px; background: var(--accent-grad); color: #fff; }
 .music-ctl:active { opacity: 0.7; }
