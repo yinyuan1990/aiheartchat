@@ -313,9 +313,10 @@ export function MusicSharePage() {
             </div>
             {t.source?.title && <div className="small" style={{ marginTop: 6, textAlign: 'center' }}>来自 {t.source.title}</div>}
           </div>
-          <audio src={t.fullUrl} controls preload="metadata" style={{ width: '100%', marginTop: 22 }} />
+          {/* 同源 /res 路径：<a download> 跨域会失效，且同源可复用 nginx 的 /res 反代 */}
+          <audio src={t.url} controls preload="metadata" style={{ width: '100%', marginTop: 22 }} />
           <div className="row" style={{ gap: 12, marginTop: 22 }}>
-            <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => { saveTrack({ title: t.title, url: t.fullUrl }); showToast('开始下载'); }}>保存到手机</button>
+            <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => { saveTrack({ title: t.title, url: t.url }); showToast('开始下载'); }}>保存到手机</button>
             <button className="btn" style={{ flex: 1 }} onClick={openApp}>打开心之音 App</button>
           </div>
           <div className="hint">心之音 App 里每天都有新歌，边聊边听</div>
