@@ -193,22 +193,22 @@ fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, c
                     }
                     Box(modifier = Modifier.fillMaxWidth().padding(start = 76.dp).height(1.dp).background(Line))
                 }
-                // 花边新闻置顶入口（每天一个故事）
+                // 音乐频道置顶入口（Telegram 频道同步，只留最近 3 天）
                 Column(Modifier.fillMaxWidth().clickable(onClick = onOpenNews)) {
                     Row(Modifier.fillMaxWidth().padding(16.dp, 10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             Modifier.size(48.dp).clip(RoundedCornerShape(24.dp))
-                                .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFFFF9500), Accent))),
+                                .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF7B5CFF), Accent))),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Text("📰", fontSize = 22.sp)
+                            NoteIcon(Color.White, 24.dp)
                         }
                         Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                            Text("花边新闻", color = TextMain, fontSize = 15.sp)
-                            Text("逆袭·励志·情感，看看别人的故事", color = TextSub, fontSize = 13.sp, maxLines = 1)
+                            Text("音乐", color = TextMain, fontSize = 15.sp)
+                            Text("DJ 热曲 · 情感音乐，边聊边听", color = TextSub, fontSize = 13.sp, maxLines = 1)
                         }
                         Text(
-                            "每天一个故事", color = Accent, fontSize = 10.sp,
+                            "每日上新", color = Accent, fontSize = 10.sp,
                             modifier = Modifier.clip(RoundedCornerShape(4.dp))
                                 .background(Accent.copy(alpha = 0.12f))
                                 .padding(horizontal = 5.dp, vertical = 2.dp),

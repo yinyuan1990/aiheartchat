@@ -65,6 +65,17 @@ export class UploadService implements OnModuleInit {
     return { url: `/res/${this.bucket}/${object}` };
   }
 
+  /**
+   * 服务端内部转存（不走用户上传的类型/大小限制）：如 Telegram 频道同步下来的音乐文件（100MB+）。
+   * prefix 为对象前缀目录（如 music），ext 为扩展名（不带点）。
+   */
+  async putInternal(prefix: string, ext: string, buffer: Buffer, mimetype: string, extraMeta: Record<string, string> = {}) {
+    const clean = (ext || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8) || 'bin';
+    const object = `${prefix}/${new Date().toISOString().slice(0, 10)}/${randomUUID()}.${clean}`;
+    await this.client.putObject(this.bucket, object, buffer, buffer.length, { 'Content-Type': mimetype, ...extraMeta });
+    return { url: `/res/${this.bucket}/${object}` };
+  }
+
   /** 删除站内资源（只认本 bucket 的 /res/<bucket>/ 路径，其它忽略） */
   async remove(url: string) {
     const prefix = `/res/${this.bucket}/`;

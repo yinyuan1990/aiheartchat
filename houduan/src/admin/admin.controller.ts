@@ -9,6 +9,8 @@ import { AppVersionService } from '../module/app-version.service';
 import { AdminGuard } from './admin.guard';
 import { AdminService } from './admin.service';
 import { ReviewService } from '../auth/review.service';
+import { TelegramClientService } from '../telegram/telegram.service';
+import { MusicService } from '../music/music.service';
 
 @Controller('admin')
 export class AdminController {
@@ -20,7 +22,97 @@ export class AdminController {
     private readonly srs: SrsService,
     private readonly appVersion: AppVersionService,
     private readonly review: ReviewService,
+    private readonly tg: TelegramClientService,
+    private readonly music: MusicService,
   ) {}
+
+  // ---------- Telegram 账号（音乐频道同步用） ----------
+
+  @Get('telegram/status')
+  @UseGuards(AdminGuard)
+  tgStatus() {
+    return this.tg.status();
+  }
+
+  /** 保存 api_id / api_hash（my.telegram.org 申请；留空回退内置值） */
+  @Put('telegram/api')
+  @UseGuards(AdminGuard)
+  tgSaveApi(@Body() body: { apiId?: string; apiHash?: string }) {
+    return this.tg.saveApi(body?.apiId ?? '', body?.apiHash ?? '');
+  }
+
+  @Post('telegram/send-code')
+  @UseGuards(AdminGuard)
+  @Throttle(5, 300)
+  tgSendCode(@Body() body: { phone: string }) {
+    return this.tg.sendCode(body?.phone ?? '');
+  }
+
+  /** 输验证码；返回 needPassword=true 时再带 password 调一次 */
+  @Post('telegram/sign-in')
+  @UseGuards(AdminGuard)
+  @Throttle(10, 300)
+  tgSignIn(@Body() body: { code?: string; password?: string }) {
+    return this.tg.signIn(body?.code ?? '', body?.password);
+  }
+
+  @Post('telegram/logout')
+  @UseGuards(AdminGuard)
+  tgLogout() {
+    return this.tg.logout();
+  }
+
+  // ---------- 音乐频道 ----------
+
+  @Get('music/sources')
+  @UseGuards(AdminGuard)
+  musicSources() {
+    return this.music.listSources();
+  }
+
+  /** 预览：解析频道 + 最近音频列表（不入库），改来源前先核对 */
+  @Get('music/sources/preview')
+  @UseGuards(AdminGuard)
+  musicPreview(@Query('channel') channel: string) {
+    return this.music.preview(channel ?? '');
+  }
+
+  /** 新增/修改来源（保存前会解析频道，解析失败不保存；换频道会清掉旧曲目） */
+  @Post('music/sources')
+  @UseGuards(AdminGuard)
+  musicSaveSource(@Body() body: { id?: number; channel: string; enabled?: boolean }) {
+    return this.music.saveSource(body);
+  }
+
+  @Delete('music/sources/:id')
+  @UseGuards(AdminGuard)
+  musicRemoveSource(@Param('id') id: string) {
+    return this.music.removeSource(Number(id));
+  }
+
+  @Post('music/sources/:id/sync')
+  @UseGuards(AdminGuard)
+  musicSyncNow(@Param('id') id: string) {
+    return this.music.syncOne(Number(id));
+  }
+
+  @Get('music/tracks')
+  @UseGuards(AdminGuard)
+  musicTracks(@Query('beforeId') beforeId?: string) {
+    return this.music.adminTracks(beforeId ? BigInt(beforeId) : undefined);
+  }
+
+  @Post('music/tracks/:id/delete')
+  @UseGuards(AdminGuard)
+  musicDeleteTrack(@Param('id') id: string) {
+    return this.music.adminDeleteTrack(BigInt(id));
+  }
+
+  @Post('music/purge')
+  @UseGuards(AdminGuard)
+  musicPurge() {
+    return this.music.purgeOld();
+  }
 
   // ---------- iOS 审核模式 / 演示账号 ----------
 

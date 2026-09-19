@@ -10,6 +10,7 @@ import ModulesView from './views/ModulesView.vue';
 import LedgerView from './views/LedgerView.vue';
 import CallLogsView from './views/CallLogsView.vue';
 import TreeholeView from './views/TreeholeView.vue';
+import MusicView from './views/MusicView.vue';
 import SrsNodesView from './views/SrsNodesView.vue';
 import AppVersionView from './views/AppVersionView.vue';
 
@@ -29,6 +30,7 @@ const tabs = [
   { key: 'disputes', label: '约单仲裁' },
   { key: 'modules', label: '大厅 / 小游戏' },
   { key: 'treehole', label: '私密树洞' },
+  { key: 'music', label: '音乐频道' },
   { key: 'srs', label: 'SRS 节点' },
   { key: 'appver', label: 'App 版本 / 强制更新' },
 ];
@@ -88,6 +90,7 @@ function logout() {
       <DisputesView v-if="tab === 'disputes'" />
       <ModulesView v-if="tab === 'modules'" />
       <TreeholeView v-if="tab === 'treehole'" />
+      <MusicView v-if="tab === 'music'" />
       <SrsNodesView v-if="tab === 'srs'" />
       <AppVersionView v-if="tab === 'appver'" />
     </div>

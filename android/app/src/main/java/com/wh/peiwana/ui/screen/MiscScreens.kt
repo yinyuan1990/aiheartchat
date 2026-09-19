@@ -502,6 +502,8 @@ object FeedVideoCenter {
     fun register(player: androidx.media3.exoplayer.ExoPlayer) {
         if (current !== player) current?.pause()
         current = player
+        // 视频出声时把背景音乐停掉
+        MusicCenter.pause()
     }
 
     fun unregister(player: androidx.media3.exoplayer.ExoPlayer) {

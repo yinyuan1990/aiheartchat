@@ -11,6 +11,7 @@ import { ChatListPage } from './pages/ChatList';
 import { ChatRoomPage } from './pages/ChatRoom';
 import { AiChatPage } from './pages/AiChat';
 import { NewsDetailPage, NewsListPage } from './pages/NewsDetail';
+import { MusicPage } from './pages/Music';
 import { MePage } from './pages/Me';
 import { PublishPage } from './pages/Publish';
 import { PeoplePage } from './pages/People';
@@ -175,6 +176,7 @@ export function App() {
         <Route path="/treehole/:id" element={<TreeholeDetailPage />} />
         <Route path="/news" element={<NewsListPage />} />
         <Route path="/news/:id" element={<NewsDetailPage />} />
+        <Route path="/music" element={<MusicPage />} />
         <Route path="/people/:mode" element={<PeoplePage />} />
         <Route path="/task/post" element={<TaskPostPage />} />
         <Route path="/task/hall" element={<TaskHallPage />} />

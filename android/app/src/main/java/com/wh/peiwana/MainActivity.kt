@@ -283,6 +283,9 @@ fun AppRoot() {
             page("news") {
                 NewsListScreen(onOpenNews = { nav.navigate("news/$it") }, onBack = { nav.popBackStack() })
             }
+            page("music") {
+                MusicScreen(onBack = { nav.popBackStack() })
+            }
             page("news/{id}", listOf(navArgument("id") { type = NavType.StringType })) { entry ->
                 NewsDetailScreen(entry.arguments!!.getString("id")!!, onBack = { nav.popBackStack() })
             }

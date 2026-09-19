@@ -368,20 +368,21 @@ export function ChatListPage() {
               </div>
             </div>
           )}
-          {/* 花边新闻置顶入口（每天一个故事） */}
+          {/* 音乐频道置顶入口（Telegram 频道同步，只留最近 3 天） */}
           {tab === 'single' && (
-            <div className="row" style={{ padding: '10px 16px', cursor: 'pointer' }} onClick={() => nav('/news')}>
+            <div className="row" style={{ padding: '10px 16px', cursor: 'pointer' }} onClick={() => nav('/music')}>
               <div style={{
                 width: 48, height: 48, borderRadius: 24, flexShrink: 0,
-                background: 'linear-gradient(135deg, #ff9500, #ff2c55)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 22,
-              }}>📰</div>
+                background: 'linear-gradient(135deg, #7b5cff, #fe2c55)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <svg width={24} height={24} viewBox="0 0 24 24" fill="#fff"><path d="M9 3v10.55A4 4 0 1 0 11 17V7h5a3 3 0 0 0 3-3V3H9z" /></svg>
+              </div>
               <div className="grow" style={{ borderBottom: '1px solid var(--line)', paddingBottom: 10 }}>
                 <div className="row">
-                  <span className="grow" style={{ fontSize: 15 }}>花边新闻</span>
-                  <span style={{ fontSize: 10, color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 4, padding: '1px 5px' }}>每天一个故事</span>
+                  <span className="grow" style={{ fontSize: 15 }}>音乐</span>
+                  <span style={{ fontSize: 10, color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 4, padding: '1px 5px' }}>每日上新</span>
                 </div>
-                <div className="muted ellipsis" style={{ marginTop: 3 }}>逆袭·励志·情感，看看别人的故事</div>
+                <div className="muted ellipsis" style={{ marginTop: 3 }}>DJ 热曲 · 情感音乐，边聊边听</div>
               </div>
             </div>
           )}

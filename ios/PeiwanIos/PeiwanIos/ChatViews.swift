@@ -180,21 +180,21 @@ struct MessagesView: View {
         .buttonStyle(.plain)
     }
 
-    /// 花边新闻置顶入口（每天一个故事）
+    /// 音乐频道置顶入口（Telegram 频道同步，只留最近 3 天）
     private var newsEntryRow: some View {
-        RouteLink(.newsList) {
+        RouteLink(.music) {
             VStack(spacing: 0) {
                 HStack(spacing: 12) {
                     Circle()
-                        .fill(LinearGradient(colors: [Color(red: 1, green: 0.58, blue: 0), Theme.accent], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .fill(LinearGradient(colors: [Color(red: 0.48, green: 0.36, blue: 1), Theme.accent], startPoint: .topLeading, endPoint: .bottomTrailing))
                         .frame(width: 48, height: 48)
-                        .overlay(Text("📰").font(.system(size: 22)))
+                        .overlay(Image(systemName: "music.note").font(.system(size: 22, weight: .semibold)).foregroundStyle(.white))
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("花边新闻").font(.system(size: 15)).foregroundStyle(Theme.text)
-                        Text("逆袭·励志·情感，看看别人的故事").font(.system(size: 13)).foregroundStyle(Theme.textSub).lineLimit(1)
+                        Text("音乐").font(.system(size: 15)).foregroundStyle(Theme.text)
+                        Text("DJ 热曲 · 情感音乐，边聊边听").font(.system(size: 13)).foregroundStyle(Theme.textSub).lineLimit(1)
                     }
                     Spacer()
-                    Text("每天一个故事").font(.system(size: 10)).foregroundStyle(Theme.accent)
+                    Text("每日上新").font(.system(size: 10)).foregroundStyle(Theme.accent)
                         .padding(.horizontal, 5).padding(.vertical, 2)
                         .background(RoundedRectangle(cornerRadius: 4).fill(Theme.accent.opacity(0.12)))
                 }

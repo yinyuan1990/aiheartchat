@@ -411,6 +411,8 @@ final class CallManager: ObservableObject {
             }
             // 通话期间暂停无声保活，避免音频会话冲突（通话音频本身可后台保活）
             SilentAudioKeeper.shared.stop()
+            // 背景音乐让位
+            MusicCenter.shared.pause()
             // 必须走 WebRTC 的 RTCAudioSession 配置（直接用 AVAudioSession 会绕过
             // WebRTC 会话管理，导致录音单元静默不启动 → 对方听不到声音）
             let rtcSession = RTCAudioSession.sharedInstance()

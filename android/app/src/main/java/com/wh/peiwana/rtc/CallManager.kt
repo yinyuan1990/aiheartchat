@@ -381,6 +381,8 @@ object CallManager {
         val f = factory ?: return
         try {
             clog("startMedia begin type=$type callId=$callId peerId=$peerId")
+            // 通话期间停掉背景音乐
+            com.wh.peiwana.ui.screen.MusicCenter.pause()
             // 微信习惯：语音默认听筒，视频默认免提
             (appContextRef?.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager)?.apply {
                 mode = android.media.AudioManager.MODE_IN_COMMUNICATION

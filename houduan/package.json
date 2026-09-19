@@ -29,6 +29,7 @@
     "minio": "^8.0.2",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "telegram": "^2.26.16",
     "ws": "^8.18.0"
   },
   "devDependencies": {

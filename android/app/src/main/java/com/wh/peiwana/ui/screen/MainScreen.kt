@@ -109,7 +109,7 @@ fun MainScreen(
                     onOpenTask = { onNav("task/$it") },
                     onCreateGroup = { onNav("create-group") },
                     onOpenAi = { onNav("aichat") },
-                    onOpenNews = { onNav("news") },
+                    onOpenNews = { onNav("music") },
                     onJoinGroup = { onNav("join-group") },
                 )
             }

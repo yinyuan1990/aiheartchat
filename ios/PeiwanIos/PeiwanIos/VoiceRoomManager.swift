@@ -187,6 +187,7 @@ final class VoiceRoomManager: ObservableObject {
     private func configureAudio() {
         // 语音房期间暂停无声保活，避免音频会话冲突
         SilentAudioKeeper.shared.stop()
+        MusicCenter.shared.pause()
         // 必须走 WebRTC 的 RTCAudioSession 配置（同 CallManager，直接用 AVAudioSession 会导致录音单元静默失败）
         let rtcSession = RTCAudioSession.sharedInstance()
         rtcSession.lockForConfiguration()

@@ -23,6 +23,8 @@ import { NewsModule } from './news/news.module';
 import { TreeholeModule } from './treehole/treehole.module';
 import { SrsModule } from './srs/srs.module';
 import { InviteModule } from './invite/invite.module';
+import { TelegramModule } from './telegram/telegram.module';
+import { MusicModule } from './music/music.module';
 
 @Module({
   imports: [
@@ -48,6 +50,8 @@ import { InviteModule } from './invite/invite.module';
     NewsModule,
     TreeholeModule,
     InviteModule,
+    TelegramModule,
+    MusicModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: RateLimitGuard }],
 })

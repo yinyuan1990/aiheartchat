@@ -640,13 +640,64 @@ model AppModule {
 
 // ---------- 其他 ----------
 
-/// 系统开关/配置（key-value）。目前：review_mode_ios = 1/0（iOS 审核模式：启动显示账号密码登录页）
+/// 系统开关/配置（key-value）。目前：review_mode_ios = 1/0（iOS 审核模式：启动显示账号密码登录页）；
+/// tg_api_id / tg_api_hash / tg_session（Telegram 用户账号登录态，音乐频道同步用）
 model SysSetting {
   key       String   @id @db.VarChar(40)
-  value     String   @default("") @db.VarChar(500)
+  value     String   @default("") @db.VarChar(2000)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@map("sys_setting")
+}
+
+// ---------- 音乐频道（消息页入口，Telegram 频道音频自动同步） ----------
+
+/// 音乐来源：Telegram 频道（需要后台登录一个 Telegram 用户账号，通过 MTProto 读取；
+/// 网页预览 t.me/s 不给音频文件，且该类频道多半关了预览）
+model MusicSource {
+  id            Int      @id @default(autoincrement())
+  /// 频道用户名（不带 @），如 wenan_DJ866
+  channel       String   @unique @db.VarChar(64)
+  /// 解析到的频道标题（保存时从 Telegram 取回，后台核对用）
+  title         String   @default("") @db.VarChar(120)
+  /// 订阅数（解析时取回）
+  subscribers   Int      @default(0)
+  enabled       Boolean  @default(true)
+  /// 已同步到的最大消息 id
+  lastMsgId     Int      @default(0) @map("last_msg_id")
+  lastSyncAt    DateTime? @map("last_sync_at")
+  lastError     String   @default("") @map("last_error") @db.VarChar(300)
+  importedCount Int      @default(0) @map("imported_count")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("music_source")
+}
+
+/// 曲目：音频文件已转存到 MinIO，只保留最近 3 天
+model MusicTrack {
+  id        BigInt   @id @default(autoincrement())
+  sourceId  Int      @map("source_id")
+  /// tg:频道:消息id，同步去重
+  sourceKey String   @unique @map("source_key") @db.VarChar(120)
+  title     String   @db.VarChar(200)
+  performer String   @default("") @db.VarChar(120)
+  /// 秒
+  duration  Int      @default(0)
+  /// 字节
+  size      Int      @default(0)
+  mime      String   @default("audio/mpeg") @db.VarChar(60)
+  /// /res/ 路径
+  url       String   @db.VarChar(300)
+  /// 封面 /res/ 路径（有内嵌封面才有）
+  cover     String   @default("") @db.VarChar(300)
+  /// 频道里的发布时间
+  postedAt  DateTime @map("posted_at")
+  playCount Int      @default(0) @map("play_count")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([postedAt])
+  @@index([sourceId])
+  @@map("music_track")
 }
 
 model Region {

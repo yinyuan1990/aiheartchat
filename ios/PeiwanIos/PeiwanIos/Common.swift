@@ -212,6 +212,8 @@ enum Route: Hashable {
     case newsList
     /// 花边新闻详情
     case newsDetail(String)
+    /// 音乐频道（Telegram 频道同步，最近 3 天）
+    case music
     /// 私密树洞详情（评论）
     case treehole(String)
     /// 私密树洞匿名发布
@@ -244,6 +246,7 @@ func routeView(_ route: Route) -> some View {
     case .aiChat: AiChatView()
     case .newsList: NewsListView()
     case .newsDetail(let id): NewsDetailView(newsId: id)
+    case .music: MusicView()
     case .treehole(let id): TreeholeDetailView(postId: id)
     case .treeholePublish: TreeholePublishView()
     }

@@ -1,4 +1,4 @@
-/* 心之音 UI 定稿主题：纯黑沉浸 + 玫红渐变（docs/UI设计规范.md） */
+﻿/* 心之音 UI 定稿主题：纯黑沉浸 + 玫红渐变（docs/UI设计规范.md） */
 :root {
   --bg: #0a0a0c;
   --bg-card: #161619;
@@ -370,3 +370,30 @@ textarea.input { resize: none; min-height: 90px; }
   display: flex; align-items: center; justify-content: center;
   color: #ff8fa3; letter-spacing: 6px; font-size: 14px;
 }
+
+/* 音乐频道（消息页入口）：列表 + 底部常驻播放器 */
+.music-row { padding: 10px 16px; cursor: pointer; }
+.music-row:active { background: var(--bg-card); }
+.music-cover {
+  flex-shrink: 0; border-radius: 50%; overflow: hidden; display: flex; align-items: center; justify-content: center;
+  background: var(--accent-grad); box-shadow: 0 0 0 3px #1c1c22 inset;
+}
+.music-cover img { width: 100%; height: 100%; object-fit: cover; }
+.music-cover.spin { animation: music-spin 8s linear infinite; }
+@keyframes music-spin { to { transform: rotate(360deg); } }
+.music-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; flex-shrink: 0; }
+.music-bars i { width: 3px; background: var(--accent); border-radius: 1px; animation: music-bar 0.9s ease-in-out infinite; }
+.music-bars i:nth-child(2) { animation-delay: 0.25s; }
+.music-bars i:nth-child(3) { animation-delay: 0.5s; }
+@keyframes music-bar { 0%, 100% { height: 4px; } 50% { height: 12px; } }
+.music-player {
+  position: fixed; left: 0; right: 0; bottom: 0; max-width: 480px; margin: 0 auto; z-index: 40;
+  background: rgba(22, 22, 25, 0.96); backdrop-filter: blur(12px); border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.music-progress { height: 3px; background: #2a2a30; cursor: pointer; position: relative; }
+.music-progress::before { content: ""; position: absolute; left: 0; right: 0; top: -8px; bottom: -8px; }
+.music-progress-fill { height: 100%; background: var(--accent-grad); transition: width 0.25s linear; }
+.music-ctl { width: 36px; height: 36px; border-radius: 18px; display: flex; align-items: center; justify-content: center; color: var(--text); cursor: pointer; flex-shrink: 0; }
+.music-ctl.main { width: 42px; height: 42px; border-radius: 21px; background: var(--accent-grad); color: #fff; }
+.music-ctl:active { opacity: 0.7; }
