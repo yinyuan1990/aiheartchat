@@ -14,6 +14,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,6 +60,14 @@ fun HallScreen(
     // 大厅 H5 内有子页面（树洞详情/发布等）：系统返回键先让网页后退，退不了才交给系统
     var webView by remember { mutableStateOf<android.webkit.WebView?>(null) }
     var canGoBack by remember { mutableStateOf(false) }
+    // 原生播放状态回推给 H5（切歌 / 暂停时），H5 的播放 UI 据此同步：window.PeiwanMusicState({id, playing})
+    val musicCur = MusicCenter.current.value
+    val musicPlaying = MusicCenter.isPlaying.value
+    LaunchedEffect(webView, musicCur?.id, musicPlaying) {
+        val w = webView ?: return@LaunchedEffect
+        val id = musicCur?.id?.let { "\"$it\"" } ?: "null"
+        w.evaluateJavascript("window.PeiwanMusicState&&window.PeiwanMusicState({id:$id,playing:$musicPlaying})", null)
+    }
     androidx.activity.compose.BackHandler(enabled = active && canGoBack) { webView?.goBack() }
     // 切到大厅 tab：打一条尺寸/进度日志（黑屏时看这里是不是 0x0），并强制 WebView 重绘一次
     LaunchedEffect(active, webView) {
@@ -87,13 +96,13 @@ fun HallScreen(
                     clipToOutline = true
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
-                    // 深色底避免加载白闪
-                    setBackgroundColor(0xFF141418.toInt())
+                    // 与页面底色一致（浅色主题），避免加载时闪一下别的颜色
+                    setBackgroundColor(Bg.toArgb())
                     webViewClient = GameLog.webViewClient("hall") { canGoBack = it }
                     // H5 的 console.log / JS 报错转到 logcat（tag=YGameXd），排查黑屏/点击无反应
                     webChromeClient = GameLog.chromeClient("hall")
                     // JS 桥（window.PeiwanNative）：H5 聊天入口唤起原生聊天页 / 小游戏唤起原生全屏网页
-                    addJavascriptInterface(HallJsBridge(onOpenChat, onOpenWeb), "PeiwanNative")
+                    addJavascriptInterface(HallJsBridge(ctx, onOpenChat, onOpenWeb), "PeiwanNative")
                     // 布局尺寸变化打日志：大厅黑屏时先确认 WebView 有没有拿到真实尺寸
                     addOnLayoutChangeListener { v, l, t, r, b, ol, ot, or, ob ->
                         if (r - l != or - ol || b - t != ob - ot) GameLog.d("hall: webview layout ${r - l}x${b - t}")
@@ -119,11 +128,50 @@ fun withIndexCacheBuster(url: String): String {
     return "$head${sep}_t=${System.currentTimeMillis()}$tail"
 }
 
-/** 大厅 H5 → 原生 的 JS 桥（JS 侧调用 PeiwanNative.openChat / PeiwanNative.openWeb） */
+/** H5 → 原生播放器的指令（web/src/bridge.ts nativeMusic 发出） */
+@kotlinx.serialization.Serializable
+private data class MusicCmd(
+    val action: String = "",
+    val track: MusicTrack? = null,
+    val queue: List<MusicTrack>? = null,
+    val ratio: Float? = null,
+    val value: Float? = null,
+)
+
+/** 大厅 H5 → 原生 的 JS 桥（JS 侧调用 PeiwanNative.openChat / openWeb / music） */
 private class HallJsBridge(
+    private val ctx: android.content.Context,
     private val onOpenChat: (String, Int, String, String) -> Unit,
     private val onOpenWeb: (String, String, Boolean) -> Unit,
 ) {
+    /**
+     * H5 里播音乐交给原生播放器（后台可播、消息页顶部栏/锁屏可控，与原生音乐页共用 MusicCenter）。
+     * json: {action: play|pause|resume|stop|seek|rate, track?, queue?, ratio?, value?}
+     */
+    @android.webkit.JavascriptInterface
+    fun music(json: String) {
+        val cmd = runCatching { Api.json.decodeFromString(MusicCmd.serializer(), json) }
+            .onFailure { GameLog.w("bridge.music bad json: ${it.message}") }.getOrNull() ?: return
+        GameLog.d("bridge.music ${cmd.action} track=${cmd.track?.title} queue=${cmd.queue?.size}")
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            when (cmd.action) {
+                "play" -> {
+                    val t = cmd.track ?: return@post
+                    cmd.queue?.takeIf { it.isNotEmpty() }?.let { MusicCenter.setQueue(it) }
+                    if (MusicCenter.queue.none { it.id == t.id }) MusicCenter.setQueue(MusicCenter.queue + t)
+                    if (MusicCenter.current.value?.id == t.id) { if (!MusicCenter.isPlaying.value) MusicCenter.toggle(ctx) }
+                    else MusicCenter.play(ctx, t)
+                }
+                "pause" -> MusicCenter.pause()
+                "resume" -> if (!MusicCenter.isPlaying.value) MusicCenter.toggle(ctx)
+                "stop" -> MusicCenter.stop()
+                "seek" -> cmd.ratio?.let { MusicCenter.seekTo(it) }
+                "rate" -> cmd.value?.let { MusicCenter.setRate(it) }
+                else -> GameLog.w("bridge.music unknown action ${cmd.action}")
+            }
+        }
+    }
+
     @android.webkit.JavascriptInterface
     fun openChat(convId: String, convType: String, targetId: String, title: String) {
         GameLog.d("bridge.openChat conv=$convId type=$convType target=$targetId title=$title")

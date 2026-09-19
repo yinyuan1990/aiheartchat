@@ -46,6 +46,50 @@ export function isEmbedded(): boolean {
   return sessionStorage.getItem(EMBED_KEY) === '1' || inNativeApp();
 }
 
+// ---------- 原生音乐播放器 ----------
+
+/** 交给原生播放的曲目（字段与 /music 接口一致） */
+export interface NativeMusicTrack {
+  id: string;
+  title: string;
+  performer?: string;
+  duration?: number;
+  size?: number;
+  url: string;
+  cover?: string;
+  postedAt?: string;
+}
+
+export type NativeMusicAction = 'play' | 'pause' | 'resume' | 'stop' | 'seek' | 'rate';
+
+/**
+ * H5 里播音乐时优先交给 App 原生播放器（后台可播、消息页顶部栏 / 锁屏可控，与原生音乐页共用一个播放器）。
+ * play 需带 track（可带 queue 作为上一首/下一首列表）；seek 带 ratio(0~1)；rate 带 value(1/1.5/2)。
+ * 成功交给原生返回 true，普通浏览器（无桥）返回 false，调用方自己用 <audio> 播。
+ */
+export function nativeMusic(action: NativeMusicAction, track?: NativeMusicTrack, queue?: NativeMusicTrack[], extra?: { ratio?: number; value?: number }): boolean {
+  const payload = { type: 'music', action, track, queue, ...extra };
+  const wk = (window as any).webkit?.messageHandlers?.peiwan;
+  if (wk) {
+    try { wk.postMessage(payload); return true; } catch { return false; }
+  }
+  const droid = (window as any).PeiwanNative;
+  if (droid?.music) {
+    try { droid.music(JSON.stringify(payload)); return true; } catch { return false; }
+  }
+  return false;
+}
+
+export interface NativeMusicState {
+  id: string | null;
+  playing: boolean;
+}
+
+/** 原生播放状态回推（原生在切歌/暂停时调 window.PeiwanMusicState({id, playing})），H5 据此同步自己的 UI */
+export function onNativeMusicState(cb: (s: NativeMusicState) => void) {
+  (window as any).PeiwanMusicState = cb;
+}
+
 export type WebOrientation = 'portrait' | 'landscape';
 
 /**

@@ -195,9 +195,16 @@ object MusicCenter {
     }
 
     /** 倍速循环 1x → 1.5x → 2x */
-    fun cycleRate() {
-        rate.value = when (rate.value) { 1f -> 1.5f; 1.5f -> 2f; else -> 1f }
+    fun cycleRate() = setRate(when (rate.value) { 1f -> 1.5f; 1.5f -> 2f; else -> 1f })
+
+    fun setRate(v: Float) {
+        rate.value = v.coerceIn(0.5f, 3f)
         player?.setPlaybackSpeed(rate.value)
+    }
+
+    /** H5（大厅）交过来的播放列表：只换列表，来源标题沿用 */
+    fun setQueue(list: List<MusicTrack>) {
+        data.value = MusicList(source = data.value?.source, list = list)
     }
 
     fun toggleShuffle() { shuffle.value = !shuffle.value }

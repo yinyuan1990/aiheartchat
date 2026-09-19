@@ -160,9 +160,22 @@ final class MusicCenter: ObservableObject {
     }
 
     /// 倍速循环 1x → 1.5x → 2x
-    func cycleRate() {
-        rate = rate == 1 ? 1.5 : rate == 1.5 ? 2 : 1
+    func cycleRate() { setRate(rate == 1 ? 1.5 : rate == 1.5 ? 2 : 1) }
+
+    func setRate(_ v: Float) {
+        rate = max(0.5, min(3, v))
         if isPlaying { player?.rate = rate }
+    }
+
+    /// H5（大厅）交过来的播放列表：只换列表，来源标题沿用
+    func setQueue(_ list: [MusicTrackModel]) {
+        data = MusicListModel(source: data?.source, list: list)
+    }
+
+    /// 是否已暂停但有当前曲目（resume 用）
+    func resume() {
+        guard current != nil, let p = player, !isPlaying else { return }
+        p.play(); p.rate = rate
     }
 
     var rateLabel: String { rate == 1 ? "1X" : rate == 1.5 ? "1.5X" : "2X" }

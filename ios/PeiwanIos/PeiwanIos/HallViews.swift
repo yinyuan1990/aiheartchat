@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import WebKit
 
@@ -155,6 +156,7 @@ private struct HallWebView: UIViewRepresentable {
         web.navigationDelegate = context.coordinator.navLogger
         GameLog.log("hall: webview created, bridge peiwan registered")
         web.load(URLRequest(url: url))
+        context.coordinator.bindMusicState(to: web)
         return web
     }
 
@@ -164,9 +166,51 @@ private struct HallWebView: UIViewRepresentable {
         let onOpenChat: (ChatTarget) -> Void
         let onOpenWeb: (WebTarget) -> Void
         let navLogger = WebNavLogger(scope: "hall")
+        private var musicCancellable: AnyCancellable?
+        private var lastMusicState = ""
         init(onOpenChat: @escaping (ChatTarget) -> Void, onOpenWeb: @escaping (WebTarget) -> Void) {
             self.onOpenChat = onOpenChat
             self.onOpenWeb = onOpenWeb
+        }
+
+        /// 原生播放状态回推给 H5（切歌 / 暂停时）：window.PeiwanMusicState({id, playing})
+        func bindMusicState(to web: WKWebView) {
+            let center = MusicCenter.shared
+            musicCancellable = center.objectWillChange
+                .debounce(for: .milliseconds(150), scheduler: DispatchQueue.main)
+                .sink { [weak web, weak self] _ in
+                    guard let self, let web else { return }
+                    let id = center.current.map { "\"\($0.id)\"" } ?? "null"
+                    let js = "window.PeiwanMusicState&&window.PeiwanMusicState({id:\(id),playing:\(center.isPlaying)})"
+                    if js == self.lastMusicState { return }
+                    self.lastMusicState = js
+                    web.evaluateJavaScript(js, completionHandler: nil)
+                }
+        }
+
+        /// H5 里播音乐交给原生播放器（与原生音乐页共用 MusicCenter）
+        private func handleMusic(_ body: [String: Any]) {
+            let action = body["action"] as? String ?? ""
+            func decode<T: Decodable>(_ any: Any?) -> T? {
+                guard let any, let data = try? JSONSerialization.data(withJSONObject: any) else { return nil }
+                return try? JSONDecoder().decode(T.self, from: data)
+            }
+            let center = MusicCenter.shared
+            DispatchQueue.main.async {
+                switch action {
+                case "play":
+                    guard let t: MusicTrackModel = decode(body["track"]) else { return }
+                    if let q: [MusicTrackModel] = decode(body["queue"]), !q.isEmpty { center.setQueue(q) }
+                    if !center.queue.contains(where: { $0.id == t.id }) { center.setQueue(center.queue + [t]) }
+                    if center.current?.id == t.id { center.resume() } else { center.play(t) }
+                case "pause": center.pause()
+                case "resume": center.resume()
+                case "stop": center.stop()
+                case "seek": if let r = body["ratio"] as? Double { center.seek(ratio: r) }
+                case "rate": if let v = body["value"] as? Double { center.setRate(Float(v)) }
+                default: GameLog.log("hall: music unknown action \(action)")
+                }
+            }
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -202,6 +246,8 @@ private struct HallWebView: UIViewRepresentable {
                     GameLog.log("hall: openWeb -> present GameWebSheet url=\(url.absoluteString) landscape=\(landscape)")
                     onOpenWeb(WebTarget(url: url, title: title, landscape: landscape))
                 }
+            case "music":
+                handleMusic(body)
             default:
                 GameLog.log("hall: unknown bridge type \(String(describing: body["type"]))")
                 return
