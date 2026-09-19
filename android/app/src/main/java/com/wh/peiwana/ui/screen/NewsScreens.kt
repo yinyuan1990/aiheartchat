@@ -1,7 +1,11 @@
 package com.wh.peiwana.ui.screen
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
@@ -120,40 +124,52 @@ private fun QuotePage(q: DailyQuote, index: Int, total: Int, hasMore: Boolean, t
                 .background(Brush.verticalGradient(listOf(Color.Transparent, Accent.copy(alpha = 0.35f), Color.Transparent))),
         )
         Text(
-            "「", color = Accent.copy(alpha = 0.38f), fontSize = 42.sp, fontFamily = FontFamily.Serif,
+            "「", color = Accent.copy(alpha = 0.38f), fontSize = 42.sp,
             modifier = Modifier.align(Alignment.TopEnd).padding(top = 36.dp, end = 36.dp),
         )
         Text(
-            "」", color = Accent.copy(alpha = 0.38f), fontSize = 42.sp, fontFamily = FontFamily.Serif,
+            "」", color = Accent.copy(alpha = 0.38f), fontSize = 42.sp,
             modifier = Modifier.align(Alignment.BottomStart).padding(bottom = 88.dp, start = 36.dp),
         )
+        // 字体效果与启动页「爱情和金钱无关 / 与内心相连」一致：系统字体 24sp Medium、字距 8、右起竖读、逐字浮现，末尾一枚「心」印
+        var shown by remember(q.id) { mutableStateOf(false) }
+        LaunchedEffect(q.id) { shown = true }
+        // 每列起始字序（右起第一列先浮现）
+        val starts = cols.runningFold(0) { acc, c -> acc + c.length }
         Row(
             Modifier.align(Alignment.Center),
-            horizontalArrangement = Arrangement.spacedBy(22.dp),
+            horizontalArrangement = Arrangement.spacedBy(26.dp),
             verticalAlignment = Alignment.Top,
         ) {
-            cols.reversed().forEach { col ->
+            cols.indices.reversed().forEach { ci ->
+                val col = cols[ci]
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    col.forEach { ch ->
+                    col.forEachIndexed { k, ch ->
+                        val i = starts[ci] + k
+                        val a by animateFloatAsState(if (shown) 1f else 0f, tween(520, delayMillis = 120 + i * 60, easing = FastOutSlowInEasing), label = "q$i")
                         Text(
-                            ch.toString(),
-                            color = TextMain.copy(alpha = 0.92f),
-                            fontSize = 22.sp,
-                            fontFamily = FontFamily.Serif,
-                            lineHeight = 28.sp,
+                            ch.toString(), color = TextMain, fontSize = 24.sp, fontWeight = FontWeight.Medium, lineHeight = 30.sp,
+                            modifier = Modifier.alpha(a).offset(y = ((1f - a) * 10).dp),
                         )
+                    }
+                    if (ci == cols.lastIndex) {
+                        val sa by animateFloatAsState(if (shown) 1f else 0f, tween(500, delayMillis = 200 + q.text.length * 60), label = "seal")
+                        Box(
+                            Modifier.padding(top = 6.dp).alpha(sa).size(22.dp).clip(RoundedCornerShape(5.dp)).background(Accent),
+                            contentAlignment = Alignment.Center,
+                        ) { Text("心", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
                     }
                 }
             }
         }
         Column(Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(artDate(q.day), color = TextSub, fontSize = 12.sp, fontFamily = FontFamily.Serif, letterSpacing = 2.sp)
+                Text(artDate(q.day), color = TextSub, fontSize = 12.sp, letterSpacing = 2.sp)
                 if (q.day == today) {
-                    Text("今日", color = Accent, fontSize = 11.sp, fontFamily = FontFamily.Serif, letterSpacing = 2.sp)
+                    Text("今日", color = Accent, fontSize = 11.sp, letterSpacing = 2.sp)
                 }
             }
             Text(

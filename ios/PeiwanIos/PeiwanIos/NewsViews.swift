@@ -91,6 +91,7 @@ private struct QuotePageView: View {
     let total: Int
     let hasMore: Bool
     let today: String
+    @State private var shown = false
 
     private var artDay: String {
         let p = q.day.split(separator: "-").map(String.init)
@@ -126,42 +127,58 @@ private struct QuotePageView: View {
                 .padding(.trailing, 56)
                 .allowsHitTesting(false)
 
-            HStack(alignment: .top, spacing: 22) {
-                ForEach(Array(columns.reversed().enumerated()), id: \.offset) { _, col in
+            // 字体效果与启动页「爱情和金钱无关 / 与内心相连」一致：系统字体 24 Medium、字距 8、右起竖读、逐字浮现，末尾一枚「心」印
+            let starts = columns.reduce(into: [0]) { acc, c in acc.append(acc.last! + c.count) }
+            HStack(alignment: .top, spacing: 26) {
+                ForEach(Array(columns.indices.reversed()), id: \.self) { ci in
                     VStack(spacing: 8) {
-                        ForEach(Array(col.enumerated()), id: \.offset) { _, ch in
+                        ForEach(Array(columns[ci].enumerated()), id: \.offset) { k, ch in
+                            let i = starts[ci] + k
                             Text(String(ch))
-                                .font(.custom("Songti SC", size: 22))
-                                .foregroundStyle(Theme.text.opacity(0.92))
+                                .font(.system(size: 24, weight: .medium))
+                                .foregroundStyle(Theme.text)
+                                .opacity(shown ? 1 : 0)
+                                .offset(y: shown ? 0 : 10)
+                                .animation(.easeOut(duration: 0.52).delay(0.12 + Double(i) * 0.06), value: shown)
+                        }
+                        if ci == columns.count - 1 {
+                            Text("心")
+                                .font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+                                .frame(width: 22, height: 22)
+                                .background(RoundedRectangle(cornerRadius: 5).fill(Theme.accent))
+                                .padding(.top, 6)
+                                .opacity(shown ? 1 : 0)
+                                .animation(.easeOut(duration: 0.5).delay(0.2 + Double(q.text.count) * 0.06), value: shown)
                         }
                     }
                 }
             }
+            .onAppear { shown = true }
 
             VStack {
                 HStack {
                     Spacer()
                     Text("「")
-                        .font(.custom("Songti SC", size: 42))
+                        .font(.system(size: 42))
                         .foregroundStyle(Theme.accent.opacity(0.38))
                         .padding(.trailing, 36).padding(.top, 28)
                 }
                 Spacer()
                 HStack {
                     Text("」")
-                        .font(.custom("Songti SC", size: 42))
+                        .font(.system(size: 42))
                         .foregroundStyle(Theme.accent.opacity(0.38))
                         .padding(.leading, 36).padding(.bottom, 8)
                     Spacer()
                 }
                 HStack(spacing: 10) {
                     Text(artDay)
-                        .font(.custom("Songti SC", size: 12))
+                        .font(.system(size: 12))
                         .tracking(3)
                         .foregroundStyle(Theme.textSub)
                     if q.day == today {
                         Text("今日")
-                            .font(.custom("Songti SC", size: 11))
+                            .font(.system(size: 11))
                             .tracking(2)
                             .foregroundStyle(Theme.accent)
                     }

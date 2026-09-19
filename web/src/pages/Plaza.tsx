@@ -237,7 +237,20 @@ function QuoteSection() {
             <div className="quote-glow" />
             <div className="quote-mark quote-mark-open">「</div>
             <div className="quote-vline" />
-            <div className="quote-text">{q.text}</div>
+            <div className="quote-text">
+              {(() => {
+                const chars = Array.from(q.text);
+                const cols: string[][] = [];
+                for (let k = 0; k < chars.length; k += 11) cols.push(chars.slice(k, k + 11));
+                let n = 0;
+                return cols.map((col, ci) => (
+                  <div key={ci} className="col">
+                    {col.map((ch, k) => <span key={k} style={{ animationDelay: `${0.12 + n++ * 0.06}s` }}>{ch}</span>)}
+                    {ci === cols.length - 1 && <i className="seal" style={{ animationDelay: `${0.2 + chars.length * 0.06}s` }}>心</i>}
+                  </div>
+                ));
+              })()}
+            </div>
             <div className="quote-mark quote-mark-close">」</div>
             <div className="quote-meta">
               <span>{artDate(q.day)}</span>

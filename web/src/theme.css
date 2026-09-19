@@ -70,15 +70,14 @@ body {
   background: linear-gradient(180deg, transparent, rgba(254, 44, 85, 0.35), transparent);
   pointer-events: none;
 }
-.quote-text {
-  writing-mode: vertical-rl; text-orientation: mixed;
-  font-family: "Songti SC", "STSong", "SimSun", "Noto Serif SC", Georgia, serif;
-  font-size: 22px; letter-spacing: 0.42em; line-height: 1.95;
-  color: rgba(255, 255, 255, 0.92); max-height: 62%;
-  text-shadow: 0 0 24px rgba(254, 44, 85, 0.12);
-}
+/* 字体效果与启动页「爱情和金钱无关 / 与内心相连」一致：系统字体 24px 500、字距 8、右起竖读、逐字浮现 */
+.quote-text { display: flex; flex-direction: row-reverse; align-items: flex-start; gap: 26px; max-height: 62%; }
+.quote-text .col { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.quote-text .col span { font-size: 24px; font-weight: 500; line-height: 1; color: #fff; opacity: 0; transform: translateY(10px); animation: quote-char .52s cubic-bezier(.2,.8,.2,1) forwards; }
+.quote-text .seal { width: 22px; height: 22px; border-radius: 5px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin-top: 6px; opacity: 0; animation: quote-char .5s forwards; }
+@keyframes quote-char { to { opacity: 1; transform: none; } }
 .quote-mark {
-  position: absolute; font-family: "Songti SC", "STSong", Georgia, serif;
+  position: absolute;
   font-size: 42px; color: var(--accent); opacity: 0.38; line-height: 1; pointer-events: none;
 }
 .quote-mark-open { top: 14%; right: 18%; }
@@ -86,7 +85,6 @@ body {
 .quote-meta {
   position: absolute; bottom: 56px; left: 0; right: 0;
   display: flex; justify-content: center; align-items: center; gap: 10px;
-  font-family: "Songti SC", "STSong", Georgia, serif;
   font-size: 12px; letter-spacing: 0.28em; color: var(--text-2);
 }
 .quote-today { color: var(--accent); letter-spacing: 0.2em; font-size: 11px; }
