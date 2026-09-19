@@ -25,7 +25,7 @@ async function saveSettings() {
 
 // ---------- 来源（按受众） ----------
 interface Source {
-  id: number; channel: string; title: string; subscribers: number; audience: number; enabled: boolean;
+  id: number; channel: string; title: string; subscribers: number; audience: number; enabled: boolean; blockWords: string;
   lastMsgId: number; lastSyncAt: string | null; lastError: string; importedCount: number; syncing?: boolean;
 }
 interface Preview {
@@ -34,7 +34,7 @@ interface Preview {
   samples: { msgId: number; text: string; photos: number; videos: number; date: string }[];
 }
 const sources = ref<Source[]>([]);
-const srcForm = ref<{ id?: number; channel: string; audience: number; enabled: boolean }>({ channel: '', audience: 1, enabled: true });
+const srcForm = ref<{ id?: number; channel: string; audience: number; enabled: boolean; blockWords: string }>({ channel: '', audience: 1, enabled: true, blockWords: '' });
 const preview = ref<Preview | null>(null);
 const previewing = ref(false);
 const syncing = ref<number | null>(null);
@@ -68,7 +68,7 @@ async function saveSource() {
   }
   try {
     await api('/admin/gallery/sources', { method: 'POST', body: srcForm.value });
-    srcForm.value = { channel: '', audience: srcForm.value.audience, enabled: true };
+    srcForm.value = { channel: '', audience: srcForm.value.audience, enabled: true, blockWords: '' };
     preview.value = null;
     emit('toast', '已保存，每 10 分钟自动同步一次；可点「立即同步」');
     loadSources();
@@ -77,7 +77,7 @@ async function saveSource() {
   }
 }
 function editSource(s: Source) {
-  srcForm.value = { id: s.id, channel: s.channel, audience: s.audience, enabled: s.enabled };
+  srcForm.value = { id: s.id, channel: s.channel, audience: s.audience, enabled: s.enabled, blockWords: s.blockWords ?? '' };
   preview.value = null;
 }
 async function removeSource(s: Source) {
@@ -157,6 +157,7 @@ onMounted(() => { loadSettings(); loadSources(); loadPosts(); });
       <div style="font-weight: 600; margin-bottom: 6px">{{ settings.title || '养眼图片' }} · 频道来源</div>
       <div class="muted" style="margin-bottom: 12px">
         填频道 → 选受众 → 先点<b>「解析」</b>看标题、订阅数、最近的图片/视频数量对不对得上 → 再保存。同一受众可以有多个来源（内容混排）。
+        <br />文案里的广告会自动过滤（带链接 / @ 的行、VPN / 防走丢 / 广告联系 / 投稿 / 👉 / 加群 / 下载 等），只删文字不删图；频道有自己的套路就填「屏蔽词」补充。<b>换频道 = 旧频道内容连文件全部清掉</b>，新频道从头同步。
       </div>
       <div class="row" style="flex-wrap: wrap; gap: 12px; align-items: center">
         <label class="muted">频道 <input v-model="srcForm.channel" placeholder="xxx 或 https://t.me/xxx" style="width: 260px" @keydown.enter="doPreview" /></label>
@@ -167,9 +168,10 @@ onMounted(() => { loadSettings(); loadSources(); loadPosts(); });
           </select>
         </label>
         <label class="muted" style="display: flex; align-items: center; gap: 6px"><input v-model="srcForm.enabled" type="checkbox" style="width: auto" /> 启用</label>
+        <label class="muted">屏蔽词 <input v-model="srcForm.blockWords" placeholder="逗号分隔，含则整行删（补充内置广告过滤）" style="width: 260px" /></label>
         <button class="small ghost" :disabled="previewing || !props.loggedIn" @click="doPreview">{{ previewing ? '解析中…' : '解析' }}</button>
         <button class="small" :disabled="!preview" @click="saveSource">{{ srcForm.id ? '保存修改' : '添加来源' }}</button>
-        <button v-if="srcForm.id" class="small ghost" @click="srcForm = { channel: '', audience: 1, enabled: true }; preview = null">取消编辑</button>
+        <button v-if="srcForm.id" class="small ghost" @click="srcForm = { channel: '', audience: 1, enabled: true, blockWords: '' }; preview = null">取消编辑</button>
         <span v-if="!props.loggedIn" class="muted" style="color: #ffb020">先登录 Telegram 账号才能解析</span>
       </div>
 

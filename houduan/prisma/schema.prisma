@@ -684,6 +684,8 @@ model GallerySource {
   /// 受众：1=男用户看 2=女用户看
   audience      Int      @db.TinyInt
   enabled       Boolean  @default(true)
+  /// 文案屏蔽词（逗号分隔）：含这些词的行整行删掉（频道自己的广告/引流套路），内置规则之外的补充
+  blockWords    String   @default("") @map("block_words") @db.VarChar(500)
   lastMsgId     Int      @default(0) @map("last_msg_id")
   lastSyncAt    DateTime? @map("last_sync_at")
   lastError     String   @default("") @map("last_error") @db.VarChar(300)

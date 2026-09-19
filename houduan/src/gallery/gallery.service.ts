@@ -135,12 +135,15 @@ export class GalleryService implements OnModuleInit {
   }
 
   /** 保存来源（先解析频道，解析不到不保存；换频道会清掉旧帖子） */
-  async saveSource(data: { id?: number; channel: string; audience: number; enabled?: boolean }) {
+  async saveSource(data: { id?: number; channel: string; audience: number; enabled?: boolean; blockWords?: string }) {
     const channel = normalizeChannel(data.channel);
     if (!channel) throw new BadRequestException('请填写频道用户名（t.me/ 后面那段）');
     const audience = Number(data.audience) === 2 ? 2 : 1;
     const info = await this.tg.resolveChannel(channel);
-    const clean = { channel: info.username, title: info.title.slice(0, 120), subscribers: info.subscribers, audience, enabled: data.enabled ?? true };
+    const clean = {
+      channel: info.username, title: info.title.slice(0, 120), subscribers: info.subscribers, audience,
+      enabled: data.enabled ?? true, blockWords: String(data.blockWords ?? '').trim().slice(0, 500),
+    };
     if (data.id) {
       const old = await this.prisma.gallerySource.findUnique({ where: { id: Number(data.id) } });
       if (!old) throw new NotFoundException('来源不存在');
@@ -243,10 +246,11 @@ export class GalleryService implements OnModuleInit {
 
   // ---------- 同步 ----------
 
-  private async syncSource(src: { id: number; channel: string; audience: number; lastMsgId: number }) {
+  private async syncSource(src: { id: number; channel: string; audience: number; lastMsgId: number; blockWords?: string }) {
     const client = await this.tg.authorized();
     const { days } = await this.settings();
     const cutoff = Date.now() - days * 86_400_000;
+    const blockWords = (src.blockWords ?? '').split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean);
     let imported = 0, skipped = 0, maxId = src.lastMsgId;
     let error = '';
     try {
@@ -272,8 +276,8 @@ export class GalleryService implements OnModuleInit {
         if (!medias.length) { maxId = Math.max(maxId, last); skipped++; continue; }
         const groupBytes = medias.reduce((s, m) => s + m.size, 0);
         if (files > 0 && (files + medias.length > MAX_FILES_PER_ROUND || bytes + groupBytes > MAX_BYTES_PER_ROUND)) break; // 下一轮接着
-        const text = cleanText(g.msgs.map((m) => m.message || '').find((t) => t.trim()) ?? '');
-        if (looksLikeSpam(text)) { maxId = Math.max(maxId, last); skipped++; continue; }
+        const text = cleanText(g.msgs.map((m) => m.message || '').find((t) => t.trim()) ?? '', blockWords);
+        // 文案像广告只是把文案丢掉，图片/视频照样进（这类频道的图没问题，问题都在文字）
         const sourceKey = `tg:${src.channel}:${g.key}`.slice(0, 120);
         if (await this.prisma.galleryPost.findUnique({ where: { sourceKey }, select: { id: true } })) { maxId = Math.max(maxId, last); continue; }
 
@@ -290,7 +294,7 @@ export class GalleryService implements OnModuleInit {
         await this.prisma.galleryPost.create({
           data: {
             sourceId: src.id, audience: src.audience, sourceKey,
-            text: text.slice(0, 2000), media: JSON.stringify(saved),
+            text: looksLikeSpam(text) ? '' : text.slice(0, 2000), media: JSON.stringify(saved),
             viewCount: first.views ?? 0, postedAt: date,
           },
         });
@@ -361,11 +365,17 @@ function parseMedia(msg: Api.Message): TgMedia | null {
   return null;
 }
 
-/** 文案清洗：去掉带链接/@ 的行（频道签名），再去掉引流行（VPN / 防走丢 / 广告联系 / 👉 …），空的「频道:」之类也去掉 */
-function cleanText(raw: string): string {
+/** 内置的广告/引流行特征：VPN、防走丢、广告联系/合作、投稿、👉、订阅/关注频道、加群、下载、telegram/tg 引流、空的「频道:」 */
+const AD_LINE = /VPN|防走丢|防失联|广告(联系|合作|投放)|商务合作|投稿|👉|👇|订阅频道|关注频道|加群|进群|下载(安装|地址|链接)|telegram|电报群|tg群|频道\s*[:：]\s*$/i;
+
+/**
+ * 文案清洗：去掉带链接/@ 的行（频道签名），再去掉命中内置广告特征或来源自定义屏蔽词的行；
+ * 只删行不删帖，图片/视频照常进。
+ */
+function cleanText(raw: string, blockWords: string[] = []): string {
   return stripLinkLines(raw)
     .split('\n')
-    .filter((l) => !/VPN|防走丢|广告联系|广告合作|投稿|👉|频道\s*[:：]\s*$/i.test(l))
+    .filter((l) => !AD_LINE.test(l) && !blockWords.some((w) => l.includes(w)))
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
