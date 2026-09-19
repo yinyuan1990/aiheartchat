@@ -673,7 +673,48 @@ model MusicSource {
   @@map("music_source")
 }
 
-/// 曲目：音频文件已转存到 MinIO，只保留最近 3 天
+// ---------- 「养眼图片」（大厅 tab，名称可在后台改；Telegram 频道图片/视频自动同步，按性别分流） ----------
+
+model GallerySource {
+  id            Int      @id @default(autoincrement())
+  /// 频道用户名（不带 @）
+  channel       String   @db.VarChar(64)
+  title         String   @default("") @db.VarChar(120)
+  subscribers   Int      @default(0)
+  /// 受众：1=男用户看 2=女用户看
+  audience      Int      @db.TinyInt
+  enabled       Boolean  @default(true)
+  lastMsgId     Int      @default(0) @map("last_msg_id")
+  lastSyncAt    DateTime? @map("last_sync_at")
+  lastError     String   @default("") @map("last_error") @db.VarChar(300)
+  importedCount Int      @default(0) @map("imported_count")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@unique([channel, audience])
+  @@map("gallery_source")
+}
+
+/// 一条帖子 = 频道里的一条消息或一个相册（多图/多视频），媒体已转存 MinIO；只保留最近 N 天（后台可调）
+model GalleryPost {
+  id        BigInt   @id @default(autoincrement())
+  sourceId  Int      @map("source_id")
+  audience  Int      @db.TinyInt
+  /// tg:频道:消息id 或 tg:频道:g<groupedId>（相册）
+  sourceKey String   @unique @map("source_key") @db.VarChar(120)
+  /// 文案（MySQL 的 TEXT 不能带默认值，用 VarChar）
+  text      String   @default("") @db.VarChar(2000)
+  /// JSON [{type:"image"|"video", url, cover?, w, h, duration?, size}]
+  media     String   @db.Text
+  viewCount Int      @default(0) @map("view_count")
+  postedAt  DateTime @map("posted_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([audience, postedAt])
+  @@index([sourceId])
+  @@map("gallery_post")
+}
+
+/// 曲目：音频文件已转存到 MinIO，最多保留 100 首
 model MusicTrack {
   id        BigInt   @id @default(autoincrement())
   sourceId  Int      @map("source_id")

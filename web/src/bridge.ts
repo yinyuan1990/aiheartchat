@@ -90,6 +90,33 @@ export function onNativeMusicState(cb: (s: NativeMusicState) => void) {
   (window as any).PeiwanMusicState = cb;
 }
 
+// ---------- 原生媒体查看器（看大图 / 播视频） ----------
+
+export interface NativeMediaItem {
+  type: 'image' | 'video';
+  url: string;
+  cover?: string;
+}
+
+/**
+ * 点图放大 / 点视频播放时优先交给原生全屏查看器（左右滑、双指缩放、原生播放器）；
+ * 普通浏览器（无桥）返回 false，调用方用网页灯箱。老版本 App 没这个桥：Android 能探测方法，iOS 会静默忽略——
+ * 所以 iOS 侧只有确认过桥存在（收到过任何原生回推）才算，其余情况先走网页灯箱。
+ */
+export function viewNativeMedia(items: NativeMediaItem[], index: number): boolean {
+  const payload = { type: 'viewMedia', items, index };
+  const wk = (window as any).webkit?.messageHandlers?.peiwan;
+  if (wk) {
+    if (!(window as any).__peiwanBridgeV2) return false;
+    try { wk.postMessage(payload); return true; } catch { return false; }
+  }
+  const droid = (window as any).PeiwanNative;
+  if (droid?.viewMedia) {
+    try { droid.viewMedia(JSON.stringify(items), String(index)); return true; } catch { return false; }
+  }
+  return false;
+}
+
 export type WebOrientation = 'portrait' | 'landscape';
 
 /**

@@ -25,6 +25,7 @@ import { SrsModule } from './srs/srs.module';
 import { InviteModule } from './invite/invite.module';
 import { TelegramModule } from './telegram/telegram.module';
 import { MusicModule } from './music/music.module';
+import { GalleryModule } from './gallery/gallery.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { MusicModule } from './music/music.module';
     InviteModule,
     TelegramModule,
     MusicModule,
+    GalleryModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: RateLimitGuard }],
 })

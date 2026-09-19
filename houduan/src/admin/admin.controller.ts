@@ -11,6 +11,7 @@ import { AdminService } from './admin.service';
 import { ReviewService } from '../auth/review.service';
 import { TelegramClientService } from '../telegram/telegram.service';
 import { MusicService } from '../music/music.service';
+import { GalleryService } from '../gallery/gallery.service';
 
 @Controller('admin')
 export class AdminController {
@@ -24,7 +25,70 @@ export class AdminController {
     private readonly review: ReviewService,
     private readonly tg: TelegramClientService,
     private readonly music: MusicService,
+    private readonly gallery: GalleryService,
   ) {}
+
+  // ---------- 养眼图片（大厅 tab，名称/保留天数可改，按性别分流） ----------
+
+  @Get('gallery/settings')
+  @UseGuards(AdminGuard)
+  gallerySettings() {
+    return this.gallery.settings();
+  }
+
+  @Put('gallery/settings')
+  @UseGuards(AdminGuard)
+  gallerySaveSettings(@Body() body: { title?: string; days?: number }) {
+    return this.gallery.saveSettings(body ?? {});
+  }
+
+  @Get('gallery/sources')
+  @UseGuards(AdminGuard)
+  gallerySources() {
+    return this.gallery.listSources();
+  }
+
+  @Get('gallery/sources/preview')
+  @UseGuards(AdminGuard)
+  galleryPreview(@Query('channel') channel: string) {
+    return this.gallery.preview(channel ?? '');
+  }
+
+  @Post('gallery/sources')
+  @UseGuards(AdminGuard)
+  gallerySaveSource(@Body() body: { id?: number; channel: string; audience: number; enabled?: boolean }) {
+    return this.gallery.saveSource(body);
+  }
+
+  @Delete('gallery/sources/:id')
+  @UseGuards(AdminGuard)
+  galleryRemoveSource(@Param('id') id: string) {
+    return this.gallery.removeSource(Number(id));
+  }
+
+  @Post('gallery/sources/:id/sync')
+  @UseGuards(AdminGuard)
+  gallerySync(@Param('id') id: string) {
+    return this.gallery.syncOne(Number(id));
+  }
+
+  @Get('gallery/posts')
+  @UseGuards(AdminGuard)
+  galleryPosts(@Query('audience') audience?: string, @Query('beforeId') beforeId?: string) {
+    return this.gallery.adminPosts(audience ? Number(audience) : undefined, beforeId ? BigInt(beforeId) : undefined);
+  }
+
+  @Post('gallery/posts/:id/delete')
+  @UseGuards(AdminGuard)
+  galleryDeletePost(@Param('id') id: string) {
+    return this.gallery.adminDeletePost(BigInt(id));
+  }
+
+  @Post('gallery/purge')
+  @UseGuards(AdminGuard)
+  galleryPurge() {
+    return this.gallery.purgeOld();
+  }
 
   // ---------- Telegram 账号（音乐频道同步用） ----------
 

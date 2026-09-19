@@ -6,12 +6,13 @@ import { TreeholeModule } from '../treehole/treehole.module';
 import { ModuleConfigModule } from '../module/module.module';
 import { TelegramModule } from '../telegram/telegram.module';
 import { MusicModule } from '../music/music.module';
+import { GalleryModule } from '../gallery/gallery.module';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { AdminGuard } from './admin.guard';
 
 @Module({
-  imports: [AuthModule, WalletModule, NewsModule, TreeholeModule, ModuleConfigModule, TelegramModule, MusicModule],
+  imports: [AuthModule, WalletModule, NewsModule, TreeholeModule, ModuleConfigModule, TelegramModule, MusicModule, GalleryModule],
   controllers: [AdminController],
   providers: [AdminService, AdminGuard],
 })

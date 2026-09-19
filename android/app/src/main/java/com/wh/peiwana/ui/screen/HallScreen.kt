@@ -60,6 +60,16 @@ fun HallScreen(
     // 大厅 H5 内有子页面（树洞详情/发布等）：系统返回键先让网页后退，退不了才交给系统
     var webView by remember { mutableStateOf<android.webkit.WebView?>(null) }
     var canGoBack by remember { mutableStateOf(false) }
+    // H5 经桥打开的原生媒体查看器（养眼图片：看大图 / 播视频）
+    var viewer by remember { mutableStateOf<Pair<List<com.wh.peiwana.ui.MediaItem>, Int>?>(null) }
+    viewer?.let { (items, idx) ->
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { viewer = null },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+        ) {
+            com.wh.peiwana.ui.MediaViewer(items, idx) { viewer = null }
+        }
+    }
     // 原生播放状态回推给 H5（切歌 / 暂停时），H5 的播放 UI 据此同步：window.PeiwanMusicState({id, playing})
     val musicCur = MusicCenter.current.value
     val musicPlaying = MusicCenter.isPlaying.value
@@ -102,7 +112,7 @@ fun HallScreen(
                     // H5 的 console.log / JS 报错转到 logcat（tag=YGameXd），排查黑屏/点击无反应
                     webChromeClient = GameLog.chromeClient("hall")
                     // JS 桥（window.PeiwanNative）：H5 聊天入口唤起原生聊天页 / 小游戏唤起原生全屏网页
-                    addJavascriptInterface(HallJsBridge(ctx, onOpenChat, onOpenWeb), "PeiwanNative")
+                    addJavascriptInterface(HallJsBridge(ctx, onOpenChat, onOpenWeb, onViewMedia = { items, i -> viewer = items to i }), "PeiwanNative")
                     // 布局尺寸变化打日志：大厅黑屏时先确认 WebView 有没有拿到真实尺寸
                     addOnLayoutChangeListener { v, l, t, r, b, ol, ot, or, ob ->
                         if (r - l != or - ol || b - t != ob - ot) GameLog.d("hall: webview layout ${r - l}x${b - t}")
@@ -143,7 +153,19 @@ private class HallJsBridge(
     private val ctx: android.content.Context,
     private val onOpenChat: (String, Int, String, String) -> Unit,
     private val onOpenWeb: (String, String, Boolean) -> Unit,
+    private val onViewMedia: (List<com.wh.peiwana.ui.MediaItem>, Int) -> Unit = { _, _ -> },
 ) {
+    /** H5 点图放大 / 点视频：原生全屏查看器（缩放、原生播放器）。itemsJson: [{type:image|video,url,cover}] */
+    @android.webkit.JavascriptInterface
+    fun viewMedia(itemsJson: String, index: String) {
+        val items = runCatching {
+            Api.json.decodeFromString(kotlinx.serialization.builtins.ListSerializer(com.wh.peiwana.ui.MediaItem.serializer()), itemsJson)
+        }.onFailure { GameLog.w("bridge.viewMedia bad json: ${it.message}") }.getOrNull() ?: return
+        val i = index.toIntOrNull() ?: 0
+        GameLog.d("bridge.viewMedia ${items.size} items, index=$i")
+        android.os.Handler(android.os.Looper.getMainLooper()).post { onViewMedia(items, i) }
+    }
+
     /**
      * H5 里播音乐交给原生播放器（后台可播、消息页顶部栏/锁屏可控，与原生音乐页共用 MusicCenter）。
      * json: {action: play|pause|resume|stop|seek|rate, track?, queue?, ratio?, value?}

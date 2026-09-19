@@ -4,6 +4,7 @@ import { inNativeApp, isEmbedded, openNativeWeb, WebOrientation } from '../bridg
 import { useApp } from '../store';
 import { GuideProjectBody } from './GuideProject';
 import { TreeholeFeed } from './Treehole';
+import { GalleryFeed } from './Gallery';
 import { PullToRefresh } from '../components/PullToRefresh';
 
 interface ProjectItem {
@@ -22,13 +23,16 @@ interface ProjectItem {
 /** 大厅页版本标记，日志里用来确认 App 加载到的是不是新部署的 H5 */
 const HALL_VERSION = '2026-09-15-hall-tabs-v4';
 
-type HallTab = 'guide' | 'games' | 'treehole';
+type HallTab = 'guide' | 'games' | 'gallery' | 'treehole';
 const ALL_TABS: { key: HallTab; label: string }[] = [
   { key: 'guide', label: '同城搭子' },
   { key: 'games', label: '休闲游戏' },
+  // 「养眼图片」名称后台可改（GET /gallery/settings），按性别分流内容
+  { key: 'gallery', label: '养眼图片' },
   { key: 'treehole', label: '私密树洞' },
 ];
 const TAB_KEY = 'hall_tab';
+const GALLERY_TITLE_KEY = 'hall_gallery_title';
 
 /** App 内嵌大厅不显示私密树洞（iOS/Android 已在广场做了原生版本），仅浏览器网页版保留 */
 function visibleTabs() {
@@ -83,6 +87,13 @@ export function HallPage() {
   });
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [loaded, setLoaded] = useState(false);
+  // 养眼图片 tab 名称（后台可改）：先用上次缓存的，再拉最新
+  const [galleryTitle, setGalleryTitle] = useState(() => sessionStorage.getItem(GALLERY_TITLE_KEY) || '养眼图片');
+  useEffect(() => {
+    api<{ title: string }>('/gallery/settings').then((s) => {
+      if (s?.title) { setGalleryTitle(s.title); sessionStorage.setItem(GALLERY_TITLE_KEY, s.title); }
+    }).catch(() => {});
+  }, []);
 
   const switchTab = (t: HallTab) => {
     setTab(t);
@@ -133,7 +144,7 @@ export function HallPage() {
       <div className="top-tabs sticky">
         {tabs.map((t) => (
           <span key={t.key} className={`top-tab${tab === t.key ? ' active' : ''}`} onClick={() => switchTab(t.key)}>
-            {t.label}
+            {t.key === 'gallery' ? galleryTitle : t.label}
           </span>
         ))}
       </div>
@@ -185,6 +196,7 @@ export function HallPage() {
           </PullToRefresh>
         )}
 
+        {tab === 'gallery' && <GalleryFeed />}
         {tab === 'treehole' && <TreeholeFeed />}
       </div>
     </>

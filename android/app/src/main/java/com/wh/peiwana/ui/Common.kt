@@ -178,6 +178,70 @@ fun EyeIcon(tint: Color, size: androidx.compose.ui.unit.Dp = 14.dp) {
     }
 }
 
+/** 混合媒体项（图片 / 视频），大厅 H5 经桥传来 */
+@kotlinx.serialization.Serializable
+data class MediaItem(val type: String = "image", val url: String = "", val cover: String? = null)
+
+/**
+ * 全屏混合媒体查看器：图片用 Telephoto 缩放；视频用 ExoPlayer（原生控制条），滑到哪页播哪页；单击图片关闭。
+ * 大厅 H5 的「养眼图片」点图/点视频经 PeiwanNative.viewMedia 走这里。
+ */
+@Composable
+fun MediaViewer(items: List<MediaItem>, startIndex: Int = 0, onClose: () -> Unit) {
+    if (items.isEmpty()) return
+    val pager = rememberPagerState(initialPage = startIndex.coerceIn(0, items.size - 1)) { items.size }
+    androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+        HorizontalPager(state = pager, modifier = Modifier.fillMaxSize(), beyondViewportPageCount = 0) { page ->
+            val it = items[page]
+            if (it.type == "video") {
+                MediaVideoPage(url = Api.fullUrl(it.url), active = pager.currentPage == page)
+            } else {
+                me.saket.telephoto.zoomable.coil.ZoomableAsyncImage(
+                    model = Api.fullUrl(it.url), contentDescription = null,
+                    modifier = Modifier.fillMaxSize(), onClick = { onClose() },
+                )
+            }
+        }
+        if (items.size > 1) {
+            Text("${pager.currentPage + 1}/${items.size}", color = Color.White, modifier = Modifier.align(Alignment.TopCenter).padding(top = 40.dp))
+        }
+        Box(
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 36.dp, end = 16.dp).size(36.dp)
+                .clip(CircleShape).background(Color.White.copy(alpha = 0.18f)).noRippleClick(onClose),
+            contentAlignment = Alignment.Center,
+        ) { Text("×", color = Color.White, fontSize = 22.sp) }
+    }
+}
+
+/** 查看器里的视频页：当前页自动播，滑走暂停，离开释放 */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+@Composable
+private fun MediaVideoPage(url: String, active: Boolean) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val player = remember(url) {
+        androidx.media3.exoplayer.ExoPlayer.Builder(ctx).build().apply {
+            setMediaItem(androidx.media3.common.MediaItem.fromUri(url))
+            repeatMode = androidx.media3.common.Player.REPEAT_MODE_ONE
+            prepare()
+        }
+    }
+    LaunchedEffect(active) {
+        if (active) { com.wh.peiwana.ui.screen.MusicCenter.pause(); player.play() } else player.pause()
+    }
+    androidx.compose.runtime.DisposableEffect(url) { onDispose { player.release() } }
+    androidx.compose.ui.viewinterop.AndroidView(
+        modifier = Modifier.fillMaxSize(),
+        factory = {
+            androidx.media3.ui.PlayerView(it).apply {
+                this.player = player
+                useController = true
+                setShowNextButton(false); setShowPreviousButton(false)
+                setBackgroundColor(android.graphics.Color.BLACK)
+            }
+        },
+    )
+}
+
 /** 全屏图片查看器（Telephoto）：双指/双击缩放 + 平移，横滑切换，单击关闭 */
 @Composable
 fun ImageViewer(urls: List<String>, startIndex: Int = 0, onClose: () -> Unit) {

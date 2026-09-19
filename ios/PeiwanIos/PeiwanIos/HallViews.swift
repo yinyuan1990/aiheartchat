@@ -11,6 +11,7 @@ struct HallView: View {
     @State private var hallUrl: URL?
     @State private var chatTarget: ChatTarget?
     @State private var webTarget: WebTarget?
+    @State private var mediaTarget: MediaTarget?
 
     var body: some View {
         Group {
@@ -18,7 +19,8 @@ struct HallView: View {
                 HallWebView(
                     url: hallUrl,
                     onOpenChat: { target in chatTarget = target },
-                    onOpenWeb: { target in webTarget = target }
+                    onOpenWeb: { target in webTarget = target },
+                    onViewMedia: { target in mediaTarget = target }
                 )
             } else {
                 EmptyHint(text: "加载中…")
@@ -28,6 +30,10 @@ struct HallView: View {
         // H5 里点「打招呼」等经 JS 桥唤起原生聊天页
         .fullScreenCover(item: $chatTarget) { t in
             ChatRoomSheet(target: t)
+        }
+        // 养眼图片：看大图 / 播视频走原生查看器
+        .fullScreenCover(item: $mediaTarget) { t in
+            MediaViewerView(items: t.items, initial: t.index) { mediaTarget = nil }
         }
         // 小游戏等第三方 H5：独立原生 WebView 全屏打开，不污染大厅页
         .fullScreenCover(item: $webTarget) { t in
@@ -135,17 +141,34 @@ final class WebNavLogger: NSObject, WKNavigationDelegate {
 
 /// 大厅 WebView 容器：深色底避免加载白闪，支持侧滑返回 H5 内页；
 /// 注册 JS 桥（window.webkit.messageHandlers.peiwan）：openChat 唤起原生聊天页，openWeb 唤起原生全屏网页
+/// 混合媒体项（图片 / 视频），大厅 H5 经桥传来
+struct MediaItemModel: Codable, Identifiable {
+    var id: String { url }
+    let type: String
+    let url: String
+    let cover: String?
+}
+
+struct MediaTarget: Identifiable {
+    let id = UUID()
+    let items: [MediaItemModel]
+    let index: Int
+}
+
 private struct HallWebView: UIViewRepresentable {
     let url: URL
     let onOpenChat: (ChatTarget) -> Void
     let onOpenWeb: (WebTarget) -> Void
+    var onViewMedia: (MediaTarget) -> Void = { _ in }
 
-    func makeCoordinator() -> Coordinator { Coordinator(onOpenChat: onOpenChat, onOpenWeb: onOpenWeb) }
+    func makeCoordinator() -> Coordinator { Coordinator(onOpenChat: onOpenChat, onOpenWeb: onOpenWeb, onViewMedia: onViewMedia) }
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         config.userContentController.add(context.coordinator, name: "peiwan")
+        // 桥版本标记：H5 据此判断 viewMedia 等新桥是否可用（老版本 App 没有这个标记就走网页灯箱）
+        config.userContentController.addUserScript(WKUserScript(source: "window.__peiwanBridgeV2=true;", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         // H5 console / JS 报错转原生日志（[Game] hall: [H5 ...]）
         config.userContentController.addUserScript(GameLog.consoleForwardScript)
         let web = WKWebView(frame: .zero, configuration: config)
@@ -165,12 +188,14 @@ private struct HallWebView: UIViewRepresentable {
     final class Coordinator: NSObject, WKScriptMessageHandler {
         let onOpenChat: (ChatTarget) -> Void
         let onOpenWeb: (WebTarget) -> Void
+        let onViewMedia: (MediaTarget) -> Void
         let navLogger = WebNavLogger(scope: "hall")
         private var musicCancellable: AnyCancellable?
         private var lastMusicState = ""
-        init(onOpenChat: @escaping (ChatTarget) -> Void, onOpenWeb: @escaping (WebTarget) -> Void) {
+        init(onOpenChat: @escaping (ChatTarget) -> Void, onOpenWeb: @escaping (WebTarget) -> Void, onViewMedia: @escaping (MediaTarget) -> Void) {
             self.onOpenChat = onOpenChat
             self.onOpenWeb = onOpenWeb
+            self.onViewMedia = onViewMedia
         }
 
         /// 原生播放状态回推给 H5（切歌 / 暂停时）：window.PeiwanMusicState({id, playing})
@@ -248,6 +273,13 @@ private struct HallWebView: UIViewRepresentable {
                 }
             case "music":
                 handleMusic(body)
+            case "viewMedia":
+                guard let raw = body["items"], let data = try? JSONSerialization.data(withJSONObject: raw),
+                      let items = try? JSONDecoder().decode([MediaItemModel].self, from: data), !items.isEmpty
+                else { GameLog.log("hall: viewMedia bad items"); return }
+                let index = (body["index"] as? NSNumber)?.intValue ?? Int(body["index"] as? String ?? "") ?? 0
+                let onViewMedia = onViewMedia
+                DispatchQueue.main.async { onViewMedia(MediaTarget(items: items, index: min(max(0, index), items.count - 1))) }
             default:
                 GameLog.log("hall: unknown bridge type \(String(describing: body["type"]))")
                 return

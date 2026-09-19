@@ -11,6 +11,7 @@ import LedgerView from './views/LedgerView.vue';
 import CallLogsView from './views/CallLogsView.vue';
 import TreeholeView from './views/TreeholeView.vue';
 import MusicView from './views/MusicView.vue';
+import TelegramView from './views/TelegramView.vue';
 import SrsNodesView from './views/SrsNodesView.vue';
 import AppVersionView from './views/AppVersionView.vue';
 
@@ -29,6 +30,7 @@ const tabs = [
   { key: 'guide', label: '地陪审核' },
   { key: 'disputes', label: '约单仲裁' },
   { key: 'modules', label: '大厅 / 小游戏' },
+  { key: 'telegram', label: 'Telegram 来源' },
   { key: 'treehole', label: '私密树洞' },
   { key: 'music', label: '音乐频道' },
   { key: 'srs', label: 'SRS 节点' },
@@ -89,6 +91,7 @@ function logout() {
       <GuideReviewView v-if="tab === 'guide'" />
       <DisputesView v-if="tab === 'disputes'" />
       <ModulesView v-if="tab === 'modules'" />
+      <TelegramView v-if="tab === 'telegram'" />
       <TreeholeView v-if="tab === 'treehole'" />
       <MusicView v-if="tab === 'music'" />
       <SrsNodesView v-if="tab === 'srs'" />
