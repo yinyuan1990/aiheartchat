@@ -59,10 +59,10 @@ class MainActivity : ComponentActivity() {
                 .crossfade(true)
                 .build(),
         )
-        // 深色状态栏/导航栏背景 → 浅色（白色）图标文字
+        // 浅色主题：透明状态栏/导航栏 + 深色图标文字
         enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
+            statusBarStyle = SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT),
         )
         setContent { PeiwanATheme { Surface(Modifier.fillMaxSize()) { AppRoot() } } }
         // Android 13+ 通知权限（来电提醒需要）

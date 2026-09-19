@@ -171,7 +171,7 @@ struct MeView: View {
                                 }
                             }
                             .padding(.horizontal, 16).padding(.vertical, 12)
-                            .background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.05)))
+                            .background(RoundedRectangle(cornerRadius: 14).fill(Color.black.opacity(0.04)))
                             .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.accent.opacity(0.25), lineWidth: 1))
                         }
                         .buttonStyle(.plain)

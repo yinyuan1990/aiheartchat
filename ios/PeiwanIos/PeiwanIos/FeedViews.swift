@@ -322,7 +322,7 @@ struct MomentCardView: View {
                         if let cityName = m.cityName, !cityName.isEmpty {
                             Text(cityName).font(.system(size: 10)).foregroundStyle(Theme.textDim)
                                 .padding(.horizontal, 5).padding(.vertical, 1)
-                                .background(RoundedRectangle(cornerRadius: 3).fill(.white.opacity(0.06)))
+                                .background(RoundedRectangle(cornerRadius: 3).fill(Color.black.opacity(0.05)))
                         }
                     }
                     Text(timeAgo(m.createdAt)).font(.system(size: 11)).foregroundStyle(Theme.textDim)

@@ -182,7 +182,7 @@ private fun AiBubble(content: String, mine: Boolean, dim: Boolean = false, myAva
                 ) {
                     Text(
                         text,
-                        color = if (dim) TextSub else if (mine) Color.White else TextMain,
+                        color = if (dim) TextSub else TextMain,
                         fontSize = 15.sp,
                         lineHeight = 22.sp,
                     )

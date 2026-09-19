@@ -91,7 +91,7 @@ struct TaskPostView: View {
                     .datePickerStyle(.compact)
                     .foregroundStyle(Theme.textSub)
                     .tint(Theme.accent)
-                    .colorScheme(.dark)
+                    .colorScheme(.light)
                     .padding(14)
                     .background(RoundedRectangle(cornerRadius: 12).fill(Theme.bg2))
                 HStack {

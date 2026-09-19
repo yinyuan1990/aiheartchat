@@ -1,19 +1,27 @@
 import SwiftUI
 
-// 纯黑沉浸 + 玫红渐变（对齐 Web 定稿）
+// 浅色主题（对齐 Telegram iOS 浅色：白底、浅灰次级背景、近黑文字、灰色辅助文字）+ 玫红渐变强调色
+// 2026-09-19 由纯黑沉浸切换：纯黑底白字长时间看费眼。与 Android ui/theme/Color.kt 同值
 enum Theme {
-    static let bg = Color(red: 0.039, green: 0.039, blue: 0.047)
-    static let bg2 = Color(red: 0.086, green: 0.086, blue: 0.098)
-    static let bg3 = Color(red: 0.129, green: 0.129, blue: 0.149)
-    static let line = Color(red: 0.122, green: 0.122, blue: 0.141)
+    static let bg = Color.white
+    /// 卡片 / 顶栏 / 底栏  #F5F5F8
+    static let bg2 = Color(red: 0.961, green: 0.961, blue: 0.973)
+    /// 输入框 / 未选中胶囊 / 对方气泡  #EBEBF0
+    static let bg3 = Color(red: 0.922, green: 0.922, blue: 0.941)
+    /// #E5E5EA
+    static let line = Color(red: 0.898, green: 0.898, blue: 0.918)
     static let accent = Color(red: 0.996, green: 0.173, blue: 0.333)
     static let accent2 = Color(red: 1.0, green: 0.42, blue: 0.506)
-    static let text = Color.white
-    static let textSub = Color(red: 0.541, green: 0.541, blue: 0.576)
-    static let textDim = Color(red: 0.29, green: 0.29, blue: 0.32)
+    /// #111114
+    static let text = Color(red: 0.067, green: 0.067, blue: 0.078)
+    /// #8E8E93
+    static let textSub = Color(red: 0.557, green: 0.557, blue: 0.576)
+    /// #B5B5BC
+    static let textDim = Color(red: 0.71, green: 0.71, blue: 0.737)
     static let danger = Color(red: 1.0, green: 0.302, blue: 0.31)
     static let success = Color(red: 0.043, green: 0.816, blue: 0.49)
-    static let warn = Color(red: 1.0, green: 0.722, blue: 0.0)
+    /// 浅底上金黄要压暗一点才看得清 #E6A100
+    static let warn = Color(red: 0.902, green: 0.631, blue: 0.0)
     // 兼容旧引用
     static let gold = accent
     static let gold2 = accent2
@@ -21,8 +29,8 @@ enum Theme {
 
     static let accentGrad = LinearGradient(colors: [accent, accent2], startPoint: .leading, endPoint: .trailing)
 
-    /// 自己消息气泡：深玫红，比 accent 柔和不晃眼
-    static let bubbleMine = Color(red: 75 / 255, green: 32 / 255, blue: 40 / 255)
+    /// 自己消息气泡：浅玫红底 + 深色文字（浅色主题下不再用白字） #FFE1E7
+    static let bubbleMine = Color(red: 1.0, green: 0.882, blue: 0.906)
 }
 
 func fmtPoints(_ fen: String?) -> String {

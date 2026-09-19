@@ -138,7 +138,7 @@ fun MeScreen(modifier: Modifier = Modifier, initialUser: UserProfile?, onNav: (S
                 Row(
                     Modifier.padding(top = 16.dp).fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Color.White.copy(alpha = 0.05f))
+                        .background(Color.Black.copy(alpha = 0.04f))
                         .border(1.dp, Accent.copy(alpha = 0.25f), RoundedCornerShape(14.dp))
                         .clickable { onNav("wallet") }
                         .padding(16.dp, 12.dp),

@@ -541,7 +541,8 @@ private fun Bubble(m: MsgItem, mine: Boolean, convType: Int, onImage: (String) -
     // 微信式：对方左侧灰气泡，自己右侧主题气泡，头像顶部对齐、贴边尾角
     val bubbleShape = if (mine) RoundedCornerShape(16.dp, 4.dp, 16.dp, 16.dp) else RoundedCornerShape(4.dp, 16.dp, 16.dp, 16.dp)
     val bg = if (mine) BubbleMine else Bg3
-    val fg = if (mine) Color.White else TextMain
+    // 浅色主题：自己的气泡是浅玫红底，文字同样用深色
+    val fg = TextMain
 
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Top) {
         if (!mine) { Avatar(m.senderAvatar, 38); Spacer(Modifier.width(8.dp)) }
@@ -596,7 +597,7 @@ private fun Bubble(m: MsgItem, mine: Boolean, convType: Int, onImage: (String) -
                         Column {
                             Text("${if (mine) "送出" else "收到"}「$giftName」", color = fg, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                             Spacer(Modifier.height(3.dp))
-                            Text("${fmtPoints(giftPrice)} 积分", color = if (mine) Color.White.copy(alpha = 0.85f) else Warn, fontSize = 12.sp)
+                            Text("${fmtPoints(giftPrice)} 积分", color = Warn, fontSize = 12.sp)
                         }
                     }
                 }

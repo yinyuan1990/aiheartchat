@@ -283,7 +283,7 @@ struct TreeholeDetailView: View {
                                 Text(comments.isEmpty ? "还没有人评论，来说第一句" : "讨论已开始")
                                     .font(.system(size: 12)).foregroundStyle(Theme.textSub)
                                     .padding(.horizontal, 12).padding(.vertical, 4)
-                                    .background(Capsule().fill(Color.white.opacity(0.08)))
+                                    .background(Capsule().fill(Color.black.opacity(0.05)))
                                 Spacer()
                             }
                             .padding(.vertical, 14)

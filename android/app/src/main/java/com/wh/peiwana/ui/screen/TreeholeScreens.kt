@@ -343,7 +343,7 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
                     Text(
                         if (comments.isEmpty()) "还没有人评论，来说第一句" else "讨论已开始",
                         color = TextSub, fontSize = 12.sp,
-                        modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = 0.08f)).padding(horizontal = 12.dp, vertical = 4.dp),
+                        modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = 0.05f)).padding(horizontal = 12.dp, vertical = 4.dp),
                     )
                 }
             }

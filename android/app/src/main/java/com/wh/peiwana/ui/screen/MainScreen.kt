@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.wh.peiwana.net.UserProfile
+import com.wh.peiwana.ui.AccentBrush
 import com.wh.peiwana.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -62,14 +63,15 @@ fun MainScreen(
         containerColor = Bg,
         bottomBar = {
             Row(
-                modifier = Modifier.fillMaxWidth().background(Color.Black).padding(vertical = 8.dp).navigationBarsPadding(),
+                modifier = Modifier.fillMaxWidth().background(Bg2).padding(vertical = 8.dp).navigationBarsPadding(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TabText("广场", tab == 0, Modifier.weight(1f)) { tab = 0 }
                 TabText("大厅", tab == 1, Modifier.weight(1f)) { tab = 1 }
                 Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                    Box(modifier = Modifier.size(44.dp, 30.dp).clip(RoundedCornerShape(8.dp)).background(Color.White).clickable { onNav("publish") }, contentAlignment = Alignment.Center) {
-                        Text("+", color = Color.Black, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    // 发布按钮：玫红渐变 + 白色加号（对齐 iOS）
+                    Box(modifier = Modifier.size(44.dp, 30.dp).clip(RoundedCornerShape(8.dp)).background(AccentBrush).clickable { onNav("publish") }, contentAlignment = Alignment.Center) {
+                        Text("+", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     }
                 }
                 TabText("消息", tab == 2, Modifier.weight(1f), badge = unreadTotal) { tab = 2 }
@@ -141,7 +143,7 @@ private fun Pane(active: Boolean, content: @Composable () -> Unit) {
 private fun TabText(text: String, active: Boolean, modifier: Modifier, badge: Int = 0, onClick: () -> Unit) {
     val src = remember { MutableInteractionSource() }
     Box(modifier = modifier.clickable(interactionSource = src, indication = null, onClick = onClick), contentAlignment = Alignment.Center) {
-        Text(text, color = if (active) Color.White else TextSub, fontSize = if (active) 17.sp else 16.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
+        Text(text, color = if (active) TextMain else TextSub, fontSize = if (active) 17.sp else 16.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
         // 未读角标（红色正圆数字）
         com.wh.peiwana.ui.RoundBadge(
             badge,

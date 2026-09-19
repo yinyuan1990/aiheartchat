@@ -817,7 +817,8 @@ struct MsgBubble: View {
     @State private var voiceStopTask: Task<Void, Never>?
 
     private var bg: Color { mine ? Theme.bubbleMine : Theme.bg3 }
-    private var fg: Color { mine ? .white : Theme.text }
+    /// 浅色主题：自己的气泡是浅玫红底，文字同样用深色
+    private var fg: Color { Theme.text }
 
     private var avatarUrl: String {
         (m.senderAvatar?.isEmpty == false) ? m.senderAvatar! : fallbackAvatar
@@ -903,7 +904,7 @@ struct MsgBubble: View {
                     Text("\(mine ? "送出" : "收到")「\(giftName)」")
                         .font(.system(size: 14, weight: .medium)).foregroundStyle(fg)
                     Text("\(fmtPoints(giftPrice)) 积分")
-                        .font(.system(size: 12)).foregroundStyle(mine ? .white.opacity(0.85) : Theme.warn)
+                        .font(.system(size: 12)).foregroundStyle(Theme.warn)
                 }
             }
             .padding(.horizontal, 14).padding(.vertical, 10)
@@ -1355,7 +1356,7 @@ struct AiChatView: View {
                 if !parts.text.isEmpty {
                     Text(parts.text)
                         .font(.system(size: 15))
-                        .foregroundStyle(dim ? Theme.textSub : (mine ? .white : Theme.text))
+                        .foregroundStyle(dim ? Theme.textSub : Theme.text)
                         .lineSpacing(4)
                         .padding(.horizontal, 14).padding(.vertical, 10)
                         .background(
