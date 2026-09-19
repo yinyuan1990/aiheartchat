@@ -138,22 +138,37 @@ function GalleryCard({ post, channel }: { post: GalleryPost; channel: string }) 
   );
 }
 
-/** 大厅「养眼图片」tab（名称后台可改）：按性别分流的图片/视频流，下拉刷新 + 滚到底自动加载 */
+/**
+ * 大厅「养眼图片」tab（名称后台可改，男女分开）：按性别分流的图片/视频流。
+ * 像 Telegram 聊天记录：**最新的在最底部**，打开自动滚到底；往上滑到顶附近自动加载更早的（保持视口不跳）；下拉刷新拉最新。
+ */
 export function GalleryFeed() {
   const [data, setData] = useState<GalleryList | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const sentinel = useRef<HTMLDivElement>(null);
+  const topSentinel = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  /** 首次加载 / 刷新后需要滚到底 */
+  const scrollToBottom = useRef(false);
+  /** 往上加载更早内容前记录的滚动高度，加载后按增量补回，画面不跳 */
+  const prependAnchor = useRef<{ top: number; height: number } | null>(null);
+  /** 首次滚到底完成前不触发「加载更早」，避免顶部哨兵一出现就连着翻页 */
+  const ready = useRef(false);
+
+  const scroller = () => (rootRef.current?.closest('.page') as HTMLElement | null);
 
   const load = async () => {
     const d = await api<GalleryList>('/gallery').catch(() => null);
+    scrollToBottom.current = true;
     if (d) { setData(d); setHasMore(d.list.length >= 20); }
     else setData({ title: '养眼图片', days: 3, source: null, list: [] });
   };
-  const loadMore = async () => {
+  const loadOlder = async () => {
     if (loadingMore || !hasMore || !data?.list.length) return;
     setLoadingMore(true);
-    const last = data.list[data.list.length - 1].id;
+    const s = scroller();
+    if (s) prependAnchor.current = { top: s.scrollTop, height: s.scrollHeight };
+    const last = data.list[data.list.length - 1].id; // 接口按 id 倒序，末尾是最早的
     const d = await api<GalleryList>(`/gallery?beforeId=${last}`).catch(() => null);
     if (d) {
       setData((prev) => (prev ? { ...prev, list: [...prev.list, ...d.list] } : d));
@@ -164,26 +179,48 @@ export function GalleryFeed() {
 
   useEffect(() => { load(); }, []);
 
-  // 滚到底自动加载下一页
+  // 数据变化后：首次/刷新 → 滚到底；往上加载 → 补回高度增量
   useEffect(() => {
-    const el = sentinel.current;
+    const s = scroller();
+    if (!s || !data) return;
+    if (scrollToBottom.current) {
+      scrollToBottom.current = false;
+      // 图片懒加载会撑高，连续几帧滚到底
+      let n = 0;
+      const tick = () => { s.scrollTop = s.scrollHeight; if (++n < 6) requestAnimationFrame(tick); else ready.current = true; };
+      requestAnimationFrame(tick);
+    } else if (prependAnchor.current) {
+      const a = prependAnchor.current;
+      prependAnchor.current = null;
+      s.scrollTop = a.top + (s.scrollHeight - a.height);
+    }
+  }, [data]);
+
+  // 滚到顶附近自动加载更早的
+  useEffect(() => {
+    const el = topSentinel.current;
     if (!el) return;
-    const ob = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) loadMore(); }, { rootMargin: '400px' });
+    const ob = new IntersectionObserver((es) => { if (ready.current && es.some((e) => e.isIntersecting)) loadOlder(); }, { rootMargin: '300px' });
     ob.observe(el);
     return () => ob.disconnect();
   }, [data, hasMore, loadingMore]);
 
+  // 渲染顺序：最早 → 最新（最新在最底部）
+  const ordered = data ? [...data.list].reverse() : [];
+
   return (
     <PullToRefresh onRefresh={load}>
-      {!data && <div className="empty">加载中…</div>}
-      {data && data.list.length === 0 && <div className="empty">最近 {data.days} 天还没有内容<br />稍后再来看看</div>}
-      {data && data.list.length > 0 && (
-        <div className="small" style={{ padding: '6px 0 8px' }}>只保留最近 {data.days} 天</div>
-      )}
-      {/* 卡片不显示频道名（频道名多带引流字样），与 Telegram 帖子样式一致 */}
-      {data?.list.map((p) => <GalleryCard key={p.id} post={p} channel="" />)}
-      <div ref={sentinel} style={{ height: 1 }} />
-      {loadingMore && <div className="small" style={{ textAlign: 'center', padding: 12 }}>加载中…</div>}
+      <div ref={rootRef}>
+        {!data && <div className="empty">加载中…</div>}
+        {data && data.list.length === 0 && <div className="empty">最近 {data.days} 天还没有内容<br />稍后再来看看</div>}
+        <div ref={topSentinel} style={{ height: 1 }} />
+        {loadingMore && <div className="small" style={{ textAlign: 'center', padding: 12 }}>加载更早的…</div>}
+        {data && data.list.length > 0 && !hasMore && (
+          <div className="small" style={{ textAlign: 'center', padding: '6px 0 8px' }}>只保留最近 {data.days} 天 · 已经是最早的了</div>
+        )}
+        {/* 卡片不显示频道名（频道名多带引流字样），与 Telegram 帖子样式一致 */}
+        {ordered.map((p) => <GalleryCard key={p.id} post={p} channel="" />)}
+      </div>
     </PullToRefresh>
   );
 }

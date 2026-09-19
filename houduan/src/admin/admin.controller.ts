@@ -38,7 +38,7 @@ export class AdminController {
 
   @Put('gallery/settings')
   @UseGuards(AdminGuard)
-  gallerySaveSettings(@Body() body: { title?: string; days?: number }) {
+  gallerySaveSettings(@Body() body: { titleM?: string; titleF?: string; days?: number }) {
     return this.gallery.saveSettings(body ?? {});
   }
 

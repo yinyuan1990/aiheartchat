@@ -11,8 +11,8 @@ export class GalleryController {
 
   /** tab 名称 / 保留天数（大厅渲染 tab 标签用，声明在 @Get() 之前无所谓，路径不同） */
   @Get('settings')
-  settings() {
-    return this.gallery.settings();
+  settings(@CurrentUser() userId: bigint) {
+    return this.gallery.userSettings(userId);
   }
 
   /** {title, days, source, list:[{id,text,media[],viewCount,postedAt}]}，beforeId 翻页，每页 20 */

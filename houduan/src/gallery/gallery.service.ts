@@ -63,18 +63,36 @@ export class GalleryService implements OnModuleInit {
 
   // ---------- 设置 ----------
 
-  async settings(): Promise<{ title: string; days: number }> {
-    const rows = await this.prisma.sysSetting.findMany({ where: { key: { in: ['gallery_title', 'gallery_days'] } } });
+  /** 后台设置：tab 名称按受众分开（titleM 男看 / titleF 女看，空则用 DEFAULT_TITLE）+ 保留天数 */
+  async settings(): Promise<{ titleM: string; titleF: string; days: number }> {
+    const rows = await this.prisma.sysSetting.findMany({ where: { key: { in: ['gallery_title_m', 'gallery_title_f', 'gallery_title', 'gallery_days'] } } });
     const get = (k: string) => rows.find((r) => r.key === k)?.value ?? '';
     const days = Number(get('gallery_days')) || DEFAULT_DAYS;
-    return { title: get('gallery_title') || DEFAULT_TITLE, days: Math.min(60, Math.max(1, days)) };
+    const legacy = get('gallery_title') || DEFAULT_TITLE;
+    return { titleM: get('gallery_title_m') || legacy, titleF: get('gallery_title_f') || legacy, days: Math.min(60, Math.max(1, days)) };
   }
 
-  async saveSettings(data: { title?: string; days?: number }) {
-    const title = String(data.title ?? '').trim().slice(0, 12);
+  /** 某个受众看到的 tab 名 */
+  async titleFor(audience: number): Promise<string> {
+    const s = await this.settings();
+    return audience === 2 ? s.titleF : s.titleM;
+  }
+
+  /** 用户端：按自己性别拿 tab 名称与天数 */
+  async userSettings(userId: bigint) {
+    const me = await this.prisma.user.findUnique({ where: { id: userId }, select: { gender: true } });
+    const s = await this.settings();
+    return { title: me?.gender === 2 ? s.titleF : s.titleM, days: s.days };
+  }
+
+  async saveSettings(data: { titleM?: string; titleF?: string; days?: number }) {
+    const titleM = String(data.titleM ?? '').trim().slice(0, 12);
+    const titleF = String(data.titleF ?? '').trim().slice(0, 12);
     const days = Math.min(60, Math.max(1, Number(data.days) || DEFAULT_DAYS));
-    await this.prisma.sysSetting.upsert({ where: { key: 'gallery_title' }, create: { key: 'gallery_title', value: title }, update: { value: title } });
-    await this.prisma.sysSetting.upsert({ where: { key: 'gallery_days' }, create: { key: 'gallery_days', value: String(days) }, update: { value: String(days) } });
+    const set = (key: string, value: string) => this.prisma.sysSetting.upsert({ where: { key }, create: { key, value }, update: { value } });
+    await set('gallery_title_m', titleM);
+    await set('gallery_title_f', titleF);
+    await set('gallery_days', String(days));
     return this.settings();
   }
 
@@ -84,7 +102,9 @@ export class GalleryService implements OnModuleInit {
   async list(userId: bigint, beforeId?: bigint) {
     const me = await this.prisma.user.findUnique({ where: { id: userId }, select: { gender: true } });
     const audience = me?.gender === 2 ? 2 : 1;
-    const { title, days } = await this.settings();
+    const s = await this.settings();
+    const title = audience === 2 ? s.titleF : s.titleM;
+    const days = s.days;
     const cutoff = new Date(Date.now() - days * 86_400_000);
     const rows = await this.prisma.galleryPost.findMany({
       where: { audience, postedAt: { gte: cutoff }, ...(beforeId ? { id: { lt: beforeId } } : {}) },
