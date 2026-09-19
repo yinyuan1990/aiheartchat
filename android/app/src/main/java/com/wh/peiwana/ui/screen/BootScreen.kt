@@ -50,6 +50,7 @@ import com.wh.peiwana.ui.theme.Accent
 import com.wh.peiwana.ui.theme.Accent2
 import com.wh.peiwana.ui.theme.Bg
 import com.wh.peiwana.ui.theme.TextDim
+import com.wh.peiwana.ui.theme.TextMain
 import com.wh.peiwana.ui.theme.TextSub
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
