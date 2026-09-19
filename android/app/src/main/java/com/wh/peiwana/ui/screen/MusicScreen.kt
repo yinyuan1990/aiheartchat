@@ -361,6 +361,7 @@ fun MusicScreen(onBack: () -> Unit) {
 }
 
 /** 弹层内容：头部（频道名 + 关闭）/ 列表 / 大播放器 */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MusicSheetContent(onClose: (() -> Unit)?) {
     val ctx = LocalContext.current
