@@ -10,8 +10,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.font.FontWeight
@@ -126,11 +126,13 @@ fun MainScreen(
 /** 保活页面容器：当前页置顶显示，其余页隐藏在底层（不销毁、不响应点击） */
 @Composable
 private fun Pane(active: Boolean, content: @Composable () -> Unit) {
+    // 非当前 tab 直接跳过绘制而不用 alpha(0)：alpha 会把子树（含大厅 WebView）画进离屏图层，
+    // 部分厂商 WebView（华为等）在图层里 / 从图层切回后不出画面，表现为大厅黑屏
     Box(
         modifier = Modifier
             .fillMaxSize()
             .zIndex(if (active) 1f else 0f)
-            .alpha(if (active) 1f else 0f)
+            .drawWithContent { if (active) drawContent() }
             .background(Bg),
     ) { content() }
 }

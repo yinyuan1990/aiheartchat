@@ -59,6 +59,14 @@ fun HallScreen(
     var webView by remember { mutableStateOf<android.webkit.WebView?>(null) }
     var canGoBack by remember { mutableStateOf(false) }
     androidx.activity.compose.BackHandler(enabled = active && canGoBack) { webView?.goBack() }
+    // 切到大厅 tab：打一条尺寸/进度日志（黑屏时看这里是不是 0x0），并强制 WebView 重绘一次
+    LaunchedEffect(active, webView) {
+        val w = webView ?: return@LaunchedEffect
+        if (active) {
+            GameLog.d("hall: tab active, view=${w.width}x${w.height} visible=${w.isShown} progress=${w.progress} url=${w.url?.substringBefore("token=")}")
+            w.invalidate()
+        }
+    }
 
     if (u == null) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -78,6 +86,10 @@ fun HallScreen(
                     webChromeClient = GameLog.chromeClient("hall")
                     // JS 桥（window.PeiwanNative）：H5 聊天入口唤起原生聊天页 / 小游戏唤起原生全屏网页
                     addJavascriptInterface(HallJsBridge(onOpenChat, onOpenWeb), "PeiwanNative")
+                    // 布局尺寸变化打日志：大厅黑屏时先确认 WebView 有没有拿到真实尺寸
+                    addOnLayoutChangeListener { v, l, t, r, b, ol, ot, or, ob ->
+                        if (r - l != or - ol || b - t != ob - ot) GameLog.d("hall: webview layout ${r - l}x${b - t}")
+                    }
                     GameLog.d("hall: webview created, bridge PeiwanNative registered")
                     loadUrl(u)
                     webView = this
