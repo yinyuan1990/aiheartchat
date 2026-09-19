@@ -4,14 +4,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UploadService } from '../upload/upload.service';
 import { TelegramClientService } from '../telegram/telegram.service';
 
-/** 只保留最近 3 天的曲目：更早的连文件一起删 */
-const RETENTION_MS = 3 * 24 * 3600 * 1000;
 /** 单个音频文件上限（频道里的 DJ 曲一般 80~120MB） */
 const MAX_FILE_BYTES = 300 * 1024 * 1024;
 /** 每个来源每轮最多下载的条数（一首 100MB 要下载几十秒，别一次拖太多） */
 const MAX_PER_ROUND = 10;
-/** 曲目总量上限（磁盘保护），超出删最旧 */
-const MAX_TRACKS = 200;
+/** 曲目只按数量保留：超过 100 首才删最旧的（连文件一起），与天数无关 */
+export const MAX_TRACKS = 100;
+/** 首次同步往前扫的消息条数 */
+const FIRST_SCAN = 60;
 
 /** 从频道消息里解析出的一条音频（预览/同步共用） */
 export interface TgAudio {
@@ -30,7 +30,7 @@ export interface TgAudio {
  * 音乐频道（消息页「私聊」tab 置顶入口，替代原花边新闻）
  *
  * 通过已登录的 Telegram 用户账号读取来源频道的音频消息，文件转存到 MinIO 后入库，
- * 客户端直接拿 /res/ 地址播放。频道里只同步最近 3 天的，过期自动清理。
+ * 客户端直接拿 /res/ 地址播放。曲目最多保留 MAX_TRACKS 首，超出删最旧的。
  */
 @Injectable()
 export class MusicService implements OnModuleInit {
@@ -52,12 +52,11 @@ export class MusicService implements OnModuleInit {
 
   /** 曲目列表：最新在前，beforeId 翻页；附带来源标题给页面标题用 */
   async list(beforeId?: bigint) {
-    const cutoff = new Date(Date.now() - RETENTION_MS);
     const [tracks, sources] = await Promise.all([
       this.prisma.musicTrack.findMany({
-        where: { postedAt: { gte: cutoff }, ...(beforeId ? { id: { lt: beforeId } } : {}) },
+        where: beforeId ? { id: { lt: beforeId } } : undefined,
         orderBy: [{ postedAt: 'desc' }, { id: 'desc' }],
-        take: 50,
+        take: MAX_TRACKS,
         select: { id: true, title: true, performer: true, duration: true, size: true, url: true, cover: true, postedAt: true, playCount: true },
       }),
       this.prisma.musicSource.findMany({ where: { enabled: true }, select: { title: true, channel: true }, orderBy: { id: 'asc' } }),
@@ -89,7 +88,8 @@ export class MusicService implements OnModuleInit {
     if (!channel) throw new BadRequestException('请填写频道用户名（t.me/ 后面那段）');
     const info = await this.tg.resolveChannel(channel);
     const { audios, scanned } = await this.fetchAudios(info.entity, { limit: 30 });
-    const recent = audios.filter((a) => a.date.getTime() >= Date.now() - RETENTION_MS).length;
+    // 保存后首次同步会导入的数量（按首次扫描条数与总量上限估算）
+    const recent = Math.min(audios.length, FIRST_SCAN, MAX_TRACKS);
     return {
       channel: info.username,
       title: info.title,
@@ -192,21 +192,21 @@ export class MusicService implements OnModuleInit {
     }
   }
 
-  /** 3 天保留期 + 总量上限：过期/超量的曲目连文件删除 */
+  /** 只按数量保留：超过 MAX_TRACKS 首时把最旧（按发布时间）的连文件删除；与天数无关 */
   async purgeOld() {
-    const cutoff = new Date(Date.now() - RETENTION_MS);
-    const old = await this.prisma.musicTrack.findMany({ where: { postedAt: { lt: cutoff } }, select: { id: true, url: true, cover: true }, take: 500 });
-    const over = await this.prisma.musicTrack.findMany({ orderBy: { id: 'desc' }, skip: MAX_TRACKS, select: { id: true, url: true, cover: true }, take: 500 });
-    const all = new Map<string, { id: bigint; url: string; cover: string }>();
-    for (const t of [...old, ...over]) all.set(t.id.toString(), t);
-    if (!all.size) return { removed: 0 };
-    const rows = [...all.values()];
+    const rows = await this.prisma.musicTrack.findMany({
+      orderBy: [{ postedAt: 'desc' }, { id: 'desc' }],
+      skip: MAX_TRACKS,
+      select: { id: true, url: true, cover: true },
+      take: 500,
+    });
+    if (!rows.length) return { removed: 0 };
     await this.prisma.musicTrack.deleteMany({ where: { id: { in: rows.map((r) => r.id) } } });
     for (const t of rows) {
       await this.uploads.remove(t.url);
       if (t.cover) await this.uploads.remove(t.cover);
     }
-    this.logger.log(`purged ${rows.length} tracks (older than 3 days / over limit)`);
+    this.logger.log(`purged ${rows.length} tracks (over ${MAX_TRACKS})`);
     return { removed: rows.length };
   }
 
@@ -226,14 +226,12 @@ export class MusicService implements OnModuleInit {
     let error = '';
     try {
       const entity = await client.getEntity(src.channel);
-      const cutoff = Date.now() - RETENTION_MS;
-      // 只看比上次更新的消息；首次同步扫最近 60 条（再往前的也超过 3 天了）
-      const { messages } = await this.fetchAudios(entity, { limit: src.lastMsgId ? 100 : 60, minId: src.lastMsgId || undefined });
-      // 旧→新处理，下载中途失败也能把已完成的游标推进
+      // 只看比上次更新的消息；首次同步扫最近 FIRST_SCAN 条
+      const { messages } = await this.fetchAudios(entity, { limit: src.lastMsgId ? 100 : FIRST_SCAN, minId: src.lastMsgId || undefined });
+      // 旧→新处理，游标只推进到已处理的那条：一轮下不完（MAX_PER_ROUND）的下一轮从断点接着
       const fresh = messages.filter((m) => m.audio.msgId > src.lastMsgId).sort((a, b) => a.audio.msgId - b.audio.msgId);
       let downloaded = 0;
       for (const { msg, audio } of fresh) {
-        if (audio.date.getTime() < cutoff) { maxId = Math.max(maxId, audio.msgId); skipped++; continue; }
         if (audio.size > MAX_FILE_BYTES || audio.size <= 0) { maxId = Math.max(maxId, audio.msgId); skipped++; continue; }
         if (downloaded >= MAX_PER_ROUND) break; // 剩下的下一轮接着（游标不推进）
         const key = `tg:${src.channel}:${audio.msgId}`;

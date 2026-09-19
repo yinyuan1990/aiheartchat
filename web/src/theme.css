@@ -1,16 +1,16 @@
-﻿/* 心之音 UI 定稿主题：纯黑沉浸 + 玫红渐变（docs/UI设计规范.md） */
+/* 心之音主题：浅色（对齐 Telegram iOS 浅色，与 Android/iOS 同值）+ 玫红渐变。2026-09-19 由纯黑沉浸切换 */
 :root {
-  --bg: #0a0a0c;
-  --bg-card: #161619;
-  --bg-input: #212126;
-  --line: #1f1f24;
-  --text: #ffffff;
-  --text-2: #8a8a93;
-  --text-3: #4a4a52;
+  --bg: #ffffff;
+  --bg-card: #f5f5f8;
+  --bg-input: #ebebf0;
+  --line: #e5e5ea;
+  --text: #111114;
+  --text-2: #8e8e93;
+  --text-3: #b5b5bc;
   --accent: #fe2c55;
   --accent-grad: linear-gradient(120deg, #fe2c55, #ff6b81);
   --success: #0bd07d;
-  --warn: #ffb800;
+  --warn: #e6a100;
   --danger: #ff4d4f;
 }
 
@@ -19,7 +19,7 @@
 html, body, #root { height: 100%; }
 
 body {
-  background: #000;
+  background: var(--bg);
   color: var(--text);
   font-family: "PingFang SC", "Microsoft YaHei", -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -73,7 +73,7 @@ body {
 /* 字体效果与启动页「爱情和金钱无关 / 与内心相连」一致：系统字体 24px 500、字距 8、右起竖读、逐字浮现 */
 .quote-text { display: flex; flex-direction: row-reverse; align-items: flex-start; gap: 26px; max-height: 62%; }
 .quote-text .col { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-.quote-text .col span { font-size: 24px; font-weight: 500; line-height: 1; color: #fff; opacity: 0; transform: translateY(10px); animation: quote-char .52s cubic-bezier(.2,.8,.2,1) forwards; }
+.quote-text .col span { font-size: 24px; font-weight: 500; line-height: 1; color: var(--text); opacity: 0; transform: translateY(10px); animation: quote-char .52s cubic-bezier(.2,.8,.2,1) forwards; }
 .quote-text .seal { width: 22px; height: 22px; border-radius: 5px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin-top: 6px; opacity: 0; animation: quote-char .5s forwards; }
 @keyframes quote-char { to { opacity: 1; transform: none; } }
 .quote-mark {
@@ -109,12 +109,12 @@ body {
   letter-spacing: 2px; cursor: pointer;
 }
 .btn:disabled { opacity: 0.5; }
-.btn-ghost { background: transparent; border: 1px solid #2a2a30; color: var(--text); font-weight: 400; }
+.btn-ghost { background: transparent; border: 1px solid var(--line); color: var(--text); font-weight: 400; }
 .btn-sm {
   display: inline-block; width: auto; height: 30px; padding: 0 16px; border: none;
   border-radius: 15px; background: var(--accent-grad); color: #fff; font-size: 13px; cursor: pointer;
 }
-.btn-sm.ghost { background: transparent; border: 1px solid #2a2a30; color: var(--text-2); }
+.btn-sm.ghost { background: transparent; border: 1px solid var(--line); color: var(--text-2); }
 
 .input {
   width: 100%; padding: 13px 14px; margin-bottom: 12px;
@@ -126,7 +126,7 @@ textarea.input { resize: none; min-height: 90px; }
 
 /* 底部导航：抖音式纯文字 + 居中加号 */
 .tabbar {
-  display: flex; align-items: center; background: #000;
+  display: flex; align-items: center; background: var(--bg-card); border-top: 1px solid var(--line);
   padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
 }
 .tab {
@@ -138,9 +138,9 @@ textarea.input { resize: none; min-height: 90px; }
   flex: 1; display: flex; justify-content: center; cursor: pointer;
 }
 .tab-plus .plus-box {
-  width: 44px; height: 30px; border-radius: 8px; background: #fff;
+  width: 44px; height: 30px; border-radius: 8px; background: var(--accent-grad);
   display: flex; align-items: center; justify-content: center;
-  color: #000; font-size: 20px; font-weight: 700; line-height: 1;
+  color: #fff; font-size: 20px; font-weight: 700; line-height: 1;
 }
 .tab-plus:active .plus-box { transform: scale(0.92); }
 .badge {
@@ -177,7 +177,7 @@ textarea.input { resize: none; min-height: 90px; }
 }
 .add-box {
   display: flex; align-items: center; justify-content: center;
-  border: 1px dashed #2a2a30; color: var(--text-3); font-size: 26px; cursor: pointer;
+  border: 1px dashed var(--line); color: var(--text-3); font-size: 26px; cursor: pointer;
 }
 
 /* 操作行（点赞 评论 打招呼） */
@@ -195,7 +195,7 @@ textarea.input { resize: none; min-height: 90px; }
   word-break: break-word; border-radius: 18px; width: fit-content;
 }
 .bubble.theirs { background: var(--bg-input); border-bottom-left-radius: 4px; }
-.bubble.mine { background: #4b2028; border-bottom-right-radius: 4px; }
+.bubble.mine { background: #ffe1e7; border-bottom-right-radius: 4px; }
 /* 图片/视频消息不加气泡背景 */
 .bubble.media { padding: 0; background: none; border-radius: 10px; overflow: hidden; }
 /* 语音气泡声条：播放时循环跳动 */
@@ -219,7 +219,7 @@ textarea.input { resize: none; min-height: 90px; }
 .tag-accent { background: rgba(254, 44, 85, 0.15); color: var(--accent); }
 .tag-warn { background: rgba(255, 184, 0, 0.15); color: var(--warn); }
 .tag-success { background: rgba(11, 208, 125, 0.15); color: var(--success); }
-.tag-muted { background: #222; color: var(--text-2); }
+.tag-muted { background: var(--bg-input); color: var(--text-2); }
 
 /* 顶栏（子页面） */
 .navbar {
@@ -343,7 +343,7 @@ textarea.input { resize: none; min-height: 90px; }
 .th-divider {
   display: flex; align-items: center; justify-content: center; margin: 14px 0;
 }
-.th-divider span { background: rgba(255,255,255,0.08); color: var(--text-2); font-size: 12px; padding: 4px 12px; border-radius: 12px; }
+.th-divider span { background: rgba(0,0,0,0.05); color: var(--text-2); font-size: 12px; padding: 4px 12px; border-radius: 12px; }
 
 .th-comment { display: flex; gap: 10px; align-items: flex-end; margin-bottom: 12px; }
 .th-comment .avatar { width: 34px; height: 34px; }
@@ -395,7 +395,7 @@ textarea.input { resize: none; min-height: 90px; }
 .music-row:active { background: var(--bg-input); }
 .music-cover {
   flex-shrink: 0; border-radius: 50%; overflow: hidden; display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, #7b5cff, var(--accent)); box-shadow: 0 0 0 3px #1c1c22 inset;
+  background: linear-gradient(135deg, #7b5cff, var(--accent)); box-shadow: 0 0 0 3px var(--bg-card) inset;
 }
 .music-cover.square { border-radius: 10px; box-shadow: none; }
 .music-cover img { width: 100%; height: 100%; object-fit: cover; }
@@ -408,7 +408,7 @@ textarea.input { resize: none; min-height: 90px; }
 @keyframes music-bar { 0%, 100% { height: 4px; } 50% { height: 12px; } }
 
 .music-big { flex-shrink: 0; padding: 12px 16px 14px; border-top: 1px solid var(--line); background: var(--bg); padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
-.music-progress { height: 3px; background: #2a2a30; cursor: pointer; position: relative; }
+.music-progress { height: 3px; background: var(--line); cursor: pointer; position: relative; }
 .music-progress.big { margin-top: 14px; height: 4px; border-radius: 2px; }
 .music-progress::before { content: ""; position: absolute; left: 0; right: 0; top: -10px; bottom: -10px; }
 .music-progress-fill { height: 100%; background: var(--accent-grad); border-radius: 2px; transition: width 0.25s linear; }

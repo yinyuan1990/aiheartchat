@@ -12,6 +12,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.font.FontWeight
@@ -130,12 +132,23 @@ fun MainScreen(
 private fun Pane(active: Boolean, content: @Composable () -> Unit) {
     // 非当前 tab 直接跳过绘制而不用 alpha(0)：alpha 会把子树（含大厅 WebView）画进离屏图层，
     // 部分厂商 WebView（华为等）在图层里 / 从图层切回后不出画面，表现为大厅黑屏
+    // 事件穿透修复：background 不参与命中测试，当前页空白处的点击会穿到下层 tab（如「我的」）的按钮上。
+    // 给当前页挂一个什么都不做的 pointerInput，让整页都算"命中"，命中测试到此为止不再往下层兄弟找；
+    // 非当前页则把所有事件吞掉兜底（即便被命中也不响应）。
     Box(
         modifier = Modifier
             .fillMaxSize()
             .zIndex(if (active) 1f else 0f)
             .drawWithContent { if (active) drawContent() }
-            .background(Bg),
+            .background(Bg)
+            .pointerInput(active) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(if (active) PointerEventPass.Main else PointerEventPass.Initial)
+                        if (!active) event.changes.forEach { it.consume() }
+                    }
+                }
+            },
     ) { content() }
 }
 

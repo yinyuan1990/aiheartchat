@@ -279,7 +279,7 @@ export function UserHomePage() {
                         return (
                           <div key={label} style={{
                             borderRadius: 10, padding: '10px 0', textAlign: 'center',
-                            background: best ? 'var(--accent-grad)' : 'rgba(255,255,255,0.06)',
+                            background: best ? 'var(--accent-grad)' : 'rgba(0,0,0,0.05)',
                           }}>
                             <div style={{ fontSize: 16, fontWeight: 700, color: best ? '#fff' : 'var(--text)' }}>{(score / 20).toFixed(1)}</div>
                             <div style={{ fontSize: 11, marginTop: 2, color: best ? 'rgba(255,255,255,0.9)' : 'var(--text-2)' }}>{label}</div>

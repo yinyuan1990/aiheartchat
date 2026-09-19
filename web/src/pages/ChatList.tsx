@@ -372,7 +372,7 @@ export function ChatListPage() {
               </div>
             </div>
           )}
-          {/* 音乐频道置顶入口（Telegram 频道同步，只留最近 3 天） */}
+          {/* 音乐频道置顶入口（Telegram 频道同步，最多保留 100 首） */}
           {tab === 'single' && (
             <div className="row" style={{ padding: '10px 16px', cursor: 'pointer' }} onClick={() => setShowMusic(true)}>
               <div style={{

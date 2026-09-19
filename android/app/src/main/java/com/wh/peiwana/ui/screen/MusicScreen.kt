@@ -306,7 +306,7 @@ private fun MusicSheetContent(onClose: (() -> Unit)?) {
             Row(Modifier.fillMaxWidth().padding(16.dp, 4.dp, 8.dp, 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(data?.source?.title?.ifEmpty { null } ?: "音乐", color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text("只保留最近 3 天" + (data?.list?.size?.takeIf { it > 0 }?.let { " · 共 $it 首" } ?: ""), color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
+                    Text("最多保留 100 首" + (data?.list?.size?.takeIf { it > 0 }?.let { " · 共 $it 首" } ?: ""), color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
                 }
                 Box(Modifier.size(34.dp).noRippleClick(onClose), contentAlignment = Alignment.Center) { CloseIcon(TextMain, 16.dp) }
             }
@@ -317,7 +317,7 @@ private fun MusicSheetContent(onClose: (() -> Unit)?) {
             val d = data
             when {
                 !loaded || d == null -> EmptyHint("加载中…")
-                d.list.isEmpty() -> EmptyHint("最近 3 天还没有新歌\n稍后再来看看")
+                d.list.isEmpty() -> EmptyHint("还没有歌曲\n稍后再来看看")
                 else -> androidx.compose.material3.pulltorefresh.PullToRefreshBox(
                     isRefreshing = refreshing,
                     onRefresh = { scope.launch { refreshing = true; MusicCenter.load(force = true); refreshing = false } },
@@ -325,7 +325,7 @@ private fun MusicSheetContent(onClose: (() -> Unit)?) {
                 ) {
                     LazyColumn(Modifier.fillMaxSize()) {
                         if (onClose == null) item(key = "head") {
-                            Text("只保留最近 3 天 · 共 ${d.list.size} 首", color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(16.dp, 10.dp, 16.dp, 2.dp))
+                            Text("最多保留 100 首 · 共 ${d.list.size} 首", color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(16.dp, 10.dp, 16.dp, 2.dp))
                         }
                         items(d.list, key = { it.id }) { t ->
                             val active = current?.id == t.id

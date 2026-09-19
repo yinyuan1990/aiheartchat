@@ -91,7 +91,7 @@ export function MePage() {
       {/* 顶部渐变背景 */}
       <div style={{ background: 'linear-gradient(180deg, rgba(254,44,85,0.14), transparent 85%)', padding: '28px 20px 0' }}>
         <div className="row" style={{ gap: 16, alignItems: 'flex-start' }}>
-          <div className="avatar" style={{ width: 76, height: 76, border: '2px solid rgba(255,255,255,0.15)' }}>
+          <div className="avatar" style={{ width: 76, height: 76, border: '2px solid rgba(0,0,0,0.08)' }}>
             {me.avatar ? <img src={me.avatar} alt="" /> : null}
           </div>
           <div className="grow" style={{ paddingTop: 4 }}>
@@ -156,7 +156,7 @@ export function MePage() {
           onClick={() => nav('/wallet')}
           style={{
             margin: '16px 0 18px', borderRadius: 14, padding: '12px 16px', cursor: 'pointer',
-            background: 'rgba(255,255,255,0.05)',
+            background: 'rgba(0,0,0,0.035)',
             border: '1px solid rgba(254,44,85,0.25)',
             display: 'flex', alignItems: 'center',
           }}

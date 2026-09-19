@@ -194,7 +194,7 @@ async function deleteTrack(t: Track) {
 }
 async function purge() {
   const r = await api<{ removed: number }>('/admin/music/purge', { method: 'POST' });
-  showToast(`已清理 ${r.removed} 首过期曲目`);
+  showToast(`已清理 ${r.removed} 首超量曲目`);
   loadTracks();
 }
 
@@ -264,7 +264,7 @@ onMounted(() => { loadTg(); loadSources(); loadTracks(); });
     <div class="card">
       <div style="font-weight: 600; margin-bottom: 6px">频道来源</div>
       <div class="muted" style="margin-bottom: 12px">
-        填频道用户名或 t.me 链接 → 先点<b>「解析」</b>看标题、订阅数、最近的曲目对不对得上 → 再保存。保存后每 10 分钟同步一次，只同步<b>最近 3 天</b>的音频，文件转存到自己服务器，过期自动删除。
+        填频道用户名或 t.me 链接 → 先点<b>「解析」</b>看标题、订阅数、最近的曲目对不对得上 → 再保存。保存后每 10 分钟同步一次，音频文件转存到自己服务器；<b>最多保留 100 首</b>，超出自动删最旧的（与天数无关）。
       </div>
       <div class="row" style="flex-wrap: wrap; gap: 12px; align-items: center">
         <label class="muted">频道 <input v-model="srcForm.channel" placeholder="wenan_DJ866 或 https://t.me/wenan_DJ866" style="width: 300px" @keydown.enter="doPreview" /></label>
@@ -281,7 +281,7 @@ onMounted(() => { loadTg(); loadSources(); loadTracks(); });
           <span class="muted">@{{ preview.channel }} · {{ preview.subscribers.toLocaleString() }} 订阅</span>
         </div>
         <div v-if="preview.about" class="muted" style="margin-top: 4px; white-space: pre-wrap; font-size: 12px">{{ preview.about }}</div>
-        <div class="muted" style="margin: 8px 0">最近 {{ preview.scanned }} 条音频消息里解析到 {{ preview.audioCount }} 首，其中 3 天内 <b style="color: var(--accent)">{{ preview.recentCount }}</b> 首会被同步：</div>
+        <div class="muted" style="margin: 8px 0">最近 {{ preview.scanned }} 条音频消息里解析到 {{ preview.audioCount }} 首，保存后首次同步会导入最近 <b style="color: var(--accent)">{{ preview.recentCount }}</b> 首左右（同名同大小的重发会合并）：</div>
         <div v-if="preview.audios.length === 0" class="muted">这个频道最近没有音频文件，可能不是音乐频道</div>
         <div v-for="a in preview.audios" :key="a.msgId" class="row" style="padding: 6px 0; border-top: 1px solid var(--line); font-size: 13px">
           <span style="flex: 1">{{ a.title }} <span class="muted">{{ a.performer }}</span></span>
@@ -316,9 +316,9 @@ onMounted(() => { loadTg(); loadSources(); loadTracks(); });
     <div class="card">
       <div class="row" style="margin-bottom: 12px">
         <div style="font-weight: 600">已同步曲目（{{ tracks.length }}）</div>
-        <button class="small ghost" @click="purge">清理过期</button>
+        <button class="small ghost" @click="purge">清理超量</button>
         <button class="small ghost" @click="loadTracks">刷新</button>
-        <span class="muted">用户端「消息 → 音乐」看到的就是这些；发布超过 3 天自动删除</span>
+        <span class="muted">用户端「消息 → 音乐」看到的就是这些；超过 100 首自动删最旧的</span>
       </div>
       <table>
         <thead><tr><th></th><th style="min-width: 260px">曲目</th><th>时长</th><th>大小</th><th>发布时间</th><th>播放</th><th>操作</th></tr></thead>

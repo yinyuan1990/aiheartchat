@@ -63,7 +63,7 @@ export function MomentCard({ m, onOpenDetail, onGreet }: { m: MomentItem; onOpen
             <span>{m.user?.nickname}</span>
             {m.user?.isGuide && <span className="tag tag-accent" style={{ fontSize: 10, padding: '1px 6px' }}>认证</span>}
             {m.cityName && (
-              <span style={{ fontSize: 10, color: 'var(--text-3)', background: 'rgba(255,255,255,0.06)', padding: '1px 6px', borderRadius: 3 }}>{m.cityName}</span>
+              <span style={{ fontSize: 10, color: 'var(--text-3)', background: 'rgba(0,0,0,0.05)', padding: '1px 6px', borderRadius: 3 }}>{m.cityName}</span>
             )}
           </div>
           <div className="small" style={{ marginTop: 3 }}>{formatAgo(m.createdAt)}</div>
@@ -75,7 +75,7 @@ export function MomentCard({ m, onOpenDetail, onGreet }: { m: MomentItem; onOpen
               onClick={toggleFollow}
               style={{
                 height: 26, padding: '0 12px', borderRadius: 13, fontSize: 12, cursor: 'pointer',
-                border: following ? '1px solid #2a2a30' : 'none',
+                border: following ? '1px solid var(--line)' : 'none',
                 background: following ? 'transparent' : 'var(--accent-grad)',
                 color: following ? 'var(--text-2)' : '#fff',
               }}

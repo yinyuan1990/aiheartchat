@@ -199,7 +199,7 @@ fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, c
                     }
                     Box(modifier = Modifier.fillMaxWidth().padding(start = 76.dp).height(1.dp).background(Line))
                 }
-                // 音乐频道置顶入口（Telegram 频道同步，只留最近 3 天）：弹出播放弹层
+                // 音乐频道置顶入口（Telegram 频道同步，最多保留 100 首）：弹出播放弹层
                 Column(Modifier.fillMaxWidth().clickable(onClick = { showMusic = true })) {
                     Row(Modifier.fillMaxWidth().padding(16.dp, 10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(

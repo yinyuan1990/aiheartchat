@@ -3,7 +3,7 @@ import Combine
 import MediaPlayer
 import SwiftUI
 
-/// 曲目（后端从 Telegram 频道同步，最近 3 天）
+/// 曲目（后端从 Telegram 频道同步，最新 100 首）
 struct MusicTrackModel: Codable, Identifiable, Equatable {
     let id: String
     let title: String
@@ -277,7 +277,7 @@ struct MusicSheetView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(center.sourceTitle.isEmpty ? "音乐" : center.sourceTitle)
                         .font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
-                    Text("只保留最近 3 天" + (center.queue.isEmpty ? "" : " · 共 \(center.queue.count) 首"))
+                    Text("最多保留 100 首" + (center.queue.isEmpty ? "" : " · 共 \(center.queue.count) 首"))
                         .font(.system(size: 11)).foregroundStyle(Theme.textDim)
                 }
                 Spacer()
@@ -315,12 +315,12 @@ struct MusicListAndPlayer: View {
                 if !loaded {
                     EmptyHint(text: "加载中…")
                 } else if center.queue.isEmpty {
-                    EmptyHint(text: "最近 3 天还没有新歌\n稍后再来看看")
+                    EmptyHint(text: "还没有歌曲\n稍后再来看看")
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 0) {
                             if showHeadline {
-                                Text("只保留最近 3 天 · 共 \(center.queue.count) 首")
+                                Text("最多保留 100 首 · 共 \(center.queue.count) 首")
                                     .font(.system(size: 12)).foregroundStyle(Theme.textSub)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 2)

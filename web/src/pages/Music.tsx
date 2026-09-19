@@ -108,7 +108,7 @@ export function NowPlayingBar({ onOpen }: { onOpen: () => void }) {
 
 /**
  * 独立弹层：上半部曲目列表，下半部播放器（封面、标题、进度/时间、倍速、随机/上一首/播放/下一首/循环）。
- * 数据来自后端从 Telegram 频道同步的最近 3 天曲目。
+ * 数据来自后端从 Telegram 频道同步的最新曲目。
  */
 export function MusicSheet({ onClose }: { onClose: () => void }) {
   const s = useMusic();
@@ -135,7 +135,7 @@ export function MusicSheet({ onClose }: { onClose: () => void }) {
           <div className="row" style={{ padding: '4px 16px 10px' }}>
             <div className="grow" style={{ minWidth: 0 }}>
               <div style={{ fontSize: 16, fontWeight: 600 }} className="ellipsis">{s.data?.source?.title || '音乐'}</div>
-              <div className="small" style={{ marginTop: 2 }}>只保留最近 3 天{list.length ? ` · 共 ${list.length} 首` : ''}</div>
+              <div className="small" style={{ marginTop: 2 }}>最多保留 100 首{list.length ? ` · 共 ${list.length} 首` : ''}</div>
             </div>
             <span className="np-btn" onClick={onClose}><CloseIcon /></span>
           </div>
@@ -143,7 +143,7 @@ export function MusicSheet({ onClose }: { onClose: () => void }) {
 
         <div className="music-list no-scrollbar">
           {!loaded && <div className="empty">加载中…</div>}
-          {loaded && list.length === 0 && <div className="empty">最近 3 天还没有新歌<br />稍后再来看看</div>}
+          {loaded && list.length === 0 && <div className="empty">还没有歌曲<br />稍后再来看看</div>}
           {list.map((t) => {
             const active = t.id === track?.id;
             return (

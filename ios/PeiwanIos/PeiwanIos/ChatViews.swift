@@ -187,7 +187,7 @@ struct MessagesView: View {
         .buttonStyle(.plain)
     }
 
-    /// 音乐频道置顶入口（Telegram 频道同步，只留最近 3 天）：弹出播放弹层
+    /// 音乐频道置顶入口（Telegram 频道同步，最多保留 100 首）：弹出播放弹层
     private var newsEntryRow: some View {
         Button { showMusic = true } label: {
             VStack(spacing: 0) {
