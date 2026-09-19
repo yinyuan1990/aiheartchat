@@ -90,37 +90,73 @@ function Mosaic({ media, onOpen }: { media: GalleryMedia[]; onOpen: (i: number) 
   );
 }
 
-/** 网页灯箱（浏览器用；App 内走原生查看器）：左右点击翻页，视频用 <video controls> */
-function MediaLightbox({ items, index, onClose }: { items: GalleryMedia[]; index: number; onClose: () => void }) {
-  const [i, setI] = useState(index);
-  const m = items[i];
+/** 灯箱里的一个视频：滚到可见才播、滑走暂停 */
+function LightboxVideo({ m }: { m: GalleryMedia }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ob = new IntersectionObserver((es) => {
+      es.forEach((e) => { if (e.intersectionRatio > 0.6) el.play().catch(() => {}); else el.pause(); });
+    }, { threshold: [0, 0.6] });
+    ob.observe(el);
+    return () => ob.disconnect();
+  }, []);
+  return <video ref={ref} src={full(m.url)} poster={m.cover ? full(m.cover) : undefined} controls playsInline loop onClick={(e) => e.stopPropagation()} style={{ maxWidth: '100%', maxHeight: '100%' }} />;
+}
+
+/**
+ * 网页灯箱（浏览器用；App 内走原生查看器）：
+ * 上下滑切帖子、左右滑切同一帖里的多张图（scroll-snap），视频滑到就播；点空白关闭。
+ */
+function MediaLightbox({ groups, group, index, onClose }: { groups: GalleryMedia[][]; group: number; index: number; onClose: () => void }) {
+  const outer = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ g: group, i: index });
+
+  // 打开时定位到点开的那条 / 那张
+  useEffect(() => {
+    const o = outer.current;
+    if (!o) return;
+    o.scrollTop = group * o.clientHeight;
+    const row = o.children[group] as HTMLElement | undefined;
+    if (row) row.scrollLeft = index * row.clientWidth;
+  }, []);
+
+  const onScroll = () => {
+    const o = outer.current;
+    if (!o) return;
+    const g = Math.round(o.scrollTop / o.clientHeight);
+    const row = o.children[g] as HTMLElement | undefined;
+    const i = row ? Math.round(row.scrollLeft / row.clientWidth) : 0;
+    if (g !== pos.g || i !== pos.i) setPos({ g, i });
+  };
+
+  const cur = groups[pos.g] ?? [];
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.96)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      {m.type === 'video' ? (
-        <video key={m.url} src={full(m.url)} poster={m.cover ? full(m.cover) : undefined} controls autoPlay playsInline onClick={(e) => e.stopPropagation()} style={{ maxWidth: '100%', maxHeight: '100%' }} />
-      ) : (
-        <img key={m.url} src={full(m.url)} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-      )}
-      <span onClick={onClose} style={{ position: 'absolute', top: 'calc(12px + env(safe-area-inset-top))', right: 14, width: 34, height: 34, borderRadius: 17, background: 'rgba(255,255,255,0.15)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>×</span>
-      {items.length > 1 && (
-        <>
-          <span style={{ position: 'absolute', top: 'calc(20px + env(safe-area-inset-top))', left: 0, right: 0, textAlign: 'center', color: '#fff', fontSize: 13 }}>{i + 1} / {items.length}</span>
-          <span onClick={(e) => { e.stopPropagation(); setI((i - 1 + items.length) % items.length); }} style={{ position: 'absolute', left: 0, top: 80, bottom: 80, width: '28%' }} />
-          <span onClick={(e) => { e.stopPropagation(); setI((i + 1) % items.length); }} style={{ position: 'absolute', right: 0, top: 80, bottom: 80, width: '28%' }} />
-        </>
-      )}
+    <div className="gl-lightbox" ref={outer} onScroll={onScroll} onClick={onClose}>
+      {groups.map((items, g) => (
+        <div key={g} className="gl-lb-row" onScroll={onScroll}>
+          {items.map((m, i) => (
+            <div key={i} className="gl-lb-cell">
+              {m.type === 'video' ? <LightboxVideo m={m} /> : <img src={full(m.url)} alt="" loading={Math.abs(g - pos.g) <= 1 ? 'eager' : 'lazy'} />}
+            </div>
+          ))}
+        </div>
+      ))}
+      <span onClick={onClose} className="gl-lb-close">×</span>
+      <span className="gl-lb-counter">
+        {groups.length > 1 && <>{pos.g + 1} / {groups.length} 条</>}
+        {cur.length > 1 && <>{groups.length > 1 ? ' · ' : ''}{pos.i + 1} / {cur.length}</>}
+      </span>
     </div>
   );
 }
 
-function GalleryCard({ post, channel }: { post: GalleryPost; channel: string }) {
-  const [view, setView] = useState<number | null>(null);
-  const open = (i: number) => {
-    const items: NativeMediaItem[] = post.media.map((m) => ({ type: m.type, url: full(m.url), cover: m.cover ? full(m.cover) : undefined }));
-    // App 内：原生全屏查看器（缩放 / 原生播放器）；浏览器：网页灯箱
-    if (viewNativeMedia(items, i)) return;
-    setView(i);
-  };
+/** 灯箱要打开的位置：第几条帖子的第几个媒体 */
+type OpenPos = { g: number; i: number };
+
+function GalleryCard({ post, channel, onOpen }: { post: GalleryPost; channel: string; onOpen: (i: number) => void }) {
+  const open = (i: number) => onOpen(i);
   return (
     <div className="th-card gl-card">
       {channel && <div className="th-channel">{channel}</div>}
@@ -133,7 +169,6 @@ function GalleryCard({ post, channel }: { post: GalleryPost; channel: string }) 
         </span>
         <span>{fmtTime(post.postedAt)}</span>
       </div>
-      {view != null && <MediaLightbox items={post.media} index={view} onClose={() => setView(null)} />}
     </div>
   );
 }
@@ -208,8 +243,17 @@ export function GalleryFeed() {
   // 渲染顺序：最早 → 最新（最新在最底部）
   const ordered = data ? [...data.list].reverse() : [];
 
+  // 查看器：把整个信息流的媒体按显示顺序交过去，上下滑就能连着看
+  const [view, setView] = useState<OpenPos | null>(null);
+  const openAt = (g: number, i: number) => {
+    const groups: NativeMediaItem[][] = ordered.map((p) => p.media.map((m) => ({ type: m.type, url: full(m.url), cover: m.cover ? full(m.cover) : undefined })));
+    if (viewNativeMedia(groups, g, i)) return; // App 内：原生全屏查看器
+    setView({ g, i });
+  };
+
   return (
     <PullToRefresh onRefresh={load}>
+      {view && <MediaLightbox groups={ordered.map((p) => p.media)} group={view.g} index={view.i} onClose={() => setView(null)} />}
       <div ref={rootRef}>
         {!data && <div className="empty">加载中…</div>}
         {data && data.list.length === 0 && <div className="empty">最近 {data.days} 天还没有内容<br />稍后再来看看</div>}
@@ -219,7 +263,7 @@ export function GalleryFeed() {
           <div className="small" style={{ textAlign: 'center', padding: '6px 0 8px' }}>只保留最近 {data.days} 天 · 已经是最早的了</div>
         )}
         {/* 卡片不显示频道名（频道名多带引流字样），与 Telegram 帖子样式一致 */}
-        {ordered.map((p) => <GalleryCard key={p.id} post={p} channel="" />)}
+        {ordered.map((p, g) => <GalleryCard key={p.id} post={p} channel="" onOpen={(i) => openAt(g, i)} />)}
       </div>
     </PullToRefresh>
   );

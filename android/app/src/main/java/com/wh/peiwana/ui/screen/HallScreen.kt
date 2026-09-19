@@ -61,13 +61,13 @@ fun HallScreen(
     var webView by remember { mutableStateOf<android.webkit.WebView?>(null) }
     var canGoBack by remember { mutableStateOf(false) }
     // H5 经桥打开的原生媒体查看器（养眼图片：看大图 / 播视频）
-    var viewer by remember { mutableStateOf<Pair<List<com.wh.peiwana.ui.MediaItem>, Int>?>(null) }
-    viewer?.let { (items, idx) ->
+    var viewer by remember { mutableStateOf<Triple<List<List<com.wh.peiwana.ui.MediaItem>>, Int, Int>?>(null) }
+    viewer?.let { (groups, g, idx) ->
         androidx.compose.ui.window.Dialog(
             onDismissRequest = { viewer = null },
             properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
         ) {
-            com.wh.peiwana.ui.MediaViewer(items, idx) { viewer = null }
+            com.wh.peiwana.ui.MediaViewer(groups, g, idx) { viewer = null }
         }
     }
     // 原生播放状态回推给 H5（切歌 / 暂停时），H5 的播放 UI 据此同步：window.PeiwanMusicState({id, playing})
@@ -112,7 +112,7 @@ fun HallScreen(
                     // H5 的 console.log / JS 报错转到 logcat（tag=YGameXd），排查黑屏/点击无反应
                     webChromeClient = GameLog.chromeClient("hall")
                     // JS 桥（window.PeiwanNative）：H5 聊天入口唤起原生聊天页 / 小游戏唤起原生全屏网页
-                    addJavascriptInterface(HallJsBridge(ctx, onOpenChat, onOpenWeb, onViewMedia = { items, i -> viewer = items to i }), "PeiwanNative")
+                    addJavascriptInterface(HallJsBridge(ctx, onOpenChat, onOpenWeb, onViewMedia = { groups, g, i -> viewer = Triple(groups, g, i) }), "PeiwanNative")
                     // 布局尺寸变化打日志：大厅黑屏时先确认 WebView 有没有拿到真实尺寸
                     addOnLayoutChangeListener { v, l, t, r, b, ol, ot, or, ob ->
                         if (r - l != or - ol || b - t != ob - ot) GameLog.d("hall: webview layout ${r - l}x${b - t}")
@@ -153,18 +153,27 @@ private class HallJsBridge(
     private val ctx: android.content.Context,
     private val onOpenChat: (String, Int, String, String) -> Unit,
     private val onOpenWeb: (String, String, Boolean) -> Unit,
-    private val onViewMedia: (List<com.wh.peiwana.ui.MediaItem>, Int) -> Unit = { _, _ -> },
+    private val onViewMedia: (List<List<com.wh.peiwana.ui.MediaItem>>, Int, Int) -> Unit = { _, _, _ -> },
 ) {
-    /** H5 点图放大 / 点视频：原生全屏查看器（缩放、原生播放器）。itemsJson: [{type:image|video,url,cover}] */
+    /**
+     * H5 点图放大 / 点视频：原生全屏查看器（上下滑切帖子、左右滑切图、缩放、原生播放器）。
+     * groupsJson: [[{type:image|video,url,cover}], ...] 按显示顺序的所有帖子；group/index = 点开的位置
+     */
     @android.webkit.JavascriptInterface
-    fun viewMedia(itemsJson: String, index: String) {
-        val items = runCatching {
-            Api.json.decodeFromString(kotlinx.serialization.builtins.ListSerializer(com.wh.peiwana.ui.MediaItem.serializer()), itemsJson)
-        }.onFailure { GameLog.w("bridge.viewMedia bad json: ${it.message}") }.getOrNull() ?: return
+    fun viewMediaGroups(groupsJson: String, group: String, index: String) {
+        val itemSer = com.wh.peiwana.ui.MediaItem.serializer()
+        val groups = runCatching {
+            Api.json.decodeFromString(kotlinx.serialization.builtins.ListSerializer(kotlinx.serialization.builtins.ListSerializer(itemSer)), groupsJson)
+        }.onFailure { GameLog.w("bridge.viewMediaGroups bad json: ${it.message}") }.getOrNull() ?: return
+        val g = group.toIntOrNull() ?: 0
         val i = index.toIntOrNull() ?: 0
-        GameLog.d("bridge.viewMedia ${items.size} items, index=$i")
-        android.os.Handler(android.os.Looper.getMainLooper()).post { onViewMedia(items, i) }
+        GameLog.d("bridge.viewMediaGroups ${groups.size} groups, group=$g index=$i")
+        android.os.Handler(android.os.Looper.getMainLooper()).post { onViewMedia(groups, g, i) }
     }
+
+    /** 兼容：单条帖子的媒体 */
+    @android.webkit.JavascriptInterface
+    fun viewMedia(itemsJson: String, index: String) = viewMediaGroups("[$itemsJson]", "0", index)
 
     /**
      * H5 里播音乐交给原生播放器（后台可播、消息页顶部栏/锁屏可控，与原生音乐页共用 MusicCenter）。

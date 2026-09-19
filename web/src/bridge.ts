@@ -99,20 +99,22 @@ export interface NativeMediaItem {
 }
 
 /**
- * 点图放大 / 点视频播放时优先交给原生全屏查看器（左右滑、双指缩放、原生播放器）；
- * 普通浏览器（无桥）返回 false，调用方用网页灯箱。老版本 App 没这个桥：Android 能探测方法，iOS 会静默忽略——
- * 所以 iOS 侧只有确认过桥存在（收到过任何原生回推）才算，其余情况先走网页灯箱。
+ * 点图放大 / 点视频播放时优先交给原生全屏查看器：
+ * groups = 信息流里所有帖子的媒体（按显示顺序），上下滑切帖子，左右滑切同一帖里的多张图，双指缩放，视频原生播放器。
+ * group/index = 点开的是第几条帖子的第几个。
+ * 普通浏览器（无桥）返回 false，调用方用网页灯箱。老版本 App 没这个桥：Android 能探测方法；
+ * iOS 靠原生注入的 window.__peiwanBridgeV2 标记，没有就走网页灯箱。
  */
-export function viewNativeMedia(items: NativeMediaItem[], index: number): boolean {
-  const payload = { type: 'viewMedia', items, index };
+export function viewNativeMedia(groups: NativeMediaItem[][], group: number, index: number): boolean {
+  const payload = { type: 'viewMedia', groups, group, index, items: groups[group] ?? [] };
   const wk = (window as any).webkit?.messageHandlers?.peiwan;
   if (wk) {
     if (!(window as any).__peiwanBridgeV2) return false;
     try { wk.postMessage(payload); return true; } catch { return false; }
   }
   const droid = (window as any).PeiwanNative;
-  if (droid?.viewMedia) {
-    try { droid.viewMedia(JSON.stringify(items), String(index)); return true; } catch { return false; }
+  if (droid?.viewMediaGroups) {
+    try { droid.viewMediaGroups(JSON.stringify(groups), String(group), String(index)); return true; } catch { return false; }
   }
   return false;
 }

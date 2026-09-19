@@ -33,7 +33,7 @@ struct HallView: View {
         }
         // 养眼图片：看大图 / 播视频走原生查看器
         .fullScreenCover(item: $mediaTarget) { t in
-            MediaViewerView(items: t.items, initial: t.index) { mediaTarget = nil }
+            MediaViewerView(groups: t.groups, initialGroup: t.group, initialIndex: t.index) { mediaTarget = nil }
         }
         // 小游戏等第三方 H5：独立原生 WebView 全屏打开，不污染大厅页
         .fullScreenCover(item: $webTarget) { t in
@@ -149,9 +149,11 @@ struct MediaItemModel: Codable, Identifiable {
     let cover: String?
 }
 
+/// 查看器目标：所有帖子的媒体（按显示顺序）+ 点开的是第几条的第几个
 struct MediaTarget: Identifiable {
     let id = UUID()
-    let items: [MediaItemModel]
+    let groups: [[MediaItemModel]]
+    let group: Int
     let index: Int
 }
 
@@ -274,12 +276,21 @@ private struct HallWebView: UIViewRepresentable {
             case "music":
                 handleMusic(body)
             case "viewMedia":
-                guard let raw = body["items"], let data = try? JSONSerialization.data(withJSONObject: raw),
-                      let items = try? JSONDecoder().decode([MediaItemModel].self, from: data), !items.isEmpty
-                else { GameLog.log("hall: viewMedia bad items"); return }
-                let index = (body["index"] as? NSNumber)?.intValue ?? Int(body["index"] as? String ?? "") ?? 0
+                // 新协议 groups（所有帖子）；老协议只有 items（单条）
+                var groups: [[MediaItemModel]] = []
+                if let raw = body["groups"], let data = try? JSONSerialization.data(withJSONObject: raw),
+                   let gs = try? JSONDecoder().decode([[MediaItemModel]].self, from: data) {
+                    groups = gs.filter { !$0.isEmpty }
+                } else if let raw = body["items"], let data = try? JSONSerialization.data(withJSONObject: raw),
+                          let items = try? JSONDecoder().decode([MediaItemModel].self, from: data), !items.isEmpty {
+                    groups = [items]
+                }
+                guard !groups.isEmpty else { GameLog.log("hall: viewMedia bad payload"); return }
+                let toInt: (Any?) -> Int = { v in (v as? NSNumber)?.intValue ?? Int(v as? String ?? "") ?? 0 }
+                let g = min(max(0, toInt(body["group"])), groups.count - 1)
+                let index = toInt(body["index"])
                 let onViewMedia = onViewMedia
-                DispatchQueue.main.async { onViewMedia(MediaTarget(items: items, index: min(max(0, index), items.count - 1))) }
+                DispatchQueue.main.async { onViewMedia(MediaTarget(groups: groups, group: g, index: index)) }
             default:
                 GameLog.log("hall: unknown bridge type \(String(describing: body["type"]))")
                 return

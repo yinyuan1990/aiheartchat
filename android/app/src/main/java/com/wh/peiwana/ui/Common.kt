@@ -183,27 +183,38 @@ fun EyeIcon(tint: Color, size: androidx.compose.ui.unit.Dp = 14.dp) {
 data class MediaItem(val type: String = "image", val url: String = "", val cover: String? = null)
 
 /**
- * 全屏混合媒体查看器：图片用 Telephoto 缩放；视频用 ExoPlayer（原生控制条），滑到哪页播哪页；单击图片关闭。
- * 大厅 H5 的「养眼图片」点图/点视频经 PeiwanNative.viewMedia 走这里。
+ * 全屏混合媒体查看器（像 Telegram / 抖音）：**上下滑切帖子**（VerticalPager），**左右滑切同一帖里的多张图**（HorizontalPager）；
+ * 图片用 Telephoto 缩放，视频用 ExoPlayer（原生控制条），滑到哪个播哪个；单击图片关闭。
+ * 大厅 H5 的「养眼图片」点图/点视频经 PeiwanNative.viewMediaGroups 走这里。
  */
 @Composable
-fun MediaViewer(items: List<MediaItem>, startIndex: Int = 0, onClose: () -> Unit) {
-    if (items.isEmpty()) return
-    val pager = rememberPagerState(initialPage = startIndex.coerceIn(0, items.size - 1)) { items.size }
+fun MediaViewer(groups: List<List<MediaItem>>, startGroup: Int = 0, startIndex: Int = 0, onClose: () -> Unit) {
+    val gs = groups.filter { it.isNotEmpty() }
+    if (gs.isEmpty()) return
+    val vPager = rememberPagerState(initialPage = startGroup.coerceIn(0, gs.size - 1)) { gs.size }
     androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
-        HorizontalPager(state = pager, modifier = Modifier.fillMaxSize(), beyondViewportPageCount = 0) { page ->
-            val it = items[page]
-            if (it.type == "video") {
-                MediaVideoPage(url = Api.fullUrl(it.url), active = pager.currentPage == page)
-            } else {
-                me.saket.telephoto.zoomable.coil.ZoomableAsyncImage(
-                    model = Api.fullUrl(it.url), contentDescription = null,
-                    modifier = Modifier.fillMaxSize(), onClick = { onClose() },
-                )
+        androidx.compose.foundation.pager.VerticalPager(state = vPager, modifier = Modifier.fillMaxSize(), beyondViewportPageCount = 0) { g ->
+            val items = gs[g]
+            val hPager = rememberPagerState(initialPage = if (g == startGroup) startIndex.coerceIn(0, items.size - 1) else 0) { items.size }
+            androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+                HorizontalPager(state = hPager, modifier = Modifier.fillMaxSize(), beyondViewportPageCount = 0) { page ->
+                    val it = items[page]
+                    if (it.type == "video") {
+                        MediaVideoPage(url = Api.fullUrl(it.url), active = vPager.currentPage == g && hPager.currentPage == page)
+                    } else {
+                        me.saket.telephoto.zoomable.coil.ZoomableAsyncImage(
+                            model = Api.fullUrl(it.url), contentDescription = null,
+                            modifier = Modifier.fillMaxSize(), onClick = { onClose() },
+                        )
+                    }
+                }
+                // 角标：第几条 / 共几条 · 第几张 / 共几张
+                val label = buildString {
+                    if (gs.size > 1) append("${g + 1}/${gs.size} 条")
+                    if (items.size > 1) { if (isNotEmpty()) append(" · "); append("${hPager.currentPage + 1}/${items.size}") }
+                }
+                if (label.isNotEmpty()) Text(label, color = Color.White, fontSize = 13.sp, modifier = Modifier.align(Alignment.TopCenter).padding(top = 40.dp))
             }
-        }
-        if (items.size > 1) {
-            Text("${pager.currentPage + 1}/${items.size}", color = Color.White, modifier = Modifier.align(Alignment.TopCenter).padding(top = 40.dp))
         }
         Box(
             modifier = Modifier.align(Alignment.TopEnd).padding(top = 36.dp, end = 16.dp).size(36.dp)
