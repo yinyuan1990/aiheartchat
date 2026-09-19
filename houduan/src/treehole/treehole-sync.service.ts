@@ -92,11 +92,14 @@ export class TreeholeSyncService implements OnModuleInit {
     }
   }
 
-  /** 3 天保留期：删除过期帖子（所有来源）+ 其评论 + 转存的图片 */
+  /** 3 天保留期：删除过期帖子（所有来源）+ 其评论 + 转存的图片。
+   *  iOS 审核模式开着时后台录入（source=1）的帖子不清理：审核演示账号只能看到这类内容，审核往往超过 3 天 */
   async purgeOld() {
     const cutoff = new Date(Date.now() - RETENTION_MS);
+    const review = await this.prisma.sysSetting.findUnique({ where: { key: 'review_mode_ios' } });
+    const keepAdmin = review?.value === '1';
     const old = await this.prisma.treeholePost.findMany({
-      where: { createdAt: { lt: cutoff } },
+      where: { createdAt: { lt: cutoff }, ...(keepAdmin ? { source: { not: 1 } } : {}) },
       select: { id: true, images: true },
       take: 500,
     });

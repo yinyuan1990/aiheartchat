@@ -131,6 +131,8 @@ enum AppStage {
 final class AppState: ObservableObject {
     @Published var stage: AppStage = .boot
     @Published var user: UserProfile?
+    /// 审核模式（后台开关）：隐藏「我的邀请名片」等带外部网页的入口
+    @Published var reviewMode = false
 }
 
 struct RootView: View {

@@ -46,8 +46,11 @@ export class TreeholeService {
   // ---------- 用户端 ----------
 
   async list(viewerId: bigint, beforeId?: bigint) {
+    // 审核演示账号只看后台录入 / 用户投稿，不给外部同步的内容（尺度不可控）
+    const viewer = await this.prisma.user.findUnique({ where: { id: viewerId }, select: { deviceId: true } });
+    const demo = viewer?.deviceId?.startsWith('demo_') ?? false;
     const posts = await this.prisma.treeholePost.findMany({
-      where: { status: 0, ...(beforeId ? { id: { lt: beforeId } } : {}) },
+      where: { status: 0, ...(demo ? { source: { in: [0, 1] } } : {}), ...(beforeId ? { id: { lt: beforeId } } : {}) },
       orderBy: { id: 'desc' },
       take: 20,
     });

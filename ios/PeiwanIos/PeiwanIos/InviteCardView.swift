@@ -88,8 +88,8 @@ struct InviteCardView: View {
                 Spacer()
             }
             Text(isFemale
-                 ? "发给男生：他打开网页能看到你的照片、价格和评分，下载后自动打开你的主页，第一条消息就是你的收入。"
-                 : "发给女生：她打开网页能看到你的名片和在这里的收入方式，下载后自动和你成为好友。")
+                 ? "发给男生：他打开网页能看到你的照片和评分，下载后自动打开你的主页，第一条消息就会到你这里。"
+                 : "发给女生：她打开网页能看到你的名片，下载后自动和你成为好友。")
                 .font(.system(size: 12)).foregroundStyle(Theme.textSub).lineSpacing(4)
                 .padding(.top, 14)
 

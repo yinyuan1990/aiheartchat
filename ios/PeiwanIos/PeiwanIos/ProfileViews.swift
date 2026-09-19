@@ -204,7 +204,7 @@ struct MeView: View {
                     // 菜单
                     menuRow("编辑资料", .editProfile)
                     // 专属邀请网页（链接 + 二维码）：女生发给男生 / 男生发给女生，下载后自动归因到我
-                    menuRow("我的邀请名片", .inviteCard)
+                    if !state.reviewMode { menuRow("我的邀请名片", .inviteCard) }
                     menuRow("我的动态", .myMoments)
                     // 关注的人动态（原主页「关注」tab 移到这里）
                     menuRow("关注动态", .followMoments)

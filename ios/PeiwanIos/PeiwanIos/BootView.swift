@@ -12,6 +12,7 @@ struct BootView: View {
                 async let reviewReq: ReviewMode? = try? await Api.request("/app/review-mode")
                 let resp: EnterResp? = try? await Api.request("/auth/enter", method: "POST", body: ["deviceId": Api.deviceId])
                 let reviewMode = (await reviewReq)?.ios ?? false
+                state.reviewMode = reviewMode
                 _ = await minShow.value
                 if let resp, resp.registered, let token = resp.token, let user = resp.user {
                     Api.token = token
