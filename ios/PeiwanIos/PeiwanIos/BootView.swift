@@ -8,14 +8,22 @@ struct BootView: View {
         SplashContent()
             .task {
                 let minShow = Task { try? await Task.sleep(nanoseconds: 1_600_000_000) }
+                struct ReviewMode: Codable { var ios: Bool? }
+                async let reviewReq: ReviewMode? = try? await Api.request("/app/review-mode")
                 let resp: EnterResp? = try? await Api.request("/auth/enter", method: "POST", body: ["deviceId": Api.deviceId])
+                let reviewMode = (await reviewReq)?.ios ?? false
                 _ = await minShow.value
                 if let resp, resp.registered, let token = resp.token, let user = resp.user {
                     Api.token = token
                     state.user = user
                     state.stage = .main
+                } else if Api.token != nil, let me: UserProfile = try? await Api.request("/user/me") {
+                    // 演示账号不绑定设备：上次账号密码登录留下的 token 仍有效就直接进
+                    state.user = me
+                    state.stage = .main
                 } else {
-                    state.stage = .register
+                    // 审核模式：显示账号密码登录页；否则一机一号注册
+                    state.stage = reviewMode ? .login : .register
                 }
             }
     }

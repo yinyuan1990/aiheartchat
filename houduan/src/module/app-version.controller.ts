@@ -1,5 +1,6 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { AppVersionService } from './app-version.service';
+import { ReviewService } from '../auth/review.service';
 
 /**
  * App 版本检查（无需登录：启动时用户可能还没注册）。
@@ -8,7 +9,16 @@ import { AppVersionService } from './app-version.service';
  */
 @Controller('app')
 export class AppVersionController {
-  constructor(private readonly svc: AppVersionService) {}
+  constructor(
+    private readonly svc: AppVersionService,
+    private readonly review: ReviewService,
+  ) {}
+
+  /** iOS 审核模式开关（启动时读取：开=显示账号密码登录页） */
+  @Get('review-mode')
+  reviewMode() {
+    return this.review.publicStatus();
+  }
 
   @Get('version')
   check(@Query('platform') platform = 'android', @Query('version') version = '0') {

@@ -240,6 +240,9 @@ export class UserService {
   /** GPS 位置上报 */
   async reportLocation(userId: bigint, latitude?: number, longitude?: number) {
     if (latitude == null || longitude == null) return { ok: false };
+    // 审核演示账号位置固定成都，不接受客户端上报覆盖
+    const me = await this.prisma.user.findUnique({ where: { id: userId }, select: { deviceId: true } });
+    if (me?.deviceId?.startsWith('demo_')) return { ok: true };
     await this.prisma.user.update({ where: { id: userId }, data: { latitude, longitude } });
     return { ok: true };
   }

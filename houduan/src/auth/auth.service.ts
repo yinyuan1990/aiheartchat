@@ -105,6 +105,11 @@ export class AuthService {
     return this.jwt.sign({ sub: userId.toString() });
   }
 
+  /** 给其它登录方式（审核演示账号）签发同款 token */
+  signFor(userId: bigint): string {
+    return this.sign(userId);
+  }
+
   /** 生成唯一 6 位数字短号（100000-999999） */
   private async genShortId(): Promise<string> {
     for (let i = 0; i < 20; i++) {

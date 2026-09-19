@@ -106,7 +106,20 @@ function onPick(e: Event) {
   (e.target as HTMLInputElement).value = '';
 }
 
-onMounted(load);
+// ---------- iOS 审核模式 / 演示账号 ----------
+interface ReviewStatus { ios: boolean; demo: { id: string; shortId: string | null; nickname: string; cityName: string; balance: string; username: string; password: string } | null }
+const review = ref<ReviewStatus | null>(null);
+async function loadReview() { review.value = await api<ReviewStatus>('/admin/review-mode'); }
+async function toggleReview(on: boolean) {
+  review.value = await api<ReviewStatus>('/admin/review-mode', { method: 'PUT', body: { ios: on } });
+  showToast(on ? '已开启：iOS 启动显示登录页' : '已关闭：iOS 恢复一机一号');
+}
+async function rebuildDemo() {
+  review.value = await api<ReviewStatus>('/admin/review-mode/demo-user', { method: 'POST' });
+  showToast('演示账号已重建');
+}
+
+onMounted(() => { load(); loadReview(); });
 </script>
 
 <template>
@@ -117,6 +130,29 @@ onMounted(load);
       iOS 前期填 TestFlight 公开链接（渠道选 TestFlight），上架后把链接换成 App Store 地址、渠道改为 App Store 即可，客户端不用改代码。
       官网下载区也读这里的地址。
     </p>
+
+    <!-- iOS 审核模式 -->
+    <div class="card" style="margin-bottom: 18px; border: 1px solid rgba(254,44,85,0.35)">
+      <div class="row" style="align-items: center; gap: 14px">
+        <strong style="font-size: 16px">iOS 审核模式</strong>
+        <label class="muted" style="display: flex; align-items: center; gap: 6px">
+          <input type="checkbox" :checked="review?.ios ?? true" style="width: auto" @change="toggleReview(($event.target as HTMLInputElement).checked)" />
+          开启（App Store / TestFlight 审核期间保持开启，审核通过后手动关闭）
+        </label>
+        <span class="tag" :class="review?.ios ? 'warn' : 'ok'">{{ review?.ios ? '开启中：iOS 启动显示账号密码登录页' : '已关闭：iOS 走一机一号' }}</span>
+      </div>
+      <div class="muted" style="margin-top: 10px; line-height: 1.7">
+        给苹果审核员的账号填在 App Store Connect → TestFlight → Test Information → Beta App Review Information（勾 Sign-in required）：<br />
+        账号 <code style="color: #fff">{{ review?.demo?.username ?? '11111111111' }}</code>　密码 <code style="color: #fff">{{ review?.demo?.password ?? '123456' }}</code>（密码实际不校验）
+        <template v-if="review?.demo">
+          <br />演示账号：#{{ review.demo.id }} · 短号 {{ review.demo.shortId }} · {{ review.demo.nickname }} · {{ review.demo.cityName }} · 余额 {{ (Number(review.demo.balance) / 100).toFixed(0) }} 积分
+        </template>
+        <br />资料从平台第一个男用户复制，城市固定成都，积分不足 10000 自动补足；关闭审核模式后该账号仍可用但没有入口。
+      </div>
+      <div class="row" style="margin-top: 10px">
+        <button class="small ghost" @click="rebuildDemo">重建演示账号</button>
+      </div>
+    </div>
 
     <div v-for="p in (['android', 'ios'] as const)" :key="p" class="card" style="margin-bottom: 18px">
       <div class="row" style="align-items: center; margin-bottom: 14px">

@@ -8,6 +8,7 @@ import { SrsService } from '../srs/srs.service';
 import { AppVersionService } from '../module/app-version.service';
 import { AdminGuard } from './admin.guard';
 import { AdminService } from './admin.service';
+import { ReviewService } from '../auth/review.service';
 
 @Controller('admin')
 export class AdminController {
@@ -18,7 +19,31 @@ export class AdminController {
     private readonly treeholeSync: TreeholeSyncService,
     private readonly srs: SrsService,
     private readonly appVersion: AppVersionService,
+    private readonly review: ReviewService,
   ) {}
+
+  // ---------- iOS 审核模式 / 演示账号 ----------
+
+  @Get('review-mode')
+  @UseGuards(AdminGuard)
+  reviewMode() {
+    return this.review.adminStatus();
+  }
+
+  /** 开关 iOS 审核模式；开启时自动创建/补足演示账号 */
+  @Put('review-mode')
+  @UseGuards(AdminGuard)
+  setReviewMode(@Body() body: { ios: boolean }) {
+    return this.review.setIos(!!body?.ios);
+  }
+
+  /** 重建演示账号资料（从第一个男用户重新复制、城市成都、补足积分） */
+  @Post('review-mode/demo-user')
+  @UseGuards(AdminGuard)
+  async rebuildDemo() {
+    await this.review.ensureDemoUser(true);
+    return this.review.adminStatus();
+  }
 
   // ---------- App 版本 / 强制更新 ----------
 

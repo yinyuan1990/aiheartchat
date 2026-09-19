@@ -640,6 +640,15 @@ model AppModule {
 
 // ---------- 其他 ----------
 
+/// 系统开关/配置（key-value）。目前：review_mode_ios = 1/0（iOS 审核模式：启动显示账号密码登录页）
+model SysSetting {
+  key       String   @id @db.VarChar(40)
+  value     String   @default("") @db.VarChar(500)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("sys_setting")
+}
+
 model Region {
   code     String @id @db.VarChar(12)
   name     String @db.VarChar(30)

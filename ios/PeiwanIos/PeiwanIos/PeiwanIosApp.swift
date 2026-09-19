@@ -120,6 +120,8 @@ struct PeiwanIosApp: App {
 enum AppStage {
     case boot
     case register
+    /// 审核模式（后台开关 review_mode_ios）：账号密码登录页
+    case login
     case main
 }
 
@@ -142,6 +144,7 @@ struct RootView: View {
             switch state.stage {
             case .boot: BootView()
             case .register: RegisterView()
+            case .login: LoginView()
             case .main: MainTabView()
             }
             // 通话界面由 CallWindow（独立 UIWindow）承载，可盖住任何弹层
