@@ -12,6 +12,7 @@ import { ReviewService } from '../auth/review.service';
 import { TelegramClientService } from '../telegram/telegram.service';
 import { MusicService } from '../music/music.service';
 import { GalleryService } from '../gallery/gallery.service';
+import { StickerService } from '../sticker/sticker.service';
 
 @Controller('admin')
 export class AdminController {
@@ -26,7 +27,68 @@ export class AdminController {
     private readonly tg: TelegramClientService,
     private readonly music: MusicService,
     private readonly gallery: GalleryService,
+    private readonly stickers: StickerService,
   ) {}
+
+  // ---------- 表情包（Telegram 公开贴纸集，后台精选） ----------
+
+  @Get('stickers/sets')
+  @UseGuards(AdminGuard)
+  stickerSets() {
+    return this.stickers.listSets();
+  }
+
+  @Get('stickers/sets/:id/items')
+  @UseGuards(AdminGuard)
+  stickerItems(@Param('id') id: string) {
+    return this.stickers.items(Number(id));
+  }
+
+  /** 解析（不入库）：标题/张数/类型 + 前 12 张缩略图 */
+  @Get('stickers/preview')
+  @UseGuards(AdminGuard)
+  stickerPreview(@Query('name') name: string) {
+    return this.stickers.preview(name ?? '');
+  }
+
+  /** Telegram 官方热门贴纸集 */
+  @Get('stickers/featured')
+  @UseGuards(AdminGuard)
+  stickerFeatured() {
+    return this.stickers.featured();
+  }
+
+  /** 添加并开始同步；已存在则重新同步 */
+  @Post('stickers/sets')
+  @UseGuards(AdminGuard)
+  stickerAdd(@Body() body: { name: string }) {
+    return this.stickers.addSet(body?.name ?? '');
+  }
+
+  @Post('stickers/sets/:id/sync')
+  @UseGuards(AdminGuard)
+  stickerSync(@Param('id') id: string) {
+    return this.stickers.syncOne(Number(id));
+  }
+
+  @Put('stickers/sets/:id')
+  @UseGuards(AdminGuard)
+  stickerUpdate(@Param('id') id: string, @Body() body: { title?: string; enabled?: boolean; sort?: number }) {
+    return this.stickers.updateSet(Number(id), body ?? {});
+  }
+
+  @Put('stickers/reorder')
+  @UseGuards(AdminGuard)
+  stickerReorder(@Body() body: { ids: number[] }) {
+    return this.stickers.reorder((body?.ids ?? []).map(Number).filter((n) => n > 0));
+  }
+
+  /** purge=1 连文件删（已发出的表情会裂图）；默认只删记录 */
+  @Delete('stickers/sets/:id')
+  @UseGuards(AdminGuard)
+  stickerRemove(@Param('id') id: string, @Query('purge') purge?: string) {
+    return this.stickers.removeSet(Number(id), purge === '1' || purge === 'true');
+  }
 
   // ---------- 养眼图片（大厅 tab，名称/保留天数可改，按性别分流） ----------
 

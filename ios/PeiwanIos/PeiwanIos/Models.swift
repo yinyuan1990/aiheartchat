@@ -82,6 +82,8 @@ struct CommentItem: Codable, Identifiable, Hashable {
     var user: MomentUser? = nil
     var content: String? = ""
     var imageUrl: String? = ""
+    /// 贴纸（表情包），可与文字同时存在
+    var sticker: StickerPayload? = nil
     var replyToNickname: String? = ""
     var createdAt: String? = ""
 }

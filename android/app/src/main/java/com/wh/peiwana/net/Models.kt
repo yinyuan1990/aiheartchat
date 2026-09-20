@@ -134,6 +134,8 @@ data class CommentItem(
     val user: MomentUser? = null,
     val content: String = "",
     val imageUrl: String = "",
+    /** 贴纸（表情包），可与文字同时存在 */
+    val sticker: com.wh.peiwana.ui.sticker.StickerPayload? = null,
     val replyToNickname: String = "",
     val createdAt: String = "",
 )

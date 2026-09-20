@@ -493,6 +493,8 @@ model MomentComment {
   content  String   @default("") @db.VarChar(500)
   /// 评论图片
   imageUrl String   @default("") @map("image_url") @db.VarChar(255)
+  /// 贴纸 JSON {id,format,url,thumb,w,h,emoji}（空=没有）
+  sticker  String   @default("") @db.VarChar(600)
   /// 回复的评论 id
   replyToId BigInt? @map("reply_to_id")
   /// 0=正常 1=删除
@@ -554,6 +556,8 @@ model TreeholeComment {
   postId    BigInt   @map("post_id")
   userId    BigInt   @map("user_id")
   content   String   @db.VarChar(500)
+  /// 贴纸 JSON {id,format,url,thumb,w,h,emoji}（空=没有）
+  sticker   String   @default("") @db.VarChar(600)
   /// 回复的评论 id
   replyToId BigInt?  @map("reply_to_id")
   /// 0=正常 1=删除
@@ -741,6 +745,52 @@ model MusicTrack {
   @@index([postedAt])
   @@index([sourceId])
   @@map("music_track")
+}
+
+// ---------- 表情包（Telegram 公开贴纸集，后台精选；聊天 / 评论可用） ----------
+
+/// 一个贴纸集 = t.me/addstickers/<shortName>；文件已转存 MinIO，格式统一为 webp / lottie(JSON) / awebp(动态 WebP)
+model StickerSet {
+  id            Int      @id @default(autoincrement())
+  shortName     String   @unique @map("short_name") @db.VarChar(64)
+  title         String   @default("") @db.VarChar(120)
+  /// static | animated(TGS) | video(WebM，已转成动态 WebP)
+  kind          String   @default("static") @db.VarChar(12)
+  /// Telegram 声明的张数
+  count         Int      @default(0)
+  /// 封面（第一张贴纸的缩略图）/res/ 路径
+  thumb         String   @default("") @db.VarChar(300)
+  enabled       Boolean  @default(true)
+  sort          Int      @default(0)
+  importedCount Int      @default(0) @map("imported_count")
+  lastSyncAt    DateTime? @map("last_sync_at")
+  lastError     String   @default("") @map("last_error") @db.VarChar(300)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("sticker_set")
+}
+
+model Sticker {
+  id        BigInt   @id @default(autoincrement())
+  setId     Int      @map("set_id")
+  /// Telegram document id（同一集内去重）
+  tgDocId   String   @map("tg_doc_id") @db.VarChar(32)
+  /// 对应的 emoji（Telegram 的 alt）
+  emoji     String   @default("") @db.VarChar(16)
+  /// webp（静态）| lottie（Lottie JSON）| awebp（动态 WebP）
+  format    String   @db.VarChar(12)
+  url       String   @db.VarChar(300)
+  /// 静态缩略图 /res/ 路径（面板网格用；静态贴纸可为空 = 用 url）
+  thumb     String   @default("") @db.VarChar(300)
+  w         Int      @default(512)
+  h         Int      @default(512)
+  size      Int      @default(0)
+  sort      Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([setId, tgDocId])
+  @@index([setId, sort])
+  @@map("sticker")
 }
 
 model Region {

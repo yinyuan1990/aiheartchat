@@ -25,6 +25,7 @@ struct TreeholeComment: Codable, Identifiable, Hashable {
     var id: String = ""
     var user: MomentUser? = nil
     var content: String = ""
+    var sticker: StickerPayload? = nil
     var replyToId: String? = nil
     var replyToNickname: String? = ""
     var createdAt: String? = ""
@@ -261,6 +262,9 @@ struct TreeholeDetailView: View {
     @State private var comments: [TreeholeComment] = []
     @State private var input = ""
     @State private var replyTo: TreeholeComment?
+    /// 待发的贴纸：点贴纸先挂到输入栏，再点发送
+    @State private var sticker: StickerPayload?
+    @State private var showSticker = false
     @State private var sending = false
     @State private var confirmDelete = false
     @State private var toastMsg: String?
@@ -298,11 +302,16 @@ struct TreeholeDetailView: View {
                                     Text(c.user?.nickname ?? "用户")
                                         .font(.system(size: 13, weight: .semibold))
                                         .foregroundStyle(nameColor(c.user?.id ?? c.id))
-                                    (
-                                        Text((c.replyToNickname ?? "").isEmpty ? "" : "@\(c.replyToNickname ?? "") ").foregroundColor(linkBlue)
-                                        + Text(c.content).foregroundColor(Theme.text)
-                                    )
-                                    .font(.system(size: 15)).lineSpacing(3)
+                                    if !c.content.isEmpty || !(c.replyToNickname ?? "").isEmpty {
+                                        (
+                                            Text((c.replyToNickname ?? "").isEmpty ? "" : "@\(c.replyToNickname ?? "") ").foregroundColor(linkBlue)
+                                            + Text(c.content).foregroundColor(Theme.text)
+                                        )
+                                        .font(.system(size: 15)).lineSpacing(3)
+                                    }
+                                    if let s = c.sticker {
+                                        StickerImageView(p: s, size: 96).padding(.top, 2)
+                                    }
                                     HStack(spacing: 10) {
                                         Spacer()
                                         Button("回复") { replyTo = c; inputFocused = true }
@@ -331,32 +340,52 @@ struct TreeholeDetailView: View {
                 }
             }
 
-            if let r = replyTo {
-                HStack {
-                    Text("回复 @\(r.user?.nickname ?? "")").font(.system(size: 12)).foregroundStyle(Theme.accent)
-                    Spacer()
-                    Button("取消") { replyTo = nil }.font(.system(size: 12)).foregroundStyle(Theme.textSub)
+            if replyTo != nil || sticker != nil {
+                HStack(spacing: 10) {
+                    if let s = sticker { PendingStickerChip(p: s) { sticker = nil } }
+                    if let r = replyTo {
+                        Text("回复 @\(r.user?.nickname ?? "")").font(.system(size: 12)).foregroundStyle(Theme.accent)
+                        Spacer()
+                        Button("取消") { replyTo = nil }.font(.system(size: 12)).foregroundStyle(Theme.textSub)
+                    } else {
+                        Spacer()
+                    }
                 }
                 .padding(.horizontal, 16).padding(.vertical, 6)
             }
 
-            HStack(spacing: 10) {
-                CompatVerticalTextField(
-                    text: $input,
-                    prompt: Text(replyTo != nil ? "回复 @\(replyTo?.user?.nickname ?? "")" : "说点什么…（评论会显示你的昵称）").foregroundColor(Theme.textSub),
-                    lineRange: 1...4
-                )
-                .focused($inputFocused)
-                .padding(.horizontal, 14).padding(.vertical, 10)
-                .background(RoundedRectangle(cornerRadius: 20).fill(Theme.bg3))
-                .foregroundStyle(Theme.text)
-                Button(sending ? "发送中" : "发送") { send() }
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(canSend ? Theme.accent : Theme.textDim)
-                    .disabled(!canSend)
+            VStack(spacing: 0) {
+                HStack(spacing: 10) {
+                    Button {
+                        inputFocused = false; showSticker.toggle()
+                    } label: {
+                        Image(systemName: "face.smiling")
+                            .font(.system(size: 18)).foregroundStyle(showSticker ? Theme.accent : Theme.textSub)
+                            .frame(width: 36, height: 36)
+                            .background(Circle().fill(showSticker ? Theme.bubbleMine : Theme.bg3))
+                    }
+                    .buttonStyle(.plain)
+                    CompatVerticalTextField(
+                        text: $input,
+                        prompt: Text(replyTo != nil ? "回复 @\(replyTo?.user?.nickname ?? "")" : "说点什么…（评论会显示你的昵称）").foregroundColor(Theme.textSub),
+                        lineRange: 1...4
+                    )
+                    .focused($inputFocused)
+                    .padding(.horizontal, 14).padding(.vertical, 10)
+                    .background(RoundedRectangle(cornerRadius: 20).fill(Theme.bg3))
+                    .foregroundStyle(Theme.text)
+                    Button(sending ? "发送中" : "发送") { send() }
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(canSend ? Theme.accent : Theme.textDim)
+                        .disabled(!canSend)
+                }
+                .padding(12)
+                if showSticker {
+                    StickerPanel(onPick: { sticker = $0 }, onEmoji: { input += $0 })
+                }
             }
-            .padding(12)
             .background(Theme.bg2)
+            .onChange(of: inputFocused) { f in if f { showSticker = false } }
         }
         .fullBg()
         .navigationTitle(title)
@@ -381,7 +410,7 @@ struct TreeholeDetailView: View {
     }
 
     private var canSend: Bool {
-        !sending && !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !sending && (!input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || sticker != nil)
     }
 
     private func load() async {
@@ -395,16 +424,21 @@ struct TreeholeDetailView: View {
 
     private func send() {
         let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !sending else { return }
+        guard canSend else { return }
         sending = true
+        let picked = sticker
         Task {
             struct IdResp: Codable { var id: String? }
             var body: [String: Any] = ["content": text]
             if let r = replyTo { body["replyToId"] = r.id }
+            if let picked { body["stickerId"] = picked.id }
             do {
                 let _: IdResp = try await Api.request("/treehole/\(postId)/comments", method: "POST", body: body)
+                if let picked { StickerStore.shared.addRecent(picked) }
                 input = ""
                 replyTo = nil
+                sticker = nil
+                showSticker = false
                 comments = (try? await Api.request("/treehole/\(postId)/comments")) ?? []
                 post?.commentCount = (post?.commentCount ?? 0) + 1
                 TreeholeStore.shared.bumpComment(postId)

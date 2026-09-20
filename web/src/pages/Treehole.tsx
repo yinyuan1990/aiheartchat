@@ -3,6 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api, uploadFile } from '../api';
 import { isEmbedded } from '../bridge';
 import { PullToRefresh } from '../components/PullToRefresh';
+import { addRecent, StickerPayload } from '../stickers';
+import { StickerPanel } from '../components/StickerPanel';
+import { StickerView } from '../components/StickerView';
 
 /** 私密树洞帖子（匿名，无作者信息） */
 export interface TreeholePost {
@@ -23,6 +26,7 @@ interface TreeholeComment {
   id: string;
   user: { id: string; nickname: string; avatar: string };
   content: string;
+  sticker?: StickerPayload | null;
   replyToId: string | null;
   replyToNickname: string;
   createdAt: string;
@@ -201,6 +205,8 @@ export function TreeholeDetailPage() {
   const [comments, setComments] = useState<TreeholeComment[]>([]);
   const [input, setInput] = useState('');
   const [replyTo, setReplyTo] = useState<{ id: string; nickname: string } | null>(null);
+  const [sticker, setSticker] = useState<StickerPayload | null>(null);
+  const [showEmoji, setShowEmoji] = useState(false);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
@@ -225,11 +231,14 @@ export function TreeholeDetailPage() {
 
   const send = async () => {
     const content = input.trim();
-    if (!content) return;
+    if (!content && !sticker) return;
     setBusy(true);
     try {
-      await api(`/treehole/${id}/comments`, { method: 'POST', body: { content, replyToId: replyTo?.id } });
+      await api(`/treehole/${id}/comments`, { method: 'POST', body: { content, replyToId: replyTo?.id, stickerId: sticker?.id } });
+      if (sticker) addRecent(sticker);
       setInput('');
+      setSticker(null);
+      setShowEmoji(false);
       setReplyTo(null);
       await loadComments();
       setPost((p) => (p ? { ...p, commentCount: p.commentCount + 1 } : p));
@@ -277,10 +286,13 @@ export function TreeholeDetailPage() {
             <div className="avatar">{c.user.avatar && <img src={c.user.avatar} alt="" />}</div>
             <div className="bubble">
               <div className="name" style={{ color: nameColor(c.user.id) }}>{c.user.nickname}</div>
-              <div className="text">
-                {c.replyToNickname && <span style={{ color: '#5aa9ff' }}>@{c.replyToNickname} </span>}
-                {c.content}
-              </div>
+              {(c.content || c.replyToNickname) && (
+                <div className="text">
+                  {c.replyToNickname && <span style={{ color: '#5aa9ff' }}>@{c.replyToNickname} </span>}
+                  {c.content}
+                </div>
+              )}
+              {c.sticker && <StickerView p={c.sticker} size={96} style={{ marginTop: 4 }} />}
               <div className="time">
                 <span className="reply" onClick={() => startReply(c)}>回复</span>
                 {fmtTime(c.createdAt)}
@@ -291,14 +303,21 @@ export function TreeholeDetailPage() {
         <div style={{ height: 12 }} />
       </div>
 
-      {replyTo && (
-        <div className="row" style={{ padding: '6px 16px' }}>
-          <span className="small grow">回复 <span className="accent">@{replyTo.nickname}</span></span>
-          <span className="small" style={{ cursor: 'pointer' }} onClick={() => setReplyTo(null)}>取消</span>
+      {(replyTo || sticker) && (
+        <div className="row" style={{ padding: '6px 16px', gap: 10, borderTop: '1px solid var(--line)' }}>
+          {sticker && (
+            <span style={{ position: 'relative', display: 'inline-block' }}>
+              <StickerView p={sticker} size={56} autoplay={false} />
+              <span onClick={() => setSticker(null)} style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: 9, background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>×</span>
+            </span>
+          )}
+          {replyTo ? <span className="small grow">回复 <span className="accent">@{replyTo.nickname}</span></span> : <span className="grow" />}
+          {replyTo && <span className="small" style={{ cursor: 'pointer' }} onClick={() => setReplyTo(null)}>取消</span>}
         </div>
       )}
 
       <div className="row" style={{ padding: '10px 14px calc(10px + env(safe-area-inset-bottom))', borderTop: '1px solid var(--line)', gap: 8 }}>
+        <span style={{ fontSize: 22, cursor: 'pointer', color: showEmoji ? 'var(--accent)' : 'inherit' }} onClick={() => setShowEmoji((v) => !v)}>☺</span>
         <input
           ref={inputRef}
           className="input grow"
@@ -307,10 +326,12 @@ export function TreeholeDetailPage() {
           maxLength={500}
           placeholder={replyTo ? `回复 @${replyTo.nickname}` : '说点什么…（评论会显示你的昵称）'}
           onChange={(e) => setInput(e.target.value)}
+          onFocus={() => setShowEmoji(false)}
           onKeyDown={(e) => e.key === 'Enter' && send()}
         />
-        <button className="btn-sm" disabled={busy || !input.trim()} onClick={send}>发送</button>
+        <button className="btn-sm" disabled={busy || (!input.trim() && !sticker)} onClick={send}>发送</button>
       </div>
+      {showEmoji && <StickerPanel onPick={(p) => setSticker(p)} onEmoji={(e) => setInput((v) => v + e)} />}
 
       {toast && (
         <div style={{ position: 'fixed', top: '45%', left: '50%', transform: 'translate(-50%,-50%)', background: 'rgba(0,0,0,0.85)', padding: '10px 22px', borderRadius: 10, fontSize: 14, zIndex: 300 }}>

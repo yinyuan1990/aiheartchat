@@ -63,6 +63,9 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.coil.compose)
     implementation(libs.coil.video)
+    // 表情包：动态 WebP（视频贴纸转码产物）用 coil-gif 的 ImageDecoderDecoder；TGS 贴纸是 Lottie JSON
+    implementation(libs.coil.gif)
+    implementation(libs.lottie.compose)
     implementation(libs.stream.webrtc)
     implementation(libs.telephoto.zoomable.coil)
     implementation(libs.media3.exoplayer)

@@ -46,6 +46,10 @@ import coil.compose.AsyncImage
 import com.wh.peiwana.net.*
 import com.wh.peiwana.ui.*
 import com.wh.peiwana.ui.theme.*
+import com.wh.peiwana.ui.sticker.SmileIcon
+import com.wh.peiwana.ui.sticker.StickerImage
+import com.wh.peiwana.ui.sticker.StickerPanel
+import com.wh.peiwana.ui.sticker.StickerStore
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
@@ -114,6 +118,7 @@ private fun preview(msg: LastMsg?): String = when {
     msg.type == "text" -> msg.content.take(30)
     msg.type == "image" -> "[图片]"
     msg.type == "video" -> "[视频]"
+    msg.type == "sticker" -> "[表情]"
     msg.type == "audio" -> "[语音]"
     msg.type == "location" -> "[位置]"
     msg.type == "gift" -> "[礼物]"
@@ -277,6 +282,7 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
     var recording by remember { mutableStateOf(false) }
     var voiceMode by remember { mutableStateOf(false) }
     var showPanel by remember { mutableStateOf(false) }
+    var showSticker by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val ctx = LocalContext.current
@@ -437,7 +443,7 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
                 dismissButton = { Text("取消", color = TextSub, modifier = Modifier.noRippleClick { showClearConfirm = false }.padding(8.dp)) },
             )
         }
-        LazyColumn(state = listState, modifier = Modifier.weight(1f).padding(horizontal = 12.dp).noRippleClick { showPanel = false; focus.clearFocus(); keyboard?.hide() }) {
+        LazyColumn(state = listState, modifier = Modifier.weight(1f).padding(horizontal = 12.dp).noRippleClick { showPanel = false; showSticker = false; focus.clearFocus(); keyboard?.hide() }) {
             itemsIndexed(messages, key = { _, m -> m.id }) { idx, m ->
                 // 微信式时间分隔条：与上一条间隔超 5 分钟显示
                 if (shouldShowTime(messages, idx)) {
@@ -452,7 +458,7 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
         Column(modifier = Modifier.background(Bg2).imePadding().navigationBarsPadding()) {
             Row(modifier = Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.Bottom) {
                 Box(
-                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(20.dp)).background(Bg3).noRippleClick { voiceMode = !voiceMode; showPanel = false; focus.clearFocus(); keyboard?.hide() },
+                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(20.dp)).background(Bg3).noRippleClick { voiceMode = !voiceMode; showPanel = false; showSticker = false; focus.clearFocus(); keyboard?.hide() },
                     contentAlignment = Alignment.Center,
                 ) { VoiceIcon(TextSub, 20.dp) }
                 Spacer(Modifier.width(8.dp))
@@ -482,12 +488,18 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
                             textStyle = androidx.compose.ui.text.TextStyle(color = TextMain, fontSize = 15.sp),
                             cursorBrush = androidx.compose.ui.graphics.SolidColor(Accent),
                             maxLines = 4,
-                            modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) showPanel = false },
+                            modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) { showPanel = false; showSticker = false } },
                         )
                     }
                 }
                 Spacer(Modifier.width(8.dp))
-                Box(modifier = Modifier.size(40.dp).clip(RoundedCornerShape(20.dp)).background(Bg3).noRippleClick { focus.clearFocus(); keyboard?.hide(); voiceMode = false; showPanel = !showPanel }, contentAlignment = Alignment.Center) { PlusIcon(TextSub, 22.dp) }
+                // 表情按钮：面板顶替键盘（Telegram 式，点贴纸即发送）
+                Box(
+                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(20.dp)).background(if (showSticker) BubbleMine else Bg3).noRippleClick { focus.clearFocus(); keyboard?.hide(); voiceMode = false; showPanel = false; showSticker = !showSticker },
+                    contentAlignment = Alignment.Center,
+                ) { SmileIcon(if (showSticker) Accent else TextSub, 22.dp) }
+                Spacer(Modifier.width(8.dp))
+                Box(modifier = Modifier.size(40.dp).clip(RoundedCornerShape(20.dp)).background(Bg3).noRippleClick { focus.clearFocus(); keyboard?.hide(); voiceMode = false; showSticker = false; showPanel = !showPanel }, contentAlignment = Alignment.Center) { PlusIcon(TextSub, 22.dp) }
                 if (input.isNotBlank() && !voiceMode) {
                     Spacer(Modifier.width(8.dp))
                     Box(modifier = Modifier.height(40.dp).clip(RoundedCornerShape(20.dp)).background(Accent).noRippleClick {
@@ -496,6 +508,16 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
                 }
             }
 
+            if (showSticker) {
+                StickerPanel(
+                    onPick = { p ->
+                        val content = StickerStore.encode(p)
+                        WsClient.send(convType, targetId, "sticker", content); appendLocal("sticker", content)
+                        StickerStore.addRecent(ctx, p)
+                    },
+                    onEmoji = { input += it },
+                )
+            }
             // + 号功能面板（九宫格）
             if (showPanel) {
                 val actions = buildList {
@@ -550,6 +572,12 @@ private fun Bubble(m: MsgItem, mine: Boolean, convType: Int, onImage: (String) -
             if (!mine) Text(m.senderNickname, color = TextSub, fontSize = 11.sp, modifier = Modifier.padding(bottom = 2.dp, start = 4.dp))
             when (m.type) {
                 "image" -> AsyncImage(model = Api.fullUrl(m.content), contentDescription = null, contentScale = ContentScale.FillWidth, modifier = Modifier.widthIn(max = 160.dp).clip(RoundedCornerShape(10.dp)).noRippleClick { onImage(m.content) })
+                "sticker" -> {
+                    // 贴纸不画气泡底
+                    val p = remember(m.content) { StickerStore.parse(m.content) }
+                    if (p != null) StickerImage(p, 140.dp)
+                    else Box(modifier = Modifier.clip(bubbleShape).background(bg).padding(horizontal = 14.dp, vertical = 10.dp)) { Text("[表情]", color = fg, fontSize = 15.sp) }
+                }
                 "audio" -> {
                     val obj = runCatching { WsClient.json.parseToJsonElement(m.content).jsonObject }.getOrNull()
                     val url = obj?.get("url")?.jsonPrimitive?.content ?: m.content

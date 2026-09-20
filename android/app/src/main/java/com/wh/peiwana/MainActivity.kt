@@ -55,7 +55,11 @@ class MainActivity : ComponentActivity() {
                         .build()
                 }
                 .respectCacheHeaders(false)
-                .components { add(coil.decode.VideoFrameDecoder.Factory()) }
+                .components {
+                    add(coil.decode.VideoFrameDecoder.Factory())
+                    // 动态 WebP / GIF（表情包）：API 28+ 用系统 ImageDecoder，之前的机型退回 GifDecoder（只播 GIF，动态 WebP 显示首帧）
+                    if (android.os.Build.VERSION.SDK_INT >= 28) add(coil.decode.ImageDecoderDecoder.Factory()) else add(coil.decode.GifDecoder.Factory())
+                }
                 .crossfade(true)
                 .build(),
         )

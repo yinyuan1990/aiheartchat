@@ -49,6 +49,11 @@ export class CommentDto {
   @IsString()
   imageUrl?: string;
 
+  /** 贴纸 id（表情包），文字可为空 */
+  @IsOptional()
+  @IsString()
+  stickerId?: string;
+
   /** 回复的评论 id */
   @IsOptional()
   @IsString()

@@ -4,6 +4,9 @@ import { api, fmtPoints, uploadFile } from '../api';
 import { useApp } from '../store';
 import { wsManager, MessagePayload } from '../ws';
 import { nearestCity } from '../cities';
+import { addRecent, parseSticker, StickerPayload } from '../stickers';
+import { StickerPanel } from '../components/StickerPanel';
+import { StickerView } from '../components/StickerView';
 
 interface MsgItem {
   id: string;
@@ -373,12 +376,17 @@ function AudioBubble({ a }: { a: any }) {
 }
 
 function MsgBubble({ m, mine, convType, onImage }: { m: MsgItem; mine: boolean; convType: number; onImage: (url: string) => void }) {
-  const isMedia = m.type === 'image' || m.type === 'video';
+  const isMedia = m.type === 'image' || m.type === 'video' || m.type === 'sticker';
   let body: JSX.Element;
   switch (m.type) {
     case 'image':
       body = <img src={m.content} alt="" style={{ cursor: 'pointer' }} onClick={() => onImage(m.content)} />;
       break;
+    case 'sticker': {
+      const p = parseSticker(m.content);
+      body = p ? <StickerView p={p} size={140} /> : <span>[表情]</span>;
+      break;
+    }
     case 'video':
       body = <video src={m.content} controls playsInline style={{ background: '#000' }} />;
       break;
@@ -467,6 +475,7 @@ export function ChatRoomPage() {
   const [showGift, setShowGift] = useState(false);
   const [showGroupInfo, setShowGroupInfo] = useState(false);
   const [showPanel, setShowPanel] = useState(false);
+  const [showSticker, setShowSticker] = useState(false);
   const [fullImage, setFullImage] = useState<string | null>(null);
   const [toast, setToast] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -545,6 +554,12 @@ export function ChatRoomPage() {
     setInput('');
   };
 
+  /** 贴纸：点即发（Telegram 式） */
+  const sendSticker = (p: StickerPayload) => {
+    sendRaw('sticker', JSON.stringify(p));
+    addRecent(p);
+  };
+
   const sendMedia = async (files: FileList | null) => {
     const file = files?.[0];
     if (!file) return;
@@ -597,7 +612,7 @@ export function ChatRoomPage() {
         )}
       </div>
 
-      <div className="page page-pad" onClick={() => setShowPanel(false)}>
+      <div className="page page-pad" onClick={() => { setShowPanel(false); setShowSticker(false); }}>
         {messages.map((m, i) => {
           // 微信式时间分隔条：与上一条间隔超 5 分钟显示
           const prev = i > 0 ? new Date(messages[i - 1].createdAt).getTime() : 0;
@@ -626,17 +641,22 @@ export function ChatRoomPage() {
             value={input}
             placeholder="发消息"
             onChange={(e) => setInput(e.target.value)}
-            onFocus={() => setShowPanel(false)}
+            onFocus={() => { setShowPanel(false); setShowSticker(false); }}
             onKeyDown={(e) => e.key === 'Enter' && send()}
           />
           <span
+            style={{ width: 40, height: 40, borderRadius: 20, flexShrink: 0, background: showSticker ? '#ffe1e7' : 'var(--bg-input)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: showSticker ? 'var(--accent)' : 'var(--text-2)', fontSize: 22 }}
+            onClick={() => { setShowSticker((v) => !v); setShowPanel(false); }}
+          >☺</span>
+          <span
             style={{ width: 40, height: 40, borderRadius: 20, flexShrink: 0, background: 'var(--bg-input)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-2)', fontSize: 20 }}
-            onClick={() => setShowPanel((v) => !v)}
+            onClick={() => { setShowPanel((v) => !v); setShowSticker(false); }}
           >+</span>
           {input.trim() && (
             <button className="btn-sm" style={{ height: 40, borderRadius: 20, flexShrink: 0 }} onClick={send}>发送</button>
           )}
         </div>
+        {showSticker && <StickerPanel onPick={sendSticker} onEmoji={(e) => setInput((v) => v + e)} />}
         {showPanel && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, padding: '12px 12px 20px' }}>
             {([

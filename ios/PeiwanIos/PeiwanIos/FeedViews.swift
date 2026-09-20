@@ -549,6 +549,10 @@ struct MomentDetailView: View {
     @State private var moment: Moment?
     @State private var comments: [CommentItem] = []
     @State private var input = ""
+    /// 待发的贴纸：点贴纸先挂到输入栏，再点发送
+    @State private var sticker: StickerPayload?
+    @State private var showSticker = false
+    @FocusState private var inputFocused: Bool
     @State private var chatTarget: ChatTarget?
     @State private var fullImage: String?
     @State private var detailPlayer: AVPlayer?
@@ -596,6 +600,9 @@ struct MomentDetailView: View {
                                         .clipShape(RoundedRectangle(cornerRadius: 8))
                                         .onTapGesture { fullImage = img }
                                 }
+                                if let s = c.sticker {
+                                    StickerImageView(p: s, size: 96)
+                                }
                                 Text(timeAgo(c.createdAt)).font(.system(size: 11)).foregroundStyle(Theme.textDim)
                             }
                             Spacer()
@@ -605,17 +612,41 @@ struct MomentDetailView: View {
                 }
             }
 
-            HStack(spacing: 10) {
-                TextField("", text: $input, prompt: Text("说点什么…").foregroundColor(Theme.textSub))
-                    .padding(.horizontal, 14).padding(.vertical, 10)
-                    .background(Capsule().fill(Theme.bg3))
-                    .foregroundStyle(Theme.text)
-                Button("发送") { send() }
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(input.trimmingCharacters(in: .whitespaces).isEmpty ? Theme.textDim : Theme.accent)
+            VStack(spacing: 0) {
+                if let s = sticker {
+                    HStack {
+                        PendingStickerChip(p: s) { sticker = nil }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16).padding(.top, 8)
+                }
+                HStack(spacing: 10) {
+                    Button {
+                        inputFocused = false; showSticker.toggle()
+                    } label: {
+                        Image(systemName: "face.smiling")
+                            .font(.system(size: 18)).foregroundStyle(showSticker ? Theme.accent : Theme.textSub)
+                            .frame(width: 36, height: 36)
+                            .background(Circle().fill(showSticker ? Theme.bubbleMine : Theme.bg3))
+                    }
+                    .buttonStyle(.plain)
+                    TextField("", text: $input, prompt: Text("说点什么…").foregroundColor(Theme.textSub))
+                        .focused($inputFocused)
+                        .padding(.horizontal, 14).padding(.vertical, 10)
+                        .background(Capsule().fill(Theme.bg3))
+                        .foregroundStyle(Theme.text)
+                    Button("发送") { send() }
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(canSend ? Theme.accent : Theme.textDim)
+                        .disabled(!canSend)
+                }
+                .padding(12)
+                if showSticker {
+                    StickerPanel(onPick: { sticker = $0 }, onEmoji: { input += $0 })
+                }
             }
-            .padding(12)
             .background(Theme.bg2)
+            .onChange(of: inputFocused) { f in if f { showSticker = false } }
         }
         .fullBg()
         .navigationTitle("动态详情")
@@ -635,13 +666,22 @@ struct MomentDetailView: View {
         comments = (try? await Api.request("/moments/\(momentId)/comments")) ?? []
     }
 
+    private var canSend: Bool {
+        !input.trimmingCharacters(in: .whitespaces).isEmpty || sticker != nil
+    }
+
     private func send() {
         let text = input.trimmingCharacters(in: .whitespaces)
-        guard !text.isEmpty else { return }
+        guard canSend else { return }
+        let picked = sticker
         Task {
-            struct Empty: Codable {}
-            let _: CommentItem? = try? await Api.request("/moments/\(momentId)/comments", method: "POST", body: ["content": text])
+            var body: [String: Any] = ["content": text]
+            if let picked { body["stickerId"] = picked.id }
+            let _: CommentItem? = try? await Api.request("/moments/\(momentId)/comments", method: "POST", body: body)
+            if let picked { StickerStore.shared.addRecent(picked) }
             input = ""
+            sticker = nil
+            showSticker = false
             await load()
         }
     }

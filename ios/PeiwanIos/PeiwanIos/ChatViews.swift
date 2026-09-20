@@ -53,6 +53,7 @@ private func preview(_ msg: LastMsg?) -> String {
     case "text": return String((msg.content ?? "").prefix(30))
     case "image": return "[图片]"
     case "video": return "[视频]"
+    case "sticker": return "[表情]"
     case "audio": return "[语音]"
     case "location": return "[位置]"
     case "gift": return "[礼物]"
@@ -427,6 +428,7 @@ struct ChatRoomView: View {
     @State private var voiceMode = false
     @State private var recording = false
     @State private var showPanel = false
+    @State private var showSticker = false
     @State private var showGift = false
     @State private var fullImage: String?
     @State private var removeListener: (() -> Void)?
@@ -459,7 +461,7 @@ struct ChatRoomView: View {
                     }
                     .padding(.horizontal, 12).padding(.vertical, 8)
                 }
-                .onTapGesture { showPanel = false; inputFocused = false }
+                .onTapGesture { showPanel = false; showSticker = false; inputFocused = false }
                 // 进入聊天默认停在最底部（最新消息）；defaultScrollAnchor 是 iOS 17 API，改用 scrollTo
                 .onAppear {
                     if let last = messages.last {
@@ -471,8 +473,9 @@ struct ChatRoomView: View {
                 }
                 .onChange(of: inputFocused) { focused in
                     if focused {
-                        // 键盘弹出时收起 + 面板，避免两者叠加把内容顶飞
+                        // 键盘弹出时收起 + 面板 / 表情面板，避免两者叠加把内容顶飞
                         showPanel = false
+                        showSticker = false
                         if let last = messages.last {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                                 withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
@@ -599,7 +602,7 @@ struct ChatRoomView: View {
         VStack(spacing: 0) {
             HStack(alignment: .bottom, spacing: 8) {
                 Button {
-                    voiceMode.toggle(); showPanel = false; inputFocused = false
+                    voiceMode.toggle(); showPanel = false; showSticker = false; inputFocused = false
                 } label: {
                     Image(systemName: voiceMode ? "keyboard" : "waveform")
                         .font(.system(size: 17)).foregroundStyle(Theme.textSub)
@@ -634,8 +637,19 @@ struct ChatRoomView: View {
                     .background(RoundedRectangle(cornerRadius: 20).fill(Theme.bg3))
                 }
 
+                // 表情按钮：面板顶替键盘（Telegram 式，点贴纸即发送）
                 Button {
-                    inputFocused = false; voiceMode = false; showPanel.toggle()
+                    inputFocused = false; voiceMode = false; showPanel = false; showSticker.toggle()
+                } label: {
+                    Image(systemName: "face.smiling")
+                        .font(.system(size: 19)).foregroundStyle(showSticker ? Theme.accent : Theme.textSub)
+                        .frame(width: 40, height: 40)
+                        .background(Circle().fill(showSticker ? Theme.bubbleMine : Theme.bg3))
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    inputFocused = false; voiceMode = false; showSticker = false; showPanel.toggle()
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 18)).foregroundStyle(Theme.textSub)
@@ -659,6 +673,12 @@ struct ChatRoomView: View {
             }
             .padding(8)
 
+            if showSticker {
+                StickerPanel(onPick: { p in
+                    sendMsg("sticker", p.encoded())
+                    StickerStore.shared.addRecent(p)
+                }, onEmoji: { input += $0 })
+            }
             if showPanel { panelGrid }
         }
         .background(Theme.bg2)
@@ -857,6 +877,15 @@ struct MsgBubble: View {
                 .frame(width: 160, height: 160)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .onTapGesture { onImage(m.content) }
+        case "sticker":
+            // 贴纸不画气泡底
+            if let p = StickerPayload.parse(m.content) {
+                StickerImageView(p: p, size: 140)
+            } else {
+                Text("[表情]").font(.system(size: 15)).foregroundStyle(fg)
+                    .padding(.horizontal, 14).padding(.vertical, 10)
+                    .background(bubbleShape.fill(bg))
+            }
         case "audio":
             let obj = parseJson(m.content)
             let url = obj["url"] as? String ?? m.content

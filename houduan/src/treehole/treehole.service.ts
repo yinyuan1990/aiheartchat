@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { StickerService, parseStickerJson } from '../sticker/sticker.service';
 
 /** 前端展示的帖子（匿名：不含作者信息，只告诉本人 mine） */
 export interface TreeholePostView {
@@ -41,7 +42,10 @@ export function parseImages(s: string | null | undefined): string[] {
  */
 @Injectable()
 export class TreeholeService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly stickers: StickerService,
+  ) {}
 
   // ---------- 用户端 ----------
 
@@ -124,6 +128,7 @@ export class TreeholeService {
         id: c.id,
         user: userMap.get(c.userId.toString()) ?? { id: c.userId, nickname: '用户', avatar: '' },
         content: c.content,
+        sticker: parseStickerJson(c.sticker),
         replyToId: c.replyToId,
         replyToNickname: replyTo ? userMap.get(replyTo.userId.toString())?.nickname ?? '' : '',
         createdAt: c.createdAt,
@@ -131,11 +136,12 @@ export class TreeholeService {
     });
   }
 
-  async addComment(userId: bigint, postId: bigint, rawContent: string, replyToId?: string) {
+  async addComment(userId: bigint, postId: bigint, rawContent: string, replyToId?: string, stickerId?: string) {
     const post = await this.prisma.treeholePost.findUnique({ where: { id: postId } });
     if (!post || post.status !== 0) throw new NotFoundException('内容不存在');
     const content = (rawContent ?? '').trim();
-    if (!content) throw new BadRequestException('评论不能为空');
+    const sticker = await this.stickers.payloadOf(stickerId);
+    if (!content && !sticker) throw new BadRequestException('评论不能为空');
     if (content.length > COMMENT_MAX) throw new BadRequestException(`评论最多 ${COMMENT_MAX} 字`);
 
     let replyTo: bigint | null = null;
@@ -146,7 +152,7 @@ export class TreeholeService {
     }
 
     const [comment] = await this.prisma.$transaction([
-      this.prisma.treeholeComment.create({ data: { postId, userId, content, replyToId: replyTo } }),
+      this.prisma.treeholeComment.create({ data: { postId, userId, content, sticker: sticker ? JSON.stringify(sticker) : '', replyToId: replyTo } }),
       this.prisma.treeholePost.update({ where: { id: postId }, data: { commentCount: { increment: 1 } } }),
     ]);
     return { id: comment.id };
@@ -243,7 +249,7 @@ export class TreeholeService {
       ? await this.prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, nickname: true, shortId: true, avatar: true } })
       : [];
     const userMap = new Map(users.map((u) => [u.id.toString(), u]));
-    return list.map((c) => ({ ...c, user: userMap.get(c.userId.toString()) ?? null }));
+    return list.map((c) => ({ ...c, sticker: parseStickerJson(c.sticker), user: userMap.get(c.userId.toString()) ?? null }));
   }
 
   async adminDeleteComment(id: bigint) {

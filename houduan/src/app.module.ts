@@ -26,6 +26,7 @@ import { InviteModule } from './invite/invite.module';
 import { TelegramModule } from './telegram/telegram.module';
 import { MusicModule } from './music/music.module';
 import { GalleryModule } from './gallery/gallery.module';
+import { StickerModule } from './sticker/sticker.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { GalleryModule } from './gallery/gallery.module';
     TelegramModule,
     MusicModule,
     GalleryModule,
+    StickerModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: RateLimitGuard }],
 })

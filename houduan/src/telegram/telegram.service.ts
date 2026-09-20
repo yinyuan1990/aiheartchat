@@ -73,6 +73,19 @@ export class TelegramClientService implements OnModuleInit, OnModuleDestroy {
     await c?.disconnect().catch(() => {});
   }
 
+  /**
+   * 强制重连（登录态不丢）。GramJS 收到不认识的 TL 构造器时接收循环会卡死、之后所有请求都超时，
+   * 调用方检测到超时后用这个恢复，不用重启进程。
+   */
+  async recover() {
+    this.logger.warn('Telegram 客户端疑似卡死，强制重连');
+    const c = this.client;
+    this.client = undefined;
+    this.connecting = undefined;
+    await c?.disconnect().catch(() => {});
+    await this.getClient().catch((e) => this.logger.warn(`重连失败: ${e?.message ?? e}`));
+  }
+
   /** 拿到已连接的客户端（可能未登录）。并发调用共用同一次握手 */
   async getClient(): Promise<TelegramClient> {
     if (this.client?.connected) return this.client;

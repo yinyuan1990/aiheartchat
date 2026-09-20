@@ -7,7 +7,7 @@ import { IntimacyService } from '../intimacy/intimacy.service';
 import { MessagePayload, SendFrame } from './im.types';
 
 /** 需要扣费的消息类型（礼物走礼物模块自身计费） */
-const CHARGED_TYPES = new Set(['text', 'image', 'video', 'audio', 'location']);
+const CHARGED_TYPES = new Set(['text', 'image', 'video', 'audio', 'location', 'sticker']);
 
 @Injectable()
 export class ImService {

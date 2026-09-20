@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotifyService } from '../notify/notify.service';
 import { ConnectionRegistry } from '../im/connection.registry';
 import { IntimacyService } from '../intimacy/intimacy.service';
+import { StickerService, parseStickerJson } from '../sticker/sticker.service';
 import { CommentDto, PublishMomentDto } from './moment.dto';
 
 @Injectable()
@@ -12,6 +13,7 @@ export class MomentService {
     private readonly notify: NotifyService,
     private readonly registry: ConnectionRegistry,
     private readonly intimacy: IntimacyService,
+    private readonly stickers: StickerService,
   ) {}
 
   async publish(userId: bigint, dto: PublishMomentDto) {
@@ -260,6 +262,7 @@ export class MomentService {
         user: userMap.get(c.userId.toString()),
         content: c.content,
         imageUrl: c.imageUrl,
+        sticker: parseStickerJson(c.sticker),
         replyToId: c.replyToId,
         replyToNickname: replyTo ? userMap.get(replyTo.userId.toString())?.nickname ?? '' : '',
         createdAt: c.createdAt,
@@ -271,7 +274,8 @@ export class MomentService {
     const moment = await this.prisma.moment.findUnique({ where: { id: momentId } });
     if (!moment || moment.status !== 0) throw new NotFoundException('动态不存在');
     const content = dto.content?.trim() ?? '';
-    if (!content && !dto.imageUrl) throw new BadRequestException('评论不能为空');
+    const sticker = await this.stickers.payloadOf(dto.stickerId);
+    if (!content && !dto.imageUrl && !sticker) throw new BadRequestException('评论不能为空');
 
     let replyToUserId: bigint | null = null;
     if (dto.replyToId) {
@@ -287,6 +291,7 @@ export class MomentService {
           userId,
           content,
           imageUrl: dto.imageUrl ?? '',
+          sticker: sticker ? JSON.stringify(sticker) : '',
           replyToId: dto.replyToId ? BigInt(dto.replyToId) : null,
         },
       }),
@@ -295,7 +300,7 @@ export class MomentService {
 
     // 分类通知：动态作者与被回复人（不通知自己），落库 + 在线推送
     const commenter = await this.prisma.user.findUnique({ where: { id: userId }, select: { nickname: true } });
-    const preview = (content || '[图片]').slice(0, 60);
+    const preview = (content || (sticker ? '[表情]' : '[图片]')).slice(0, 60);
     const from = commenter?.nickname ?? '';
     if (moment.userId !== userId) {
       await this.notify.push(moment.userId, 'comment', `${from} 评论了你的动态`, preview, momentId, userId);

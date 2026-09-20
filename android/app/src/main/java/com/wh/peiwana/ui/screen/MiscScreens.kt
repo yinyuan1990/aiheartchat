@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
@@ -40,6 +41,11 @@ import coil.compose.AsyncImage
 import com.wh.peiwana.net.*
 import com.wh.peiwana.ui.*
 import com.wh.peiwana.ui.theme.*
+import com.wh.peiwana.ui.sticker.SmileIcon
+import com.wh.peiwana.ui.sticker.StickerImage
+import com.wh.peiwana.ui.sticker.StickerPanel
+import com.wh.peiwana.ui.sticker.StickerPayload
+import com.wh.peiwana.ui.sticker.StickerStore
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -49,6 +55,12 @@ fun MomentDetailScreen(id: String, onBack: () -> Unit, onOpenChat: (String, Stri
     var m by remember { mutableStateOf<Moment?>(null) }
     var comments by remember { mutableStateOf<List<CommentItem>>(emptyList()) }
     var input by remember { mutableStateOf("") }
+    /** 待发的贴纸（点贴纸先挂到输入栏，再点发送） */
+    var sticker by remember { mutableStateOf<StickerPayload?>(null) }
+    var showSticker by remember { mutableStateOf(false) }
+    val ctx = LocalContext.current
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val scope = rememberCoroutineScope()
     fun loadC() { scope.launch { comments = runCatching { Api.getList<CommentItem>("/moments/$id/comments") }.getOrDefault(emptyList()) } }
     LaunchedEffect(id) {
@@ -98,17 +110,57 @@ fun MomentDetailScreen(id: String, onBack: () -> Unit, onOpenChat: (String, Stri
                         Text(c.user?.nickname + (if (c.replyToNickname.isNotEmpty()) " 回复 @${c.replyToNickname}" else ""), color = TextSub, fontSize = 12.sp)
                         if (c.content.isNotEmpty()) Text(c.content, color = TextMain, fontSize = 14.sp, modifier = Modifier.padding(top = 2.dp))
                         if (c.imageUrl.isNotEmpty()) AsyncImage(model = Api.fullUrl(c.imageUrl), contentDescription = null, modifier = Modifier.padding(top = 4.dp).width(120.dp).clip(RoundedCornerShape(8.dp)))
+                        c.sticker?.let { StickerImage(it, 96.dp, modifier = Modifier.padding(top = 4.dp)) }
                     }
                 }
             }
         }
-        Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(input, { input = it }, placeholder = { Text("说点什么…") }, modifier = Modifier.weight(1f))
-            Spacer(Modifier.width(8.dp))
-            Box(modifier = Modifier.clip(RoundedCornerShape(15.dp)).background(Accent).clickable {
-                if (input.isBlank()) return@clickable
-                scope.launch { runCatching { Api.request("/moments/$id/comments", "POST", buildJsonObject { put("content", JsonPrimitive(input.trim())) }) }.onSuccess { input = ""; loadC() } }
-            }.padding(horizontal = 16.dp, vertical = 10.dp)) { Text("发送", color = Color.White, fontSize = 13.sp) }
+        Column(Modifier.fillMaxWidth().background(Bg).imePadding().navigationBarsPadding()) {
+            sticker?.let { s ->
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box {
+                        StickerImage(s, 56.dp, autoplay = false)
+                        Box(
+                            Modifier.align(Alignment.TopEnd).size(18.dp).clip(RoundedCornerShape(9.dp)).background(Color.Black.copy(alpha = 0.6f)).noRippleClick { sticker = null },
+                            contentAlignment = Alignment.Center,
+                        ) { Text("×", color = Color.White, fontSize = 12.sp) }
+                    }
+                }
+            }
+            Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier.size(36.dp).clip(RoundedCornerShape(18.dp)).background(if (showSticker) BubbleMine else Bg3).noRippleClick { focus.clearFocus(); keyboard?.hide(); showSticker = !showSticker },
+                    contentAlignment = Alignment.Center,
+                ) { SmileIcon(if (showSticker) Accent else TextSub, 20.dp) }
+                Spacer(Modifier.width(8.dp))
+                Box(Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).background(Bg3).padding(horizontal = 14.dp, vertical = 10.dp)) {
+                    if (input.isEmpty()) Text("说点什么…", color = TextSub, fontSize = 14.sp)
+                    BasicTextField(
+                        value = input, onValueChange = { if (it.length <= 500) input = it },
+                        textStyle = TextStyle(color = TextMain, fontSize = 15.sp),
+                        cursorBrush = SolidColor(Accent),
+                        maxLines = 4,
+                        modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) showSticker = false },
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                val canSend = input.isNotBlank() || sticker != null
+                Box(modifier = Modifier.clip(RoundedCornerShape(15.dp)).background(if (canSend) Accent else Bg3).clickable {
+                    if (!canSend) return@clickable
+                    scope.launch {
+                        runCatching {
+                            Api.request("/moments/$id/comments", "POST", buildJsonObject {
+                                put("content", JsonPrimitive(input.trim()))
+                                sticker?.let { put("stickerId", JsonPrimitive(it.id)) }
+                            })
+                        }.onSuccess {
+                            sticker?.let { StickerStore.addRecent(ctx, it) }
+                            input = ""; sticker = null; showSticker = false; loadC()
+                        }
+                    }
+                }.padding(horizontal = 16.dp, vertical = 10.dp)) { Text("发送", color = Color.White, fontSize = 13.sp) }
+            }
+            if (showSticker) StickerPanel(onPick = { sticker = it }, onEmoji = { input += it })
         }
         fullImage?.let { u ->
             androidx.compose.ui.window.Dialog(onDismissRequest = { fullImage = null }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {

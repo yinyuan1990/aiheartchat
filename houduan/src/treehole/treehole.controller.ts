@@ -44,7 +44,7 @@ export class TreeholeController {
 
   @Post(':id/comments')
   @Throttle(30, 600)
-  comment(@CurrentUser() userId: bigint, @Param('id') id: string, @Body() body: { content: string; replyToId?: string }) {
-    return this.treehole.addComment(userId, BigInt(id), body?.content ?? '', body?.replyToId);
+  comment(@CurrentUser() userId: bigint, @Param('id') id: string, @Body() body: { content: string; replyToId?: string; stickerId?: string }) {
+    return this.treehole.addComment(userId, BigInt(id), body?.content ?? '', body?.replyToId, body?.stickerId);
   }
 }

@@ -28,6 +28,15 @@ import com.wh.peiwana.net.Api
 import com.wh.peiwana.net.MomentUser
 import com.wh.peiwana.ui.*
 import com.wh.peiwana.ui.theme.*
+import com.wh.peiwana.ui.sticker.SmileIcon
+import com.wh.peiwana.ui.sticker.StickerImage
+import com.wh.peiwana.ui.sticker.StickerPanel
+import com.wh.peiwana.ui.sticker.StickerPayload
+import com.wh.peiwana.ui.sticker.StickerStore
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.focus.onFocusChanged
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonPrimitive
@@ -63,6 +72,7 @@ data class TreeholeComment(
     val id: String,
     val user: MomentUser? = null,
     val content: String = "",
+    val sticker: StickerPayload? = null,
     val replyToId: String? = null,
     val replyToNickname: String = "",
     val createdAt: String = "",
@@ -305,11 +315,17 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
     var comments by remember { mutableStateOf<List<TreeholeComment>>(emptyList()) }
     var input by remember { mutableStateOf("") }
     var replyTo by remember { mutableStateOf<TreeholeComment?>(null) }
+    /** 待发的贴纸：评论里点贴纸先挂到输入栏，再点发送 */
+    var sticker by remember { mutableStateOf<StickerPayload?>(null) }
+    var showSticker by remember { mutableStateOf(false) }
     var sending by remember { mutableStateOf(false) }
     var toast by remember { mutableStateOf("") }
     var confirmDelete by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+    val ctx = LocalContext.current
+    val focus = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
 
     suspend fun loadComments() {
         comments = runCatching { Api.getList<TreeholeComment>("/treehole/$id/comments") }.getOrDefault(emptyList())
@@ -358,13 +374,16 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
                     ) {
                         Text(c.user?.nickname ?: "用户", color = nameColor(c.user?.id ?: c.id), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(2.dp))
-                        Text(
-                            buildString {
-                                if (c.replyToNickname.isNotEmpty()) append("@${c.replyToNickname} ")
-                                append(c.content)
-                            },
-                            color = TextMain, fontSize = 15.sp, lineHeight = 23.sp,
-                        )
+                        if (c.content.isNotEmpty() || c.replyToNickname.isNotEmpty()) {
+                            Text(
+                                buildString {
+                                    if (c.replyToNickname.isNotEmpty()) append("@${c.replyToNickname} ")
+                                    append(c.content)
+                                },
+                                color = TextMain, fontSize = 15.sp, lineHeight = 23.sp,
+                            )
+                        }
+                        c.sticker?.let { StickerImage(it, 96.dp, modifier = Modifier.padding(top = 4.dp)) }
                         Spacer(Modifier.height(3.dp))
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                             Text("回复", color = TextSub, fontSize = 11.sp, modifier = Modifier.noRippleClick { replyTo = c }.padding(end = 10.dp))
@@ -378,10 +397,22 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
 
         // 底部区域（回复提示 + 输入栏）：与聊天页一致，imePadding 让输入框贴在键盘上方（App 是 edge-to-edge，adjustResize 不会自动顶起）
         Column(Modifier.fillMaxWidth().background(Bg).imePadding().navigationBarsPadding()) {
-        replyTo?.let { r ->
+        if (replyTo != null || sticker != null) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("回复 @${r.user?.nickname ?: ""}", color = Accent, fontSize = 12.sp, modifier = Modifier.weight(1f))
-                Text("取消", color = TextSub, fontSize = 12.sp, modifier = Modifier.noRippleClick { replyTo = null })
+                sticker?.let { s ->
+                    Box {
+                        StickerImage(s, 56.dp, autoplay = false)
+                        Box(
+                            Modifier.align(Alignment.TopEnd).size(18.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.6f)).noRippleClick { sticker = null },
+                            contentAlignment = Alignment.Center,
+                        ) { Text("×", color = Color.White, fontSize = 12.sp) }
+                    }
+                    Spacer(Modifier.width(10.dp))
+                }
+                replyTo?.let { r ->
+                    Text("回复 @${r.user?.nickname ?: ""}", color = Accent, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                    Text("取消", color = TextSub, fontSize = 12.sp, modifier = Modifier.noRippleClick { replyTo = null })
+                } ?: Spacer(Modifier.weight(1f))
             }
         }
 
@@ -390,6 +421,11 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
             Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            Box(
+                Modifier.size(36.dp).clip(CircleShape).background(if (showSticker) BubbleMine else Bg3).noRippleClick { focus.clearFocus(); keyboard?.hide(); showSticker = !showSticker },
+                contentAlignment = Alignment.Center,
+            ) { SmileIcon(if (showSticker) Accent else TextSub, 20.dp) }
+            Spacer(Modifier.width(8.dp))
             Box(Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).background(Bg3).padding(horizontal = 14.dp, vertical = 10.dp)) {
                 if (input.isEmpty()) {
                     Text(
@@ -402,11 +438,11 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
                     textStyle = TextStyle(color = TextMain, fontSize = 15.sp),
                     cursorBrush = SolidColor(Accent),
                     maxLines = 4,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) showSticker = false },
                 )
             }
             Spacer(Modifier.width(8.dp))
-            val canSend = input.isNotBlank() && !sending
+            val canSend = (input.isNotBlank() || sticker != null) && !sending
             Box(
                 Modifier.clip(RoundedCornerShape(15.dp)).background(if (canSend) AccentBrush else androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Bg3, Bg3)))
                     .noRippleClick {
@@ -417,10 +453,14 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
                                 Api.request("/treehole/$id/comments", "POST", buildJsonObject {
                                     put("content", JsonPrimitive(input.trim()))
                                     replyTo?.let { put("replyToId", JsonPrimitive(it.id)) }
+                                    sticker?.let { put("stickerId", JsonPrimitive(it.id)) }
                                 })
                             }.onSuccess {
+                                sticker?.let { StickerStore.addRecent(ctx, it) }
                                 input = ""
                                 replyTo = null
+                                sticker = null
+                                showSticker = false
                                 loadComments()
                                 post = post?.copy(commentCount = (post?.commentCount ?: 0) + 1)
                                 TreeholeCache.bumpComment(id)
@@ -433,6 +473,7 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             ) { Text("发送", color = Color.White, fontSize = 13.sp) }
         }
+        if (showSticker) StickerPanel(onPick = { sticker = it }, onEmoji = { input += it })
         } // 底部区域 Column
     }
 
