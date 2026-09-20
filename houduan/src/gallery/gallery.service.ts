@@ -63,36 +63,45 @@ export class GalleryService implements OnModuleInit {
 
   // ---------- 设置 ----------
 
-  /** 后台设置：tab 名称按受众分开（titleM 男看 / titleF 女看，空则用 DEFAULT_TITLE）+ 保留天数 */
-  async settings(): Promise<{ titleM: string; titleF: string; days: number }> {
-    const rows = await this.prisma.sysSetting.findMany({ where: { key: { in: ['gallery_title_m', 'gallery_title_f', 'gallery_title', 'gallery_days'] } } });
+  /** 后台设置：tab 名称与保留天数都按受众分开（M 男看 / F 女看） */
+  async settings(): Promise<{ titleM: string; titleF: string; daysM: number; daysF: number }> {
+    const rows = await this.prisma.sysSetting.findMany({
+      where: { key: { in: ['gallery_title_m', 'gallery_title_f', 'gallery_title', 'gallery_days_m', 'gallery_days_f', 'gallery_days'] } },
+    });
     const get = (k: string) => rows.find((r) => r.key === k)?.value ?? '';
-    const days = Number(get('gallery_days')) || DEFAULT_DAYS;
-    const legacy = get('gallery_title') || DEFAULT_TITLE;
-    return { titleM: get('gallery_title_m') || legacy, titleF: get('gallery_title_f') || legacy, days: Math.min(60, Math.max(1, days)) };
+    const clampDays = (v: string, fallback: number) => Math.min(60, Math.max(1, Number(v) || fallback));
+    const legacyTitle = get('gallery_title') || DEFAULT_TITLE;
+    const legacyDays = clampDays(get('gallery_days'), DEFAULT_DAYS);
+    return {
+      titleM: get('gallery_title_m') || legacyTitle,
+      titleF: get('gallery_title_f') || legacyTitle,
+      daysM: clampDays(get('gallery_days_m'), legacyDays),
+      daysF: clampDays(get('gallery_days_f'), legacyDays),
+    };
   }
 
-  /** 某个受众看到的 tab 名 */
-  async titleFor(audience: number): Promise<string> {
+  /** 某个受众的 tab 名 / 保留天数 */
+  async forAudience(audience: number): Promise<{ title: string; days: number }> {
     const s = await this.settings();
-    return audience === 2 ? s.titleF : s.titleM;
+    return audience === 2 ? { title: s.titleF, days: s.daysF } : { title: s.titleM, days: s.daysM };
   }
 
   /** 用户端：按自己性别拿 tab 名称与天数 */
   async userSettings(userId: bigint) {
     const me = await this.prisma.user.findUnique({ where: { id: userId }, select: { gender: true } });
-    const s = await this.settings();
-    return { title: me?.gender === 2 ? s.titleF : s.titleM, days: s.days };
+    return this.forAudience(me?.gender === 2 ? 2 : 1);
   }
 
-  async saveSettings(data: { titleM?: string; titleF?: string; days?: number }) {
+  async saveSettings(data: { titleM?: string; titleF?: string; daysM?: number; daysF?: number }) {
     const titleM = String(data.titleM ?? '').trim().slice(0, 12);
     const titleF = String(data.titleF ?? '').trim().slice(0, 12);
-    const days = Math.min(60, Math.max(1, Number(data.days) || DEFAULT_DAYS));
+    const daysM = Math.min(60, Math.max(1, Number(data.daysM) || DEFAULT_DAYS));
+    const daysF = Math.min(60, Math.max(1, Number(data.daysF) || DEFAULT_DAYS));
     const set = (key: string, value: string) => this.prisma.sysSetting.upsert({ where: { key }, create: { key, value }, update: { value } });
     await set('gallery_title_m', titleM);
     await set('gallery_title_f', titleF);
-    await set('gallery_days', String(days));
+    await set('gallery_days_m', String(daysM));
+    await set('gallery_days_f', String(daysF));
     return this.settings();
   }
 
@@ -102,9 +111,7 @@ export class GalleryService implements OnModuleInit {
   async list(userId: bigint, beforeId?: bigint) {
     const me = await this.prisma.user.findUnique({ where: { id: userId }, select: { gender: true } });
     const audience = me?.gender === 2 ? 2 : 1;
-    const s = await this.settings();
-    const title = audience === 2 ? s.titleF : s.titleM;
-    const days = s.days;
+    const { title, days } = await this.forAudience(audience);
     const cutoff = new Date(Date.now() - days * 86_400_000);
     const rows = await this.prisma.galleryPost.findMany({
       where: { audience, postedAt: { gte: cutoff }, ...(beforeId ? { id: { lt: beforeId } } : {}) },
@@ -229,22 +236,21 @@ export class GalleryService implements OnModuleInit {
     }
   }
 
-  /** 保留期 + 每受众总量上限：超出的帖子连文件删 */
+  /** 保留期（按受众各自的天数）+ 每受众总量上限：超出的帖子连文件删 */
   async purgeOld() {
-    const { days } = await this.settings();
-    const cutoff = new Date(Date.now() - days * 86_400_000);
-    const old = await this.prisma.galleryPost.findMany({ where: { postedAt: { lt: cutoff } }, select: { id: true, media: true }, take: 500 });
-    const over: { id: bigint; media: string }[] = [];
-    for (const audience of [1, 2]) {
-      over.push(...(await this.prisma.galleryPost.findMany({ where: { audience }, orderBy: { id: 'desc' }, skip: MAX_POSTS_PER_AUDIENCE, select: { id: true, media: true }, take: 500 })));
-    }
     const all = new Map<string, { id: bigint; media: string }>();
-    for (const p of [...old, ...over]) all.set(p.id.toString(), p);
+    for (const audience of [1, 2]) {
+      const { days } = await this.forAudience(audience);
+      const cutoff = new Date(Date.now() - days * 86_400_000);
+      const old = await this.prisma.galleryPost.findMany({ where: { audience, postedAt: { lt: cutoff } }, select: { id: true, media: true }, take: 500 });
+      const over = await this.prisma.galleryPost.findMany({ where: { audience }, orderBy: { id: 'desc' }, skip: MAX_POSTS_PER_AUDIENCE, select: { id: true, media: true }, take: 500 });
+      for (const p of [...old, ...over]) all.set(p.id.toString(), p);
+    }
     if (!all.size) return { removed: 0 };
     const rows = [...all.values()];
     await this.prisma.galleryPost.deleteMany({ where: { id: { in: rows.map((r) => r.id) } } });
     await this.removeFiles(rows.map((r) => r.media));
-    this.logger.log(`purged ${rows.length} gallery posts (older than ${days} days / over limit)`);
+    this.logger.log(`purged ${rows.length} gallery posts (expired / over limit)`);
     return { removed: rows.length };
   }
 
@@ -268,7 +274,7 @@ export class GalleryService implements OnModuleInit {
 
   private async syncSource(src: { id: number; channel: string; audience: number; lastMsgId: number; blockWords?: string }) {
     const client = await this.tg.authorized();
-    const { days } = await this.settings();
+    const { days } = await this.forAudience(src.audience);
     const cutoff = Date.now() - days * 86_400_000;
     const blockWords = (src.blockWords ?? '').split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean);
     let imported = 0, skipped = 0, maxId = src.lastMsgId;
