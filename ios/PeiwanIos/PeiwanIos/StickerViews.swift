@@ -76,6 +76,13 @@ final class StickerStore: ObservableObject {
         d.set(version, forKey: "stk_version")
         if let data = try? JSONEncoder().encode(sets) { d.set(data, forKey: "stk_sets") }
         loaded = true
+        // 后台下架的包：把「最近使用」里已经不在目录中的贴纸清掉
+        let alive = Set(sets.flatMap { $0.items.map(\.id) })
+        let pruned = recent.filter { alive.contains($0.id) }
+        if pruned.count != recent.count {
+            recent = pruned
+            if let data = try? JSONEncoder().encode(recent) { d.set(data, forKey: "stk_recent") }
+        }
     }
 
     func addRecent(_ p: StickerPayload) {
@@ -120,17 +127,12 @@ struct StickerImageView: View {
     }
 }
 
-/// 面板网格里的小图：动态的用静态缩略图，省资源
+/// 面板网格里的小图：和 Telegram 一样动态的也直接播（LazyVGrid 只创建可见的那几行）
 struct StickerThumbView: View {
     let p: StickerPayload
     var size: CGFloat = 56
     var body: some View {
-        let src = p.format == "webp" ? p.url : (p.thumb ?? "")
-        if !src.isEmpty {
-            RemoteImage(url: src).frame(width: size, height: size)
-        } else {
-            StickerImageView(p: p, size: size, autoplay: false)
-        }
+        StickerImageView(p: p, size: size)
     }
 }
 
@@ -303,7 +305,7 @@ struct PendingStickerChip: View {
     var onRemove: () -> Void
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            StickerImageView(p: p, size: 56, autoplay: false)
+            StickerImageView(p: p, size: 56)
             Button(action: onRemove) {
                 Image(systemName: "xmark")
                     .font(.system(size: 9, weight: .bold)).foregroundStyle(.white)

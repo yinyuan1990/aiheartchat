@@ -119,7 +119,7 @@ fun MomentDetailScreen(id: String, onBack: () -> Unit, onOpenChat: (String, Stri
             sticker?.let { s ->
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box {
-                        StickerImage(s, 56.dp, autoplay = false)
+                        StickerImage(s, 56.dp)
                         Box(
                             Modifier.align(Alignment.TopEnd).size(18.dp).clip(RoundedCornerShape(9.dp)).background(Color.Black.copy(alpha = 0.6f)).noRippleClick { sticker = null },
                             contentAlignment = Alignment.Center,

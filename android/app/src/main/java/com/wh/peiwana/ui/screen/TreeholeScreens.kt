@@ -401,7 +401,7 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 sticker?.let { s ->
                     Box {
-                        StickerImage(s, 56.dp, autoplay = false)
+                        StickerImage(s, 56.dp)
                         Box(
                             Modifier.align(Alignment.TopEnd).size(18.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.6f)).noRippleClick { sticker = null },
                             contentAlignment = Alignment.Center,

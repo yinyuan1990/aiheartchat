@@ -103,6 +103,13 @@ object StickerStore {
                 version = cat.version
                 sets = cat.sets
                 prefs(ctx).edit().putInt("version", version).putString("sets", json.encodeToString(ListSerializer(StickerSetItem.serializer()), sets)).apply()
+                // 后台下架的包：把「最近使用」里已经不在目录中的贴纸清掉
+                val alive = sets.flatMap { s -> s.items.map { it.id } }.toHashSet()
+                val pruned = recent.filter { it.id in alive }
+                if (pruned.size != recent.size) {
+                    recent = pruned
+                    prefs(ctx).edit().putString("recent", json.encodeToString(ListSerializer(StickerPayload.serializer()), recent)).apply()
+                }
             }
         } catch (_: Exception) {
         } finally {
@@ -138,15 +145,10 @@ fun StickerImage(p: StickerPayload, size: Dp, autoplay: Boolean = true, modifier
     }
 }
 
-/** 面板网格里的小图：动态的用静态缩略图，省资源 */
+/** 面板网格里的小图：和 Telegram 一样动态的也直接播（LazyVerticalGrid 只组合可见的那几行） */
 @Composable
 fun StickerThumb(p: StickerPayload, size: Dp, modifier: Modifier = Modifier) {
-    val src = if (p.format == "webp") p.url else p.thumb
-    if (src.isNotEmpty()) {
-        AsyncImage(model = Api.fullUrl(src), contentDescription = p.emoji, contentScale = ContentScale.Fit, modifier = modifier.size(size))
-    } else {
-        StickerImage(p, size, autoplay = false, modifier = modifier)
-    }
+    StickerImage(p, size, modifier = modifier)
 }
 
 val EMOJIS = listOf(

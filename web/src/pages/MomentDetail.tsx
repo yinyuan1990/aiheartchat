@@ -172,7 +172,7 @@ export function MomentDetailPage() {
         <div className="row" style={{ padding: '6px 16px', gap: 10, borderTop: '1px solid var(--line)' }}>
           {sticker && (
             <span style={{ position: 'relative', display: 'inline-block' }}>
-              <StickerView p={sticker} size={56} autoplay={false} />
+              <StickerView p={sticker} size={56} />
               <span onClick={() => setSticker(null)} style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: 9, background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>×</span>
             </span>
           )}

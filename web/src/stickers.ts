@@ -54,6 +54,7 @@ export function loadStickers(force = false): Promise<StickerSet[]> {
       if (!r.notModified) {
         memo = { version: r.version, sets: r.sets };
         try { localStorage.setItem(CACHE_KEY, JSON.stringify(memo)); } catch { /* 存不下就算了 */ }
+        pruneRecent();
         notify();
       }
       return memo?.sets ?? [];
@@ -73,6 +74,17 @@ export function getRecent(): StickerPayload[] {
     return Array.isArray(a) ? a : [];
   } catch {
     return [];
+  }
+}
+
+/** 后台下架的包：把「最近使用」里已经不在目录中的贴纸清掉 */
+function pruneRecent() {
+  if (!memo) return;
+  const alive = new Set(memo.sets.flatMap((s) => s.items.map((i) => i.id)));
+  const cur = getRecent();
+  const next = cur.filter((p) => alive.has(p.id));
+  if (next.length !== cur.length) {
+    try { localStorage.setItem(RECENT_KEY, JSON.stringify(next)); } catch { /* ignore */ }
   }
 }
 

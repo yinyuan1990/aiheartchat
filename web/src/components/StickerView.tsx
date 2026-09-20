@@ -39,6 +39,7 @@ function LottieSticker({ p, style, autoplay, onClick }: { p: StickerPayload; sty
   const visibleRef = useRef(false);
   const [visible, setVisible] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     const el = ref.current;
@@ -60,9 +61,10 @@ function LottieSticker({ p, style, autoplay, onClick }: { p: StickerPayload; sty
         const anim = lottie.loadAnimation({ container: el, renderer: 'svg', loop: true, autoplay: play, animationData: data, rendererSettings: { progressiveLoad: true } });
         if (!play) anim.goToAndStop(0, true);
         animRef.current = anim;
+        setLoaded(true);
       })
       .catch(() => setFailed(true));
-    return () => { dead = true; animRef.current?.destroy(); animRef.current = undefined; };
+    return () => { dead = true; animRef.current?.destroy(); animRef.current = undefined; setLoaded(false); };
   }, [p.url]);
 
   // 视口进出：只暂停/继续，不重建
@@ -74,13 +76,12 @@ function LottieSticker({ p, style, autoplay, onClick }: { p: StickerPayload; sty
   }, [visible, autoplay]);
 
   if (failed && p.thumb) return <img src={p.thumb} alt={p.emoji} style={style} onClick={onClick} draggable={false} />;
-  return <div ref={ref} style={style} onClick={onClick} />;
+  // JSON 下载完成前先垫静态缩略图，面板一屏几十个不至于一片空白
+  const placeholder = !loaded && p.thumb ? { backgroundImage: `url(${p.thumb})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' } : {};
+  return <div ref={ref} style={{ ...style, ...placeholder }} onClick={onClick} />;
 }
 
-/** 面板网格里的小图：动态贴纸用静态缩略图，省资源；没缩略图的 Lottie 就画第一帧 */
+/** 面板网格里的小图：和 Telegram 一样动态的也直接播（Lottie 只在进入视口时跑） */
 export function StickerThumb({ p, size = 56, onClick }: { p: StickerPayload; size?: number; onClick?: () => void }) {
-  const box: CSSProperties = { width: size, height: size, objectFit: 'contain', display: 'block' };
-  const src = p.format === 'webp' ? p.url : p.thumb;
-  if (src) return <img src={src} alt={p.emoji} style={box} onClick={onClick} loading="lazy" draggable={false} />;
-  return <StickerView p={p} size={size} autoplay={false} onClick={onClick} />;
+  return <StickerView p={p} size={size} onClick={onClick} />;
 }
