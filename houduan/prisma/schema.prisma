@@ -44,6 +44,8 @@ model User {
   status       Int      @default(0) @db.TinyInt
   /// 邀请人 id：通过 TA 的专属邀请页（/t/?u=短号）下载注册时归因，注册时写入一次
   inviterId    BigInt?  @map("inviter_id")
+  /// 表情包：是否已把「新用户默认包」写进 user_sticker_set（第一次拉我的表情包时置 true；之后用户删光也不再补）
+  stickerInited Boolean @default(false) @map("sticker_inited")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
@@ -762,12 +764,27 @@ model StickerSet {
   thumb         String   @default("") @db.VarChar(300)
   enabled       Boolean  @default(true)
   sort          Int      @default(0)
+  /// 新用户默认就有的包（老用户不受影响，后台可「推给所有人」）
+  isDefault     Boolean  @default(false) @map("is_default")
   importedCount Int      @default(0) @map("imported_count")
   lastSyncAt    DateTime? @map("last_sync_at")
   lastError     String   @default("") @map("last_error") @db.VarChar(300)
   createdAt     DateTime @default(now()) @map("created_at")
 
   @@map("sticker_set")
+}
+
+/// 用户自己加进面板的贴纸集（表情商店），sort 小的在前
+model UserStickerSet {
+  id        BigInt   @id @default(autoincrement())
+  userId    BigInt   @map("user_id")
+  setId     Int      @map("set_id")
+  sort      Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, setId])
+  @@index([userId, sort])
+  @@map("user_sticker_set")
 }
 
 model Sticker {

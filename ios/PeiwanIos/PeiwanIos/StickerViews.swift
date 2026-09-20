@@ -89,6 +89,40 @@ final class StickerStore: ObservableObject {
         recent = ([p] + recent.filter { $0.id != p.id }).prefix(recentMax).map { $0 }
         if let data = try? JSONEncoder().encode(recent) { UserDefaults.standard.set(data, forKey: "stk_recent") }
     }
+
+    // MARK: 我的表情包（表情商店）
+
+    /// 我面板里的集合 id（有序）；先用本地缓存，进面板时向后端刷一次
+    @Published var mineIds: [Int] = (UserDefaults.standard.array(forKey: "stk_mine") as? [Int]) ?? []
+
+    var mineSets: [StickerSetItem] { mineIds.compactMap { id in sets.first { $0.id == id } } }
+
+    private struct MineResp: Codable { var ids: [Int]? }
+
+    private func applyMine(_ r: MineResp) {
+        mineIds = r.ids ?? []
+        UserDefaults.standard.set(mineIds, forKey: "stk_mine")
+    }
+
+    func loadMine() async {
+        if let r: MineResp = try? await Api.request("/stickers/mine") { applyMine(r) }
+    }
+
+    func addMine(_ setId: Int) async throws {
+        let r: MineResp = try await Api.request("/stickers/mine/\(setId)", method: "POST")
+        applyMine(r)
+    }
+
+    func removeMine(_ setId: Int) async throws {
+        let r: MineResp = try await Api.request("/stickers/mine/\(setId)", method: "DELETE")
+        applyMine(r)
+    }
+
+    func reorderMine(_ ids: [Int]) async throws {
+        mineIds = ids
+        let r: MineResp = try await Api.request("/stickers/mine", method: "PUT", body: ["ids": ids])
+        applyMine(r)
+    }
 }
 
 // MARK: - 渲染
@@ -204,30 +238,40 @@ struct StickerPanel: View {
     @ObservedObject private var store = StickerStore.shared
     /// -2 emoji，-1 最近，>=0 表情包 id
     @State private var tab: Int = -3
+    @State private var showStore = false
 
     var body: some View {
         VStack(spacing: 0) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
-                    if onEmoji != nil {
-                        tabCell(active: tab == -2) { tab = -2 } content: {
-                            Image(systemName: "face.smiling").font(.system(size: 20)).foregroundStyle(Theme.text)
+            HStack(spacing: 0) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 4) {
+                        if onEmoji != nil {
+                            tabCell(active: tab == -2) { tab = -2 } content: {
+                                Image(systemName: "face.smiling").font(.system(size: 20)).foregroundStyle(Theme.text)
+                            }
                         }
-                    }
-                    tabCell(active: tab == -1) { tab = -1 } content: {
-                        Image(systemName: "clock").font(.system(size: 18)).foregroundStyle(Theme.textSub)
-                    }
-                    ForEach(store.sets) { s in
-                        tabCell(active: tab == s.id) { tab = s.id } content: {
-                            if let t = s.thumb, !t.isEmpty {
-                                RemoteImage(url: t).frame(width: 28, height: 28)
-                            } else {
-                                Text(String((s.title ?? "").prefix(2))).font(.system(size: 11)).foregroundStyle(Theme.textSub)
+                        tabCell(active: tab == -1) { tab = -1 } content: {
+                            Image(systemName: "clock").font(.system(size: 18)).foregroundStyle(Theme.textSub)
+                        }
+                        ForEach(store.mineSets) { s in
+                            tabCell(active: tab == s.id) { tab = s.id } content: {
+                                if let t = s.thumb, !t.isEmpty {
+                                    RemoteImage(url: t).frame(width: 28, height: 28)
+                                } else {
+                                    Text(String((s.title ?? "").prefix(2))).font(.system(size: 11)).foregroundStyle(Theme.textSub)
+                                }
                             }
                         }
                     }
+                    .padding(.horizontal, 6).padding(.vertical, 6)
                 }
-                .padding(.horizontal, 6).padding(.vertical, 6)
+                Divider().overlay(Theme.line).frame(height: 28)
+                // 表情商店入口
+                Button { showStore = true } label: {
+                    Image(systemName: "plus").font(.system(size: 18, weight: .semibold)).foregroundStyle(Theme.text)
+                        .frame(width: 44, height: 40)
+                }
+                .buttonStyle(.plain)
             }
             Divider().overlay(Theme.line)
 
@@ -246,9 +290,15 @@ struct StickerPanel: View {
                     }
                 } else if tab == -1 {
                     if store.recent.isEmpty {
-                        Text(store.sets.isEmpty ? "表情包还在路上…" : "还没用过表情，先从右边的表情包里挑一个")
-                            .font(.system(size: 13)).foregroundStyle(Theme.textSub)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        VStack(spacing: 10) {
+                            Text(store.mineSets.isEmpty ? "还没有表情包，点右上角 + 去表情商店添加" : "还没用过表情，先从右边的表情包里挑一个")
+                                .font(.system(size: 13)).foregroundStyle(Theme.textSub)
+                            if store.mineSets.isEmpty {
+                                Button("去添加") { showStore = true }
+                                    .font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.accent)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         grid(store.recent)
                     }
@@ -267,10 +317,16 @@ struct StickerPanel: View {
         }
         .frame(height: height)
         .background(Theme.bg2)
+        .fullScreenCover(isPresented: $showStore) { StickerStoreView() }
         .task {
-            if tab == -3 { tab = onEmoji != nil ? -2 : (store.recent.isEmpty ? (store.sets.first?.id ?? -1) : -1) }
+            if tab == -3 { tab = onEmoji != nil ? -2 : (store.recent.isEmpty ? (store.mineSets.first?.id ?? -1) : -1) }
             await store.ensureLoaded()
-            if tab == -1, store.recent.isEmpty, onEmoji == nil, let first = store.sets.first { tab = first.id }
+            await store.loadMine()
+            if tab == -1, store.recent.isEmpty, onEmoji == nil, let first = store.mineSets.first { tab = first.id }
+        }
+        .onChange(of: store.mineIds) { ids in
+            // 当前 tab 的包被移除 → 回到最近
+            if tab >= 0, !ids.contains(tab) { tab = -1 }
         }
     }
 
@@ -296,6 +352,154 @@ struct StickerPanel: View {
                 .background(RoundedRectangle(cornerRadius: 10).fill(active ? Theme.bg3 : Color.clear))
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - 表情商店
+
+/// 表情商店（全屏，从面板「+」进来）：上半「我的表情」可置顶 / 移除，下半「全部」可添加。
+/// 库里的包由后台维护；用户只决定自己面板里有哪些、什么顺序。
+struct StickerStoreView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var store = StickerStore.shared
+    @State private var busy: Int? = nil
+    @State private var toast: String? = nil
+
+    private var others: [StickerSetItem] { store.sets.filter { !store.mineIds.contains($0.id) } }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button { dismiss() } label: {
+                    Image(systemName: "chevron.left").font(.system(size: 18, weight: .semibold)).foregroundStyle(Theme.text)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                Spacer()
+                Text("表情商店").font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.text)
+                Spacer()
+                Color.clear.frame(width: 44, height: 44)
+            }
+            .background(Theme.bg)
+            Divider().overlay(Theme.line)
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    section("我的表情（\(store.mineSets.count)）")
+                    if store.mineSets.isEmpty {
+                        empty("还没有添加表情包，从下面挑几个")
+                    }
+                    ForEach(Array(store.mineSets.enumerated()), id: \.element.id) { i, s in
+                        row(s) {
+                            HStack(spacing: 6) {
+                                if i > 0 {
+                                    btn("置顶", primary: false, disabled: busy == s.id) {
+                                        run(s.id) { try await store.reorderMine([s.id] + store.mineIds.filter { $0 != s.id }) }
+                                    }
+                                }
+                                btn("移除", primary: false, disabled: busy == s.id) {
+                                    run(s.id) { try await store.removeMine(s.id) }
+                                }
+                            }
+                        }
+                    }
+
+                    section("全部表情包（\(store.sets.count)）").padding(.top, 8)
+                    if store.sets.isEmpty {
+                        empty("表情包还在路上…")
+                    } else if others.isEmpty {
+                        empty("都已经添加了")
+                    }
+                    ForEach(others) { s in
+                        row(s) {
+                            btn("添加", primary: true, disabled: busy == s.id) {
+                                run(s.id) { try await store.addMine(s.id) }
+                            }
+                        }
+                    }
+                    Color.clear.frame(height: 30)
+                }
+            }
+        }
+        .background(Theme.bg.ignoresSafeArea())
+        .overlay(alignment: .bottom) {
+            if let t = toast {
+                Text(t).font(.system(size: 13)).foregroundStyle(.white)
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(Capsule().fill(Color.black.opacity(0.75)))
+                    .padding(.bottom, 40)
+            }
+        }
+        .task {
+            await store.ensureLoaded()
+            await store.loadMine()
+        }
+    }
+
+    private func run(_ id: Int, _ job: @escaping () async throws -> Void) {
+        busy = id
+        Task {
+            do { try await job() } catch { show(error.localizedDescription) }
+            busy = nil
+        }
+    }
+
+    private func show(_ msg: String) {
+        toast = msg
+        Task { try? await Task.sleep(nanoseconds: 1_800_000_000); if toast == msg { toast = nil } }
+    }
+
+    private func section(_ title: String) -> some View {
+        Text(title).font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.textSub)
+            .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 4)
+    }
+
+    private func empty(_ text: String) -> some View {
+        Text(text).font(.system(size: 13)).foregroundStyle(Theme.textSub)
+            .padding(.horizontal, 16).padding(.vertical, 18)
+    }
+
+    private func kindText(_ k: String?) -> String {
+        switch k { case "static": return "静态"; case "animated", "video": return "动态"; default: return "" }
+    }
+
+    private func row<A: View>(_ s: StickerSetItem, @ViewBuilder actions: () -> A) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                if let t = s.thumb, !t.isEmpty {
+                    RemoteImage(url: t).frame(width: 44, height: 44)
+                } else {
+                    RoundedRectangle(cornerRadius: 10).fill(Theme.bg3).frame(width: 44, height: 44)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(s.title ?? "").font(.system(size: 15, weight: .medium)).foregroundStyle(Theme.text).lineLimit(1)
+                    Text("\(s.items.count) 张 · \(kindText(s.kind))").font(.system(size: 12)).foregroundStyle(Theme.textSub)
+                }
+                Spacer(minLength: 8)
+                actions()
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(s.items.prefix(8)) { p in
+                        StickerImageView(p: p, size: 52, autoplay: false)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 16).padding(.vertical, 12)
+        .overlay(alignment: .bottom) { Divider().overlay(Theme.line) }
+    }
+
+    private func btn(_ label: String, primary: Bool, disabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label).font(.system(size: 13, weight: .medium))
+                .foregroundStyle(primary ? .white : Theme.text)
+                .padding(.horizontal, 14).padding(.vertical, 6)
+                .background(Capsule().fill(primary ? Theme.accent : Theme.bg3))
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .opacity(disabled ? 0.5 : 1)
     }
 }
 

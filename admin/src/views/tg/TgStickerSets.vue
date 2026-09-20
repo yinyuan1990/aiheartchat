@@ -7,7 +7,7 @@ const emit = defineEmits<{ (e: 'toast', t: string): void }>();
 
 interface SetRow {
   id: number; shortName: string; title: string; kind: 'static' | 'animated' | 'video'; count: number; thumb: string;
-  enabled: boolean; sort: number; importedCount: number; stickers: number; lastSyncAt: string | null; lastError: string; syncing: boolean;
+  enabled: boolean; isDefault: boolean; sort: number; importedCount: number; stickers: number; users: number; lastSyncAt: string | null; lastError: string; syncing: boolean;
 }
 interface Brief { shortName: string; title: string; count: number; kind: string; official: boolean; added: boolean; cover: string }
 interface Preview { shortName: string; title: string; count: number; kind: string; official: boolean; added: boolean; samples: { emoji: string; thumb: string }[] }
@@ -71,6 +71,20 @@ async function loadFeatured() {
 async function toggle(s: SetRow) {
   await api(`/admin/stickers/sets/${s.id}`, { method: 'PUT', body: { enabled: !s.enabled } });
   load();
+}
+async function toggleDefault(s: SetRow) {
+  await api(`/admin/stickers/sets/${s.id}`, { method: 'PUT', body: { isDefault: !s.isDefault } });
+  load();
+}
+async function pushAll(s: SetRow) {
+  if (!confirm(`把「${s.title}」加进所有现有用户的面板？（用户仍可自己移除）`)) return;
+  try {
+    const r = await api<{ added: number; users: number }>(`/admin/stickers/sets/${s.id}/push-all`, { method: 'POST' });
+    emit('toast', `已推给 ${r.added} 人（共 ${r.users} 个已有面板的用户）`);
+    load();
+  } catch (e: any) {
+    emit('toast', e.message);
+  }
 }
 async function rename(s: SetRow) {
   const t = prompt('显示名称（面板里 tab 的提示文字）', s.title);
@@ -170,9 +184,12 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer); });
     </div>
 
     <div class="card">
-      <div style="font-weight: 600; margin-bottom: 10px">已收的表情包（{{ sets.length }}）</div>
+      <div style="font-weight: 600; margin-bottom: 4px">已收的表情包（{{ sets.length }}）</div>
+      <div class="muted" style="margin-bottom: 10px; font-size: 12px">
+        这里是「表情商店」的候选池：用户在面板里点「+」进商店自己加/删。勾了<b>「新用户默认」</b>的包，新用户第一次打开面板就有；老用户要用「推给所有人」。
+      </div>
       <table v-if="sets.length">
-        <thead><tr><th></th><th>名称</th><th>类型</th><th>张数</th><th>状态</th><th>上次同步</th><th>错误</th><th>操作</th></tr></thead>
+        <thead><tr><th></th><th>名称</th><th>类型</th><th>张数</th><th>用户数</th><th>新用户默认</th><th>状态</th><th>上次同步</th><th>错误</th><th>操作</th></tr></thead>
         <tbody>
           <tr v-for="s in sets" :key="s.id">
             <td><img v-if="s.thumb" :src="s.thumb" style="width: 40px; height: 40px; object-fit: contain" /></td>
@@ -185,6 +202,8 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer); });
               <span :style="s.stickers < s.count ? 'color:#ffb020' : ''">{{ s.stickers }}</span><span class="muted"> / {{ s.count }}</span>
               <span v-if="s.syncing" class="muted"> 同步中…</span>
             </td>
+            <td class="muted">{{ s.users }}</td>
+            <td><input type="checkbox" :checked="s.isDefault" style="width: auto" @change="toggleDefault(s)" /></td>
             <td><span class="tag" :class="s.enabled ? 'ok' : 'off'">{{ s.enabled ? '启用' : '停用' }}</span></td>
             <td class="muted">{{ s.lastSyncAt ? fmt(s.lastSyncAt) : '—' }}</td>
             <td class="muted" style="max-width: 220px; color: #ff6b6b; font-size: 12px">{{ s.lastError }}</td>
@@ -195,6 +214,7 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer); });
                 <button class="small ghost" @click="showItems(s)">查看</button>
                 <button class="small ghost" @click="rename(s)">改名</button>
                 <button class="small ghost" @click="toggle(s)">{{ s.enabled ? '停用' : '启用' }}</button>
+                <button class="small ghost" @click="pushAll(s)">推给所有人</button>
                 <button class="small ghost" :disabled="s.syncing || !props.loggedIn" @click="resync(s)">重新同步</button>
                 <button class="small ghost" @click="remove(s, false)">下架</button>
                 <button class="small ghost" style="color: #ff6b6b" @click="remove(s, true)">彻底删除</button>

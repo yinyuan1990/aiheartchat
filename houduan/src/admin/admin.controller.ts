@@ -73,8 +73,15 @@ export class AdminController {
 
   @Put('stickers/sets/:id')
   @UseGuards(AdminGuard)
-  stickerUpdate(@Param('id') id: string, @Body() body: { title?: string; enabled?: boolean; sort?: number }) {
+  stickerUpdate(@Param('id') id: string, @Body() body: { title?: string; enabled?: boolean; sort?: number; isDefault?: boolean }) {
     return this.stickers.updateSet(Number(id), body ?? {});
+  }
+
+  /** 推给所有已有面板的用户（新用户看 isDefault） */
+  @Post('stickers/sets/:id/push-all')
+  @UseGuards(AdminGuard)
+  stickerPushAll(@Param('id') id: string) {
+    return this.stickers.pushToAll(Number(id));
   }
 
   @Put('stickers/reorder')

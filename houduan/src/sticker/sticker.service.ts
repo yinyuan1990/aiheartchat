@@ -123,6 +123,76 @@ export class StickerService {
     };
   }
 
+  // ---------- 用户端：我的表情包（表情商店） ----------
+
+  /**
+   * 我加进面板的集合 id（按我的排序）。第一次调用时把后台标了「默认」的包写进去（之后用户删光也不再补）。
+   * 客户端拿这个列表去过滤 / 排序 catalog，面板只显示这些。
+   */
+  async mine(userId: bigint): Promise<number[]> {
+    const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { stickerInited: true } });
+    if (u && !u.stickerInited) {
+      const defaults = await this.prisma.stickerSet.findMany({ where: { enabled: true, isDefault: true }, orderBy: [{ sort: 'asc' }, { id: 'asc' }], select: { id: true } });
+      await this.prisma.$transaction([
+        ...defaults.map((s, i) => this.prisma.userStickerSet.upsert({ where: { userId_setId: { userId, setId: s.id } }, create: { userId, setId: s.id, sort: i + 1 }, update: {} })),
+        this.prisma.user.update({ where: { id: userId }, data: { stickerInited: true } }),
+      ]);
+    }
+    const rows = await this.prisma.userStickerSet.findMany({ where: { userId }, orderBy: [{ sort: 'asc' }, { id: 'asc' }], select: { setId: true } });
+    if (!rows.length) return [];
+    // 过滤掉已停用 / 已删除的
+    const alive = await this.prisma.stickerSet.findMany({ where: { id: { in: rows.map((r) => r.setId) }, enabled: true }, select: { id: true } });
+    const ok = new Set(alive.map((a) => a.id));
+    return rows.map((r) => r.setId).filter((id) => ok.has(id));
+  }
+
+  async addMine(userId: bigint, setId: number) {
+    const set = await this.prisma.stickerSet.findUnique({ where: { id: setId }, select: { enabled: true } });
+    if (!set?.enabled) throw new BadRequestException('该表情包不存在或已下架');
+    await this.mine(userId); // 确保默认包已初始化，避免新用户先加一个再被默认覆盖顺序
+    // 新加的排在最前（Telegram 行为）
+    const min = await this.prisma.userStickerSet.aggregate({ where: { userId }, _min: { sort: true } });
+    await this.prisma.userStickerSet.upsert({
+      where: { userId_setId: { userId, setId } },
+      create: { userId, setId, sort: (min._min.sort ?? 1) - 1 },
+      update: {},
+    });
+    return { ids: await this.mine(userId) };
+  }
+
+  async removeMine(userId: bigint, setId: number) {
+    await this.mine(userId);
+    await this.prisma.userStickerSet.deleteMany({ where: { userId, setId } });
+    return { ids: await this.mine(userId) };
+  }
+
+  /** 整体排序（客户端传完整顺序）；不在列表里的照旧排在后面 */
+  async reorderMine(userId: bigint, ids: number[]) {
+    await this.mine(userId);
+    const clean = [...new Set(ids.map(Number).filter((n) => n > 0))];
+    await this.prisma.$transaction(clean.map((setId, i) => this.prisma.userStickerSet.updateMany({ where: { userId, setId }, data: { sort: i + 1 } })));
+    return { ids: await this.mine(userId) };
+  }
+
+  // ---------- 后台：推送 ----------
+
+  /** 把某个包推给所有已初始化过的用户（没初始化的用户会在第一次拉取时按默认包处理，这里不用管） */
+  async pushToAll(id: number) {
+    const set = await this.prisma.stickerSet.findUnique({ where: { id } });
+    if (!set) throw new NotFoundException('表情包不存在');
+    const users = await this.prisma.user.findMany({ where: { stickerInited: true }, select: { id: true } });
+    let added = 0;
+    for (const chunk of chunks(users, 200)) {
+      const have = new Set((await this.prisma.userStickerSet.findMany({ where: { setId: id, userId: { in: chunk.map((u) => u.id) } }, select: { userId: true } })).map((r) => r.userId.toString()));
+      const rows = chunk.filter((u) => !have.has(u.id.toString())).map((u) => ({ userId: u.id, setId: id, sort: 0 }));
+      if (rows.length) {
+        await this.prisma.userStickerSet.createMany({ data: rows });
+        added += rows.length;
+      }
+    }
+    return { ok: true, added, users: users.length };
+  }
+
   /** 评论 / 其它模块拿一张贴纸的载荷（集合需启用） */
   async payloadOf(idRaw: string | number | bigint | undefined | null): Promise<StickerPayload | null> {
     if (idRaw === undefined || idRaw === null || idRaw === '') return null;
@@ -144,8 +214,10 @@ export class StickerService {
   async listSets() {
     const sets = await this.prisma.stickerSet.findMany({ orderBy: [{ sort: 'asc' }, { id: 'asc' }] });
     const counts = await this.prisma.sticker.groupBy({ by: ['setId'], _count: { _all: true } });
+    const users = await this.prisma.userStickerSet.groupBy({ by: ['setId'], _count: { _all: true } });
     const cmap = new Map(counts.map((c) => [c.setId, c._count._all]));
-    return sets.map((s) => ({ ...s, stickers: cmap.get(s.id) ?? 0, syncing: this.syncing.has(s.id) || this.queue.includes(s.id) }));
+    const umap = new Map(users.map((c) => [c.setId, c._count._all]));
+    return sets.map((s) => ({ ...s, stickers: cmap.get(s.id) ?? 0, users: umap.get(s.id) ?? 0, syncing: this.syncing.has(s.id) || this.queue.includes(s.id) }));
   }
 
   async items(setId: number) {
@@ -245,12 +317,13 @@ export class StickerService {
     return { started: true };
   }
 
-  async updateSet(id: number, data: { title?: string; enabled?: boolean; sort?: number }) {
+  async updateSet(id: number, data: { title?: string; enabled?: boolean; sort?: number; isDefault?: boolean }) {
     const set = await this.prisma.stickerSet.findUnique({ where: { id } });
     if (!set) throw new NotFoundException('表情包不存在');
     const patch: any = {};
     if (data.title !== undefined) patch.title = String(data.title).trim().slice(0, 120) || set.title;
     if (data.enabled !== undefined) patch.enabled = !!data.enabled;
+    if (data.isDefault !== undefined) patch.isDefault = !!data.isDefault;
     if (data.sort !== undefined) patch.sort = Number(data.sort) || 0;
     const row = await this.prisma.stickerSet.update({ where: { id }, data: patch });
     await this.bumpVersion();
@@ -275,6 +348,7 @@ export class StickerService {
     this.queue = this.queue.filter((x) => x !== id);
     const rows = await this.prisma.sticker.findMany({ where: { setId: id }, select: { url: true, thumb: true } });
     await this.prisma.sticker.deleteMany({ where: { setId: id } });
+    await this.prisma.userStickerSet.deleteMany({ where: { setId: id } });
     await this.prisma.stickerSet.delete({ where: { id } });
     await this.bumpVersion();
     if (purge) {
@@ -547,6 +621,12 @@ async function webmToAnimatedWebp(input: Buffer): Promise<Buffer> {
     await fs.unlink(inPath).catch(() => {});
     await fs.unlink(outPath).catch(() => {});
   }
+}
+
+function chunks<T>(arr: T[], n: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+  return out;
 }
 
 /** 简单并发池（保持输入顺序返回） */

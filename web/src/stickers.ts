@@ -94,17 +94,71 @@ export function addRecent(p: StickerPayload) {
   notify();
 }
 
-/** 表情包 + 最近使用（自动订阅变化） */
+// ---------- 我的表情包（表情商店） ----------
+
+const MINE_KEY = 'pw_sticker_mine';
+let mineIds: number[] | null = null;
+let mineLoading: Promise<number[]> | null = null;
+
+function readMineCache(): number[] | null {
+  try {
+    const a = JSON.parse(localStorage.getItem(MINE_KEY) || 'null');
+    return Array.isArray(a) ? a.map(Number) : null;
+  } catch {
+    return null;
+  }
+}
+
+function setMine(ids: number[]) {
+  mineIds = ids;
+  try { localStorage.setItem(MINE_KEY, JSON.stringify(ids)); } catch { /* ignore */ }
+  notify();
+}
+
+/** 我面板里的集合 id（有序）。先用本地缓存，再问后端（每次打开面板都会刷一次，很小） */
+export function loadMine(force = false): Promise<number[]> {
+  if (mineIds === null) {
+    const c = readMineCache();
+    if (c) mineIds = c;
+  }
+  if (mineLoading) return mineLoading;
+  if (mineIds !== null && !force) {
+    // 后台静默刷新
+    mineLoading = api<{ ids: number[] }>('/stickers/mine').then((r) => { setMine(r.ids); return r.ids; }).catch(() => mineIds ?? []).finally(() => { mineLoading = null; });
+    return Promise.resolve(mineIds);
+  }
+  mineLoading = api<{ ids: number[] }>('/stickers/mine').then((r) => { setMine(r.ids); return r.ids; }).catch(() => mineIds ?? []).finally(() => { mineLoading = null; });
+  return mineLoading;
+}
+
+export async function addMine(setId: number) {
+  const r = await api<{ ids: number[] }>(`/stickers/mine/${setId}`, { method: 'POST' });
+  setMine(r.ids);
+}
+export async function removeMine(setId: number) {
+  const r = await api<{ ids: number[] }>(`/stickers/mine/${setId}`, { method: 'DELETE' });
+  setMine(r.ids);
+}
+export async function reorderMine(ids: number[]) {
+  setMine(ids);
+  const r = await api<{ ids: number[] }>('/stickers/mine', { method: 'PUT', body: { ids } });
+  setMine(r.ids);
+}
+
+/** 目录 + 我的（有序）+ 最近使用（自动订阅变化） */
 export function useStickers() {
   const [sets, setSets] = useState<StickerSet[]>(memo?.sets ?? []);
+  const [ids, setIds] = useState<number[]>(mineIds ?? []);
   const [recent, setRecent] = useState<StickerPayload[]>(getRecent);
   useEffect(() => {
-    const l = () => { setSets(memo?.sets ?? []); setRecent(getRecent()); };
+    const l = () => { setSets(memo?.sets ?? []); setIds(mineIds ?? []); setRecent(getRecent()); };
     listeners.add(l);
     loadStickers();
+    loadMine();
     return () => { listeners.delete(l); };
   }, []);
-  return { sets, recent };
+  const mine = ids.map((id) => sets.find((s) => s.id === id)).filter((s): s is StickerSet => !!s);
+  return { sets, mine, mineIds: ids, recent };
 }
 
 export function parseSticker(content: string): StickerPayload | null {
