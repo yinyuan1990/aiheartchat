@@ -8,6 +8,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -93,10 +94,13 @@ private fun androidx.navigation.NavGraphBuilder.page(
     content: @Composable (androidx.navigation.NavBackStackEntry) -> Unit,
 ) {
     composable(route, arguments) { entry ->
+        // 子页面盖在常驻的 MainScreen 上面：background 不参与命中测试，页面空白处（比如表情面板底部胶囊两侧）
+        // 的点击会穿到下层主页的底栏「+ 发布」上。挂一个什么都不做的 pointerInput 让整页算"命中"，到此为止。
         Box(
             Modifier
                 .fillMaxSize()
-                .background(com.wh.peiwana.ui.theme.Bg),
+                .background(com.wh.peiwana.ui.theme.Bg)
+                .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } },
         ) { content(entry) }
     }
 }

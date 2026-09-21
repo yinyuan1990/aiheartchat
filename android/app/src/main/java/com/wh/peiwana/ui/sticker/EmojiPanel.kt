@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -91,15 +92,18 @@ fun EmojiPanel(
     val height = (cfg.screenWidthDp * 0.92f).dp.coerceIn(320.dp, 420.dp)
     var mode by remember { mutableStateOf(PanelPrefs.lastMode(ctx)) }
     val chrome = remember { PanelChrome() }
-    // 商店 sheet：query 非 null = 从搜索行进来（"" 只聚焦搜索框，emoji 直接带着搜）
+    // 底部 sheet：商店 / 管理 / GIF 搜索 / 表情搜索。query 非 null = 从搜索行进来（"" 只聚焦搜索框，emoji 直接带着搜）
     var sheet by remember { mutableStateOf<SheetReq?>(null) }
     LaunchedEffect(mode) { chrome.show(); PanelPrefs.saveMode(ctx, mode) }
+    val pickGif: (StickerPayload) -> Unit = { onPick(it); StickerStore.addRecent(ctx, it) }
+    val pickEmoji: (String) -> Unit = { onEmoji?.invoke(it); EmojiStore.addRecent(ctx, it) }
 
-    Box(Modifier.fillMaxWidth().height(height).background(Bg2)) {
+    // 面板本身挂个空 pointerInput：空白处的点击到此为止，不穿到下层页面（主页底栏「+」）
+    Box(Modifier.fillMaxWidth().height(height).background(Bg2).pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }) {
         when (mode) {
-            PanelMode.STICKER -> StickerPane(chrome, onPick = { onPick(it); StickerStore.addRecent(ctx, it) }, onStore = { q -> sheet = SheetReq(manage = false, query = q) })
-            PanelMode.GIF -> GifPane(chrome, onPick = { onPick(it); StickerStore.addRecent(ctx, it) })
-            PanelMode.EMOJI -> EmojiPane(chrome, onEmoji = { onEmoji?.invoke(it); EmojiStore.addRecent(ctx, it) })
+            PanelMode.STICKER -> StickerPane(chrome, onPick = pickGif, onStore = { q -> sheet = SheetReq(SheetKind.STORE, q) })
+            PanelMode.GIF -> GifPane(chrome, onPick = pickGif, onSearch = { q -> sheet = SheetReq(SheetKind.GIF, q) })
+            PanelMode.EMOJI -> EmojiPane(chrome, onEmoji = pickEmoji, onSearch = { q -> sheet = SheetReq(SheetKind.EMOJI, q) })
         }
 
         // 底部悬浮：左 🌐（表情）/ 胶囊 / 右 ⌫（表情）或 ⚙（贴纸）
@@ -123,15 +127,22 @@ fun EmojiPanel(
                     }
                 }
                 if (mode == PanelMode.EMOJI && onDelete != null) SideBtn(Modifier.align(Alignment.CenterEnd), onDelete) { BackspaceIcon(TextMain, 22.dp) }
-                if (mode == PanelMode.STICKER) SideBtn(Modifier.align(Alignment.CenterEnd), { sheet = SheetReq(manage = true) }) { GearIcon(TextMain, 20.dp) }
+                if (mode == PanelMode.STICKER) SideBtn(Modifier.align(Alignment.CenterEnd), { sheet = SheetReq(SheetKind.MANAGE) }) { GearIcon(TextMain, 20.dp) }
             }
         }
     }
 
-    sheet?.let { StickerStoreSheet(manage = it.manage, initialQuery = it.query ?: "", focusSearch = it.query != null) { sheet = null } }
+    sheet?.let { r ->
+        when (r.kind) {
+            SheetKind.STORE, SheetKind.MANAGE -> StickerStoreSheet(manage = r.kind == SheetKind.MANAGE, initialQuery = r.query ?: "", focusSearch = r.query != null) { sheet = null }
+            SheetKind.GIF -> GifSearchSheet(initialQuery = r.query ?: "", onPick = pickGif) { sheet = null }
+            SheetKind.EMOJI -> EmojiSearchSheet(initialQuery = r.query ?: "", onEmoji = pickEmoji) { sheet = null }
+        }
+    }
 }
 
-private data class SheetReq(val manage: Boolean, val query: String? = null)
+private enum class SheetKind { STORE, MANAGE, GIF, EMOJI }
+private data class SheetReq(val kind: SheetKind, val query: String? = null)
 
 @Composable
 private fun SideBtn(modifier: Modifier, onClick: () -> Unit, content: @Composable () -> Unit) {
@@ -388,17 +399,17 @@ private fun AddBtn(busy: Boolean, primary: Boolean = true, label: String = "添�
 
 // ---------- 表情页 ----------
 
-/** 表情页：顶部 🕒 + 8 个分类图标，搜索行（关键词搜 emoji），内容 8 列按分类分区 */
+/**
+ * 表情页：顶部 🕒 + 8 个分类图标，搜索行，内容 8 列按分类分区。
+ * 搜索行整条是按钮：和贴纸页一样弹搜索 sheet（onSearch("") 聚焦输入框；点快捷 emoji 带着它去搜）。
+ */
 @Composable
-private fun EmojiPane(chrome: PanelChrome, onEmoji: (String) -> Unit) {
+private fun EmojiPane(chrome: PanelChrome, onEmoji: (String) -> Unit, onSearch: (String) -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { EmojiStore.ensureLoaded(ctx) }
     val groups = EmojiStore.groups
     val recent = EmojiStore.recent
-    var q by remember { mutableStateOf("") }
-    var chip by remember { mutableStateOf("") }
-    val query = q.trim().ifEmpty { chip }
     val grid = rememberLazyGridState()
     val row = rememberLazyListState()
     val expanded = rememberBarExpanded(row)
@@ -412,15 +423,12 @@ private fun EmojiPane(chrome: PanelChrome, onEmoji: (String) -> Unit) {
         }
     }
     val starts = remember(sections) { sections.runningFold(0) { acc, s -> acc + 1 + s.third.size } }
-    val results = remember(groups, query) { if (query.isEmpty()) emptyList() else EmojiStore.search(query) }
     val activeKey by remember(sections) {
         derivedStateOf {
-            if (query.isNotEmpty()) "" else {
-                val idx = grid.firstVisibleItemIndex + 1
-                var cur = sections.firstOrNull()?.first ?: "recent"
-                sections.forEachIndexed { i, s -> if (starts[i] <= idx) cur = s.first }
-                cur
-            }
+            val idx = grid.firstVisibleItemIndex + 1
+            var cur = sections.firstOrNull()?.first ?: "recent"
+            sections.forEachIndexed { i, s -> if (starts[i] <= idx) cur = s.first }
+            cur
         }
     }
     LaunchedEffect(activeKey) {
@@ -428,7 +436,6 @@ private fun EmojiPane(chrome: PanelChrome, onEmoji: (String) -> Unit) {
         if (i >= 0) row.animateScrollToItem((i - 2).coerceAtLeast(0))
     }
     fun jump(key: String) {
-        q = ""; chip = ""
         val i = sections.indexOfFirst { it.first == key }
         scope.launch { grid.animateScrollToItem(if (i < 0) 0 else starts[i]) }
     }
@@ -442,7 +449,7 @@ private fun EmojiPane(chrome: PanelChrome, onEmoji: (String) -> Unit) {
                         BarCell(activeKey == g.key, expanded, g.name, onClick = { jump(g.key) }) { Text(g.icon, fontSize = 20.sp, modifier = Modifier.alpha(if (activeKey == g.key) 1f else 0.6f)) }
                     }
                 }
-                SearchRow(q, { q = it; if (it.isNotEmpty()) chip = "" }, chip, { chip = it; if (it.isNotEmpty()) q = "" }, "搜索表情")
+                SearchRow("", {}, "", { onSearch(it) }, "搜索表情", onTap = { onSearch("") })
             }
         }
         LazyVerticalGrid(
@@ -450,16 +457,11 @@ private fun EmojiPane(chrome: PanelChrome, onEmoji: (String) -> Unit) {
             modifier = Modifier.fillMaxSize().nestedScroll(chrome.connection),
             contentPadding = PaddingValues(6.dp, 0.dp, 6.dp, BOTTOM_PAD.dp),
         ) {
-            if (query.isNotEmpty()) {
-                if (results.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { EmptyText("没有匹配的表情") }
-                items(results.size, key = { "q$it" }) { i -> EmojiCell(results[i], onEmoji) }
-            } else {
-                sections.forEach { (key, title, items) ->
-                    item(key = "h$key", span = { GridItemSpan(maxLineSpan) }) { SectionHeader(title) }
-                    items(items.size, key = { "$key-$it" }) { i -> EmojiCell(items[i], onEmoji) }
-                }
-                if (groups.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { EmptyText("加载中…") }
+            sections.forEach { (key, title, items) ->
+                item(key = "h$key", span = { GridItemSpan(maxLineSpan) }) { SectionHeader(title) }
+                items(items.size, key = { "$key-$it" }) { i -> EmojiCell(items[i], onEmoji) }
             }
+            if (groups.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { EmptyText("加载中…") }
         }
     }
 }
@@ -473,53 +475,21 @@ private fun EmojiCell(e: String, onEmoji: (String) -> Unit) {
 
 // ---------- GIF 页 ----------
 
-/** GIF 页：没有顶部封面条，只有搜索行；内容 3 列瓦片（热门 / 搜索结果），滚到底自动翻页 */
+/**
+ * GIF 页：没有顶部封面条，只有搜索行；内容 3 列瓦片（最近使用 + 热门），滚到底自动翻页。
+ * 搜索行整条是按钮：和贴纸页一样弹搜索 sheet。
+ */
 @Composable
-private fun GifPane(chrome: PanelChrome, onPick: (StickerPayload) -> Unit) {
-    var q by remember { mutableStateOf("") }
-    var chip by remember { mutableStateOf("") }
-    val query = q.trim().ifEmpty { chip }
-    var items by remember { mutableStateOf<List<StickerPayload>>(emptyList()) }
-    var next by remember { mutableStateOf("") }
-    var loading by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf("") }
+private fun GifPane(chrome: PanelChrome, onPick: (StickerPayload) -> Unit, onSearch: (String) -> Unit) {
+    val feed = rememberGifFeed("")
     val grid = rememberLazyGridState()
     val recent = StickerStore.recentGifs
     ShowAtTop(chrome, grid)
-
-    // 输入防抖 400ms；chip 立即
-    LaunchedEffect(query) {
-        if (q.isNotBlank() && chip.isEmpty()) delay(400)
-        loading = true; error = ""
-        runCatching { StickerStore.searchGifs(query, "") }
-            .onSuccess { (list, n) ->
-                items = list; next = n
-                grid.scrollToItem(0)
-                // 首次搜索后端还在后台补齐时结果会少，3 秒后再拉一次
-                if (list.size < 10 && n.isNotEmpty()) {
-                    delay(3000)
-                    runCatching { StickerStore.searchGifs(query, "") }.onSuccess { (l2, n2) -> if (l2.size > list.size) { items = l2; next = n2 } }
-                }
-            }
-            .onFailure { error = it.message ?: "加载失败" }
-        loading = false
-    }
-    // 翻页：最后可见项接近末尾
-    val nearEnd by remember { derivedStateOf { val last = grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0; last >= grid.layoutInfo.totalItemsCount - 9 } }
-    LaunchedEffect(nearEnd, next, loading) {
-        if (nearEnd && next.isNotEmpty() && !loading && items.isNotEmpty()) {
-            loading = true
-            runCatching { StickerStore.searchGifs(query, next) }.onSuccess { (list, n) ->
-                val seen = items.map { it.id }.toHashSet()
-                items = items + list.filter { it.id !in seen }; next = n
-            }
-            loading = false
-        }
-    }
+    GifPaging(grid, feed)
 
     Column(Modifier.fillMaxSize()) {
         AnimatedVisibility(visible = !chrome.hidden, enter = expandVertically(), exit = shrinkVertically()) {
-            SearchRow(q, { q = it; if (it.isNotEmpty()) chip = "" }, chip, { chip = it; if (it.isNotEmpty()) q = "" }, "搜索 GIF")
+            SearchRow("", {}, "", { onSearch(it) }, "搜索 GIF", onTap = { onSearch("") })
         }
         LazyVerticalGrid(
             columns = GridCells.Fixed(3), state = grid,
@@ -527,20 +497,67 @@ private fun GifPane(chrome: PanelChrome, onPick: (StickerPayload) -> Unit) {
             contentPadding = PaddingValues(0.dp, 0.dp, 0.dp, BOTTOM_PAD.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            if (query.isEmpty() && recent.isNotEmpty()) {
+            if (recent.isNotEmpty()) {
                 item(key = "hr", span = { GridItemSpan(maxLineSpan) }) { SectionHeader("最近使用") }
                 items(recent, key = { "r${it.id}" }) { p -> GifTile(p) { onPick(p) } }
-                item(key = "ht", span = { GridItemSpan(maxLineSpan) }) { SectionHeader("热门") }
             }
-            items(items, key = { it.id }) { p -> GifTile(p) { onPick(p) } }
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                when {
-                    loading -> EmptyText(if (items.isEmpty()) "正在拉取 GIF，第一次会慢几秒…" else "加载更多…")
-                    error.isNotEmpty() -> EmptyText(error)
-                    items.isEmpty() -> EmptyText(if (query.isEmpty()) "暂无 GIF" else "没有找到相关 GIF")
+            item(key = "ht", span = { GridItemSpan(maxLineSpan) }) { SectionHeader("热门") }
+            items(feed.items, key = { it.id }) { p -> GifTile(p) { onPick(p) } }
+            item(span = { GridItemSpan(maxLineSpan) }) { GifFooter(feed, "暂无 GIF") }
+        }
+    }
+}
+
+/** 一路 GIF 结果（热门或某个搜索词）：首页 + 翻页 + 首次搜索 3 秒后补拉 */
+private class GifFeed(val query: String) {
+    var items by mutableStateOf<List<StickerPayload>>(emptyList())
+    var next by mutableStateOf("")
+    var loading by mutableStateOf(false)
+    var error by mutableStateOf("")
+}
+
+@Composable
+private fun rememberGifFeed(query: String): GifFeed {
+    val feed = remember(query) { GifFeed(query) }
+    LaunchedEffect(query) {
+        feed.loading = true; feed.error = ""
+        runCatching { StickerStore.searchGifs(query, "") }
+            .onSuccess { (list, n) ->
+                feed.items = list; feed.next = n
+                // 首次搜索后端还在后台补齐时结果会少，3 秒后再拉一次
+                if (list.size < 10 && n.isNotEmpty()) {
+                    delay(3000)
+                    runCatching { StickerStore.searchGifs(query, "") }.onSuccess { (l2, n2) -> if (l2.size > list.size) { feed.items = l2; feed.next = n2 } }
                 }
             }
+            .onFailure { feed.error = it.message ?: "加载失败" }
+        feed.loading = false
+    }
+    return feed
+}
+
+/** 翻页：最后可见项接近末尾就拉下一页 */
+@Composable
+private fun GifPaging(grid: LazyGridState, feed: GifFeed) {
+    val nearEnd by remember { derivedStateOf { val last = grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0; last >= grid.layoutInfo.totalItemsCount - 9 } }
+    LaunchedEffect(nearEnd, feed.next, feed.loading, feed) {
+        if (nearEnd && feed.next.isNotEmpty() && !feed.loading && feed.items.isNotEmpty()) {
+            feed.loading = true
+            runCatching { StickerStore.searchGifs(feed.query, feed.next) }.onSuccess { (list, n) ->
+                val seen = feed.items.map { it.id }.toHashSet()
+                feed.items = feed.items + list.filter { it.id !in seen }; feed.next = n
+            }
+            feed.loading = false
         }
+    }
+}
+
+@Composable
+private fun GifFooter(feed: GifFeed, emptyHint: String) {
+    when {
+        feed.loading -> EmptyText(if (feed.items.isEmpty()) "正在拉取 GIF，第一次会慢几秒…" else "加载更多…")
+        feed.error.isNotEmpty() -> EmptyText(feed.error)
+        feed.items.isEmpty() -> EmptyText(emptyHint)
     }
 }
 
@@ -550,6 +567,93 @@ private fun GifTile(p: StickerPayload, onClick: () -> Unit) {
         model = Api.fullUrl(p.thumb.ifEmpty { p.url }), contentDescription = null, contentScale = ContentScale.Crop,
         modifier = Modifier.aspectRatio(1f).background(Bg3).noRippleClick(onClick),
     )
+}
+
+// ---------- 搜索 sheet（GIF / 表情，和贴纸「点搜索弹框」一致） ----------
+
+/** 搜索 sheet 外壳：顶部搜索框（自动聚焦）+「完成」，一行快捷 emoji（点了当搜索词），下面放结果 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SearchSheetShell(placeholder: String, query: String, onQuery: (String) -> Unit, onClose: () -> Unit, content: @Composable () -> Unit) {
+    val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { delay(120); runCatching { focus.requestFocus() } }
+    ModalBottomSheet(onDismissRequest = onClose, sheetState = state, containerColor = Bg, dragHandle = null, shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)) {
+        Column(Modifier.fillMaxWidth().fillMaxHeight(0.9f)) {
+            Row(Modifier.fillMaxWidth().padding(12.dp, 12.dp, 12.dp, 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.weight(1f).height(36.dp).clip(RoundedCornerShape(10.dp)).background(Bg3).padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    SearchIcon(TextDim, 15.dp)
+                    Spacer(Modifier.width(6.dp))
+                    Box(Modifier.weight(1f)) {
+                        if (query.isEmpty()) Text(placeholder, color = TextDim, fontSize = 15.sp)
+                        BasicTextField(query, onQuery, singleLine = true, textStyle = TextStyle(color = TextMain, fontSize = 15.sp), cursorBrush = SolidColor(Accent), modifier = Modifier.fillMaxWidth().focusRequester(focus))
+                    }
+                    if (query.isNotEmpty()) Text("✕", color = TextDim, fontSize = 13.sp, modifier = Modifier.noRippleClick { onQuery("") }.padding(start = 6.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                Text("完成", color = Accent, fontSize = 16.sp, modifier = Modifier.noRippleClick(onClose))
+            }
+            LazyRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                items(QUICK_EMOJIS) { e ->
+                    val on = baseEmoji(query.trim()) == baseEmoji(e)
+                    Box(
+                        Modifier.size(36.dp).clip(CircleShape).background(if (on) Bg3 else Color.Transparent).noRippleClick { onQuery(if (on) "" else e) }.alpha(if (on) 1f else 0.5f),
+                        contentAlignment = Alignment.Center,
+                    ) { if (on) Text(e, fontSize = 22.sp) else GrayEmoji(e) }
+                }
+            }
+            content()
+        }
+    }
+}
+
+/** GIF 搜索 sheet：输入防抖 400ms，快捷 emoji 立即；3 列瓦片，滚到底翻页；点了 GIF 回调并关闭 */
+@Composable
+fun GifSearchSheet(initialQuery: String, onPick: (StickerPayload) -> Unit, onClose: () -> Unit) {
+    var q by remember { mutableStateOf(initialQuery) }
+    // 防抖：打字 400ms 后才真正搜；空 / 快捷 emoji 立即
+    var query by remember { mutableStateOf(initialQuery.trim()) }
+    LaunchedEffect(q) {
+        val t = q.trim()
+        if (t.isNotEmpty() && t !in QUICK_EMOJIS) delay(400)
+        query = t
+    }
+    val feed = rememberGifFeed(query)
+    val grid = rememberLazyGridState()
+    GifPaging(grid, feed)
+
+    SearchSheetShell("搜索 GIF", q, { q = it }, onClose) {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3), state = grid, modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(0.dp, 0.dp, 0.dp, 30.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            if (query.isEmpty()) item(key = "ht", span = { GridItemSpan(maxLineSpan) }) { SectionHeader("热门") }
+            items(feed.items, key = { it.id }) { p -> GifTile(p) { onPick(p); onClose() } }
+            item(span = { GridItemSpan(maxLineSpan) }) { GifFooter(feed, if (query.isEmpty()) "暂无 GIF" else "没有找到相关 GIF") }
+        }
+    }
+}
+
+/** 表情搜索 sheet：按中英文关键词 / emoji 本身搜；点了插进输入框，sheet 不关（可连续点几个），「完成」收起 */
+@Composable
+fun EmojiSearchSheet(initialQuery: String, onEmoji: (String) -> Unit, onClose: () -> Unit) {
+    val ctx = LocalContext.current
+    LaunchedEffect(Unit) { EmojiStore.ensureLoaded(ctx) }
+    var q by remember { mutableStateOf(initialQuery) }
+    val query = q.trim()
+    val recent = EmojiStore.recent
+    val results = remember(EmojiStore.groups, query, recent) { if (query.isEmpty()) recent else EmojiStore.search(query) }
+
+    SearchSheetShell("搜索表情", q, { q = it }, onClose) {
+        LazyVerticalGrid(columns = GridCells.Fixed(8), modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(6.dp, 0.dp, 6.dp, 30.dp)) {
+            if (query.isEmpty() && recent.isNotEmpty()) item(key = "hr", span = { GridItemSpan(maxLineSpan) }) { SectionHeader("最近使用") }
+            items(results.size, key = { "q$it" }) { i -> EmojiCell(results[i], onEmoji) }
+            if (results.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) {
+                EmptyText(if (query.isEmpty()) "输入关键词搜表情，比如「笑」「猫」「爱心」" else "没有匹配的表情")
+            }
+        }
+    }
 }
 
 // ---------- 表情商店 / 我的贴纸（底部 sheet） ----------

@@ -134,11 +134,12 @@ private struct SectionsKey: PreferenceKey {
 /// 搜索行右侧的快捷 emoji（Telegram 同款）：贴纸按 emoji 过滤，GIF 当搜索词
 private let quickEmojis = ["❤️", "👍", "👎", "🎉", "👋", "😀", "😢", "😠"]
 
-/// 商店 sheet 请求：query 非 nil = 从搜索行进来（"" 只聚焦搜索框，emoji 直接带着搜）
+/// 底部 sheet 请求：商店 / 管理 / GIF 搜索 / 表情搜索。query 非 nil = 从搜索行进来（"" 只聚焦搜索框，emoji 直接带着搜）
+private enum SheetKind { case store, manage, gif, emoji }
 private struct SheetReq: Identifiable {
-    var manage: Bool
+    var kind: SheetKind
     var query: String? = nil
-    var id: String { "\(manage)-\(query ?? "<nil>")" }
+    var id: String { "\(kind)-\(query ?? "<nil>")" }
 }
 
 /**
@@ -161,9 +162,9 @@ struct EmojiPanel: View {
         ZStack(alignment: .bottom) {
             Group {
                 switch mode {
-                case .sticker: StickerPane(chrome: chrome, onPick: pick, onStore: { q in sheet = SheetReq(manage: false, query: q) })
-                case .gif: GifPane(chrome: chrome, onPick: pick)
-                case .emoji: EmojiPane(chrome: chrome, onEmoji: { e in onEmoji?(e); EmojiStore.shared.addRecent(e) })
+                case .sticker: StickerPane(chrome: chrome, onPick: pick, onStore: { q in sheet = SheetReq(kind: .store, query: q) })
+                case .gif: GifPane(chrome: chrome, onPick: pick, onSearch: { q in sheet = SheetReq(kind: .gif, query: q) })
+                case .emoji: EmojiPane(chrome: chrome, onEmoji: pickEmoji, onSearch: { q in sheet = SheetReq(kind: .emoji, query: q) })
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -186,7 +187,7 @@ struct EmojiPanel: View {
                 if mode == .emoji, let onDelete {
                     sideBtn(action: onDelete) { Image(systemName: "delete.left").font(.system(size: 17)) }
                 } else if mode == .sticker {
-                    sideBtn(action: { sheet = SheetReq(manage: true) }) { Image(systemName: "gearshape").font(.system(size: 17)) }
+                    sideBtn(action: { sheet = SheetReq(kind: .manage) }) { Image(systemName: "gearshape").font(.system(size: 17)) }
                 } else {
                     Color.clear.frame(width: 40, height: 40)
                 }
@@ -201,12 +202,23 @@ struct EmojiPanel: View {
         .background(Theme.bg2)
         .clipped()
         .onChange(of: mode) { m in chrome.reset(); UserDefaults.standard.set(m.rawValue, forKey: "emoji_panel_mode") }
-        .sheet(item: $sheet) { r in StickerStoreSheet(manage: r.manage, initialQuery: r.query ?? "", focusSearch: r.query != nil) }
+        .sheet(item: $sheet) { r in
+            switch r.kind {
+            case .store, .manage: StickerStoreSheet(manage: r.kind == .manage, initialQuery: r.query ?? "", focusSearch: r.query != nil)
+            case .gif: GifSearchSheet(initialQuery: r.query ?? "", onPick: pick)
+            case .emoji: EmojiSearchSheet(initialQuery: r.query ?? "", onEmoji: pickEmoji)
+            }
+        }
     }
 
     private func pick(_ p: StickerPayload) {
         onPick(p)
         StickerStore.shared.addRecent(p)
+    }
+
+    private func pickEmoji(_ e: String) {
+        onEmoji?(e)
+        EmojiStore.shared.addRecent(e)
     }
 
     private func pillItem(_ m: PanelMode, _ label: String) -> some View {
@@ -508,19 +520,20 @@ private struct StickerPane: View {
 
 // MARK: - 表情页
 
-/// 表情页：顶部 🕒 + 8 个分类图标，搜索行（关键词搜 emoji），内容 8 列按分类分区
+/// 表情页：顶部 🕒 + 8 个分类图标，搜索行，内容 8 列按分类分区。
+/// 搜索行整条是按钮：和贴纸页一样弹搜索 sheet（onSearch("") 聚焦输入框；点快捷 emoji 带着它去搜）。
+/// 网格不用 LazyVGrid 嵌在 LazyVStack 里（嵌套后失去懒加载，1800 多个 emoji 一次建完，往下滑会卡死），改成每 8 个一行、行作为 LazyVStack 的元素。
 private struct EmojiPane: View {
     @ObservedObject var chrome: PanelChrome
     var onEmoji: (String) -> Void
+    var onSearch: (String) -> Void
 
     @ObservedObject private var store = EmojiStore.shared
     @StateObject private var bar = BarExpand()
-    @State private var q = ""
-    @State private var chip = ""
     @State private var active = "recent"
     @State private var jumpTarget: String? = nil
-
-    private var query: String { let t = q.trimmingCharacters(in: .whitespaces); return t.isEmpty ? chip : t }
+    @State private var noText = ""
+    @State private var chipTap = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -529,11 +542,11 @@ private struct EmojiPane: View {
                     ScrollViewReader { proxy in
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 2) {
-                                BarCell(active: active == "recent" && query.isEmpty, expanded: bar.expanded, title: "最近使用", action: { jump("recent") }) {
+                                BarCell(active: active == "recent", expanded: bar.expanded, title: "最近使用", action: { jump("recent") }) {
                                     Image(systemName: "clock").font(.system(size: 18)).foregroundStyle(Theme.textSub)
                                 }.id("recent")
                                 ForEach(store.groups) { g in
-                                    BarCell(active: active == g.key && query.isEmpty, expanded: bar.expanded, title: g.name, action: { jump(g.key) }) {
+                                    BarCell(active: active == g.key, expanded: bar.expanded, title: g.name, action: { jump(g.key) }) {
                                         Text(g.icon).font(.system(size: 20)).opacity(active == g.key ? 1 : 0.6)
                                     }.id(g.key)
                                 }
@@ -545,9 +558,8 @@ private struct EmojiPane: View {
                     }
                     .frame(height: bar.expanded ? 76 : 52)
                     .animation(.easeInOut(duration: 0.15), value: bar.expanded)
-                    SearchRow(text: $q, chip: $chip, placeholder: "搜索表情")
-                        .onChange(of: q) { if !$0.isEmpty { chip = "" } }
-                        .onChange(of: chip) { if !$0.isEmpty { q = "" } }
+                    SearchRow(text: $noText, chip: $chipTap, placeholder: "搜索表情", onTap: { onSearch("") })
+                        .onChange(of: chipTap) { e in if !e.isEmpty { chipTap = ""; onSearch(e) } }
                 }
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
@@ -556,28 +568,22 @@ private struct EmojiPane: View {
                 ScrollView {
                     GeometryReader { g in Color.clear.preference(key: OffsetKey.self, value: g.frame(in: .named("emojiScroll")).minY) }.frame(height: 0)
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        if !query.isEmpty {
-                            let results = store.search(query)
-                            if results.isEmpty { emptyText("没有匹配的表情") } else { grid(results, key: "q") }
-                        } else {
-                            if !store.recent.isEmpty {
-                                header("recent", "最近使用")
-                                grid(store.recent, key: "recent")
-                            }
-                            ForEach(store.groups) { g in
-                                header(g.key, g.name)
-                                grid(g.items.map { $0[0] }, key: g.key)
-                            }
-                            if store.groups.isEmpty { emptyText("加载中…") }
+                        if !store.recent.isEmpty {
+                            header("recent", "最近使用")
+                            EmojiRows(items: store.recent, onEmoji: onEmoji)
                         }
+                        ForEach(store.groups) { g in
+                            header(g.key, g.name)
+                            EmojiRows(items: g.items.map { $0[0] }, onEmoji: onEmoji)
+                        }
+                        if store.groups.isEmpty { emptyText("加载中…") }
                         Color.clear.frame(height: 64)
                     }
                 }
                 .coordinateSpace(name: "emojiScroll")
                 .onPreferenceChange(OffsetKey.self) { chrome.onOffset($0) }
                 .onPreferenceChange(SectionsKey.self) { dict in
-                    if !query.isEmpty { return }
-                    if let k = dict.filter({ $0.value <= 8 }).max(by: { $0.value < $1.value })?.key { active = k }
+                    if let k = dict.filter({ $0.value <= 8 }).max(by: { $0.value < $1.value })?.key, k != active { active = k }
                 }
                 .onChange(of: jumpTarget) { t in
                     guard let t else { return }
@@ -598,69 +604,69 @@ private struct EmojiPane: View {
             .background(GeometryReader { g in Color.clear.preference(key: SectionsKey.self, value: [key: g.frame(in: .named("emojiScroll")).minY]) })
     }
 
-    private func grid(_ items: [String], key: String) -> some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 8), spacing: 0) {
-            ForEach(Array(items.enumerated()), id: \.offset) { _, e in
-                Text(e).font(.system(size: 26))
-                    .frame(maxWidth: .infinity).frame(height: 42)
-                    .contentShape(Rectangle())
-                    .onTapGesture { onEmoji(e) }
-            }
-        }
-        .padding(.horizontal, 6)
-    }
-
     private func jump(_ key: String) {
         bar.collapse()
-        q = ""; chip = ""
         active = key
         jumpTarget = key
     }
 }
 
+/// emoji 网格：每 8 个一行，每行是 LazyVStack 的一个元素（真正懒加载）；最后一行不满用空格子补齐保持等宽
+private struct EmojiRows: View {
+    let items: [String]
+    var onEmoji: (String) -> Void
+    private let cols = 8
+
+    var body: some View {
+        let rows = stride(from: 0, to: items.count, by: cols).map { Array(items[$0..<min($0 + cols, items.count)]) }
+        ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+            HStack(spacing: 0) {
+                ForEach(Array(row.enumerated()), id: \.offset) { _, e in
+                    Text(e).font(.system(size: 26))
+                        .frame(maxWidth: .infinity).frame(height: 42)
+                        .contentShape(Rectangle())
+                        .onTapGesture { onEmoji(e) }
+                }
+                if row.count < cols {
+                    ForEach(0..<(cols - row.count), id: \.self) { _ in Color.clear.frame(maxWidth: .infinity).frame(height: 42) }
+                }
+            }
+            .padding(.horizontal, 6)
+        }
+    }
+}
+
 // MARK: - GIF 页
 
-/// GIF 页：没有顶部封面条，只有搜索行；内容 3 列瓦片（热门 / 搜索结果），滚到底自动翻页
+/// GIF 页：没有顶部封面条，只有搜索行；内容 3 列瓦片（最近使用 + 热门），滚到底自动翻页。
+/// 搜索行整条是按钮：和贴纸页一样弹搜索 sheet。
 private struct GifPane: View {
     @ObservedObject var chrome: PanelChrome
     var onPick: (StickerPayload) -> Void
+    var onSearch: (String) -> Void
 
     @ObservedObject private var store = StickerStore.shared
-    @State private var q = ""
-    @State private var chip = ""
-    @State private var items: [StickerPayload] = []
-    @State private var next = ""
-    @State private var loading = false
-    @State private var error = ""
-    @State private var seq = 0
-
-    private var query: String { let t = q.trimmingCharacters(in: .whitespaces); return t.isEmpty ? chip : t }
-    private let cols = Array(repeating: GridItem(.flexible(), spacing: 2), count: 3)
+    @StateObject private var feed = GifFeed()
+    @State private var noText = ""
+    @State private var chipTap = ""
 
     var body: some View {
         VStack(spacing: 0) {
             if !chrome.hidden {
-                SearchRow(text: $q, chip: $chip, placeholder: "搜索 GIF")
-                    .onChange(of: q) { if !$0.isEmpty { chip = "" } }
-                    .onChange(of: chip) { if !$0.isEmpty { q = "" } }
+                SearchRow(text: $noText, chip: $chipTap, placeholder: "搜索 GIF", onTap: { onSearch("") })
+                    .onChange(of: chipTap) { e in if !e.isEmpty { chipTap = ""; onSearch(e) } }
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
             ScrollView {
                 GeometryReader { g in Color.clear.preference(key: OffsetKey.self, value: g.frame(in: .named("gifScroll")).minY) }.frame(height: 0)
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    if query.isEmpty, !store.recentGifs.isEmpty {
+                    if !store.recentGifs.isEmpty {
                         sectionTitle("最近使用").padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 4)
-                        LazyVGrid(columns: cols, spacing: 2) { ForEach(store.recentGifs) { p in tile(p) } }
-                        sectionTitle("热门").padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 4)
+                        GifGrid(items: store.recentGifs, onPick: onPick, onNearEnd: nil)
                     }
-                    LazyVGrid(columns: cols, spacing: 2) {
-                        ForEach(items) { p in
-                            tile(p).onAppear { if p.id == items.suffix(6).first?.id { more() } }
-                        }
-                    }
-                    if loading { emptyText(items.isEmpty ? "正在拉取 GIF，第一次会慢几秒…" : "加载更多…") }
-                    else if !error.isEmpty { emptyText(error) }
-                    else if items.isEmpty { emptyText(query.isEmpty ? "暂无 GIF" : "没有找到相关 GIF") }
+                    sectionTitle("热门").padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 4)
+                    GifGrid(items: feed.items, onPick: onPick, onNearEnd: { feed.more() })
+                    GifFooter(feed: feed, emptyHint: "暂无 GIF")
                     Color.clear.frame(height: 64)
                 }
             }
@@ -668,50 +674,192 @@ private struct GifPane: View {
             .onPreferenceChange(OffsetKey.self) { chrome.onOffset($0) }
         }
         .animation(.easeInOut(duration: 0.18), value: chrome.hidden)
-        .task(id: query) {
-            // 输入防抖 400ms；chip 立即
-            if !q.trimmingCharacters(in: .whitespaces).isEmpty { try? await Task.sleep(nanoseconds: 400_000_000) }
-            if Task.isCancelled { return }
-            seq += 1
-            let my = seq
-            loading = true; error = ""
-            do {
-                let (list, n) = try await store.searchGifs(query)
+        .task { await feed.load("") }
+    }
+}
+
+/// 一路 GIF 结果（热门或某个搜索词）：首页 + 翻页 + 首次搜索 3 秒后补拉
+@MainActor
+private final class GifFeed: ObservableObject {
+    @Published var items: [StickerPayload] = []
+    @Published var next = ""
+    @Published var loading = false
+    @Published var error = ""
+    private(set) var query = ""
+    private var seq = 0
+
+    func load(_ q: String) async {
+        query = q
+        seq += 1
+        let my = seq
+        loading = true; error = ""
+        do {
+            let (list, n) = try await StickerStore.shared.searchGifs(q)
+            guard my == seq else { return }
+            items = list; next = n; loading = false
+            // 首次搜索后端还在后台补齐时结果会少，3 秒后再拉一次
+            if list.count < 10, !n.isEmpty {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
                 guard my == seq else { return }
-                items = list; next = n; loading = false
-                // 首次搜索后端还在后台补齐时结果会少，3 秒后再拉一次
-                if list.count < 10, !n.isEmpty {
-                    try? await Task.sleep(nanoseconds: 3_000_000_000)
-                    guard my == seq, !Task.isCancelled else { return }
-                    if let r = try? await store.searchGifs(query), r.0.count > list.count { items = r.0; next = r.1 }
-                }
-            } catch {
-                guard my == seq else { return }
-                self.error = error.localizedDescription; loading = false
+                if let r = try? await StickerStore.shared.searchGifs(q), r.0.count > list.count { items = r.0; next = r.1 }
             }
+        } catch {
+            guard my == seq else { return }
+            self.error = error.localizedDescription; loading = false
         }
     }
 
-    private func tile(_ p: StickerPayload) -> some View {
-        AnimatedImageView(url: Api.fullUrl((p.thumb ?? "").isEmpty ? p.url : p.thumb!), animate: true, fill: true)
-            .background(Theme.bg3)
-            .aspectRatio(1, contentMode: .fit)
-            .clipped()
-            .contentShape(Rectangle())
-            .onTapGesture { onPick(p) }
-    }
-
-    private func more() {
+    func more() {
         guard !loading, !next.isEmpty else { return }
         loading = true
         let my = seq
         Task {
             defer { if my == seq { loading = false } }
-            guard let r = try? await store.searchGifs(query, offset: next), my == seq else { return }
+            guard let r = try? await StickerStore.shared.searchGifs(query, offset: next), my == seq else { return }
             let seen = Set(items.map(\.id))
             items += r.0.filter { !seen.contains($0.id) }
             next = r.1
         }
+    }
+}
+
+/// 3 列正方形瓦片：格子先用 Color.clear 定成正方形再叠图（UIViewRepresentable 自己报的尺寸不一致会让行错位）
+private struct GifGrid: View {
+    let items: [StickerPayload]
+    var onPick: (StickerPayload) -> Void
+    var onNearEnd: (() -> Void)?
+    private let cols = Array(repeating: GridItem(.flexible(), spacing: 2), count: 3)
+
+    var body: some View {
+        LazyVGrid(columns: cols, spacing: 2) {
+            ForEach(items) { p in
+                Color.clear
+                    .aspectRatio(1, contentMode: .fit)
+                    .background(Theme.bg3)
+                    .overlay(AnimatedImageView(url: Api.fullUrl((p.thumb ?? "").isEmpty ? p.url : p.thumb!), animate: true, fill: true))
+                    .clipped()
+                    .contentShape(Rectangle())
+                    .onTapGesture { onPick(p) }
+                    .onAppear { if let onNearEnd, p.id == items.suffix(6).first?.id { onNearEnd() } }
+            }
+        }
+    }
+}
+
+private struct GifFooter: View {
+    @ObservedObject var feed: GifFeed
+    var emptyHint: String
+    var body: some View {
+        if feed.loading { emptyText(feed.items.isEmpty ? "正在拉取 GIF，第一次会慢几秒…" : "加载更多…") }
+        else if !feed.error.isEmpty { emptyText(feed.error) }
+        else if feed.items.isEmpty { emptyText(emptyHint) }
+    }
+}
+
+// MARK: - 搜索 sheet（GIF / 表情，和贴纸「点搜索弹框」一致）
+
+/// 搜索 sheet 外壳：顶部搜索框（自动聚焦）+「完成」，一行快捷 emoji（点了当搜索词），下面放结果
+private struct SearchSheetShell<Content: View>: View {
+    var placeholder: String
+    @Binding var query: String
+    @ViewBuilder var content: () -> Content
+    @Environment(\.dismiss) private var dismiss
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass").font(.system(size: 14)).foregroundStyle(Theme.textDim)
+                    TextField(placeholder, text: $query).font(.system(size: 15)).foregroundStyle(Theme.text).focused($focused)
+                    if !query.isEmpty {
+                        Image(systemName: "xmark.circle.fill").font(.system(size: 14)).foregroundStyle(Theme.textDim).onTapGesture { query = "" }
+                    }
+                }
+                .padding(.horizontal, 10).frame(height: 36)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bg3))
+                Button("完成") { dismiss() }.font(.system(size: 16)).foregroundStyle(Theme.accent)
+            }
+            .padding(.horizontal, 12).padding(.top, 14).padding(.bottom, 6)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    ForEach(quickEmojis, id: \.self) { e in
+                        let on = baseEmoji(query.trimmingCharacters(in: .whitespaces)) == baseEmoji(e)
+                        Text(e).font(.system(size: 22))
+                            .frame(width: 36, height: 36)
+                            .background(Circle().fill(on ? Theme.bg3 : Color.clear))
+                            .grayscale(on ? 0 : 1).opacity(on ? 1 : 0.5)
+                            .contentShape(Rectangle())
+                            .onTapGesture { query = on ? "" : e }
+                    }
+                }
+                .padding(.horizontal, 12)
+            }
+            .frame(height: 40)
+            content()
+        }
+        .background(Theme.bg.ignoresSafeArea())
+        .onAppear { DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { focused = true } }
+    }
+}
+
+/// GIF 搜索 sheet：输入防抖 400ms，快捷 emoji 立即；3 列瓦片，滚到底翻页；点了 GIF 回调并关闭
+struct GifSearchSheet: View {
+    var initialQuery: String
+    var onPick: (StickerPayload) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var q = ""
+    @StateObject private var feed = GifFeed()
+
+    private var query: String { q.trimmingCharacters(in: .whitespaces) }
+
+    var body: some View {
+        SearchSheetShell(placeholder: "搜索 GIF", query: $q) {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    if query.isEmpty { sectionTitle("热门").padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 4) }
+                    GifGrid(items: feed.items, onPick: { p in onPick(p); dismiss() }, onNearEnd: { feed.more() })
+                    GifFooter(feed: feed, emptyHint: query.isEmpty ? "暂无 GIF" : "没有找到相关 GIF")
+                    Color.clear.frame(height: 30)
+                }
+            }
+        }
+        .onAppear { q = initialQuery }
+        .task(id: query) {
+            // 输入防抖 400ms；空 / 快捷 emoji 立即
+            if !query.isEmpty, !quickEmojis.contains(query) { try? await Task.sleep(nanoseconds: 400_000_000) }
+            if Task.isCancelled { return }
+            await feed.load(query)
+        }
+    }
+}
+
+/// 表情搜索 sheet：按中英文关键词 / emoji 本身搜；点了插进输入框，sheet 不关（可连续点几个），「完成」收起
+struct EmojiSearchSheet: View {
+    var initialQuery: String
+    var onEmoji: (String) -> Void
+    @ObservedObject private var store = EmojiStore.shared
+    @State private var q = ""
+
+    private var query: String { q.trimmingCharacters(in: .whitespaces) }
+
+    var body: some View {
+        SearchSheetShell(placeholder: "搜索表情", query: $q) {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    let results = query.isEmpty ? store.recent : store.search(query)
+                    if query.isEmpty, !store.recent.isEmpty { sectionTitle("最近使用").padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 4) }
+                    if results.isEmpty {
+                        emptyText(query.isEmpty ? "输入关键词搜表情，比如「笑」「猫」「爱心」" : "没有匹配的表情")
+                    } else {
+                        EmojiRows(items: results, onEmoji: onEmoji)
+                    }
+                    Color.clear.frame(height: 30)
+                }
+            }
+        }
+        .onAppear { q = initialQuery }
+        .task { await store.ensureLoaded() }
     }
 }
 
