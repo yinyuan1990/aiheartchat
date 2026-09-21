@@ -18,8 +18,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -356,44 +359,14 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
         LazyColumn(state = listState, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 14.dp)) {
             item {
                 TreeholeCard(p, clamp = false)
-                // 分隔
-                Box(Modifier.fillMaxWidth().padding(vertical = 14.dp), contentAlignment = Alignment.Center) {
-                    Text(
-                        if (comments.isEmpty()) "还没有人评论，来说第一句" else "讨论已开始",
-                        color = TextSub, fontSize = 12.sp,
-                        modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = 0.05f)).padding(horizontal = 12.dp, vertical = 4.dp),
-                    )
-                }
+                // 评论区标题（和动态详情一致的平铺列表，不再用聊天气泡）
+                Text(
+                    if (comments.isEmpty()) "还没有人评论，来说第一句" else "全部评论（${comments.size}）",
+                    color = if (comments.isEmpty()) TextSub else TextMain, fontSize = if (comments.isEmpty()) 13.sp else 15.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 18.dp, bottom = 6.dp, start = 2.dp),
+                )
             }
-            items(comments, key = { it.id }) { c ->
-                Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.Bottom) {
-                    Avatar(c.user?.avatar, 34)
-                    Spacer(Modifier.width(10.dp))
-                    Column(
-                        Modifier.widthIn(max = 300.dp)
-                            .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp, bottomEnd = 14.dp, bottomStart = 4.dp))
-                            .background(Bg2).padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 6.dp),
-                    ) {
-                        Text(c.user?.nickname ?: "用户", color = nameColor(c.user?.id ?: c.id), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(2.dp))
-                        if (c.content.isNotEmpty() || c.replyToNickname.isNotEmpty()) {
-                            Text(
-                                buildString {
-                                    if (c.replyToNickname.isNotEmpty()) append("@${c.replyToNickname} ")
-                                    append(c.content)
-                                },
-                                color = TextMain, fontSize = 15.sp, lineHeight = 23.sp,
-                            )
-                        }
-                        c.sticker?.let { StickerImage(it, if (it.isGif) 160.dp else 96.dp, modifier = Modifier.padding(top = 4.dp)) }
-                        Spacer(Modifier.height(3.dp))
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                            Text("回复", color = TextSub, fontSize = 11.sp, modifier = Modifier.noRippleClick { replyTo = c }.padding(end = 10.dp))
-                            Text(fmtTreeholeTime(c.createdAt), color = TextDim, fontSize = 11.sp)
-                        }
-                    }
-                }
-            }
+            items(comments, key = { it.id }) { c -> TreeholeCommentRow(c, onReply = { replyTo = c }) }
             item { Spacer(Modifier.height(12.dp)) }
         }
 
@@ -428,11 +401,12 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
                 contentAlignment = Alignment.Center,
             ) { SmileIcon(if (showSticker) Accent else TextSub, 20.dp) }
             Spacer(Modifier.width(8.dp))
-            Box(Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).background(Bg3).padding(horizontal = 14.dp, vertical = 10.dp)) {
+            // 占位文案保持一行（长提示会折成两行把输入框撑高）；输入多了再自动长到 4 行
+            Box(Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).background(Bg3).padding(horizontal = 14.dp, vertical = 9.dp), contentAlignment = Alignment.CenterStart) {
                 if (input.isEmpty()) {
                     Text(
-                        if (replyTo != null) "回复 @${replyTo?.user?.nickname ?: ""}" else "说点什么…（评论会显示你的昵称）",
-                        color = TextSub, fontSize = 14.sp,
+                        if (replyTo != null) "回复 @${replyTo?.user?.nickname ?: ""}" else "说点什么…",
+                        color = TextSub, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 }
                 BasicTextField(
@@ -501,6 +475,43 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
             },
             dismissButton = { Text("取消", color = TextSub, modifier = Modifier.noRippleClick { confirmDelete = false }.padding(8.dp)) },
         )
+    }
+}
+
+/**
+ * 一条树洞评论（平铺样式）：头像 | 昵称 · 时间 …… 回复
+ *                              正文（@被回复人 高亮）
+ *                              贴纸 / GIF
+ * 下面一条细线（从正文起始处开始），不再用聊天气泡。
+ */
+@Composable
+private fun TreeholeCommentRow(c: TreeholeComment, onReply: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.Top) {
+        Avatar(c.user?.avatar, 32)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(c.user?.nickname ?: "用户", color = nameColor(c.user?.id ?: c.id), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                Spacer(Modifier.width(8.dp))
+                Text(fmtTreeholeTime(c.createdAt), color = TextDim, fontSize = 11.sp)
+                Spacer(Modifier.weight(1f))
+                Text("回复", color = TextSub, fontSize = 12.sp, modifier = Modifier.noRippleClick(onReply).padding(start = 12.dp, top = 2.dp, bottom = 2.dp))
+            }
+            if (c.content.isNotEmpty() || c.replyToNickname.isNotEmpty()) {
+                Text(
+                    buildAnnotatedString {
+                        if (c.replyToNickname.isNotEmpty()) {
+                            withStyle(SpanStyle(color = Accent)) { append("@${c.replyToNickname} ") }
+                        }
+                        append(c.content)
+                    },
+                    color = TextMain, fontSize = 15.sp, lineHeight = 22.sp, modifier = Modifier.padding(top = 3.dp),
+                )
+            }
+            c.sticker?.let { StickerImage(it, if (it.isGif) 160.dp else 96.dp, modifier = Modifier.padding(top = 6.dp)) }
+            Spacer(Modifier.height(12.dp))
+            Box(Modifier.fillMaxWidth().height(0.5.dp).background(Line))
+        }
     }
 }
 
