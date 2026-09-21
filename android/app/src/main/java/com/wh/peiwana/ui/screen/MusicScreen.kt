@@ -219,8 +219,8 @@ object MusicCenter {
 
     // ---------- 保存 / 分享 ----------
 
-    /** 分享落地页（不用登录就能听 + 保存 + 下载 App） */
-    fun shareLink(t: MusicTrack) = "https://app.yyheart.com/#/music/share/${t.id}"
+    /** 分享短链：后端出带 og 标签的页面（微信 / QQ 卡片显示封面），点开跳 /#/music/share/:id（不用登录就能听 + 保存 + 下载 App） */
+    fun shareLink(t: MusicTrack) = "https://app.yyheart.com/s/music/${t.id}"
 
     private fun extOf(url: String) = url.substringAfterLast('.', "mp3").take(5).ifEmpty { "mp3" }
     private fun safeName(t: MusicTrack) = t.title.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(60).ifEmpty { "music" }

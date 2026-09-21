@@ -185,8 +185,8 @@ final class MusicCenter: ObservableObject {
     /// 正在下载准备保存的曲目 id（按钮转圈）
     @Published private(set) var savingId: String?
 
-    /// 分享落地页（不用登录就能听 + 保存 + 下载 App）
-    static func shareLink(_ t: MusicTrackModel) -> URL { URL(string: "https://app.yyheart.com/#/music/share/\(t.id)")! }
+    /// 分享短链：后端出带 og 标签的页面（微信 / QQ / iMessage 卡片显示封面），点开跳 /#/music/share/:id（不用登录就能听 + 保存 + 下载 App）
+    static func shareLink(_ t: MusicTrackModel) -> URL { URL(string: "https://app.yyheart.com/s/music/\(t.id)")! }
 
     /// 分享链接：系统分享面板（微信/QQ/信息…）
     func shareLink(_ t: MusicTrackModel) {

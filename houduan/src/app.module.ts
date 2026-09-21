@@ -29,6 +29,7 @@ import { GalleryModule } from './gallery/gallery.module';
 import { StickerModule } from './sticker/sticker.module';
 import { EmojiModule } from './emoji/emoji.module';
 import { GifModule } from './gif/gif.module';
+import { ShareModule } from './share/share.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { GifModule } from './gif/gif.module';
     StickerModule,
     EmojiModule,
     GifModule,
+    ShareModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: RateLimitGuard }],
 })

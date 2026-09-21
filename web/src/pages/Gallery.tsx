@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { api } from '../api';
-import { viewNativeMedia, type NativeMediaItem } from '../bridge';
+import { shareBase, shareText, viewNativeMedia, type NativeMediaItem } from '../bridge';
 import { PullToRefresh } from '../components/PullToRefresh';
 import { fmtCount, fmtTime } from './Treehole';
 
@@ -155,14 +156,45 @@ function MediaLightbox({ groups, group, index, onClose }: { groups: GalleryMedia
 /** 灯箱要打开的位置：第几条帖子的第几个媒体 */
 type OpenPos = { g: number; i: number };
 
-function GalleryCard({ post, channel, onOpen }: { post: GalleryPost; channel: string; onOpen: (i: number) => void }) {
+/** 分享地址：后端短链（带 og 标签，卡片显示首图），点开跳到 /#/gallery/share/:id（不用登录） */
+function shareLink(id: string): string {
+  return `${shareBase()}/s/gallery/${id}`;
+}
+
+/** 分享文案：有文案用文案，没有就写「N 张图片 · M 个视频」 */
+function shareCaption(post: GalleryPost, title: string): string {
+  if (post.text) return post.text.slice(0, 60);
+  const imgs = post.media.filter((m) => m.type === 'image').length;
+  const vids = post.media.length - imgs;
+  return [title, imgs ? `${imgs} 张图片` : '', vids ? `${vids} 个视频` : ''].filter(Boolean).join(' · ');
+}
+
+async function sharePost(post: GalleryPost, title: string, toast: (s: string) => void) {
+  if ((await shareText(shareCaption(post, title), shareLink(post.id), title)) === 'copied') toast('链接已复制，去粘贴给好友吧');
+}
+
+function ShareIcon({ size = 15 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3v12" /><path d="M8 7l4-4 4 4" /><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" />
+    </svg>
+  );
+}
+
+function GalleryCard({ post, channel, onOpen, onShare }: { post: GalleryPost; channel: string; onOpen: (i: number) => void; onShare?: () => void }) {
   const open = (i: number) => onOpen(i);
   return (
     <div className="th-card gl-card">
       {channel && <div className="th-channel">{channel}</div>}
       <Mosaic media={post.media} onOpen={open} />
       {post.text && <div className="th-content" style={{ marginTop: 8 }}>{post.text}</div>}
-      <div className="th-meta">
+      <div className="th-meta" style={{ alignItems: 'center' }}>
+        {/* 分享靠左（点击区域放大一点），浏览量 / 时间靠右 */}
+        {onShare && (
+          <span onClick={(e) => { e.stopPropagation(); onShare(); }} style={{ marginRight: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px 4px 0', cursor: 'pointer', color: 'var(--text-2)', fontSize: 12 }}>
+            <ShareIcon /> 分享
+          </span>
+        )}
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
           <svg width="13" height="10" viewBox="0 0 24 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round"><path d="M1 8C5 1.5 19 1.5 23 8C19 14.5 5 14.5 1 8Z" /><circle cx="12" cy="8" r="3.4" fill="currentColor" stroke="none" /></svg>
           {fmtCount(post.viewCount)}
@@ -251,9 +283,13 @@ export function GalleryFeed() {
     setView({ g, i });
   };
 
+  const [toast, setToast] = useState('');
+  const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(''), 2000); };
+
   return (
     <PullToRefresh onRefresh={load}>
       {view && <MediaLightbox groups={ordered.map((p) => p.media)} group={view.g} index={view.i} onClose={() => setView(null)} />}
+      {toast && <div className="music-toast">{toast}</div>}
       <div ref={rootRef}>
         {!data && <div className="empty">加载中…</div>}
         {data && data.list.length === 0 && <div className="empty">最近 {data.days} 天还没有内容<br />稍后再来看看</div>}
@@ -263,8 +299,53 @@ export function GalleryFeed() {
           <div className="small" style={{ textAlign: 'center', padding: '6px 0 8px' }}>只保留最近 {data.days} 天 · 已经是最早的了</div>
         )}
         {/* 卡片不显示频道名（频道名多带引流字样），与 Telegram 帖子样式一致 */}
-        {ordered.map((p, g) => <GalleryCard key={p.id} post={p} channel="" onOpen={(i) => openAt(g, i)} />)}
+        {ordered.map((p, g) => <GalleryCard key={p.id} post={p} channel="" onOpen={(i) => openAt(g, i)} onShare={() => sharePost(p, data?.title || '养眼图片', showToast)} />)}
       </div>
     </PullToRefresh>
+  );
+}
+
+// ---------- 分享落地页（不用登录） ----------
+
+interface SharedPost extends GalleryPost {
+  title: string;
+}
+
+/** /gallery/share/:id：好友点开链接直接看图 / 看视频 + 下载 App；接口返回的媒体地址已是完整 URL */
+export function GallerySharePage() {
+  const { id } = useParams<{ id: string }>();
+  const [p, setP] = useState<SharedPost | null>(null);
+  const [err, setErr] = useState('');
+  const [dl, setDl] = useState<{ android?: string; ios?: string } | null>(null);
+  const [view, setView] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!id) return;
+    api<SharedPost>(`/app/gallery/${id}`).then(setP).catch((e) => setErr(e.message || '这条内容已过期'));
+    api<any>('/app/download').then((d) => setDl({ android: d?.android?.url, ios: d?.ios?.url })).catch(() => {});
+  }, [id]);
+
+  const openApp = () => {
+    const ua = navigator.userAgent;
+    const url = /iPhone|iPad|iPod/i.test(ua) ? dl?.ios : dl?.android;
+    location.href = url || 'https://yyheart.com/';
+  };
+
+  return (
+    <div className="app music-share" style={{ padding: '20px 12px 32px' }}>
+      {err && <div className="empty">{err}</div>}
+      {!p && !err && <div className="empty">加载中…</div>}
+      {p && (
+        <>
+          {view !== null && <MediaLightbox groups={[p.media]} group={0} index={view} onClose={() => setView(null)} />}
+          <div style={{ fontSize: 17, fontWeight: 700, textAlign: 'center', marginBottom: 12 }}>{p.title || '养眼图片'}</div>
+          <GalleryCard post={p} channel="" onOpen={(i) => setView(i)} />
+          <div className="row" style={{ gap: 12, marginTop: 18 }}>
+            <button className="btn" style={{ flex: 1 }} onClick={openApp}>打开心之音 App 看更多</button>
+          </div>
+          <div className="hint">心之音 App 里每天都有新图，边聊边看</div>
+        </>
+      )}
+    </div>
   );
 }

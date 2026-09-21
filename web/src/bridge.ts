@@ -46,6 +46,34 @@ export function isEmbedded(): boolean {
   return sessionStorage.getItem(EMBED_KEY) === '1' || inNativeApp();
 }
 
+// ---------- 分享 ----------
+
+/** 分享短链域名：/s/music/:id、/s/gallery/:id 由后端出带 og 标签的页面（链接卡片才有图），再跳 H5 */
+export function shareBase(): string {
+  return /yyheart\.com$/.test(location.hostname) ? location.origin : 'https://app.yyheart.com';
+}
+
+/**
+ * 分享一段文字 + 链接：App 内优先原生分享面板（Android `PeiwanNative.shareText`；iOS WKWebView 支持 navigator.share），
+ * 浏览器走系统分享，不支持时复制到剪贴板。返回 'native' | 'copied' | 'cancel' | 'fail'。
+ */
+export async function shareText(text: string, url: string, title = text): Promise<'native' | 'copied' | 'cancel' | 'fail'> {
+  const droid = (window as any).PeiwanNative;
+  if (droid?.shareText) {
+    try { droid.shareText(`${text}\n${url}`, title); return 'native'; } catch { /* 走下面 */ }
+  }
+  if (navigator.share) {
+    try { await navigator.share({ title, text, url }); return 'native'; } catch { return 'cancel'; }
+  }
+  try {
+    await navigator.clipboard.writeText(`${text} ${url}`);
+    return 'copied';
+  } catch {
+    prompt('复制下面的链接分享给好友', url);
+    return 'fail';
+  }
+}
+
 // ---------- 原生音乐播放器 ----------
 
 /** 交给原生播放的曲目（字段与 /music 接口一致） */

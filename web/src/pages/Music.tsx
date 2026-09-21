@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
+import { shareBase, shareText } from '../bridge';
 import { music, useMusic, type MusicTrack } from '../music';
 
 function fmtDur(s: number): string {
@@ -86,9 +87,9 @@ function Bars() {
   return <span className="music-bars"><i /><i /><i /></span>;
 }
 
-/** 分享落地页地址（不用登录就能打开听 + 下载） */
+/** 分享地址：后端短链（带 og 标签，微信 / QQ / Telegram 卡片才显示封面），点开跳到 /#/music/share/:id */
 export function shareLink(id: string): string {
-  return `${location.origin}/#/music/share/${id}`;
+  return `${shareBase()}/s/music/${id}`;
 }
 
 function extOf(url: string): string {
@@ -108,17 +109,8 @@ export function saveTrack(t: { title: string; url: string }) {
 
 /** 分享：系统分享面板，不支持时复制链接 */
 export async function shareTrack(t: { id: string; title: string; performer: string }, toast: (s: string) => void) {
-  const url = shareLink(t.id);
   const text = `${t.title}${t.performer ? ` - ${t.performer}` : ''}`;
-  if (navigator.share) {
-    try { await navigator.share({ title: text, text, url }); return; } catch { /* 用户取消 */ return; }
-  }
-  try {
-    await navigator.clipboard.writeText(`${text} ${url}`);
-    toast('链接已复制，去粘贴给好友吧');
-  } catch {
-    prompt('复制下面的链接分享给好友', url);
-  }
+  if ((await shareText(text, shareLink(t.id))) === 'copied') toast('链接已复制，去粘贴给好友吧');
 }
 
 /** 封面：有图用图，没有用渐变 + 音符 */
@@ -126,7 +118,7 @@ function Cover({ track, size, round = true, active }: { track: MusicTrack; size:
   return (
     <div className={`music-cover${active ? ' spin' : ''}${round ? '' : ' square'}`} style={{ width: size, height: size }}>
       {track.cover ? (
-        <img src={track.cover} alt="" />
+        <img src={track.cover} alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
       ) : (
         <svg width={size * 0.46} height={size * 0.46} viewBox="0 0 24 24" fill="#fff" opacity={0.9}>
           <path d="M9 3v10.55A4 4 0 1 0 11 17V7h5a3 3 0 0 0 3-3V3H9z" />
@@ -303,7 +295,8 @@ export function MusicSharePage() {
         <>
           <div className="music-share-head">
             <div className="music-cover square" style={{ width: 160, height: 160, margin: '0 auto' }}>
-              {t.fullCover ? <img src={t.fullCover} alt="" /> : (
+              {/* 封面加载失败就去掉图，露出渐变 + 音符，不留裂图 */}
+              {t.fullCover ? <img src={t.fullCover} alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} /> : (
                 <svg width={74} height={74} viewBox="0 0 24 24" fill="#fff" opacity={0.9}><path d="M9 3v10.55A4 4 0 1 0 11 17V7h5a3 3 0 0 0 3-3V3H9z" /></svg>
               )}
             </div>

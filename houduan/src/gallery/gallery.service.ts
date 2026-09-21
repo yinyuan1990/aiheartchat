@@ -134,6 +134,20 @@ export class GalleryService implements OnModuleInit {
     };
   }
 
+  /** 分享落地页用：不用登录取一条（文案按该受众的「屏蔽文字」设置处理；带 tab 名与完整地址） */
+  async publicPost(id: bigint) {
+    const r = await this.prisma.galleryPost.findUnique({
+      where: { id },
+      select: { id: true, audience: true, text: true, media: true, viewCount: true, postedAt: true },
+    });
+    if (!r) throw new NotFoundException('这条内容已过期');
+    const { title, hideText } = await this.forAudience(r.audience);
+    const base = (process.env.PUBLIC_RES_BASE || 'https://api.yyheart.com').replace(/\/$/, '');
+    const abs = (u?: string) => (!u ? '' : u.startsWith('http') ? u : base + u);
+    const media = safeJson<GalleryMedia[]>(r.media, []).map((m) => ({ ...m, url: abs(m.url), cover: abs(m.cover) }));
+    return { id: r.id, title, text: hideText ? '' : r.text, media, viewCount: r.viewCount, postedAt: r.postedAt };
+  }
+
   // ---------- 后台：来源 ----------
 
   async listSources() {

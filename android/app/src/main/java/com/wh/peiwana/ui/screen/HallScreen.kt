@@ -229,6 +229,22 @@ private class HallJsBridge(
     /** 兼容两参调用（默认竖屏） */
     @android.webkit.JavascriptInterface
     fun openWeb(url: String, title: String) = openWeb(url, title, null)
+
+    /** H5 分享（养眼图片 / 音乐链接等）：Android WebView 没有 navigator.share，走系统分享面板 */
+    @android.webkit.JavascriptInterface
+    fun shareText(text: String, title: String?) {
+        GameLog.d("bridge.shareText ${text.take(60)}")
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                if (!title.isNullOrBlank()) putExtra(android.content.Intent.EXTRA_SUBJECT, title)
+                putExtra(android.content.Intent.EXTRA_TEXT, text)
+            }
+            runCatching {
+                ctx.startActivity(android.content.Intent.createChooser(intent, "分享").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+            }.onFailure { GameLog.w("bridge.shareText failed: ${it.message}") }
+        }
+    }
 }
 
 /**

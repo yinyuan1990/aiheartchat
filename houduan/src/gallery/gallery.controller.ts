@@ -1,6 +1,7 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/current-user.decorator';
+import { Throttle } from '../common/rate-limit.guard';
 import { GalleryService } from './gallery.service';
 
 /** 「养眼图片」（大厅 tab）：按登录用户性别分流 */
@@ -19,5 +20,17 @@ export class GalleryController {
   @Get()
   list(@CurrentUser() userId: bigint, @Query('beforeId') beforeId?: string) {
     return this.gallery.list(userId, beforeId ? BigInt(beforeId) : undefined);
+  }
+}
+
+/** 公开：分享落地页（app.yyheart.com/#/gallery/share/:id）不用登录取一条 */
+@Controller('app/gallery')
+export class GalleryPublicController {
+  constructor(private readonly gallery: GalleryService) {}
+
+  @Get(':id')
+  @Throttle(60, 60)
+  post(@Param('id') id: string) {
+    return this.gallery.publicPost(BigInt(id));
   }
 }
