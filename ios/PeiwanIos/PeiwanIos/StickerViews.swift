@@ -186,11 +186,8 @@ struct StickerImageView: View {
                         if let t = p.thumb, !t.isEmpty { StaticThumbView(url: t, maxPixel: px) } else { Color.clear }
                     }
                     .playbackMode(.playing(.fromProgress(0, toProgress: 1, loopMode: .loop)))
-                    // 按动画自己的帧率（一般 30/60）而不是屏幕刷新率驱动；小图再降一半
-                    .configure { view in
-                        view.respectAnimationFrameRate = true
-                        view.shouldRasterizeWhenIdle = true
-                    }
+                    // 注意：不要在这里 configure { respectAnimationFrameRate / shouldRasterizeWhenIdle }——
+                    // 默认的 Core Animation 渲染引擎不支持这两项，lottie-ios 会走 LottieLogger.assertionFailure，Debug 下直接卡死
                 }
             case "awebp":
                 if autoplay {
