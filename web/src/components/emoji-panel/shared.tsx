@@ -20,21 +20,33 @@ export function baseEmoji(e: string) {
  */
 export function useScrollChrome() {
   const [hidden, setHidden] = useState(false);
-  const last = useRef(0);
-  // 同方向累计滚动量：高刷屏每次 scroll 事件只有几 px，单次判阈值会收不起来；换方向清零
-  const acc = useRef(0);
+  const hiddenRef = useRef(false);
+  // 锚点（Telegram 手感）：展开时跟着最低点走，比锚点再往下 24px 就收；收起时跟着最高点走，比锚点往上 40px 才展开。
+  // 切换后 300ms 内忽略（顶部条高度变了，容器重排 scrollTop 会抖）；回到顶部 12px 内一定展开
+  const anchor = useRef(0);
+  const lastToggle = useRef(0);
+  const set = (h: boolean, top: number) => {
+    if (hiddenRef.current === h) return;
+    hiddenRef.current = h;
+    anchor.current = top;
+    lastToggle.current = performance.now();
+    setHidden(h);
+  };
   const onScroll = useCallback((el: HTMLElement) => {
     const top = el.scrollTop;
-    const delta = top - last.current;
-    last.current = top;
-    if (top < 12) { acc.current = 0; setHidden(false); return; }
-    if (!delta) return;
-    if ((delta > 0) !== (acc.current > 0)) acc.current = 0;
-    acc.current += delta;
-    if (acc.current > 12) setHidden(true);
-    else if (acc.current < -12) setHidden(false);
+    const maxTop = el.scrollHeight - el.clientHeight;
+    if (top < 12) { anchor.current = top; set(false, top); return; }
+    if (top > maxTop + 1) { anchor.current = Math.min(top, maxTop); return; }
+    if (performance.now() - lastToggle.current < 300) { anchor.current = top; return; }
+    if (!hiddenRef.current) {
+      if (top < anchor.current) anchor.current = top;
+      if (top - anchor.current > 24) set(true, top);
+    } else {
+      if (top > anchor.current) anchor.current = top;
+      if (anchor.current - top > 40) set(false, top);
+    }
   }, []);
-  const reset = useCallback(() => { last.current = 0; acc.current = 0; setHidden(false); }, []);
+  const reset = useCallback(() => { anchor.current = 0; lastToggle.current = 0; hiddenRef.current = false; setHidden(false); }, []);
   return { hidden, onScroll, reset };
 }
 

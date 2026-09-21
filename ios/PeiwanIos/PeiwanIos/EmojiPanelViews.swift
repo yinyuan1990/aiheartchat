@@ -107,41 +107,37 @@ enum PanelMode: String { case gif, sticker, emoji }
 /// 不标 @MainActor：onPreferenceChange 的回调在新 SDK 里是 @Sendable，回调本身就在主线程
 final class PanelChrome: ObservableObject {
     @Published var hidden = false
-    private var last: CGFloat = 0
-    /// 同方向累计滚动量：iOS 每帧回调一次（ProMotion 120Hz 时正常滑动每帧只有 2~3pt），单帧差值到不了阈值，改成累计、换方向清零
-    private var acc: CGFloat = 0
+    /// 锚点：展开时跟着最低点走，收起时跟着最高点走（见 onOffset）
+    private var anchor: CGFloat = 0
     /// 上次切换时间：切换后顶部条高度变了，ScrollView 会重排、offset 抖一下，这段时间内的变化不算
     private var lastToggle: CFTimeInterval = 0
 
     /**
      top = 已滚过的距离（往下滚为正），maxTop = 能滚到的最大值（超出即在底部回弹）。
-     规则（Telegram 手感）：往下滚累计 24pt 才收；往上滚累计 40pt 才展开（收起比展开更容易，避免手指抖一下就闪）；
-     回到顶部 12pt 内一定展开；顶 / 底部回弹阶段和刚切换后的 300ms 内忽略。
+     Telegram 手感，用「锚点」而不是逐帧方向（手指抖动、120Hz 小步都不怕）：
+     展开状态下锚点跟着最低点走，比锚点再往下 24pt 就收；收起状态下锚点跟着最高点走，比锚点往上 40pt 才展开（收比展容易）。
+     回到顶部 12pt 内一定展开；底部回弹阶段和刚切换后的 300ms 内忽略。
      */
     func onOffset(top: CGFloat, maxTop: CGFloat) {
-        let d = top - last
-        last = top
-        if top < 12 { acc = 0; set(false); return }
-        if top > maxTop + 1 { acc = 0; return }
-        let now = CACurrentMediaTime()
-        if now - lastToggle < 0.3 { acc = 0; return }
-        if abs(d) < 0.5 { return }
-        if (d > 0) != (acc > 0) { acc = 0 }
-        acc += d
-        if !hidden && acc > 24 { set(true) } else if hidden && acc < -40 { set(false) }
+        if top < 12 { anchor = top; set(false); return }
+        if top > maxTop + 1 { anchor = min(top, maxTop); return }
+        if CACurrentMediaTime() - lastToggle < 0.3 { anchor = top; return }
+        if !hidden {
+            if top < anchor { anchor = top }
+            if top - anchor > 24 { set(true) }
+        } else {
+            if top > anchor { anchor = top }
+            if anchor - top > 40 { set(false) }
+        }
     }
-
-    /// 兼容旧调用（minY 为内容顶部位置，往下滚为负）
-    func onOffset(_ minY: CGFloat) { onOffset(top: -minY, maxTop: .greatestFiniteMagnitude) }
 
     private func set(_ h: Bool) {
         guard hidden != h else { return }
         hidden = h
-        acc = 0
         lastToggle = CACurrentMediaTime()
     }
 
-    func reset() { last = 0; acc = 0; lastToggle = 0; hidden = false }
+    func reset() { anchor = 0; lastToggle = 0; hidden = false }
 }
 
 /// ScrollView 自身在屏幕上的 top（全局坐标），分区标题的全局 minY 减掉它 = 相对滚动区的位置

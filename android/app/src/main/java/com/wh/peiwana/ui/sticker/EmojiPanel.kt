@@ -91,7 +91,8 @@ fun EmojiPanel(
     // 跟键盘差不多高，且收起顶部后能完整放 5 行贴纸
     val height = (cfg.screenWidthDp * 0.92f).dp.coerceIn(320.dp, 420.dp)
     var mode by remember { mutableStateOf(PanelPrefs.lastMode(ctx)) }
-    val chrome = remember { PanelChrome() }
+    val density = LocalDensity.current.density
+    val chrome = remember { PanelChrome(density) }
     // 底部 sheet：商店 / 管理 / GIF 搜索 / 表情搜索。query 非 null = 从搜索行进来（"" 只聚焦搜索框，emoji 直接带着搜）
     var sheet by remember { mutableStateOf<SheetReq?>(null) }
     LaunchedEffect(mode) { chrome.show(); PanelPrefs.saveMode(ctx, mode) }
@@ -156,19 +157,43 @@ private object PanelPrefs {
 }
 
 /** 内容区滚动方向 → 顶部条 / 底部胶囊收起或展开（往下滚收起，往上滚或回到顶部展开） */
-class PanelChrome {
+/**
+ * 内容区滚动方向 → 顶部条 / 底部胶囊收起或展开（Telegram 手感）。
+ * 用「锚点」而不是逐帧方向：pos 是累计滚过的距离（往下为正），展开状态下锚点跟着最低点走、比锚点再往下 24dp 就收；
+ * 收起状态下锚点跟着最高点走、比锚点往上 40dp 才展开（收比展容易，手指抖一下不会闪）。
+ * 切换后 300ms 内忽略（顶部条高度变了网格会重排、滚动量抖一下）；回到顶部由 ShowAtTop 兜底展开。
+ */
+class PanelChrome(density: Float) {
     var hidden by mutableStateOf(false)
         private set
-    /** 同方向累计滚动量（px）：120Hz 屏每帧只有几 px，单帧判阈值会收不起来；换方向清零 */
-    private var acc = 0f
-    fun show() { hidden = false; acc = 0f }
+    private val hideAfter = 24f * density
+    private val showAfter = 40f * density
+    private var pos = 0f
+    private var anchor = 0f
+    private var lastToggle = 0L
+
+    fun show() { set(false) }
+
+    private fun set(h: Boolean) {
+        if (hidden == h) return
+        hidden = h
+        anchor = pos
+        lastToggle = android.os.SystemClock.uptimeMillis()
+    }
+
     val connection = object : NestedScrollConnection {
         override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-            val d = available.y
+            val d = -available.y // 往下滚（内容上移）为正
             if (d == 0f) return Offset.Zero
-            if ((d < 0f) != (acc < 0f)) acc = 0f
-            acc += d
-            if (acc < -30f) hidden = true else if (acc > 30f) hidden = false
+            pos += d
+            if (android.os.SystemClock.uptimeMillis() - lastToggle < 300) { anchor = pos; return Offset.Zero }
+            if (!hidden) {
+                if (pos < anchor) anchor = pos
+                if (pos - anchor > hideAfter) set(true)
+            } else {
+                if (pos > anchor) anchor = pos
+                if (anchor - pos > showAfter) set(false)
+            }
             return Offset.Zero
         }
     }
