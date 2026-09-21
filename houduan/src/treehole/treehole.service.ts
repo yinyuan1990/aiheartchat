@@ -80,6 +80,24 @@ export class TreeholeService {
     return { ...view, viewCount: view.viewCount + 1 };
   }
 
+  /** 分享落地页用：不用登录取一条（匿名，不带 mine；图片地址拼成完整 URL；带最近几条评论给落地页看热闹） */
+  async publicPost(id: bigint) {
+    const post = await this.prisma.treeholePost.findUnique({ where: { id } });
+    if (!post || post.status !== 0) throw new NotFoundException('内容不存在');
+    const base = (process.env.PUBLIC_RES_BASE || 'https://api.yyheart.com').replace(/\/$/, '');
+    const abs = (u: string) => (!u ? '' : u.startsWith('http') ? u : base + u);
+    const [view] = await this.hydrate(BigInt(0), [post]);
+    const comments = await this.comments(id);
+    return {
+      ...view,
+      mine: false,
+      images: view.images.map(abs),
+      commenters: view.commenters.map((c) => ({ avatar: abs(c.avatar) })),
+      // comments() 是旧→新，落地页取最新 10 条
+      comments: comments.slice(-10).map((c) => ({ ...c, user: { ...c.user, avatar: abs(c.user.avatar ?? '') } })),
+    };
+  }
+
   /** 用户投稿：文字（≥5 字）或图片至少有一样；带图时文字可为空 */
   async publish(userId: bigint, rawContent: string, rawImages?: unknown) {
     const content = (rawContent ?? '').trim();

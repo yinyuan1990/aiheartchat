@@ -166,6 +166,16 @@ struct TreeholeSectionView: View {
     }
 }
 
+/// 分享短链：后端出带 og 标签的页面（微信 / QQ / iMessage 卡片带首图 / 文案），点开跳免登录落地页 /#/treehole/share/:id
+func treeholeShareLink(_ id: String) -> URL { URL(string: "https://app.yyheart.com/s/treehole/\(id)")! }
+
+/// 分享一条树洞：文案前 60 字（没文案就「N 张图片」）+ 短链，系统分享面板
+func shareTreehole(_ post: TreeholePost) {
+    let raw = post.content.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+    let text = raw.isEmpty ? "\(channelName) · \(post.images?.count ?? 0) 张图片" : String(raw.prefix(60))
+    ShareSheet.present([text, treeholeShareLink(post.id)])
+}
+
 /// 帖子卡：频道名 + 正文 + 阅读/时间 + 评论条（clamp=列表折叠 10 行）
 struct TreeholeCardView: View {
     let post: TreeholePost
@@ -211,6 +221,16 @@ struct TreeholeCardView: View {
             }
             VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
+                // 分享靠左：系统分享面板发短链（后端出 og 标签，卡片带首图 / 文案，点开是免登录落地页）
+                Button { shareTreehole(post) } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "square.and.arrow.up").font(.system(size: 12))
+                        Text("分享").font(.system(size: 12))
+                    }
+                    .foregroundStyle(Theme.textSub)
+                    .padding(.trailing, 8).padding(.vertical, 2)
+                }
+                .buttonStyle(.plain)
                 Spacer()
                 // 系统线性眼睛图标替代 👁 emoji
                 HStack(spacing: 3) {

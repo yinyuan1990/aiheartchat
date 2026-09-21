@@ -31,7 +31,7 @@ import { TransferPage } from './pages/Transfer';
 import { GiftsReceivedPage } from './pages/GiftsReceived';
 import { AgreementPage } from './pages/Agreement';
 import { UserHomePage } from './pages/UserHome';
-import { TreeholeDetailPage, TreeholePublishPage } from './pages/Treehole';
+import { TreeholeDetailPage, TreeholePublishPage, TreeholeSharePage } from './pages/Treehole';
 import { markEmbedded } from './bridge';
 
 function Shell() {
@@ -166,6 +166,7 @@ export function App() {
         <Route path="/hall-embed" element={<EmbedHallPage />} />
         <Route path="/music/share/:id" element={<MusicSharePage />} />
         <Route path="/gallery/share/:id" element={<GallerySharePage />} />
+        <Route path="/treehole/share/:id" element={<TreeholeSharePage />} />
         <Route element={<Shell />}>
           <Route path="/plaza" element={<PlazaPage />} />
           <Route path="/hall" element={<HallPage />} />

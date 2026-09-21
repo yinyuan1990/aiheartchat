@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, uploadFile } from '../api';
-import { isEmbedded } from '../bridge';
+import { isEmbedded, shareBase, shareText } from '../bridge';
 import { PullToRefresh } from '../components/PullToRefresh';
 import { StickerPayload } from '../stickers';
 import { dropLastGrapheme } from '../emojis';
@@ -92,7 +92,26 @@ function ImageLightbox({ images, index, onClose }: { images: string[]; index: nu
   );
 }
 
-function TreeholeCard({ post, clamp, onOpen }: { post: TreeholePost; clamp: boolean; onOpen?: () => void }) {
+/** 分享地址：后端短链（带 og 标签，卡片显示首图 / 文案），点开跳到 /#/treehole/share/:id（不用登录） */
+function shareLink(id: string): string {
+  return `${shareBase()}/s/treehole/${id}`;
+}
+
+/** 分享：文案前 60 字（没文案就「N 张图片」），App 内走原生分享面板 */
+export async function shareTreehole(post: TreeholePost, toast: (s: string) => void) {
+  const text = post.content?.trim() ? post.content.trim().replace(/\s+/g, ' ').slice(0, 60) : `${CHANNEL_NAME} · ${post.images.length} 张图片`;
+  if ((await shareText(text, shareLink(post.id), CHANNEL_NAME)) === 'copied') toast('链接已复制，去粘贴给好友吧');
+}
+
+function ShareIcon({ size = 15 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3v12" /><path d="M8 7l4-4 4 4" /><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" />
+    </svg>
+  );
+}
+
+function TreeholeCard({ post, clamp, onOpen, onShare }: { post: TreeholePost; clamp: boolean; onOpen?: () => void; onShare?: () => void }) {
   const [view, setView] = useState<number | null>(null);
   return (
     <div className="th-card">
@@ -104,7 +123,12 @@ function TreeholeCard({ post, clamp, onOpen }: { post: TreeholePost; clamp: bool
         </div>
       )}
       {view != null && <ImageLightbox images={post.images} index={view} onClose={() => setView(null)} />}
-      <div className="th-meta">
+      <div className="th-meta" style={{ alignItems: 'center' }}>
+        {onShare && (
+          <span onClick={(e) => { e.stopPropagation(); onShare(); }} style={{ marginRight: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px 4px 0', cursor: 'pointer', color: 'var(--text-2)', fontSize: 12 }}>
+            <ShareIcon /> 分享
+          </span>
+        )}
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
           <svg width="13" height="10" viewBox="0 0 24 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round"><path d="M1 8C5 1.5 19 1.5 23 8C19 14.5 5 14.5 1 8Z" /><circle cx="12" cy="8" r="3.4" fill="currentColor" stroke="none" /></svg>
           {fmtCount(post.viewCount)}
@@ -137,6 +161,8 @@ export function TreeholeFeed() {
   const [loaded, setLoaded] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [toast, setToast] = useState('');
+  const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(''), 2000); };
 
   // 频道式排序：最新在最底部，进入时停在底部；顶部「加载更早」时保持当前阅读位置不跳
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -180,8 +206,9 @@ export function TreeholeFeed() {
           {loadingMore ? '加载中…' : '查看更早的树洞'}
         </div>
       )}
+      {toast && <div className="music-toast">{toast}</div>}
       {[...posts].reverse().map((p) => (
-        <TreeholeCard key={p.id} post={p} clamp onOpen={() => nav(`/treehole/${p.id}`)} />
+        <TreeholeCard key={p.id} post={p} clamp onOpen={() => nav(`/treehole/${p.id}`)} onShare={() => shareTreehole(p, showToast)} />
       ))}
       {loaded && posts.length === 0 && (
         <div className="empty">树洞还是空的<br />说点只想让陌生人听见的话吧<br /><span className="small">下拉可刷新</span></div>
@@ -277,7 +304,7 @@ export function TreeholeDetailPage() {
       </div>
 
       <div ref={listRef} className="page no-scrollbar" style={{ padding: '0 14px' }}>
-        <TreeholeCard post={post} clamp={false} />
+        <TreeholeCard post={post} clamp={false} onShare={() => shareTreehole(post, showToast)} />
 
         {/* 评论区：和动态详情一致的平铺列表（头像 | 昵称 · 时间 …… 回复 / 正文 / 贴纸 / 细线），不再用聊天气泡 */}
         <div className={comments.length ? 'th-comments-title' : 'th-comments-title empty'}>
@@ -341,6 +368,74 @@ export function TreeholeDetailPage() {
           {toast}
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------- 分享落地页（不用登录） ----------
+
+interface SharedTreehole extends TreeholePost {
+  comments: TreeholeComment[];
+}
+
+/** /treehole/share/:id：好友点开链接直接看帖子 + 最近几条评论 + 下载 App 参与讨论；接口返回的图片已是完整 URL */
+export function TreeholeSharePage() {
+  const { id } = useParams<{ id: string }>();
+  const [p, setP] = useState<SharedTreehole | null>(null);
+  const [err, setErr] = useState('');
+  const [dl, setDl] = useState<{ android?: string; ios?: string } | null>(null);
+  const [toast, setToast] = useState('');
+  const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(''), 2000); };
+
+  useEffect(() => {
+    if (!id) return;
+    api<SharedTreehole>(`/app/treehole/${id}`).then(setP).catch((e) => setErr(e.message || '这条内容已删除'));
+    api<any>('/app/download').then((d) => setDl({ android: d?.android?.url, ios: d?.ios?.url })).catch(() => {});
+  }, [id]);
+
+  const openApp = () => {
+    const ua = navigator.userAgent;
+    const url = /iPhone|iPad|iPod/i.test(ua) ? dl?.ios : dl?.android;
+    location.href = url || 'https://yyheart.com/';
+  };
+
+  return (
+    <div className="app music-share" style={{ padding: '20px 12px 32px' }}>
+      {err && <div className="empty">{err}</div>}
+      {!p && !err && <div className="empty">加载中…</div>}
+      {p && (
+        <>
+          <TreeholeCard post={p} clamp={false} onShare={() => shareTreehole(p, showToast)} />
+          {p.comments.length > 0 && (
+            <>
+              <div className="th-comments-title">{p.commentCount > p.comments.length ? `最近评论（共 ${p.commentCount} 条）` : `全部评论（${p.commentCount}）`}</div>
+              {p.comments.map((c) => (
+                <div key={c.id} className="th-comment">
+                  <div className="avatar">{c.user.avatar && <img src={c.user.avatar} alt="" />}</div>
+                  <div className="body">
+                    <div className="head">
+                      <span className="name" style={{ color: nameColor(c.user.id) }}>{c.user.nickname}</span>
+                      <span className="time">{fmtTime(c.createdAt)}</span>
+                    </div>
+                    {(c.content || c.replyToNickname) && (
+                      <div className="text">
+                        {c.replyToNickname && <span className="accent">@{c.replyToNickname} </span>}
+                        {c.content}
+                      </div>
+                    )}
+                    {c.sticker && <StickerView p={c.sticker} size={c.sticker.format === 'mp4' ? 160 : 96} style={{ marginTop: 6 }} />}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+          <div className="row" style={{ gap: 12, marginTop: 18 }}>
+            <button className="btn" style={{ flex: 1 }} onClick={openApp}>打开心之音 App 参与讨论</button>
+          </div>
+          <div className="hint">私密树洞 · 匿名说心事，评论只显示昵称</div>
+        </>
+      )}
+      {toast && <div className="music-toast">{toast}</div>}
     </div>
   );
 }

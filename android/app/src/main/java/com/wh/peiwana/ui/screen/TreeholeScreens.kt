@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.SpanStyle
@@ -225,6 +226,37 @@ fun TreeholeSection(onOpen: (String) -> Unit, onPublish: () -> Unit) {
     }
 }
 
+/** 分享短链：后端出带 og 标签的页面（微信 / QQ 卡片带首图 / 文案），点开跳免登录落地页 /#/treehole/share/:id */
+fun treeholeShareLink(id: String) = "https://app.yyheart.com/s/treehole/$id"
+
+/** 分享一条树洞：文案前 60 字（没文案就「N 张图片」）+ 短链，系统分享面板 */
+fun shareTreehole(ctx: android.content.Context, post: TreeholePost) {
+    val text = post.content.trim().replace(Regex("\\s+"), " ").take(60).ifEmpty { "$CHANNEL_NAME · ${post.images.size} 张图片" }
+    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(android.content.Intent.EXTRA_SUBJECT, CHANNEL_NAME)
+        putExtra(android.content.Intent.EXTRA_TEXT, "$text\n${treeholeShareLink(post.id)}")
+    }
+    runCatching { ctx.startActivity(android.content.Intent.createChooser(intent, "分享").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+}
+
+/** 分享图标：向上箭头 + 托盘（和音乐页一致） */
+@Composable
+private fun ShareArrowIcon(tint: Color, size: androidx.compose.ui.unit.Dp) {
+    androidx.compose.foundation.Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        val sw = w * 0.11f
+        val cap = androidx.compose.ui.graphics.StrokeCap.Round
+        drawLine(tint, Offset(w * 0.5f, w * 0.08f), Offset(w * 0.5f, w * 0.62f), sw, cap)
+        drawLine(tint, Offset(w * 0.3f, w * 0.28f), Offset(w * 0.5f, w * 0.08f), sw, cap)
+        drawLine(tint, Offset(w * 0.7f, w * 0.28f), Offset(w * 0.5f, w * 0.08f), sw, cap)
+        val tray = androidx.compose.ui.graphics.Path().apply {
+            moveTo(w * 0.18f, w * 0.48f); lineTo(w * 0.18f, w * 0.9f); lineTo(w * 0.82f, w * 0.9f); lineTo(w * 0.82f, w * 0.48f)
+        }
+        drawPath(tray, tint, style = androidx.compose.ui.graphics.drawscope.Stroke(sw, cap = cap, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+    }
+}
+
 /** 帖子卡：频道名 + 正文 + 阅读/时间 + 评论条（clamp=列表折叠 10 行） */
 @Composable
 fun TreeholeCard(post: TreeholePost, clamp: Boolean, onOpen: (() -> Unit)? = null) {
@@ -272,7 +304,18 @@ fun TreeholeCard(post: TreeholePost, clamp: Boolean, onOpen: (() -> Unit)? = nul
         }
         Column(Modifier.padding(horizontal = 14.dp)) {
         Spacer(Modifier.height(6.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            // 分享靠左：系统分享面板发短链（后端出 og 标签，卡片带首图 / 文案，点开是免登录落地页）
+            val ctx = LocalContext.current
+            Row(
+                Modifier.noRippleClick { shareTreehole(ctx, post) }.padding(end = 8.dp, top = 2.dp, bottom = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ShareArrowIcon(TextSub, 14.dp)
+                Spacer(Modifier.width(4.dp))
+                Text("分享", color = TextSub, fontSize = 12.sp)
+            }
+            Spacer(Modifier.weight(1f))
             EyeIcon(TextDim, 13.dp)
             Text(" ${fmtCount(post.viewCount)}   ${fmtTreeholeTime(post.createdAt)}", color = TextDim, fontSize = 11.sp)
         }

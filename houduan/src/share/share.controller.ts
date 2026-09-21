@@ -3,6 +3,7 @@ import type { Response } from 'express';
 import { Throttle } from '../common/rate-limit.guard';
 import { MusicService } from '../music/music.service';
 import { GalleryService } from '../gallery/gallery.service';
+import { TreeholeService } from '../treehole/treehole.service';
 
 /** 分享链接域名（微信 / QQ / Telegram 的链接卡片抓这个页面的 og 标签） */
 const APP_BASE = (process.env.PUBLIC_APP_BASE || 'https://app.yyheart.com').replace(/\/$/, '');
@@ -25,7 +26,7 @@ interface OgPage {
  */
 @Controller('share')
 export class ShareController {
-  constructor(private readonly music: MusicService, private readonly gallery: GalleryService) {}
+  constructor(private readonly music: MusicService, private readonly gallery: GalleryService, private readonly treehole: TreeholeService) {}
 
   @Get('music/:id')
   @Throttle(60, 60)
@@ -55,6 +56,27 @@ export class ShareController {
       page = { title: p.title || `${APP_NAME} · 养眼图片`, desc: (p.text || count || APP_NAME).slice(0, 80), image, target: `/#/gallery/share/${p.id}`, type: 'article' };
     } catch {
       page = { title: `${APP_NAME} · 养眼图片`, desc: '这条内容已过期', image: '', target: `/#/gallery/share/${id}` };
+    }
+    this.send(res, page);
+  }
+
+  @Get('treehole/:id')
+  @Throttle(60, 60)
+  async treehole_(@Param('id') id: string, @Res() res: Response) {
+    let page: OgPage;
+    try {
+      const p = await this.treehole.publicPost(BigInt(id));
+      const text = (p.content || '').replace(/\s+/g, ' ').trim();
+      const tail = p.commentCount ? ` · ${p.commentCount} 条评论` : '';
+      page = {
+        title: text ? (text.length > 40 ? text.slice(0, 40) + '…' : text) : `${APP_NAME} · 私密树洞`,
+        desc: (text ? `私密树洞${tail} · 匿名说心事，来聊聊` : `${p.images.length} 张图片${tail} · 匿名说心事，来聊聊`).slice(0, 80),
+        image: p.images[0] ?? '',
+        target: `/#/treehole/share/${p.id}`,
+        type: 'article',
+      };
+    } catch {
+      page = { title: `${APP_NAME} · 私密树洞`, desc: '这条内容已删除', image: '', target: `/#/treehole/share/${id}` };
     }
     this.send(res, page);
   }

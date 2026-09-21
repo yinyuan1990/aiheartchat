@@ -48,3 +48,15 @@ export class TreeholeController {
     return this.treehole.addComment(userId, BigInt(id), body?.content ?? '', body?.replyToId, body?.stickerId);
   }
 }
+
+/** 公开：分享落地页（app.yyheart.com/#/treehole/share/:id）不用登录取一条（匿名） */
+@Controller('app/treehole')
+export class TreeholePublicController {
+  constructor(private readonly treehole: TreeholeService) {}
+
+  @Get(':id')
+  @Throttle(60, 60)
+  post(@Param('id') id: string) {
+    return this.treehole.publicPost(BigInt(id));
+  }
+}
