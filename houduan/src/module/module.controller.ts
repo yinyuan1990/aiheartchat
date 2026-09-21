@@ -2,6 +2,7 @@ import { Controller, Get, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
+import { HallTabsService } from './hall-tabs.service';
 
 /**
  * 大厅页模块入口，后台配置、按性别可见性下发。
@@ -10,7 +11,13 @@ import { PrismaService } from '../prisma/prisma.service';
 @Controller('modules')
 @UseGuards(JwtAuthGuard)
 export class ModuleController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly hallTabs: HallTabsService) {}
+
+  /** 大厅 tab 顺序（后台可调）：{order:['guide','games','gallery','treehole']} */
+  @Get('hall-tabs')
+  async hallTabOrder() {
+    return { order: await this.hallTabs.order() };
+  }
 
   @Get()
   async list(@CurrentUser() userId: bigint) {

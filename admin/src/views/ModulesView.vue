@@ -34,7 +34,33 @@ function showToast(t: string) {
 async function load() {
   modules.value = await api<AppModule[]>('/admin/modules');
 }
-onMounted(load);
+onMounted(() => { load(); loadTabs(); });
+
+// ---------- 大厅 tab 顺序 ----------
+const TAB_LABELS: Record<string, string> = { guide: '同城搭子', games: '休闲游戏', gallery: '养眼图片（名称在 Telegram → 养眼图片里改）', treehole: '私密树洞（仅网页版显示，App 内不显示）' };
+const tabOrder = ref<string[]>([]);
+const savingTabs = ref(false);
+async function loadTabs() {
+  tabOrder.value = (await api<{ order: string[] }>('/admin/hall-tabs')).order;
+}
+function moveTab(i: number, dir: -1 | 1) {
+  const j = i + dir;
+  if (j < 0 || j >= tabOrder.value.length) return;
+  const arr = [...tabOrder.value];
+  [arr[i], arr[j]] = [arr[j], arr[i]];
+  tabOrder.value = arr;
+}
+async function saveTabs() {
+  savingTabs.value = true;
+  try {
+    tabOrder.value = (await api<{ order: string[] }>('/admin/hall-tabs', { method: 'PUT', body: { order: tabOrder.value } })).order;
+    showToast('已保存，用户下次进大厅生效');
+  } catch (e: any) {
+    showToast(e.message);
+  } finally {
+    savingTabs.value = false;
+  }
+}
 
 function startAdd(type: AppModule['type']) {
   const list = type === 'game' ? games.value : banners.value;
@@ -100,6 +126,22 @@ function genderText(g: number) {
 <template>
   <div>
     <div class="page-title">项目大厅管理</div>
+
+    <div class="card">
+      <div style="font-weight: 600">大厅 tab 顺序</div>
+      <div class="muted" style="font-size: 12px; margin: 4px 0 12px">排在第一位的是用户进大厅默认打开的 tab。</div>
+      <div class="row" style="flex-wrap: wrap; gap: 8px; align-items: center">
+        <template v-for="(k, i) in tabOrder" :key="k">
+          <span class="tag" style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px">
+            <span class="muted">{{ i + 1 }}.</span>
+            {{ TAB_LABELS[k] ?? k }}
+            <button class="small ghost" :disabled="i === 0" title="前移" @click="moveTab(i, -1)">◀</button>
+            <button class="small ghost" :disabled="i === tabOrder.length - 1" title="后移" @click="moveTab(i, 1)">▶</button>
+          </span>
+        </template>
+        <button class="small" :disabled="savingTabs || tabOrder.length === 0" @click="saveTabs">保存顺序</button>
+      </div>
+    </div>
 
     <div class="card">
       <div class="row" style="margin-bottom: 14px">

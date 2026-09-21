@@ -6,7 +6,7 @@ const props = defineProps<{ loggedIn: boolean }>();
 const emit = defineEmits<{ (e: 'toast', t: string): void }>();
 
 // ---------- 设置：tab 名称 / 保留天数 ----------
-const settings = ref({ titleM: '养眼图片', titleF: '养眼图片', daysM: 3, daysF: 3 });
+const settings = ref({ titleM: '养眼图片', titleF: '养眼图片', daysM: 3, daysF: 3, hideTextM: true, hideTextF: false });
 const savingSettings = ref(false);
 async function loadSettings() {
   settings.value = await api('/admin/gallery/settings');
@@ -15,7 +15,7 @@ async function saveSettings() {
   savingSettings.value = true;
   try {
     settings.value = await api('/admin/gallery/settings', { method: 'PUT', body: settings.value });
-    emit('toast', '已保存，大厅 tab 名称与保留天数即时生效');
+    emit('toast', '已保存，tab 名称 / 保留天数 / 屏蔽文字即时生效');
   } catch (e: any) {
     emit('toast', e.message);
   } finally {
@@ -143,18 +143,21 @@ onMounted(() => { loadSettings(); loadSources(); loadPosts(); });
     <div class="card">
       <div style="font-weight: 600; margin-bottom: 6px">养眼图片 · 设置</div>
       <div class="muted" style="margin-bottom: 12px">
-        大厅里的一个 tab，<b>男用户看「男用户看」来源的内容，女用户看「女用户看」来源的内容</b>；tab 名称、保留天数都按男/女分开设。频道里的图片 / 视频（相册合成一条）转存到自己服务器，
+        大厅里的一个 tab，<b>男用户看「男用户看」来源的内容，女用户看「女用户看」来源的内容</b>；tab 名称、保留天数、是否屏蔽文字都按男/女分开设。频道里的图片 / 视频（相册合成一条）转存到自己服务器，
         超过保留天数的连文件删除。用户端最新的在最底部（像聊天记录），往上滑加载更早的。
+        <br />「屏蔽文字」勾上后用户端只看图 / 视频，不显示频道文案（下发时去掉，不改库，随时可切回）；默认男频屏蔽、女频不屏蔽。
       </div>
       <div class="row" style="flex-wrap: wrap; gap: 12px 24px; align-items: center">
         <span class="tag ok">男用户</span>
         <label class="muted">tab 名 <input v-model="settings.titleM" maxlength="12" style="width: 130px" /></label>
         <label class="muted">保留天数 <input v-model.number="settings.daysM" type="number" min="1" max="60" style="width: 70px" /></label>
+        <label class="muted" style="display: inline-flex; align-items: center; gap: 6px"><input v-model="settings.hideTextM" type="checkbox" /> 屏蔽文字</label>
       </div>
       <div class="row" style="flex-wrap: wrap; gap: 12px 24px; align-items: center; margin-top: 10px">
         <span class="tag warn">女用户</span>
         <label class="muted">tab 名 <input v-model="settings.titleF" maxlength="12" style="width: 130px" /></label>
         <label class="muted">保留天数 <input v-model.number="settings.daysF" type="number" min="1" max="60" style="width: 70px" /></label>
+        <label class="muted" style="display: inline-flex; align-items: center; gap: 6px"><input v-model="settings.hideTextF" type="checkbox" /> 屏蔽文字</label>
         <button class="small" :disabled="savingSettings" @click="saveSettings">保存设置</button>
       </div>
     </div>

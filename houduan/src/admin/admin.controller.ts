@@ -14,6 +14,7 @@ import { MusicService } from '../music/music.service';
 import { GalleryService } from '../gallery/gallery.service';
 import { StickerService } from '../sticker/sticker.service';
 import { GifService } from '../gif/gif.service';
+import { HallTabsService } from '../module/hall-tabs.service';
 
 @Controller('admin')
 export class AdminController {
@@ -30,6 +31,7 @@ export class AdminController {
     private readonly gallery: GalleryService,
     private readonly stickers: StickerService,
     private readonly gifs: GifService,
+    private readonly hallTabs: HallTabsService,
   ) {}
 
   // ---------- 表情包（Telegram 公开贴纸集，后台精选） ----------
@@ -143,7 +145,7 @@ export class AdminController {
 
   @Put('gallery/settings')
   @UseGuards(AdminGuard)
-  gallerySaveSettings(@Body() body: { titleM?: string; titleF?: string; daysM?: number; daysF?: number }) {
+  gallerySaveSettings(@Body() body: { titleM?: string; titleF?: string; daysM?: number; daysF?: number; hideTextM?: boolean; hideTextF?: boolean }) {
     return this.gallery.saveSettings(body ?? {});
   }
 
@@ -621,6 +623,19 @@ export class AdminController {
   @UseGuards(AdminGuard)
   modules() {
     return this.admin.listModules();
+  }
+
+  /** 大厅 tab 顺序 */
+  @Get('hall-tabs')
+  @UseGuards(AdminGuard)
+  async hallTabOrder() {
+    return { order: await this.hallTabs.order() };
+  }
+
+  @Put('hall-tabs')
+  @UseGuards(AdminGuard)
+  async saveHallTabs(@Body() body: { order?: string[] }) {
+    return { order: await this.hallTabs.save(body?.order) };
   }
 
   @Post('modules')

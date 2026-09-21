@@ -33,10 +33,26 @@ const ALL_TABS: { key: HallTab; label: string }[] = [
 ];
 const TAB_KEY = 'hall_tab';
 const GALLERY_TITLE_KEY = 'hall_gallery_title';
+const TAB_ORDER_KEY = 'hall_tab_order';
+
+/** 后台配的 tab 顺序（GET /modules/hall-tabs），先用上次缓存的；没配过 / 漏掉的 key 按默认顺序排到最后 */
+function readTabOrder(): HallTab[] {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(TAB_ORDER_KEY) || '[]');
+    return Array.isArray(saved) ? saved : [];
+  } catch {
+    return [];
+  }
+}
+function sortTabs(order: HallTab[]) {
+  const rank = (k: HallTab) => { const i = order.indexOf(k); return i < 0 ? order.length + ALL_TABS.findIndex((t) => t.key === k) : i; };
+  return [...ALL_TABS].sort((a, b) => rank(a.key) - rank(b.key));
+}
 
 /** App 内嵌大厅不显示私密树洞（iOS/Android 已在广场做了原生版本），仅浏览器网页版保留 */
-function visibleTabs() {
-  return isEmbedded() ? ALL_TABS.filter((t) => t.key !== 'treehole') : ALL_TABS;
+function visibleTabs(order: HallTab[]) {
+  const tabs = sortTabs(order);
+  return isEmbedded() ? tabs.filter((t) => t.key !== 'treehole') : tabs;
 }
 
 const COVERS = [
@@ -80,11 +96,25 @@ function openGameUrl(url: string, title: string, orientation: WebOrientation) {
 export function HallPage() {
   const user = useApp((s) => s.user);
   const setUser = useApp((s) => s.setUser);
-  const tabs = visibleTabs();
+  const [tabOrder, setTabOrder] = useState<HallTab[]>(readTabOrder);
+  const tabs = visibleTabs(tabOrder);
+  // 默认打开排在第一位的 tab（后台可调顺序）；本会话内切过就记住
   const [tab, setTab] = useState<HallTab>(() => {
     const saved = sessionStorage.getItem(TAB_KEY) as HallTab | null;
-    return saved && tabs.some((t) => t.key === saved) ? saved : 'guide';
+    return saved && tabs.some((t) => t.key === saved) ? saved : tabs[0]?.key ?? 'guide';
   });
+  useEffect(() => {
+    api<{ order: HallTab[] }>('/modules/hall-tabs').then((r) => {
+      if (!Array.isArray(r?.order)) return;
+      setTabOrder(r.order);
+      sessionStorage.setItem(TAB_ORDER_KEY, JSON.stringify(r.order));
+      // 首次进入（没手动切过 tab）时跟随后台的第一位
+      if (!sessionStorage.getItem(TAB_KEY)) {
+        const first = visibleTabs(r.order)[0]?.key;
+        if (first) setTab(first);
+      }
+    }).catch(() => {});
+  }, []);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [loaded, setLoaded] = useState(false);
   // 养眼图片 tab 名称（后台可改）：先用上次缓存的，再拉最新

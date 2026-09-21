@@ -63,13 +63,14 @@ export class GalleryService implements OnModuleInit {
 
   // ---------- 设置 ----------
 
-  /** 后台设置：tab 名称与保留天数都按受众分开（M 男看 / F 女看） */
-  async settings(): Promise<{ titleM: string; titleF: string; daysM: number; daysF: number }> {
+  /** 后台设置：tab 名称 / 保留天数 / 是否屏蔽文案 都按受众分开（M 男看 / F 女看）；屏蔽文案默认男频屏蔽、女频不屏蔽 */
+  async settings(): Promise<{ titleM: string; titleF: string; daysM: number; daysF: number; hideTextM: boolean; hideTextF: boolean }> {
     const rows = await this.prisma.sysSetting.findMany({
-      where: { key: { in: ['gallery_title_m', 'gallery_title_f', 'gallery_title', 'gallery_days_m', 'gallery_days_f', 'gallery_days'] } },
+      where: { key: { in: ['gallery_title_m', 'gallery_title_f', 'gallery_title', 'gallery_days_m', 'gallery_days_f', 'gallery_days', 'gallery_hide_text_m', 'gallery_hide_text_f'] } },
     });
     const get = (k: string) => rows.find((r) => r.key === k)?.value ?? '';
     const clampDays = (v: string, fallback: number) => Math.min(60, Math.max(1, Number(v) || fallback));
+    const bool = (v: string, fallback: boolean) => (v === '' ? fallback : v === '1');
     const legacyTitle = get('gallery_title') || DEFAULT_TITLE;
     const legacyDays = clampDays(get('gallery_days'), DEFAULT_DAYS);
     return {
@@ -77,13 +78,15 @@ export class GalleryService implements OnModuleInit {
       titleF: get('gallery_title_f') || legacyTitle,
       daysM: clampDays(get('gallery_days_m'), legacyDays),
       daysF: clampDays(get('gallery_days_f'), legacyDays),
+      hideTextM: bool(get('gallery_hide_text_m'), true),
+      hideTextF: bool(get('gallery_hide_text_f'), false),
     };
   }
 
-  /** 某个受众的 tab 名 / 保留天数 */
-  async forAudience(audience: number): Promise<{ title: string; days: number }> {
+  /** 某个受众的 tab 名 / 保留天数 / 是否屏蔽文案 */
+  async forAudience(audience: number): Promise<{ title: string; days: number; hideText: boolean }> {
     const s = await this.settings();
-    return audience === 2 ? { title: s.titleF, days: s.daysF } : { title: s.titleM, days: s.daysM };
+    return audience === 2 ? { title: s.titleF, days: s.daysF, hideText: s.hideTextF } : { title: s.titleM, days: s.daysM, hideText: s.hideTextM };
   }
 
   /** 用户端：按自己性别拿 tab 名称与天数 */
@@ -92,7 +95,7 @@ export class GalleryService implements OnModuleInit {
     return this.forAudience(me?.gender === 2 ? 2 : 1);
   }
 
-  async saveSettings(data: { titleM?: string; titleF?: string; daysM?: number; daysF?: number }) {
+  async saveSettings(data: { titleM?: string; titleF?: string; daysM?: number; daysF?: number; hideTextM?: boolean; hideTextF?: boolean }) {
     const titleM = String(data.titleM ?? '').trim().slice(0, 12);
     const titleF = String(data.titleF ?? '').trim().slice(0, 12);
     const daysM = Math.min(60, Math.max(1, Number(data.daysM) || DEFAULT_DAYS));
@@ -102,6 +105,8 @@ export class GalleryService implements OnModuleInit {
     await set('gallery_title_f', titleF);
     await set('gallery_days_m', String(daysM));
     await set('gallery_days_f', String(daysF));
+    if (data.hideTextM !== undefined) await set('gallery_hide_text_m', data.hideTextM ? '1' : '0');
+    if (data.hideTextF !== undefined) await set('gallery_hide_text_f', data.hideTextF ? '1' : '0');
     return this.settings();
   }
 
@@ -111,7 +116,7 @@ export class GalleryService implements OnModuleInit {
   async list(userId: bigint, beforeId?: bigint) {
     const me = await this.prisma.user.findUnique({ where: { id: userId }, select: { gender: true } });
     const audience = me?.gender === 2 ? 2 : 1;
-    const { title, days } = await this.forAudience(audience);
+    const { title, days, hideText } = await this.forAudience(audience);
     const cutoff = new Date(Date.now() - days * 86_400_000);
     const rows = await this.prisma.galleryPost.findMany({
       where: { audience, postedAt: { gte: cutoff }, ...(beforeId ? { id: { lt: beforeId } } : {}) },
@@ -124,7 +129,8 @@ export class GalleryService implements OnModuleInit {
       title,
       days,
       source: src ? { title: src.title || src.channel } : null,
-      list: rows.map((r) => ({ ...r, media: safeJson<GalleryMedia[]>(r.media, []) })),
+      // 屏蔽文案在出口做（不改库），后台切换即时生效、可反悔
+      list: rows.map((r) => ({ ...r, text: hideText ? '' : r.text, media: safeJson<GalleryMedia[]>(r.media, []) })),
     };
   }
 
