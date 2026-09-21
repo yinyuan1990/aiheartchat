@@ -108,23 +108,40 @@ enum PanelMode: String { case gif, sticker, emoji }
 final class PanelChrome: ObservableObject {
     @Published var hidden = false
     private var last: CGFloat = 0
-    /// 同方向累计滚动量：iOS 每帧回调一次（ProMotion 120Hz 时正常滑动每帧只有 2~3pt），
-    /// 单帧差值永远到不了阈值 → 顶部条 / 胶囊从来不收。改成累计，换方向清零。
+    /// 同方向累计滚动量：iOS 每帧回调一次（ProMotion 120Hz 时正常滑动每帧只有 2~3pt），单帧差值到不了阈值，改成累计、换方向清零
     private var acc: CGFloat = 0
+    /// 上次切换时间：切换后顶部条高度变了，ScrollView 会重排、offset 抖一下，这段时间内的变化不算
+    private var lastToggle: CFTimeInterval = 0
 
-    /// minY 为内容顶部在滚动坐标系里的位置（往下滚为负）
-    func onOffset(_ minY: CGFloat) {
-        let top = -minY
+    /**
+     top = 已滚过的距离（往下滚为正），maxTop = 能滚到的最大值（超出即在底部回弹）。
+     规则（Telegram 手感）：往下滚累计 24pt 才收；往上滚累计 40pt 才展开（收起比展开更容易，避免手指抖一下就闪）；
+     回到顶部 12pt 内一定展开；顶 / 底部回弹阶段和刚切换后的 300ms 内忽略。
+     */
+    func onOffset(top: CGFloat, maxTop: CGFloat) {
         let d = top - last
         last = top
-        if top < 12 { acc = 0; if hidden { hidden = false }; return }
-        if d == 0 { return }
+        if top < 12 { acc = 0; set(false); return }
+        if top > maxTop + 1 { acc = 0; return }
+        let now = CACurrentMediaTime()
+        if now - lastToggle < 0.3 { acc = 0; return }
+        if abs(d) < 0.5 { return }
         if (d > 0) != (acc > 0) { acc = 0 }
         acc += d
-        if acc > 12 { if !hidden { hidden = true } } else if acc < -12 { if hidden { hidden = false } }
+        if !hidden && acc > 24 { set(true) } else if hidden && acc < -40 { set(false) }
     }
 
-    func reset() { last = 0; acc = 0; hidden = false }
+    /// 兼容旧调用（minY 为内容顶部位置，往下滚为负）
+    func onOffset(_ minY: CGFloat) { onOffset(top: -minY, maxTop: .greatestFiniteMagnitude) }
+
+    private func set(_ h: Bool) {
+        guard hidden != h else { return }
+        hidden = h
+        acc = 0
+        lastToggle = CACurrentMediaTime()
+    }
+
+    func reset() { last = 0; acc = 0; lastToggle = 0; hidden = false }
 }
 
 /// ScrollView 自身在屏幕上的 top（全局坐标），分区标题的全局 minY 减掉它 = 相对滚动区的位置
@@ -136,10 +153,10 @@ private struct ScrollTopKey: PreferenceKey {
 /**
  滚动偏移观察：塞进 ScrollView 内容里的一个隐形 UIView，挂到窗口后沿 superview 找到宿主 UIScrollView，KVO 它的 contentOffset。
  之前用 GeometryReader + 命名坐标系 + preference 那套，在真机上不回调（顶部条 / 胶囊从来不收），改用 UIKit 直读最稳。
- 回调参数 = 已滚过的距离（往下滚为正）。
+ 回调参数 = (已滚过的距离（往下滚为正）, 最大可滚距离)。
  */
 private struct ScrollOffsetObserver: UIViewRepresentable {
-    var onChange: (CGFloat) -> Void
+    var onChange: (CGFloat, CGFloat) -> Void
 
     func makeUIView(context: Context) -> ObserverView {
         let v = ObserverView()
@@ -152,7 +169,7 @@ private struct ScrollOffsetObserver: UIViewRepresentable {
     func updateUIView(_ v: ObserverView, context: Context) { v.onChange = onChange }
 
     final class ObserverView: UIView {
-        var onChange: ((CGFloat) -> Void)?
+        var onChange: ((CGFloat, CGFloat) -> Void)?
         private var obs: NSKeyValueObservation?
 
         override func didMoveToWindow() {
@@ -168,7 +185,10 @@ private struct ScrollOffsetObserver: UIViewRepresentable {
             while let cur = v, !(cur is UIScrollView) { v = cur.superview }
             guard let sv = v as? UIScrollView else { return }
             obs = sv.observe(\.contentOffset, options: [.new]) { [weak self] sv, _ in
-                self?.onChange?(sv.contentOffset.y + sv.adjustedContentInset.top)
+                let inset = sv.adjustedContentInset
+                let top = sv.contentOffset.y + inset.top
+                let maxTop = max(0, sv.contentSize.height + inset.top + inset.bottom - sv.bounds.height)
+                self?.onChange?(top, maxTop)
             }
         }
     }
@@ -491,7 +511,7 @@ private struct StickerPane: View {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    ScrollOffsetObserver { chrome.onOffset(-$0) }.frame(height: 1)
+                    ScrollOffsetObserver { top, maxTop in chrome.onOffset(top: top, maxTop: maxTop) }.frame(height: 1)
                     LazyVStack(alignment: .leading, spacing: 0) {
                         let secs = sections
                         if secs.isEmpty {
@@ -649,7 +669,7 @@ private struct EmojiPane: View {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    ScrollOffsetObserver { chrome.onOffset(-$0) }.frame(height: 1)
+                    ScrollOffsetObserver { top, maxTop in chrome.onOffset(top: top, maxTop: maxTop) }.frame(height: 1)
                     LazyVStack(alignment: .leading, spacing: 0) {
                         if !store.recent.isEmpty {
                             header("recent", "最近使用")
@@ -742,7 +762,7 @@ private struct GifPane: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
             ScrollView {
-                ScrollOffsetObserver { chrome.onOffset(-$0) }.frame(height: 1)
+                ScrollOffsetObserver { top, maxTop in chrome.onOffset(top: top, maxTop: maxTop) }.frame(height: 1)
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if !store.recentGifs.isEmpty {
                         sectionTitle("最近使用").padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 4)
@@ -822,7 +842,7 @@ private struct GifGrid: View {
                     Color.clear
                         .aspectRatio(1, contentMode: .fit)
                         .background(Theme.bg3)
-                        .overlay(AnimatedImageView(url: Api.fullUrl((p.thumb ?? "").isEmpty ? p.url : p.thumb!), animate: true, fill: true))
+                        .overlay(AnimatedImageView(url: Api.fullUrl((p.thumb ?? "").isEmpty ? p.url : p.thumb!), animate: true, fill: true, maxFps: 12))
                         .clipped()
                         .contentShape(Rectangle())
                         .onTapGesture { onPick(p) }

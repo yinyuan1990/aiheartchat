@@ -170,6 +170,8 @@ struct StickerImageView: View {
 
     /// 解码降采样目标：显示尺寸 × 屏幕倍率（再大也看不出区别，白费 CPU 和内存）
     private var px: CGFloat { size * UIScreen.main.scale }
+    /// 面板网格 / 待发小图（≤ 80pt）一屏几十个同时播：限 12fps；气泡里正常 30fps
+    private var fpsCap: Double { size <= 80 ? 12 : 30 }
 
     var body: some View {
         Group {
@@ -184,10 +186,15 @@ struct StickerImageView: View {
                         if let t = p.thumb, !t.isEmpty { StaticThumbView(url: t, maxPixel: px) } else { Color.clear }
                     }
                     .playbackMode(.playing(.fromProgress(0, toProgress: 1, loopMode: .loop)))
+                    // 按动画自己的帧率（一般 30/60）而不是屏幕刷新率驱动；小图再降一半
+                    .configure { view in
+                        view.respectAnimationFrameRate = true
+                        view.shouldRasterizeWhenIdle = true
+                    }
                 }
             case "awebp":
                 if autoplay {
-                    AnimatedImageView(url: Api.fullUrl(p.url), animate: true, maxPixel: px)
+                    AnimatedImageView(url: Api.fullUrl(p.url), animate: true, maxPixel: px, maxFps: fpsCap)
                 } else {
                     // 不播时只要一张静态图：有 thumb 用 thumb，否则解动图首帧
                     StaticThumbView(url: (p.thumb ?? "").isEmpty ? p.url : p.thumb!, maxPixel: px)
@@ -198,7 +205,7 @@ struct StickerImageView: View {
                         .background(Theme.bg3)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                 } else {
-                    AnimatedImageView(url: Api.fullUrl((p.thumb ?? "").isEmpty ? p.url : p.thumb!), animate: true, fill: true, maxPixel: px)
+                    AnimatedImageView(url: Api.fullUrl((p.thumb ?? "").isEmpty ? p.url : p.thumb!), animate: true, fill: true, maxPixel: px, maxFps: 12)
                         .background(Theme.bg3)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
@@ -234,6 +241,8 @@ struct AnimatedImageView: UIViewRepresentable {
     var fill = false
     /// 解码时降采样到的最大像素（长边）。0 = 不降采样。面板小图 / GIF 瓦片传显示尺寸×scale 即可
     var maxPixel: CGFloat = 0
+    /// 帧率上限（0 = 按源文件）。面板一屏几十个小图同时播，30fps 的源全解会把 CPU 吃满、滑动卡，小图 12fps 看不出差别
+    var maxFps: Double = 0
 
     final class Holder {
         var url = ""
@@ -259,10 +268,11 @@ struct AnimatedImageView: UIViewRepresentable {
         let target = url
         let animate = self.animate
         let maxPixel = self.maxPixel
+        let maxFps = self.maxFps
         Task { @MainActor in
             guard let data = await AnimatedImageCache.data(for: target), holder.url == target else { return }
             if animate {
-                let player = AnimatedPlayer(data: data, maxPixel: maxPixel) { [weak v] img in v?.image = img }
+                let player = AnimatedPlayer(data: data, maxPixel: maxPixel, maxFps: maxFps) { [weak v] img in v?.image = img }
                 holder.player = player
                 player.start()
             } else {
@@ -288,12 +298,15 @@ final class AnimatedPlayer {
     private let durations: [TimeInterval]
     private let options: CFDictionary
     private let downsample: Bool
+    /// 两帧之间最短间隔（帧率上限），0 = 不限
+    private let minInterval: TimeInterval
     private let onFrame: (UIImage) -> Void
     private var stopped = false
     private var index = 0
 
-    init(data: Data, maxPixel: CGFloat, onFrame: @escaping (UIImage) -> Void) {
+    init(data: Data, maxPixel: CGFloat, maxFps: Double = 0, onFrame: @escaping (UIImage) -> Void) {
         self.onFrame = onFrame
+        minInterval = maxFps > 0 ? 1.0 / maxFps : 0
         // kCGImageSourceShouldCache=false：不让 ImageIO 把解过的帧全留在内存里
         let src = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary)
         source = src
@@ -337,11 +350,18 @@ final class AnimatedPlayer {
                 self.onFrame(img)
             }
         }
-        index = (i + 1) % max(count, 1)
         // 静态图（1 帧）显示一次即止
         if count <= 1 { return }
+        // 帧率上限：源帧太密就跳帧，把跳过的帧时长累加到等待里，动画总时长不变
+        var next = (i + 1) % count
+        var wait = durations[i]
+        while wait < minInterval && next != i {
+            wait += durations[next]
+            next = (next + 1) % count
+        }
+        index = next
         let spent = CFAbsoluteTimeGetCurrent() - started
-        schedule(after: max(0.016, durations[i] - spent))
+        schedule(after: max(0.016, wait - spent))
     }
 
     /// 单帧时长：GIF / APNG / WebP 各自的属性字典；缺省 0.1s（ImageIO 对 ≤10ms 的 GIF 也按 100ms 处理）
