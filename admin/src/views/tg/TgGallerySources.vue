@@ -248,7 +248,12 @@ onMounted(() => { loadSettings(); loadSources(); loadPosts(); });
                 <span v-if="p.media.length > 6" class="muted">+{{ p.media.length - 6 }}</span>
               </div>
             </td>
-            <td class="muted" style="max-width: 320px; white-space: pre-wrap; font-size: 12px">{{ p.text.length > 120 ? p.text.slice(0, 120) + '…' : p.text }}</td>
+            <td class="muted" style="max-width: 320px; white-space: pre-wrap; font-size: 12px">
+              <!-- 后台永远显示原文；该受众开了「屏蔽文字」只是用户端不显示，这里打个标 -->
+              <span v-if="(p.audience === 2 ? settings.hideTextF : settings.hideTextM) && p.text" class="tag off" style="margin-right: 4px; font-size: 10px">用户端不显示</span>
+              <template v-if="p.text">{{ p.text.length > 120 ? p.text.slice(0, 120) + '…' : p.text }}</template>
+              <span v-else style="opacity: 0.5">（无文字：频道原帖没文字，或文案全是广告被过滤）</span>
+            </td>
             <td class="muted">{{ p.viewCount }}</td>
             <td class="muted">{{ fmt(p.postedAt) }}</td>
             <td><button class="small ghost" @click="deletePost(p)">删除</button></td>

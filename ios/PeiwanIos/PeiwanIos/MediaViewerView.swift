@@ -49,23 +49,33 @@ struct MediaViewerView: View {
                 .rotationEffect(.degrees(-90))
                 .frame(width: geo.size.width, height: geo.size.height)
 
+                // 整页 ignoresSafeArea 后 geo 里拿不到安全区，顶部条要自己让开状态栏 / 灵动岛，否则 × 压在状态栏下点不到
                 HStack {
                     Text(counter).font(.system(size: 13)).foregroundStyle(.white).frame(maxWidth: .infinity)
                 }
                 .overlay(alignment: .trailing) {
                     Button { onClose() } label: {
-                        Text("×").font(.system(size: 22)).foregroundStyle(.white)
-                            .frame(width: 36, height: 36)
-                            .background(Circle().fill(.white.opacity(0.15)))
+                        Text("×").font(.system(size: 24)).foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .background(Circle().fill(.white.opacity(0.18)))
                     }
                     .buttonStyle(.plain)
-                    .padding(.trailing, 16)
+                    .padding(.trailing, 14)
                 }
-                .padding(.top, 8)
+                .frame(height: 44)
+                .padding(.top, Self.topInset() + 8)
+                .zIndex(10)
             }
         }
         .ignoresSafeArea()
         .onAppear { MusicCenter.shared.pause() }
+    }
+
+    /// 当前窗口顶部安全区高度（状态栏 / 灵动岛），拿不到时按带刘海机型给 47
+    static func topInset() -> CGFloat {
+        let scene = UIApplication.shared.connectedScenes.first { $0.activationState == .foregroundActive } as? UIWindowScene
+        let inset = scene?.windows.first(where: { $0.isKeyWindow })?.safeAreaInsets.top ?? 0
+        return inset > 0 ? inset : 47
     }
 
     private var counter: String {

@@ -42,27 +42,65 @@ export function Collapsible({ hidden, height, children }: { hidden: boolean; hei
   );
 }
 
-/** 搜索行：🔍 输入 + 快捷 emoji 一排 */
-export function SearchRow({ value, onChange, chip, onChip, placeholder = '搜索' }: { value: string; onChange: (v: string) => void; chip: string; onChip: (e: string) => void; placeholder?: string }) {
+/** 🔍 图标（线条，和 Telegram 一致） */
+export function SearchIcon({ size = 15 }: { size?: number }) {
   return (
-    <div className="no-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px 6px', overflowX: 'auto', height: 44, boxSizing: 'border-box' }}>
-      <div className="row" style={{ background: 'var(--bg-input)', borderRadius: 17, height: 34, padding: '0 10px', gap: 6, flexShrink: 0, minWidth: value ? 200 : 96 }}>
-        <span style={{ fontSize: 14, color: 'var(--text-3)' }}>🔍</span>
-        <input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          style={{ border: 0, outline: 0, background: 'transparent', fontSize: 14, width: value ? 160 : 60, color: 'var(--text)' }}
-        />
-        {value && <span onClick={() => onChange('')} style={{ fontSize: 13, color: 'var(--text-3)', cursor: 'pointer' }}>✕</span>}
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+      <circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4-4" />
+    </svg>
+  );
+}
+
+/**
+ * 搜索行（Telegram 图）：一整条圆角胶囊，左边 🔍「搜索」，右边一排**虚化**的快捷 emoji。
+ * - 贴纸页传 onTap：整条胶囊是个按钮（和「+」一样弹表情商店 sheet 并聚焦搜索），点快捷 emoji 直接带着它去搜；
+ * - 表情 / GIF 页不传：点胶囊变成输入框就地搜，快捷 emoji 点亮一个当过滤词。
+ */
+export function SearchRow({ value, onChange, chip, onChip, placeholder = '搜索', onTap }: {
+  value: string; onChange: (v: string) => void; chip: string; onChip: (e: string) => void; placeholder?: string; onTap?: () => void;
+}) {
+  const [focus, setFocus] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const editing = !onTap && (focus || !!value);
+  const chipStyle = (e: string): CSSProperties => ({
+    fontSize: 19, lineHeight: '30px', width: 30, textAlign: 'center', flexShrink: 0, cursor: 'pointer', borderRadius: 15,
+    background: chip === e ? 'var(--bg-card)' : 'transparent',
+    // 虚化：灰度 + 半透明，被选中的那个才恢复彩色
+    filter: chip === e ? undefined : 'grayscale(1)',
+    opacity: chip === e ? 1 : 0.45,
+    transition: 'opacity .15s',
+  });
+  return (
+    <div style={{ padding: '4px 10px 8px', height: 44, boxSizing: 'border-box' }}>
+      <div
+        className="row"
+        onClick={() => { if (onTap) onTap(); else { setFocus(true); inputRef.current?.focus(); } }}
+        style={{ background: 'var(--bg-input)', borderRadius: 18, height: 32, padding: '0 6px 0 12px', gap: 6, cursor: 'text', overflow: 'hidden' }}
+      >
+        <span style={{ color: 'var(--text-3)', display: 'flex', flexShrink: 0 }}><SearchIcon /></span>
+        {onTap ? (
+          <span style={{ fontSize: 14, color: 'var(--text-3)', flexShrink: 0 }}>{placeholder}</span>
+        ) : (
+          <input
+            ref={inputRef}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onFocus={() => setFocus(true)}
+            onBlur={() => setFocus(false)}
+            placeholder={placeholder}
+            style={{ border: 0, outline: 0, background: 'transparent', fontSize: 14, color: 'var(--text)', width: editing ? undefined : 44, flex: editing ? 1 : undefined, minWidth: 0 }}
+          />
+        )}
+        {editing ? (
+          <span onClick={(e) => { e.stopPropagation(); onChange(''); onChip(''); setFocus(false); inputRef.current?.blur(); }} style={{ fontSize: 13, color: 'var(--text-3)', cursor: 'pointer', padding: '0 6px' }}>✕</span>
+        ) : (
+          <div className="no-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: 2, marginLeft: 'auto', overflowX: 'auto', flex: 1, justifyContent: 'flex-end' }}>
+            {QUICK_EMOJIS.map((e) => (
+              <span key={e} onClick={(ev) => { ev.stopPropagation(); onChip(chip === e ? '' : e); }} style={chipStyle(e)}>{e}</span>
+            ))}
+          </div>
+        )}
       </div>
-      {QUICK_EMOJIS.map((e) => (
-        <span
-          key={e}
-          onClick={() => onChip(chip === e ? '' : e)}
-          style={{ fontSize: 20, lineHeight: '34px', width: 34, textAlign: 'center', flexShrink: 0, cursor: 'pointer', borderRadius: 17, background: chip === e ? 'var(--bg-input)' : 'transparent', filter: chip && chip !== e ? 'grayscale(1) opacity(.5)' : undefined }}
-        >{e}</span>
-      ))}
     </div>
   );
 }

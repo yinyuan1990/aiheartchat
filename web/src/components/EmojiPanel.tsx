@@ -26,7 +26,8 @@ export function EmojiPanel({ onPick, onEmoji, onDelete, onKeyboard, height }: {
     const m = localStorage.getItem(MODE_KEY) as PanelMode | null;
     return m === 'gif' || m === 'emoji' || m === 'sticker' ? m : 'sticker';
   });
-  const [sheet, setSheet] = useState<'store' | 'manage' | null>(null);
+  /** 商店 sheet：query 有值 = 从搜索行进来（'' 只聚焦搜索框，emoji 直接带着搜） */
+  const [sheet, setSheet] = useState<{ mode: 'store' | 'manage'; query?: string } | null>(null);
   const { hidden, onScroll, reset } = useScrollChrome();
   const h = height ?? defaultPanelHeight();
 
@@ -41,7 +42,7 @@ export function EmojiPanel({ onPick, onEmoji, onDelete, onKeyboard, height }: {
 
   return (
     <div style={{ height: h, position: 'relative', background: 'var(--bg-card)', borderTop: '1px solid var(--line)', overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
-      {mode === 'sticker' && <StickerPane hidden={hidden} onScroll={onScroll} onPick={pick} onStore={() => setSheet('store')} />}
+      {mode === 'sticker' && <StickerPane hidden={hidden} onScroll={onScroll} onPick={pick} onStore={(query) => setSheet({ mode: 'store', query })} />}
       {mode === 'gif' && <GifPane hidden={hidden} onScroll={onScroll} onPick={pick} />}
       {mode === 'emoji' && <EmojiPane hidden={hidden} onScroll={onScroll} onEmoji={(e) => onEmoji?.(e)} />}
 
@@ -58,10 +59,10 @@ export function EmojiPanel({ onPick, onEmoji, onDelete, onKeyboard, height }: {
         <div className={`ep-chrome ep-side${hidden ? ' hide' : ''}`} style={{ right: 12 }} title="删除" onClick={onDelete}>⌫</div>
       )}
       {mode === 'sticker' && (
-        <div className={`ep-chrome ep-side${hidden ? ' hide' : ''}`} style={{ right: 12, fontSize: 17 }} title="管理我的贴纸" onClick={() => setSheet('manage')}>⚙</div>
+        <div className={`ep-chrome ep-side${hidden ? ' hide' : ''}`} style={{ right: 12, fontSize: 17 }} title="管理我的贴纸" onClick={() => setSheet({ mode: 'manage' })}>⚙</div>
       )}
 
-      {sheet && <StickerStoreSheet mode={sheet} onClose={() => setSheet(null)} />}
+      {sheet && <StickerStoreSheet mode={sheet.mode} initialQuery={sheet.query ?? ''} autoFocus={sheet.query !== undefined} onClose={() => setSheet(null)} />}
     </div>
   );
 }
