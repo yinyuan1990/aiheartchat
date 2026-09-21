@@ -127,9 +127,51 @@ final class PanelChrome: ObservableObject {
     func reset() { last = 0; acc = 0; hidden = false }
 }
 
-private struct OffsetKey: PreferenceKey {
+/// ScrollView 自身在屏幕上的 top（全局坐标），分区标题的全局 minY 减掉它 = 相对滚动区的位置
+private struct ScrollTopKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+/**
+ 滚动偏移观察：塞进 ScrollView 内容里的一个隐形 UIView，挂到窗口后沿 superview 找到宿主 UIScrollView，KVO 它的 contentOffset。
+ 之前用 GeometryReader + 命名坐标系 + preference 那套，在真机上不回调（顶部条 / 胶囊从来不收），改用 UIKit 直读最稳。
+ 回调参数 = 已滚过的距离（往下滚为正）。
+ */
+private struct ScrollOffsetObserver: UIViewRepresentable {
+    var onChange: (CGFloat) -> Void
+
+    func makeUIView(context: Context) -> ObserverView {
+        let v = ObserverView()
+        v.onChange = onChange
+        v.isUserInteractionEnabled = false
+        v.backgroundColor = .clear
+        return v
+    }
+
+    func updateUIView(_ v: ObserverView, context: Context) { v.onChange = onChange }
+
+    final class ObserverView: UIView {
+        var onChange: ((CGFloat) -> Void)?
+        private var obs: NSKeyValueObservation?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            obs = nil
+            guard window != nil else { return }
+            // 等这一轮布局结束再找，刚挂上时 superview 链可能还没接到 UIScrollView
+            DispatchQueue.main.async { [weak self] in self?.attach() }
+        }
+
+        private func attach() {
+            var v: UIView? = superview
+            while let cur = v, !(cur is UIScrollView) { v = cur.superview }
+            guard let sv = v as? UIScrollView else { return }
+            obs = sv.observe(\.contentOffset, options: [.new]) { [weak self] sv, _ in
+                self?.onChange?(sv.contentOffset.y + sv.adjustedContentInset.top)
+            }
+        }
+    }
 }
 
 private struct SectionsKey: PreferenceKey {
@@ -399,6 +441,7 @@ private struct StickerPane: View {
     @StateObject private var bar = BarExpand()
     @State private var active = "recent"
     @State private var adding: Int? = nil
+    @State private var scrollTop: CGFloat = 0
     /// 搜索行是按钮，这两个只是占位给 SearchRow 的绑定
     @State private var noText = ""
     @State private var chipTap = ""
@@ -448,7 +491,7 @@ private struct StickerPane: View {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    GeometryReader { g in Color.clear.preference(key: OffsetKey.self, value: g.frame(in: .named("stkScroll")).minY) }.frame(height: 0)
+                    ScrollOffsetObserver { chrome.onOffset(-$0) }.frame(height: 1)
                     LazyVStack(alignment: .leading, spacing: 0) {
                         let secs = sections
                         if secs.isEmpty {
@@ -469,18 +512,19 @@ private struct StickerPane: View {
                             }
                             .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 4)
                             .id("h-\(s.key)")
-                            .background(GeometryReader { g in Color.clear.preference(key: SectionsKey.self, value: [s.key: g.frame(in: .named("stkScroll")).minY]) })
+                            .background(GeometryReader { g in Color.clear.preference(key: SectionsKey.self, value: [s.key: g.frame(in: .global).minY]) })
                             // 每 5 张一行、行是 LazyVStack 的元素：LazyVGrid 嵌在 LazyVStack 里会把整包（上百张动图）一次全建出来，滑动就卡
-                            StickerRows(items: s.items, onPick: onPick)
+                            StickerRows(items: s.items, key: s.key, onPick: onPick)
                         }
                         Color.clear.frame(height: 64)
                     }
                 }
-                .coordinateSpace(name: "stkScroll")
-                .onPreferenceChange(OffsetKey.self) { chrome.onOffset($0) }
+                .background(GeometryReader { g in Color.clear.preference(key: ScrollTopKey.self, value: g.frame(in: .global).minY) })
+                .onPreferenceChange(ScrollTopKey.self) { scrollTop = $0 }
                 .onPreferenceChange(SectionsKey.self) { dict in
-                    if let k = dict.filter({ $0.value <= 8 }).max(by: { $0.value < $1.value })?.key { active = k }
-                    else if let first = sections.first?.key, dict[first] != nil { active = first }
+                    let top = scrollTop
+                    if let k = dict.filter({ $0.value - top <= 8 }).max(by: { $0.value < $1.value })?.key { if k != active { active = k } }
+                    else if let first = sections.first?.key, dict[first] != nil, first != active { active = first }
                 }
                 .onChange(of: jumpTarget) { t in
                     guard let t else { return }
@@ -516,29 +560,43 @@ private struct StickerPane: View {
     }
 }
 
-/// 贴纸网格：每 5 张一行，每行是 LazyVStack 的一个元素（真正懒加载，滑到才建、才开始下载 / 播）；末行用空格子补齐等宽
+/// 贴纸网格：每 5 张一行，每行是 LazyVStack 的一个元素（真正懒加载，滑到才建、才开始下载 / 播）；末行用空格子补齐等宽。
+/// 行 id 必须带上分区 key：LazyVStack 会把嵌套 ForEach 拍平成一个列表，各包都用 0/1/2… 会撞 id，表现为不同包的贴纸互相串行
 private struct StickerRows: View {
     let items: [StickerPayload]
+    var key: String
     var onPick: (StickerPayload) -> Void
     private let cols = 5
 
     var body: some View {
-        let rows = stride(from: 0, to: items.count, by: cols).map { Array(items[$0..<min($0 + cols, items.count)]) }
-        ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+        ForEach(chunkRows(items, cols: cols, key: key)) { row in
             HStack(spacing: 6) {
-                ForEach(row) { p in
+                ForEach(row.items) { p in
                     StickerThumbView(p: p, size: 62)
                         .frame(maxWidth: .infinity)
                         .aspectRatio(1, contentMode: .fit)
                         .contentShape(Rectangle())
                         .onTapGesture { onPick(p) }
                 }
-                if row.count < cols {
-                    ForEach(0..<(cols - row.count), id: \.self) { _ in Color.clear.frame(maxWidth: .infinity).aspectRatio(1, contentMode: .fit) }
+                if row.items.count < cols {
+                    ForEach(0..<(cols - row.items.count), id: \.self) { _ in Color.clear.frame(maxWidth: .infinity).aspectRatio(1, contentMode: .fit) }
                 }
             }
             .padding(.horizontal, 8).padding(.bottom, 6)
         }
+    }
+}
+
+/// 一行网格内容，id = "分区key-行号"，保证 LazyVStack 里全局唯一
+private struct GridRow<T>: Identifiable {
+    var id: String
+    var index: Int
+    var items: [T]
+}
+
+private func chunkRows<T>(_ items: [T], cols: Int, key: String) -> [GridRow<T>] {
+    stride(from: 0, to: items.count, by: cols).enumerated().map { i, start in
+        GridRow(id: "\(key)-r\(i)", index: i, items: Array(items[start..<min(start + cols, items.count)]))
     }
 }
 
@@ -556,6 +614,7 @@ private struct EmojiPane: View {
     @StateObject private var bar = BarExpand()
     @State private var active = "recent"
     @State private var jumpTarget: String? = nil
+    @State private var scrollTop: CGFloat = 0
     @State private var noText = ""
     @State private var chipTap = ""
 
@@ -590,24 +649,25 @@ private struct EmojiPane: View {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    GeometryReader { g in Color.clear.preference(key: OffsetKey.self, value: g.frame(in: .named("emojiScroll")).minY) }.frame(height: 0)
+                    ScrollOffsetObserver { chrome.onOffset(-$0) }.frame(height: 1)
                     LazyVStack(alignment: .leading, spacing: 0) {
                         if !store.recent.isEmpty {
                             header("recent", "最近使用")
-                            EmojiRows(items: store.recent, onEmoji: onEmoji)
+                            EmojiRows(items: store.recent, key: "recent", onEmoji: onEmoji)
                         }
                         ForEach(store.groups) { g in
                             header(g.key, g.name)
-                            EmojiRows(items: g.items.map { $0[0] }, onEmoji: onEmoji)
+                            EmojiRows(items: g.items.map { $0[0] }, key: g.key, onEmoji: onEmoji)
                         }
                         if store.groups.isEmpty { emptyText("加载中…") }
                         Color.clear.frame(height: 64)
                     }
                 }
-                .coordinateSpace(name: "emojiScroll")
-                .onPreferenceChange(OffsetKey.self) { chrome.onOffset($0) }
+                .background(GeometryReader { g in Color.clear.preference(key: ScrollTopKey.self, value: g.frame(in: .global).minY) })
+                .onPreferenceChange(ScrollTopKey.self) { scrollTop = $0 }
                 .onPreferenceChange(SectionsKey.self) { dict in
-                    if let k = dict.filter({ $0.value <= 8 }).max(by: { $0.value < $1.value })?.key, k != active { active = k }
+                    let top = scrollTop
+                    if let k = dict.filter({ $0.value - top <= 8 }).max(by: { $0.value < $1.value })?.key, k != active { active = k }
                 }
                 .onChange(of: jumpTarget) { t in
                     guard let t else { return }
@@ -625,7 +685,7 @@ private struct EmojiPane: View {
             .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
             .id("h-\(key)")
-            .background(GeometryReader { g in Color.clear.preference(key: SectionsKey.self, value: [key: g.frame(in: .named("emojiScroll")).minY]) })
+            .background(GeometryReader { g in Color.clear.preference(key: SectionsKey.self, value: [key: g.frame(in: .global).minY]) })
     }
 
     private func jump(_ key: String) {
@@ -635,24 +695,24 @@ private struct EmojiPane: View {
     }
 }
 
-/// emoji 网格：每 8 个一行，每行是 LazyVStack 的一个元素（真正懒加载）；最后一行不满用空格子补齐保持等宽
+/// emoji 网格：每 8 个一行，每行是 LazyVStack 的一个元素（真正懒加载）；最后一行不满用空格子补齐保持等宽。行 id 带分区 key 防撞
 private struct EmojiRows: View {
     let items: [String]
+    var key: String
     var onEmoji: (String) -> Void
     private let cols = 8
 
     var body: some View {
-        let rows = stride(from: 0, to: items.count, by: cols).map { Array(items[$0..<min($0 + cols, items.count)]) }
-        ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+        ForEach(chunkRows(items, cols: cols, key: key)) { row in
             HStack(spacing: 0) {
-                ForEach(Array(row.enumerated()), id: \.offset) { _, e in
+                ForEach(Array(row.items.enumerated()), id: \.offset) { _, e in
                     Text(e).font(.system(size: 26))
                         .frame(maxWidth: .infinity).frame(height: 42)
                         .contentShape(Rectangle())
                         .onTapGesture { onEmoji(e) }
                 }
-                if row.count < cols {
-                    ForEach(0..<(cols - row.count), id: \.self) { _ in Color.clear.frame(maxWidth: .infinity).frame(height: 42) }
+                if row.items.count < cols {
+                    ForEach(0..<(cols - row.items.count), id: \.self) { _ in Color.clear.frame(maxWidth: .infinity).frame(height: 42) }
                 }
             }
             .padding(.horizontal, 6)
@@ -682,20 +742,18 @@ private struct GifPane: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
             ScrollView {
-                GeometryReader { g in Color.clear.preference(key: OffsetKey.self, value: g.frame(in: .named("gifScroll")).minY) }.frame(height: 0)
+                ScrollOffsetObserver { chrome.onOffset(-$0) }.frame(height: 1)
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if !store.recentGifs.isEmpty {
                         sectionTitle("最近使用").padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 4)
-                        GifGrid(items: store.recentGifs, onPick: onPick, onNearEnd: nil)
+                        GifGrid(items: store.recentGifs, key: "recent", onPick: onPick, onNearEnd: nil)
                     }
                     sectionTitle("热门").padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 4)
-                    GifGrid(items: feed.items, onPick: onPick, onNearEnd: { feed.more() })
+                    GifGrid(items: feed.items, key: "hot", onPick: onPick, onNearEnd: { feed.more() })
                     GifFooter(feed: feed, emptyHint: "暂无 GIF")
                     Color.clear.frame(height: 64)
                 }
             }
-            .coordinateSpace(name: "gifScroll")
-            .onPreferenceChange(OffsetKey.self) { chrome.onOffset($0) }
         }
         .animation(.easeInOut(duration: 0.18), value: chrome.hidden)
         .task { await feed.load("") }
@@ -751,15 +809,16 @@ private final class GifFeed: ObservableObject {
 /// 格子先用 Color.clear 定成正方形再叠图（UIViewRepresentable 自己报的尺寸不一致会让行错位）
 private struct GifGrid: View {
     let items: [StickerPayload]
+    var key: String
     var onPick: (StickerPayload) -> Void
     var onNearEnd: (() -> Void)?
     private let cols = 3
 
     var body: some View {
-        let rows = stride(from: 0, to: items.count, by: cols).map { Array(items[$0..<min($0 + cols, items.count)]) }
-        ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
+        let rows = chunkRows(items, cols: cols, key: key)
+        ForEach(rows) { row in
             HStack(spacing: 2) {
-                ForEach(row) { p in
+                ForEach(row.items) { p in
                     Color.clear
                         .aspectRatio(1, contentMode: .fit)
                         .background(Theme.bg3)
@@ -768,13 +827,13 @@ private struct GifGrid: View {
                         .contentShape(Rectangle())
                         .onTapGesture { onPick(p) }
                 }
-                if row.count < cols {
-                    ForEach(0..<(cols - row.count), id: \.self) { _ in Color.clear.aspectRatio(1, contentMode: .fit) }
+                if row.items.count < cols {
+                    ForEach(0..<(cols - row.items.count), id: \.self) { _ in Color.clear.aspectRatio(1, contentMode: .fit) }
                 }
             }
             .padding(.bottom, 2)
             // 倒数第 2 行出现就翻页
-            .onAppear { if let onNearEnd, i >= rows.count - 2 { onNearEnd() } }
+            .onAppear { if let onNearEnd, row.index >= rows.count - 2 { onNearEnd() } }
         }
     }
 }
@@ -852,7 +911,7 @@ struct GifSearchSheet: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if query.isEmpty { sectionTitle("热门").padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 4) }
-                    GifGrid(items: feed.items, onPick: { p in onPick(p); dismiss() }, onNearEnd: { feed.more() })
+                    GifGrid(items: feed.items, key: "q", onPick: { p in onPick(p); dismiss() }, onNearEnd: { feed.more() })
                     GifFooter(feed: feed, emptyHint: query.isEmpty ? "暂无 GIF" : "没有找到相关 GIF")
                     Color.clear.frame(height: 30)
                 }
@@ -887,7 +946,7 @@ struct EmojiSearchSheet: View {
                     if results.isEmpty {
                         emptyText(query.isEmpty ? "输入关键词搜表情，比如「笑」「猫」「爱心」" : "没有匹配的表情")
                     } else {
-                        EmojiRows(items: results, onEmoji: onEmoji)
+                        EmojiRows(items: results, key: "q", onEmoji: onEmoji)
                     }
                     Color.clear.frame(height: 30)
                 }
