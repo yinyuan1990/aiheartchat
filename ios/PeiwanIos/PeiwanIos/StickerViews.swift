@@ -158,12 +158,26 @@ final class StickerStore: ObservableObject {
 
 // MARK: - 渲染
 
+/// 「滚动中」环境值：表情面板的滚动区在滚动时置 true，网格里的动图 / Lottie 一律停在当前帧（Telegram 同款策略），停下再播。
+/// 气泡 / 评论等没设这个值的地方默认 false，照常播。
+private struct StickerPlaybackPausedKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var stickerPlaybackPaused: Bool {
+        get { self[StickerPlaybackPausedKey.self] }
+        set { self[StickerPlaybackPausedKey.self] = newValue }
+    }
+}
+
 /// 渲染一张贴纸 / GIF。size 为长边，按 w/h 保比例。静态 WebP → RemoteImage；动态 WebP → ImageIO 逐帧；Lottie → lottie-ios；
 /// GIF（mp4）→ AVPlayer 静音循环，autoplay=false 时只放动态 WebP 预览（面板网格 / 待发小图）。
 struct StickerImageView: View {
     let p: StickerPayload
     var size: CGFloat = 140
     var autoplay = true
+    @Environment(\.stickerPlaybackPaused) private var paused
 
     private var w: CGFloat { p.aspect >= 1 ? size : size * p.aspect }
     private var h: CGFloat { p.aspect >= 1 ? size / p.aspect : size }
@@ -172,6 +186,7 @@ struct StickerImageView: View {
     private var px: CGFloat { size * UIScreen.main.scale }
     /// 面板网格 / 待发小图（≤ 80pt）一屏几十个同时播：限 12fps；气泡里正常 30fps
     private var fpsCap: Double { size <= 80 ? 12 : 30 }
+    private var small: Bool { size <= 80 }
 
     var body: some View {
         Group {
@@ -180,18 +195,11 @@ struct StickerImageView: View {
                 if !autoplay {
                     StaticThumbView(url: (p.thumb ?? "").isEmpty ? p.url : p.thumb!, maxPixel: px)
                 } else if let u = URL(string: Api.fullUrl(p.url)) {
-                    LottieView {
-                        try await LottieAnimation.loadedFrom(url: u)
-                    } placeholder: {
-                        if let t = p.thumb, !t.isEmpty { StaticThumbView(url: t, maxPixel: px) } else { Color.clear }
-                    }
-                    .playbackMode(.playing(.fromProgress(0, toProgress: 1, loopMode: .loop)))
-                    // 注意：不要在这里 configure { respectAnimationFrameRate / shouldRasterizeWhenIdle }——
-                    // 默认的 Core Animation 渲染引擎不支持这两项，lottie-ios 会走 LottieLogger.assertionFailure，Debug 下直接卡死
+                    LottieStickerView(url: u, thumb: p.thumb ?? "", px: px, paused: paused, stagger: small)
                 }
             case "awebp":
                 if autoplay {
-                    AnimatedImageView(url: Api.fullUrl(p.url), animate: true, maxPixel: px, maxFps: fpsCap)
+                    AnimatedImageView(url: Api.fullUrl(p.url), animate: !paused, maxPixel: px, maxFps: fpsCap)
                 } else {
                     // 不播时只要一张静态图：有 thumb 用 thumb，否则解动图首帧
                     StaticThumbView(url: (p.thumb ?? "").isEmpty ? p.url : p.thumb!, maxPixel: px)
@@ -202,7 +210,7 @@ struct StickerImageView: View {
                         .background(Theme.bg3)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                 } else {
-                    AnimatedImageView(url: Api.fullUrl((p.thumb ?? "").isEmpty ? p.url : p.thumb!), animate: true, fill: true, maxPixel: px, maxFps: 12)
+                    AnimatedImageView(url: Api.fullUrl((p.thumb ?? "").isEmpty ? p.url : p.thumb!), animate: !paused, fill: true, maxPixel: px, maxFps: 12)
                         .background(Theme.bg3)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
@@ -213,6 +221,55 @@ struct StickerImageView: View {
         }
         .frame(width: w, height: h)
         .clipped()
+    }
+}
+
+/**
+ Lottie 贴纸（默认 Core Animation 渲染引擎：动画交给渲染服务，主线程不逐帧画）。
+
+ 两个性能点：
+ 1. `.resizable()` 必须有——不加时 LottieView 按动画固有尺寸（TG 贴纸 512pt）布局，再被外面 `.frame(62).clipped()` 裁，
+    每个格子都是一棵 512pt 大小、几百层带蒙版的图层树在滚动中被合成；一屏 35 个就够渲染服务掉帧了。
+ 2. 滚动中（paused）：**不新建** LottieView（图层树在主线程搭，一行 5 个进视口就是一次卡顿），已建好的暂停并隐藏（opacity 0 的图层渲染服务不合成），
+    露出静态 thumb；停下后再建，且小图错开 0~0.4 秒（几十个同时建会顿一下，错开后每帧只建一两个，静止时看不出来）。
+ 注意：不要 configure { respectAnimationFrameRate / shouldRasterizeWhenIdle }——Core Animation 引擎不支持，会走 LottieLogger.assertionFailure，Debug 下直接卡死。
+ */
+private struct LottieStickerView: View {
+    let url: URL
+    let thumb: String
+    let px: CGFloat
+    var paused: Bool
+    /// 建 LottieView 前随机等一小会（面板网格用）
+    var stagger: Bool
+    @State private var created = false
+
+    private var hasThumb: Bool { !thumb.isEmpty }
+    /// 有 thumb 时滚动中用 thumb 顶替；没 thumb 的只能让 Lottie 停在当前帧继续显示
+    private var hideLottie: Bool { paused && hasThumb }
+
+    var body: some View {
+        ZStack {
+            if !created || hideLottie { thumbView }
+            if created {
+                LottieView {
+                    try await LottieAnimation.loadedFrom(url: url)
+                } placeholder: {
+                    thumbView
+                }
+                .playbackMode(paused ? .paused(at: .currentFrame) : .playing(.fromProgress(0, toProgress: 1, loopMode: .loop)))
+                .resizable()
+                .opacity(hideLottie ? 0 : 1)
+            }
+        }
+        .task(id: paused) {
+            guard !created, !paused else { return }
+            if stagger { try? await Task.sleep(nanoseconds: UInt64.random(in: 0...400_000_000)) }
+            if !Task.isCancelled { created = true }
+        }
+    }
+
+    @ViewBuilder private var thumbView: some View {
+        if hasThumb { StaticThumbView(url: thumb, maxPixel: px) } else { Color.clear }
     }
 }
 
@@ -234,6 +291,7 @@ struct StickerThumbView: View {
  */
 struct AnimatedImageView: UIViewRepresentable {
     let url: String
+    /// false = 停在当前帧（还没显示过就解首帧出来）。面板滚动中传 false，停下再传 true，不重建播放器
     var animate: Bool
     var fill = false
     /// 解码时降采样到的最大像素（长边）。0 = 不降采样。面板小图 / GIF 瓦片传显示尺寸×scale 即可
@@ -243,6 +301,7 @@ struct AnimatedImageView: UIViewRepresentable {
 
     final class Holder {
         var url = ""
+        var animate = true
         var player: AnimatedPlayer?
     }
 
@@ -257,26 +316,28 @@ struct AnimatedImageView: UIViewRepresentable {
 
     func updateUIView(_ v: UIImageView, context: Context) {
         let holder = context.coordinator
-        guard holder.url != url else { return }
+        if holder.url == url {
+            // 只是播 / 停切换：不重新下载、不重建，停在当前帧
+            if holder.animate != animate {
+                holder.animate = animate
+                holder.player?.setPlaying(animate)
+            }
+            return
+        }
         holder.url = url
+        holder.animate = animate
         holder.player?.stop()
         holder.player = nil
         v.image = nil
         let target = url
-        let animate = self.animate
         let maxPixel = self.maxPixel
         let maxFps = self.maxFps
         Task { @MainActor in
             guard let data = await AnimatedImageCache.data(for: target), holder.url == target else { return }
-            if animate {
-                let player = AnimatedPlayer(data: data, maxPixel: maxPixel, maxFps: maxFps) { [weak v] img in v?.image = img }
-                holder.player = player
-                player.start()
-            } else {
-                // 只要首帧：后台解一张（降采样）回来
-                let img = await StaticThumbCache.decode(data: data, key: target, maxPixel: maxPixel)
-                if holder.url == target { v.image = img }
-            }
+            // 播放器 init 不碰 ImageIO（容器解析 / 帧时长都在解码队列上做），主线程这里只是建个对象
+            let player = AnimatedPlayer(data: data, maxPixel: maxPixel, maxFps: maxFps) { [weak v] img in v?.image = img }
+            holder.player = player
+            player.setPlaying(holder.animate)
         }
     }
 
@@ -287,28 +348,38 @@ struct AnimatedImageView: UIViewRepresentable {
     }
 }
 
-/// 逐帧播放器：后台解码、主线程显示。所有实例共用一个并发队列（qos userInitiated），不额外开线程
+/**
+ 逐帧播放器：后台解码、主线程显示。所有实例共用一个并发队列（qos userInitiated），不额外开线程。
+ - 可暂停 / 恢复（`setPlaying`）：暂停时停在当前帧，恢复从下一帧继续；用代数 `gen` 让旧的 tick 链自然失效，不会出现两条链同时跑
+ - 容器解析（`CGImageSourceCreateWithData` / `GetCount`）和逐帧时长都在解码队列上懒做，主线程建对象零成本
+ */
 final class AnimatedPlayer {
     private static let queue = DispatchQueue(label: "peiwan.anim.decode", qos: .userInitiated, attributes: .concurrent)
-    private let source: CGImageSource?
-    private let count: Int
-    private let durations: [TimeInterval]
+    private let data: Data
     private let options: CFDictionary
     private let downsample: Bool
     /// 两帧之间最短间隔（帧率上限），0 = 不限
     private let minInterval: TimeInterval
     private let onFrame: (UIImage) -> Void
-    private var stopped = false
+
+    // 以下状态主线程（setPlaying / stop）和解码队列（tick）都会碰，统一加锁
+    private let lock = NSLock()
+    private var source: CGImageSource?
+    /// -1 = 容器还没解析
+    private var count = -1
+    private var durations: [TimeInterval?] = []
     private var index = 0
+    private var playing = false
+    private var stopped = false
+    /// 是否已经把至少一帧交给了视图
+    private var shown = false
+    /// 每次 setPlaying / stop 递增；tick 链带着自己的代数，代数对不上就结束
+    private var gen = 0
 
     init(data: Data, maxPixel: CGFloat, maxFps: Double = 0, onFrame: @escaping (UIImage) -> Void) {
+        self.data = data
         self.onFrame = onFrame
         minInterval = maxFps > 0 ? 1.0 / maxFps : 0
-        // kCGImageSourceShouldCache=false：不让 ImageIO 把解过的帧全留在内存里
-        let src = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary)
-        source = src
-        count = src.map { CGImageSourceGetCount($0) } ?? 0
-        durations = src.map { s in (0..<CGImageSourceGetCount(s)).map { AnimatedPlayer.frameDuration(s, $0) } } ?? []
         var opt: [CFString: Any] = [kCGImageSourceShouldCacheImmediately: true]
         downsample = maxPixel > 0
         if downsample {
@@ -319,46 +390,103 @@ final class AnimatedPlayer {
         options = opt as CFDictionary
     }
 
-    func start() {
-        guard count > 0 else { return }
-        stopped = false
-        schedule(after: 0)
+    /// 播 / 停。停时保留当前帧；一帧都还没显示过（刚建好就是停的）就先解一帧出来
+    func setPlaying(_ p: Bool) {
+        lock.lock()
+        playing = p
+        gen += 1
+        let g = gen
+        let needTick = p || !shown
+        lock.unlock()
+        if needTick { schedule(g, after: 0) }
     }
 
-    func stop() { stopped = true }
-
-    private func schedule(after delay: TimeInterval) {
-        AnimatedPlayer.queue.asyncAfter(deadline: .now() + delay) { [weak self] in self?.tick() }
+    func stop() {
+        lock.lock()
+        stopped = true
+        playing = false
+        gen += 1
+        lock.unlock()
     }
 
-    private func tick() {
-        guard !stopped, let source else { return }
-        let i = index
+    private func schedule(_ g: Int, after delay: TimeInterval) {
+        AnimatedPlayer.queue.asyncAfter(deadline: .now() + delay) { [weak self] in self?.tick(g) }
+    }
+
+    private func alive(_ g: Int) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return !stopped && gen == g
+    }
+
+    /// 解析容器（只做一次，在解码队列上）。kCGImageSourceShouldCache=false：不让 ImageIO 把解过的帧全留在内存里
+    private func prepare() {
+        lock.lock()
+        let done = count >= 0
+        lock.unlock()
+        if done { return }
+        let src = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary)
+        let n = src.map { CGImageSourceGetCount($0) } ?? 0
+        lock.lock()
+        if count < 0 {
+            source = src
+            count = n
+            durations = Array(repeating: nil, count: n)
+        }
+        lock.unlock()
+    }
+
+    private func duration(_ src: CGImageSource, _ i: Int) -> TimeInterval {
+        lock.lock()
+        let cached = i < durations.count ? durations[i] : nil
+        lock.unlock()
+        if let cached { return cached }
+        let d = AnimatedPlayer.frameDuration(src, i)
+        lock.lock()
+        if i < durations.count { durations[i] = d }
+        lock.unlock()
+        return d
+    }
+
+    private func tick(_ g: Int) {
+        guard alive(g) else { return }
+        prepare()
+        lock.lock()
+        let src = source, n = count, i = index
+        lock.unlock()
+        guard let src, n > 0, i < n else { return }
         let started = CFAbsoluteTimeGetCurrent()
         // 降采样解码：给了 maxPixel 走 thumbnail 接口（长边 maxPixel），否则原尺寸解
-        let cg = i < count
-            ? (downsample ? CGImageSourceCreateThumbnailAtIndex(source, i, options) : CGImageSourceCreateImageAtIndex(source, i, options))
-            : nil
-        guard !stopped else { return }
+        let cg = downsample ? CGImageSourceCreateThumbnailAtIndex(src, i, options) : CGImageSourceCreateImageAtIndex(src, i, options)
+        guard alive(g) else { return }
         if let cg {
             let img = UIImage(cgImage: cg)
             DispatchQueue.main.async { [weak self] in
-                guard let self, !self.stopped else { return }
-                self.onFrame(img)
+                guard let self else { return }
+                // 解到一半被暂停的帧照样显示（只是慢了一点的当前帧），被 stop 的才丢
+                self.lock.lock()
+                let dead = self.stopped
+                self.shown = self.shown || !dead
+                self.lock.unlock()
+                if !dead { self.onFrame(img) }
             }
         }
-        // 静态图（1 帧）显示一次即止
-        if count <= 1 { return }
+        lock.lock()
+        let cont = playing && n > 1
+        lock.unlock()
+        // 静态图（1 帧）或暂停中：显示这一帧即止
+        guard cont else { return }
         // 帧率上限：源帧太密就跳帧，把跳过的帧时长累加到等待里，动画总时长不变
-        var next = (i + 1) % count
-        var wait = durations[i]
+        var next = (i + 1) % n
+        var wait = duration(src, i)
         while wait < minInterval && next != i {
-            wait += durations[next]
-            next = (next + 1) % count
+            wait += duration(src, next)
+            next = (next + 1) % n
         }
+        lock.lock()
         index = next
+        lock.unlock()
         let spent = CFAbsoluteTimeGetCurrent() - started
-        schedule(after: max(0.016, wait - spent))
+        schedule(g, after: max(0.016, wait - spent))
     }
 
     /// 单帧时长：GIF / APNG / WebP 各自的属性字典；缺省 0.1s（ImageIO 对 ≤10ms 的 GIF 也按 100ms 处理）

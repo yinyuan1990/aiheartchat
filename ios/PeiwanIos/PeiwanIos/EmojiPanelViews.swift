@@ -104,7 +104,7 @@ final class KeyboardHeight: ObservableObject {
 enum PanelMode: String { case gif, sticker, emoji }
 
 /// 内容区滚动方向 → 顶部条 / 底部胶囊收起或展开（往下滚收起，往上滚或回到顶部展开）
-/// 不标 @MainActor：onPreferenceChange 的回调在新 SDK 里是 @Sendable，回调本身就在主线程
+/// 不标 @MainActor：由 ScrollTrackerView 的 KVO 回调（主线程）直接调用
 final class PanelChrome: ObservableObject {
     @Published var hidden = false
     /// 锚点：展开时跟着最低点走，收起时跟着最高点走（见 onOffset）
@@ -140,32 +140,107 @@ final class PanelChrome: ObservableObject {
     func reset() { anchor = 0; lastToggle = 0; hidden = false }
 }
 
-/// ScrollView 自身在屏幕上的 top（全局坐标），分区标题的全局 minY 减掉它 = 相对滚动区的位置
-private struct ScrollTopKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+/**
+ 滚动跟踪（一个 pane 一个）：从宿主 UIScrollView 直读 contentOffset（KVO），一次回调干三件事：
+ 1. 喂给 `PanelChrome.onOffset` 做顶部条 / 胶囊的收起判定；
+ 2. **分区高亮**：分区标题下面挂一个 `SectionAnchor`（隐形 UIView），位置用 UIKit `convert` 算——之前用 GeometryReader(.global) + PreferenceKey，
+    滚动时每帧改值、每帧走一遍整棵树的 preference 归约再回调 `onPreferenceChange`，是滚动卡顿的固定开销之一；
+    懒加载销毁掉的标题位置也记着（内容坐标不随滚动变），滚到一个大包中间时仍能算对；
+ 3. **滚动中 / 静止**：150ms 没动算静止。网格里的动图 / Lottie 滚动中一律停在当前帧、停下再播（`stickerPlaybackPaused` 环境值），Telegram 同款策略。
+ */
+final class ScrollTracker: ObservableObject {
+    @Published var scrolling = false
+    @Published var active: String
+    /// 分区标题在滚动内容坐标里的 y（含已被 LazyVStack 销毁的）
+    private var positions: [String: CGFloat] = [:]
+    /// 当前还在层级里的标题锚点
+    private var anchors: [String: WeakView] = [:]
+    private var idle: DispatchWorkItem?
+    /// 点封面跳分区时：先手动置 active，动画滚动过程中不要被途经的分区抢走
+    private var holdUntil: CFTimeInterval = 0
+
+    private struct WeakView { weak var view: UIView? }
+
+    init(active: String) { self.active = active }
+
+    fileprivate func register(_ key: String, _ v: UIView) {
+        anchors[key] = WeakView(view: v)
+        if let sv = hostScrollView(of: v) { positions[key] = v.convert(CGPoint.zero, to: sv).y }
+    }
+
+    fileprivate func unregister(_ key: String) { anchors[key] = nil }
+
+    /// 手动指定当前分区（点封面），0.6 秒内不让滚动过程改写
+    func select(_ key: String) {
+        holdUntil = CACurrentMediaTime() + 0.6
+        if active != key { active = key }
+    }
+
+    /// 分区列表变了（加 / 删包）：把已经不存在的分区的记忆位置清掉；还在层级里的下一帧会重新量
+    func prune(valid: Set<String>) {
+        positions = positions.filter { valid.contains($0.key) }
+    }
+
+    /// 宿主 UIScrollView 每次 contentOffset 变化都会来一次（主线程，每帧）
+    fileprivate func offsetChanged(_ sv: UIScrollView) {
+        refreshActive(sv)
+        if !scrolling { scrolling = true }
+        idle?.cancel()
+        let w = DispatchWorkItem { [weak self] in self?.scrolling = false }
+        idle = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: w)
+    }
+
+    private func refreshActive(_ sv: UIScrollView) {
+        for (k, a) in anchors {
+            if let v = a.view, v.window != nil { positions[k] = v.convert(CGPoint.zero, to: sv).y } else { anchors[k] = nil }
+        }
+        guard !positions.isEmpty, CACurrentMediaTime() >= holdUntil else { return }
+        let top = sv.contentOffset.y + sv.adjustedContentInset.top
+        // 标题顶到可视区顶部 8pt 以内的最靠下的那个；一个都没过顶（还在最上面）就取最靠上的
+        var best: (String, CGFloat)?, first: (String, CGFloat)?
+        for (k, y) in positions {
+            if y - top <= 8, best.map({ y > $0.1 }) ?? true { best = (k, y) }
+            if first.map({ y < $0.1 }) ?? true { first = (k, y) }
+        }
+        if let k = (best ?? first)?.0, k != active { active = k }
+    }
+
+    fileprivate static func hostScrollView(of v: UIView) -> UIScrollView? {
+        var cur: UIView? = v.superview
+        while let c = cur, !(c is UIScrollView) { cur = c.superview }
+        return cur as? UIScrollView
+    }
+
+    private func hostScrollView(of v: UIView) -> UIScrollView? { ScrollTracker.hostScrollView(of: v) }
 }
 
 /**
  滚动偏移观察：塞进 ScrollView 内容里的一个隐形 UIView，挂到窗口后沿 superview 找到宿主 UIScrollView，KVO 它的 contentOffset。
  之前用 GeometryReader + 命名坐标系 + preference 那套，在真机上不回调（顶部条 / 胶囊从来不收），改用 UIKit 直读最稳。
- 回调参数 = (已滚过的距离（往下滚为正）, 最大可滚距离)。
+ onOffset 参数 = (已滚过的距离（往下滚为正）, 最大可滚距离)，同时通知 tracker。
  */
-private struct ScrollOffsetObserver: UIViewRepresentable {
-    var onChange: (CGFloat, CGFloat) -> Void
+private struct ScrollTrackerView: UIViewRepresentable {
+    let tracker: ScrollTracker
+    var onOffset: (CGFloat, CGFloat) -> Void
 
     func makeUIView(context: Context) -> ObserverView {
         let v = ObserverView()
-        v.onChange = onChange
+        v.tracker = tracker
+        v.onOffset = onOffset
         v.isUserInteractionEnabled = false
         v.backgroundColor = .clear
         return v
     }
 
-    func updateUIView(_ v: ObserverView, context: Context) { v.onChange = onChange }
+    func updateUIView(_ v: ObserverView, context: Context) {
+        v.tracker = tracker
+        v.onOffset = onOffset
+    }
 
     final class ObserverView: UIView {
-        var onChange: ((CGFloat, CGFloat) -> Void)?
+        weak var tracker: ScrollTracker?
+        var onOffset: ((CGFloat, CGFloat) -> Void)?
         private var obs: NSKeyValueObservation?
 
         override func didMoveToWindow() {
@@ -177,22 +252,61 @@ private struct ScrollOffsetObserver: UIViewRepresentable {
         }
 
         private func attach() {
-            var v: UIView? = superview
-            while let cur = v, !(cur is UIScrollView) { v = cur.superview }
-            guard let sv = v as? UIScrollView else { return }
+            guard let sv = ScrollTracker.hostScrollView(of: self) else { return }
             obs = sv.observe(\.contentOffset, options: [.new]) { [weak self] sv, _ in
+                guard let self else { return }
                 let inset = sv.adjustedContentInset
                 let top = sv.contentOffset.y + inset.top
                 let maxTop = max(0, sv.contentSize.height + inset.top + inset.bottom - sv.bounds.height)
-                self?.onChange?(top, maxTop)
+                self.onOffset?(top, maxTop)
+                self.tracker?.offsetChanged(sv)
             }
         }
     }
 }
 
-private struct SectionsKey: PreferenceKey {
-    static var defaultValue: [String: CGFloat] = [:]
-    static func reduce(value: inout [String: CGFloat], nextValue: () -> [String: CGFloat]) { value.merge(nextValue()) { $1 } }
+/// 分区标题的锚点：挂在标题 `.background` 上的隐形 UIView，进层级就到 tracker 报到、出层级注销（位置由 tracker 用 convert 读）
+private struct SectionAnchor: UIViewRepresentable {
+    let key: String
+    let tracker: ScrollTracker
+
+    func makeUIView(context: Context) -> AnchorView {
+        let v = AnchorView()
+        v.key = key
+        v.tracker = tracker
+        v.isUserInteractionEnabled = false
+        v.backgroundColor = .clear
+        return v
+    }
+
+    func updateUIView(_ v: AnchorView, context: Context) {
+        if v.key != key {
+            v.tracker?.unregister(v.key)
+            v.key = key
+            if v.window != nil { tracker.register(key, v) }
+        }
+        v.tracker = tracker
+    }
+
+    static func dismantleUIView(_ v: AnchorView, coordinator: ()) { v.tracker?.unregister(v.key) }
+
+    final class AnchorView: UIView {
+        var key = ""
+        weak var tracker: ScrollTracker?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if window != nil {
+                // 等布局完再报到，这时 frame 才是真的
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.window != nil else { return }
+                    self.tracker?.register(self.key, self)
+                }
+            } else {
+                tracker?.unregister(key)
+            }
+        }
+    }
 }
 
 /// 搜索行右侧的快捷 emoji（Telegram 同款）：贴纸按 emoji 过滤，GIF 当搜索词
@@ -455,12 +569,13 @@ private struct StickerPane: View {
 
     @ObservedObject private var store = StickerStore.shared
     @StateObject private var bar = BarExpand()
-    @State private var active = "recent"
+    @StateObject private var tracker = ScrollTracker(active: "recent")
     @State private var adding: Int? = nil
-    @State private var scrollTop: CGFloat = 0
     /// 搜索行是按钮，这两个只是占位给 SearchRow 的绑定
     @State private var noText = ""
     @State private var chipTap = ""
+
+    private var active: String { tracker.active }
 
     private var sections: [StickerSection] {
         var out: [StickerSection] = []
@@ -507,7 +622,7 @@ private struct StickerPane: View {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    ScrollOffsetObserver { top, maxTop in chrome.onOffset(top: top, maxTop: maxTop) }.frame(height: 1)
+                    ScrollTrackerView(tracker: tracker) { top, maxTop in chrome.onOffset(top: top, maxTop: maxTop) }.frame(height: 1)
                     LazyVStack(alignment: .leading, spacing: 0) {
                         let secs = sections
                         if secs.isEmpty {
@@ -528,19 +643,14 @@ private struct StickerPane: View {
                             }
                             .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 4)
                             .id("h-\(s.key)")
-                            .background(GeometryReader { g in Color.clear.preference(key: SectionsKey.self, value: [s.key: g.frame(in: .global).minY]) })
+                            .background(SectionAnchor(key: s.key, tracker: tracker))
                             // 每 5 张一行、行是 LazyVStack 的元素：LazyVGrid 嵌在 LazyVStack 里会把整包（上百张动图）一次全建出来，滑动就卡
                             StickerRows(items: s.items, key: s.key, onPick: onPick)
                         }
                         Color.clear.frame(height: 64)
                     }
-                }
-                .background(GeometryReader { g in Color.clear.preference(key: ScrollTopKey.self, value: g.frame(in: .global).minY) })
-                .onPreferenceChange(ScrollTopKey.self) { scrollTop = $0 }
-                .onPreferenceChange(SectionsKey.self) { dict in
-                    let top = scrollTop
-                    if let k = dict.filter({ $0.value - top <= 8 }).max(by: { $0.value < $1.value })?.key { if k != active { active = k } }
-                    else if let first = sections.first?.key, dict[first] != nil, first != active { active = first }
+                    // 滚动中网格动图停在当前帧，停下再播
+                    .environment(\.stickerPlaybackPaused, tracker.scrolling)
                 }
                 .onChange(of: jumpTarget) { t in
                     guard let t else { return }
@@ -551,13 +661,15 @@ private struct StickerPane: View {
         }
         .animation(.easeInOut(duration: 0.18), value: chrome.hidden)
         .task { await store.ensureLoaded(); await store.loadMine() }
+        // 加 / 删包、「最近使用」从无到有：内容整体位移，清掉不存在分区的记忆位置
+        .onChange(of: sections.map(\.key)) { keys in tracker.prune(valid: Set(keys)) }
     }
 
     @State private var jumpTarget: String? = nil
 
     private func jump(_ key: String) {
         bar.collapse()
-        active = key
+        tracker.select(key)
         jumpTarget = key
     }
 
@@ -569,7 +681,8 @@ private struct StickerPane: View {
     @ViewBuilder
     private func cover(_ s: StickerSetItem) -> some View {
         if let t = s.thumb, !t.isEmpty {
-            RemoteImage(url: t).frame(width: 28, height: 28)
+            // 顶部条收起 / 展开会整条重建，封面走后台降采样缓存（RemoteImage 是主线程按原图解）
+            StaticThumbView(url: t, maxPixel: 28 * UIScreen.main.scale).frame(width: 28, height: 28)
         } else {
             Text(String((s.title ?? "").prefix(2))).font(.system(size: 11)).foregroundStyle(Theme.textSub)
         }
@@ -628,11 +741,12 @@ private struct EmojiPane: View {
 
     @ObservedObject private var store = EmojiStore.shared
     @StateObject private var bar = BarExpand()
-    @State private var active = "recent"
+    @StateObject private var tracker = ScrollTracker(active: "recent")
     @State private var jumpTarget: String? = nil
-    @State private var scrollTop: CGFloat = 0
     @State private var noText = ""
     @State private var chipTap = ""
+
+    private var active: String { tracker.active }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -665,7 +779,7 @@ private struct EmojiPane: View {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    ScrollOffsetObserver { top, maxTop in chrome.onOffset(top: top, maxTop: maxTop) }.frame(height: 1)
+                    ScrollTrackerView(tracker: tracker) { top, maxTop in chrome.onOffset(top: top, maxTop: maxTop) }.frame(height: 1)
                     LazyVStack(alignment: .leading, spacing: 0) {
                         if !store.recent.isEmpty {
                             header("recent", "最近使用")
@@ -678,12 +792,6 @@ private struct EmojiPane: View {
                         if store.groups.isEmpty { emptyText("加载中…") }
                         Color.clear.frame(height: 64)
                     }
-                }
-                .background(GeometryReader { g in Color.clear.preference(key: ScrollTopKey.self, value: g.frame(in: .global).minY) })
-                .onPreferenceChange(ScrollTopKey.self) { scrollTop = $0 }
-                .onPreferenceChange(SectionsKey.self) { dict in
-                    let top = scrollTop
-                    if let k = dict.filter({ $0.value - top <= 8 }).max(by: { $0.value < $1.value })?.key, k != active { active = k }
                 }
                 .onChange(of: jumpTarget) { t in
                     guard let t else { return }
@@ -701,12 +809,12 @@ private struct EmojiPane: View {
             .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
             .id("h-\(key)")
-            .background(GeometryReader { g in Color.clear.preference(key: SectionsKey.self, value: [key: g.frame(in: .global).minY]) })
+            .background(SectionAnchor(key: key, tracker: tracker))
     }
 
     private func jump(_ key: String) {
         bar.collapse()
-        active = key
+        tracker.select(key)
         jumpTarget = key
     }
 }
@@ -747,6 +855,7 @@ private struct GifPane: View {
 
     @ObservedObject private var store = StickerStore.shared
     @StateObject private var feed = GifFeed()
+    @StateObject private var tracker = ScrollTracker(active: "")
     @State private var noText = ""
     @State private var chipTap = ""
 
@@ -758,7 +867,7 @@ private struct GifPane: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
             ScrollView {
-                ScrollOffsetObserver { top, maxTop in chrome.onOffset(top: top, maxTop: maxTop) }.frame(height: 1)
+                ScrollTrackerView(tracker: tracker) { top, maxTop in chrome.onOffset(top: top, maxTop: maxTop) }.frame(height: 1)
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if !store.recentGifs.isEmpty {
                         sectionTitle("最近使用").padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 4)
@@ -769,6 +878,8 @@ private struct GifPane: View {
                     GifFooter(feed: feed, emptyHint: "暂无 GIF")
                     Color.clear.frame(height: 64)
                 }
+                // 滚动中瓦片停在当前帧，停下再播
+                .environment(\.stickerPlaybackPaused, tracker.scrolling)
             }
         }
         .animation(.easeInOut(duration: 0.18), value: chrome.hidden)
@@ -829,6 +940,8 @@ private struct GifGrid: View {
     var onPick: (StickerPayload) -> Void
     var onNearEnd: (() -> Void)?
     private let cols = 3
+    /// 滚动中停在当前帧（面板 / 搜索 sheet 的滚动区设置）
+    @Environment(\.stickerPlaybackPaused) private var paused
 
     var body: some View {
         let rows = chunkRows(items, cols: cols, key: key)
@@ -838,7 +951,7 @@ private struct GifGrid: View {
                     Color.clear
                         .aspectRatio(1, contentMode: .fit)
                         .background(Theme.bg3)
-                        .overlay(AnimatedImageView(url: Api.fullUrl((p.thumb ?? "").isEmpty ? p.url : p.thumb!), animate: true, fill: true, maxFps: 12))
+                        .overlay(AnimatedImageView(url: Api.fullUrl((p.thumb ?? "").isEmpty ? p.url : p.thumb!), animate: !paused, fill: true, maxFps: 12))
                         .clipped()
                         .contentShape(Rectangle())
                         .onTapGesture { onPick(p) }
@@ -919,18 +1032,21 @@ struct GifSearchSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var q = ""
     @StateObject private var feed = GifFeed()
+    @StateObject private var tracker = ScrollTracker(active: "")
 
     private var query: String { q.trimmingCharacters(in: .whitespaces) }
 
     var body: some View {
         SearchSheetShell(placeholder: "搜索 GIF", query: $q) {
             ScrollView {
+                ScrollTrackerView(tracker: tracker) { _, _ in }.frame(height: 1)
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if query.isEmpty { sectionTitle("热门").padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 4) }
                     GifGrid(items: feed.items, key: "q", onPick: { p in onPick(p); dismiss() }, onNearEnd: { feed.more() })
                     GifFooter(feed: feed, emptyHint: query.isEmpty ? "暂无 GIF" : "没有找到相关 GIF")
                     Color.clear.frame(height: 30)
                 }
+                .environment(\.stickerPlaybackPaused, tracker.scrolling)
             }
         }
         .onAppear { q = initialQuery }
