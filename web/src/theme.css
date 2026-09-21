@@ -340,21 +340,17 @@ textarea.input { resize: none; min-height: 90px; }
 .th-comments-bar .th-label { flex: 1; color: #5aa9ff; font-size: 14px; font-weight: 500; }
 .th-comments-bar .th-chevron { color: #5aa9ff; font-size: 18px; line-height: 1; }
 
-.th-divider {
-  display: flex; align-items: center; justify-content: center; margin: 14px 0;
-}
-.th-divider span { background: rgba(0,0,0,0.05); color: var(--text-2); font-size: 12px; padding: 4px 12px; border-radius: 12px; }
-
-.th-comment { display: flex; gap: 10px; align-items: flex-end; margin-bottom: 12px; }
-.th-comment .avatar { width: 34px; height: 34px; }
-.th-comment .bubble {
-  max-width: 82%; background: var(--bg-card); border-radius: 14px; border-bottom-left-radius: 4px;
-  padding: 8px 12px 6px;
-}
-.th-comment .bubble .name { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
-.th-comment .bubble .text { font-size: 15px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
-.th-comment .bubble .time { text-align: right; font-size: 11px; color: var(--text-3); margin-top: 3px; }
-.th-comment .bubble .time .reply { color: var(--text-2); cursor: pointer; margin-right: 10px; }
+/* 树洞评论：平铺列表（头像 | 昵称 · 时间 …… 回复 / 正文 / 贴纸 / 细线），三端一致 */
+.th-comments-title { font-size: 15px; font-weight: 600; padding: 18px 2px 6px; }
+.th-comments-title.empty { font-size: 13px; color: var(--text-2); }
+.th-comment { display: flex; gap: 10px; align-items: flex-start; padding-top: 12px; }
+.th-comment .avatar { width: 32px; height: 32px; flex-shrink: 0; }
+.th-comment .body { flex: 1; min-width: 0; border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+.th-comment .head { display: flex; align-items: center; gap: 8px; }
+.th-comment .head .name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.th-comment .head .time { font-size: 11px; color: var(--text-3); flex-shrink: 0; }
+.th-comment .head .reply { margin-left: auto; font-size: 12px; color: var(--text-2); cursor: pointer; padding: 2px 0 2px 12px; flex-shrink: 0; }
+.th-comment .text { font-size: 15px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; margin-top: 3px; }
 
 .th-fab {
   position: fixed; right: max(16px, calc(50% - 224px)); z-index: 50;

@@ -7,9 +7,9 @@ import { baseEmoji, QUICK_EMOJIS, SearchIcon } from './shared';
  * 搜索 sheet 外壳（和表情商店 sheet 同一套）：顶部搜索框（自动聚焦）+「完成」，
  * 下面一行快捷 emoji（点了当搜索词），再下面是各自的结果区。GIF / 表情两个搜索都从这里走，和贴纸「点搜索弹框」一致。
  */
-function SheetShell({ placeholder, query, onQuery, onClose, children }: { placeholder: string; query: string; onQuery: (q: string) => void; onClose: () => void; children: React.ReactNode }) {
+function SheetShell({ placeholder, query, onQuery, onClose, autoFocus = true, children }: { placeholder: string; query: string; onQuery: (q: string) => void; onClose: () => void; autoFocus?: boolean; children: React.ReactNode }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => { setTimeout(() => inputRef.current?.focus(), 80); }, []);
+  useEffect(() => { if (autoFocus) setTimeout(() => inputRef.current?.focus(), 80); }, [autoFocus]);
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.35)' }} onClick={(e) => { e.stopPropagation(); onClose(); }}>
       <div
@@ -109,7 +109,7 @@ export function GifSearchSheet({ initialQuery, onPick, onClose }: { initialQuery
   );
 }
 
-/** 表情搜索 sheet：按中英文关键词 / emoji 本身搜；点了插进输入框，sheet 不关（可连续点几个），「完成」收起 */
+/** 表情搜索 sheet：按中英文关键词 / emoji 本身搜；点了插进输入框，sheet 不关（可连续点几个），「完成」收起。打开时不自动弹键盘（先看最近使用 / 快捷 emoji，要搜再点输入框） */
 export function EmojiSearchSheet({ initialQuery, onEmoji, onClose }: { initialQuery: string; onEmoji: (e: string) => void; onClose: () => void }) {
   const { groups, recent } = useEmojis();
   const [q, setQ] = useState(initialQuery);
@@ -117,7 +117,7 @@ export function EmojiSearchSheet({ initialQuery, onEmoji, onClose }: { initialQu
   const results = useMemo(() => (query ? searchEmojis(groups, query).map((r) => r[0]) : recent), [groups, query, recent]);
 
   return (
-    <SheetShell placeholder="搜索表情" query={q} onQuery={setQ} onClose={onClose}>
+    <SheetShell placeholder="搜索表情" query={q} onQuery={setQ} onClose={onClose} autoFocus={false}>
       {!query && recent.length > 0 && <div className="small" style={{ padding: '2px 12px 4px' }}>最近使用</div>}
       {results.length ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', padding: '0 6px' }}>

@@ -574,10 +574,10 @@ private fun GifTile(p: StickerPayload, onClick: () -> Unit) {
 /** 搜索 sheet 外壳：顶部搜索框（自动聚焦）+「完成」，一行快捷 emoji（点了当搜索词），下面放结果 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SearchSheetShell(placeholder: String, query: String, onQuery: (String) -> Unit, onClose: () -> Unit, content: @Composable () -> Unit) {
+private fun SearchSheetShell(placeholder: String, query: String, onQuery: (String) -> Unit, onClose: () -> Unit, autoFocus: Boolean = true, content: @Composable () -> Unit) {
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { delay(120); runCatching { focus.requestFocus() } }
+    LaunchedEffect(Unit) { if (autoFocus) { delay(120); runCatching { focus.requestFocus() } } }
     ModalBottomSheet(onDismissRequest = onClose, sheetState = state, containerColor = Bg, dragHandle = null, shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)) {
         Column(Modifier.fillMaxWidth().fillMaxHeight(0.9f)) {
             Row(Modifier.fillMaxWidth().padding(12.dp, 12.dp, 12.dp, 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -635,7 +635,7 @@ fun GifSearchSheet(initialQuery: String, onPick: (StickerPayload) -> Unit, onClo
     }
 }
 
-/** 表情搜索 sheet：按中英文关键词 / emoji 本身搜；点了插进输入框，sheet 不关（可连续点几个），「完成」收起 */
+/** 表情搜索 sheet：按中英文关键词 / emoji 本身搜；点了插进输入框，sheet 不关（可连续点几个），「完成」收起。打开时不自动弹键盘 */
 @Composable
 fun EmojiSearchSheet(initialQuery: String, onEmoji: (String) -> Unit, onClose: () -> Unit) {
     val ctx = LocalContext.current
@@ -645,7 +645,7 @@ fun EmojiSearchSheet(initialQuery: String, onEmoji: (String) -> Unit, onClose: (
     val recent = EmojiStore.recent
     val results = remember(EmojiStore.groups, query, recent) { if (query.isEmpty()) recent else EmojiStore.search(query) }
 
-    SearchSheetShell("搜索表情", q, { q = it }, onClose) {
+    SearchSheetShell("搜索表情", q, { q = it }, onClose, autoFocus = false) {
         LazyVerticalGrid(columns = GridCells.Fixed(8), modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(6.dp, 0.dp, 6.dp, 30.dp)) {
             if (query.isEmpty() && recent.isNotEmpty()) item(key = "hr", span = { GridItemSpan(maxLineSpan) }) { SectionHeader("最近使用") }
             items(results.size, key = { "q$it" }) { i -> EmojiCell(results[i], onEmoji) }

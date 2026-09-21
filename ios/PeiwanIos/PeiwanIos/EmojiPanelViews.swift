@@ -762,6 +762,7 @@ private struct GifFooter: View {
 private struct SearchSheetShell<Content: View>: View {
     var placeholder: String
     @Binding var query: String
+    var autoFocus = true
     @ViewBuilder var content: () -> Content
     @Environment(\.dismiss) private var dismiss
     @FocusState private var focused: Bool
@@ -799,7 +800,7 @@ private struct SearchSheetShell<Content: View>: View {
             content()
         }
         .background(Theme.bg.ignoresSafeArea())
-        .onAppear { DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { focused = true } }
+        .onAppear { if autoFocus { DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { focused = true } } }
     }
 }
 
@@ -844,7 +845,8 @@ struct EmojiSearchSheet: View {
     private var query: String { q.trimmingCharacters(in: .whitespaces) }
 
     var body: some View {
-        SearchSheetShell(placeholder: "搜索表情", query: $q) {
+        // 打开时不自动弹键盘：先看最近使用 / 快捷 emoji，要搜再点输入框
+        SearchSheetShell(placeholder: "搜索表情", query: $q, autoFocus: false) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     let results = query.isEmpty ? store.recent : store.search(query)

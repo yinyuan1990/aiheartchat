@@ -282,53 +282,48 @@ struct TreeholeDetailView: View {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         if let p = post {
                             TreeholeCardView(post: p, clamp: false)
-                            HStack {
-                                Spacer()
-                                Text(comments.isEmpty ? "还没有人评论，来说第一句" : "讨论已开始")
-                                    .font(.system(size: 12)).foregroundStyle(Theme.textSub)
-                                    .padding(.horizontal, 12).padding(.vertical, 4)
-                                    .background(Capsule().fill(Color.black.opacity(0.05)))
-                                Spacer()
-                            }
-                            .padding(.vertical, 14)
+                            // 评论区标题（和动态详情一致的平铺列表，不再用聊天气泡）
+                            Text(comments.isEmpty ? "还没有人评论，来说第一句" : "全部评论（\(comments.count)）")
+                                .font(.system(size: comments.isEmpty ? 13 : 15, weight: .semibold))
+                                .foregroundStyle(comments.isEmpty ? Theme.textSub : Theme.text)
+                                .padding(.top, 18).padding(.bottom, 6).padding(.leading, 2)
                         } else {
                             Text("加载中…").font(.system(size: 13)).foregroundStyle(Theme.textSub)
                                 .frame(maxWidth: .infinity).padding(.top, 60)
                         }
                         ForEach(comments) { c in
-                            HStack(alignment: .bottom, spacing: 10) {
-                                AvatarView(url: c.user?.avatar, size: 34)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(c.user?.nickname ?? "用户")
-                                        .font(.system(size: 13, weight: .semibold))
-                                        .foregroundStyle(nameColor(c.user?.id ?? c.id))
+                            // 头像 | 昵称 · 时间 …… 回复 / 正文（@被回复人 高亮）/ 贴纸 / 细分割线
+                            HStack(alignment: .top, spacing: 10) {
+                                AvatarView(url: c.user?.avatar, size: 32)
+                                VStack(alignment: .leading, spacing: 0) {
+                                    HStack(spacing: 8) {
+                                        Text(c.user?.nickname ?? "用户")
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .foregroundStyle(nameColor(c.user?.id ?? c.id))
+                                            .lineLimit(1)
+                                        Text(fmtTreeholeTime(c.createdAt)).font(.system(size: 11)).foregroundStyle(Theme.textDim)
+                                        Spacer(minLength: 0)
+                                        Button("回复") { replyTo = c; inputFocused = true }
+                                            .font(.system(size: 12)).foregroundStyle(Theme.textSub)
+                                            .buttonStyle(.plain)
+                                            .padding(.leading, 12).padding(.vertical, 2)
+                                    }
                                     if !c.content.isEmpty || !(c.replyToNickname ?? "").isEmpty {
                                         (
-                                            Text((c.replyToNickname ?? "").isEmpty ? "" : "@\(c.replyToNickname ?? "") ").foregroundColor(linkBlue)
+                                            Text((c.replyToNickname ?? "").isEmpty ? "" : "@\(c.replyToNickname ?? "") ").foregroundColor(Theme.accent)
                                             + Text(c.content).foregroundColor(Theme.text)
                                         )
                                         .font(.system(size: 15)).lineSpacing(3)
+                                        .padding(.top, 3)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                     }
                                     if let s = c.sticker {
-                                        StickerImageView(p: s, size: s.isGif ? 160 : 96).padding(.top, 2)
+                                        StickerImageView(p: s, size: s.isGif ? 160 : 96).padding(.top, 6)
                                     }
-                                    HStack(spacing: 10) {
-                                        Spacer()
-                                        Button("回复") { replyTo = c; inputFocused = true }
-                                            .font(.system(size: 11)).foregroundStyle(Theme.textSub)
-                                        Text(fmtTreeholeTime(c.createdAt)).font(.system(size: 11)).foregroundStyle(Theme.textDim)
-                                    }
-                                    .padding(.top, 3)
+                                    Divider().overlay(Theme.line).padding(.top, 12)
                                 }
-                                .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 6)
-                                .background(
-                                    CompatUnevenRounded(topLeadingRadius: 14, bottomLeadingRadius: 4, bottomTrailingRadius: 14, topTrailingRadius: 14)
-                                        .fill(Theme.bg2)
-                                )
-                                .frame(maxWidth: 300, alignment: .leading)
-                                Spacer(minLength: 0)
                             }
-                            .padding(.bottom, 12)
+                            .padding(.top, 12)
                             .id(c.id)
                         }
                         Color.clear.frame(height: 12)
@@ -367,7 +362,7 @@ struct TreeholeDetailView: View {
                     .buttonStyle(.plain)
                     CompatVerticalTextField(
                         text: $input,
-                        prompt: Text(replyTo != nil ? "回复 @\(replyTo?.user?.nickname ?? "")" : "说点什么…（评论会显示你的昵称）").foregroundColor(Theme.textSub),
+                        prompt: Text(replyTo != nil ? "回复 @\(replyTo?.user?.nickname ?? "")" : "说点什么…").foregroundColor(Theme.textSub),
                         lineRange: 1...4
                     )
                     .focused($inputFocused)

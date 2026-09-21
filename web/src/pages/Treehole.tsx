@@ -279,24 +279,27 @@ export function TreeholeDetailPage() {
       <div ref={listRef} className="page no-scrollbar" style={{ padding: '0 14px' }}>
         <TreeholeCard post={post} clamp={false} />
 
-        <div className="th-divider"><span>{comments.length > 0 ? '讨论已开始' : '还没有人评论，来说第一句'}</span></div>
+        {/* 评论区：和动态详情一致的平铺列表（头像 | 昵称 · 时间 …… 回复 / 正文 / 贴纸 / 细线），不再用聊天气泡 */}
+        <div className={comments.length ? 'th-comments-title' : 'th-comments-title empty'}>
+          {comments.length > 0 ? `全部评论（${comments.length}）` : '还没有人评论，来说第一句'}
+        </div>
 
         {comments.map((c) => (
           <div key={c.id} className="th-comment">
             <div className="avatar">{c.user.avatar && <img src={c.user.avatar} alt="" />}</div>
-            <div className="bubble">
-              <div className="name" style={{ color: nameColor(c.user.id) }}>{c.user.nickname}</div>
+            <div className="body">
+              <div className="head">
+                <span className="name" style={{ color: nameColor(c.user.id) }}>{c.user.nickname}</span>
+                <span className="time">{fmtTime(c.createdAt)}</span>
+                <span className="reply" onClick={() => startReply(c)}>回复</span>
+              </div>
               {(c.content || c.replyToNickname) && (
                 <div className="text">
-                  {c.replyToNickname && <span style={{ color: '#5aa9ff' }}>@{c.replyToNickname} </span>}
+                  {c.replyToNickname && <span className="accent">@{c.replyToNickname} </span>}
                   {c.content}
                 </div>
               )}
-              {c.sticker && <StickerView p={c.sticker} size={96} style={{ marginTop: 4 }} />}
-              <div className="time">
-                <span className="reply" onClick={() => startReply(c)}>回复</span>
-                {fmtTime(c.createdAt)}
-              </div>
+              {c.sticker && <StickerView p={c.sticker} size={c.sticker.format === 'mp4' ? 160 : 96} style={{ marginTop: 6 }} />}
             </div>
           </div>
         ))}
@@ -324,7 +327,7 @@ export function TreeholeDetailPage() {
           style={{ marginBottom: 0, padding: '10px 14px' }}
           value={input}
           maxLength={500}
-          placeholder={replyTo ? `回复 @${replyTo.nickname}` : '说点什么…（评论会显示你的昵称）'}
+          placeholder={replyTo ? `回复 @${replyTo.nickname}` : '说点什么…'}
           onChange={(e) => setInput(e.target.value)}
           onFocus={() => setShowEmoji(false)}
           onKeyDown={(e) => e.key === 'Enter' && send()}
