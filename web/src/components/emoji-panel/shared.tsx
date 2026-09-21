@@ -21,15 +21,20 @@ export function baseEmoji(e: string) {
 export function useScrollChrome() {
   const [hidden, setHidden] = useState(false);
   const last = useRef(0);
+  // 同方向累计滚动量：高刷屏每次 scroll 事件只有几 px，单次判阈值会收不起来；换方向清零
+  const acc = useRef(0);
   const onScroll = useCallback((el: HTMLElement) => {
     const top = el.scrollTop;
     const delta = top - last.current;
     last.current = top;
-    if (top < 12) { setHidden(false); return; }
-    if (delta > 8) setHidden(true);
-    else if (delta < -8) setHidden(false);
+    if (top < 12) { acc.current = 0; setHidden(false); return; }
+    if (!delta) return;
+    if ((delta > 0) !== (acc.current > 0)) acc.current = 0;
+    acc.current += delta;
+    if (acc.current > 12) setHidden(true);
+    else if (acc.current < -12) setHidden(false);
   }, []);
-  const reset = useCallback(() => { last.current = 0; setHidden(false); }, []);
+  const reset = useCallback(() => { last.current = 0; acc.current = 0; setHidden(false); }, []);
   return { hidden, onScroll, reset };
 }
 

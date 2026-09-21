@@ -108,17 +108,23 @@ enum PanelMode: String { case gif, sticker, emoji }
 final class PanelChrome: ObservableObject {
     @Published var hidden = false
     private var last: CGFloat = 0
+    /// 同方向累计滚动量：iOS 每帧回调一次（ProMotion 120Hz 时正常滑动每帧只有 2~3pt），
+    /// 单帧差值永远到不了阈值 → 顶部条 / 胶囊从来不收。改成累计，换方向清零。
+    private var acc: CGFloat = 0
 
     /// minY 为内容顶部在滚动坐标系里的位置（往下滚为负）
     func onOffset(_ minY: CGFloat) {
         let top = -minY
-        defer { last = top }
-        if top < 12 { if hidden { hidden = false }; return }
         let d = top - last
-        if d > 8 { if !hidden { hidden = true } } else if d < -8 { if hidden { hidden = false } }
+        last = top
+        if top < 12 { acc = 0; if hidden { hidden = false }; return }
+        if d == 0 { return }
+        if (d > 0) != (acc > 0) { acc = 0 }
+        acc += d
+        if acc > 12 { if !hidden { hidden = true } } else if acc < -12 { if hidden { hidden = false } }
     }
 
-    func reset() { last = 0; hidden = false }
+    func reset() { last = 0; acc = 0; hidden = false }
 }
 
 private struct OffsetKey: PreferenceKey {
@@ -464,16 +470,8 @@ private struct StickerPane: View {
                             .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 4)
                             .id("h-\(s.key)")
                             .background(GeometryReader { g in Color.clear.preference(key: SectionsKey.self, value: [s.key: g.frame(in: .named("stkScroll")).minY]) })
-                            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 5), spacing: 6) {
-                                ForEach(s.items) { p in
-                                    StickerThumbView(p: p, size: 62)
-                                        .frame(maxWidth: .infinity)
-                                        .aspectRatio(1, contentMode: .fit)
-                                        .contentShape(Rectangle())
-                                        .onTapGesture { onPick(p) }
-                                }
-                            }
-                            .padding(.horizontal, 8)
+                            // 每 5 张一行、行是 LazyVStack 的元素：LazyVGrid 嵌在 LazyVStack 里会把整包（上百张动图）一次全建出来，滑动就卡
+                            StickerRows(items: s.items, onPick: onPick)
                         }
                         Color.clear.frame(height: 64)
                     }
@@ -514,6 +512,32 @@ private struct StickerPane: View {
             RemoteImage(url: t).frame(width: 28, height: 28)
         } else {
             Text(String((s.title ?? "").prefix(2))).font(.system(size: 11)).foregroundStyle(Theme.textSub)
+        }
+    }
+}
+
+/// 贴纸网格：每 5 张一行，每行是 LazyVStack 的一个元素（真正懒加载，滑到才建、才开始下载 / 播）；末行用空格子补齐等宽
+private struct StickerRows: View {
+    let items: [StickerPayload]
+    var onPick: (StickerPayload) -> Void
+    private let cols = 5
+
+    var body: some View {
+        let rows = stride(from: 0, to: items.count, by: cols).map { Array(items[$0..<min($0 + cols, items.count)]) }
+        ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+            HStack(spacing: 6) {
+                ForEach(row) { p in
+                    StickerThumbView(p: p, size: 62)
+                        .frame(maxWidth: .infinity)
+                        .aspectRatio(1, contentMode: .fit)
+                        .contentShape(Rectangle())
+                        .onTapGesture { onPick(p) }
+                }
+                if row.count < cols {
+                    ForEach(0..<(cols - row.count), id: \.self) { _ in Color.clear.frame(maxWidth: .infinity).aspectRatio(1, contentMode: .fit) }
+                }
+            }
+            .padding(.horizontal, 8).padding(.bottom, 6)
         }
     }
 }
@@ -723,25 +747,34 @@ private final class GifFeed: ObservableObject {
     }
 }
 
-/// 3 列正方形瓦片：格子先用 Color.clear 定成正方形再叠图（UIViewRepresentable 自己报的尺寸不一致会让行错位）
+/// 3 列正方形瓦片：每 3 个一行、行是 LazyVStack 的元素（LazyVGrid 嵌在 LazyVStack 里会把几十个动图一次全建出来，滑动就卡）；
+/// 格子先用 Color.clear 定成正方形再叠图（UIViewRepresentable 自己报的尺寸不一致会让行错位）
 private struct GifGrid: View {
     let items: [StickerPayload]
     var onPick: (StickerPayload) -> Void
     var onNearEnd: (() -> Void)?
-    private let cols = Array(repeating: GridItem(.flexible(), spacing: 2), count: 3)
+    private let cols = 3
 
     var body: some View {
-        LazyVGrid(columns: cols, spacing: 2) {
-            ForEach(items) { p in
-                Color.clear
-                    .aspectRatio(1, contentMode: .fit)
-                    .background(Theme.bg3)
-                    .overlay(AnimatedImageView(url: Api.fullUrl((p.thumb ?? "").isEmpty ? p.url : p.thumb!), animate: true, fill: true))
-                    .clipped()
-                    .contentShape(Rectangle())
-                    .onTapGesture { onPick(p) }
-                    .onAppear { if let onNearEnd, p.id == items.suffix(6).first?.id { onNearEnd() } }
+        let rows = stride(from: 0, to: items.count, by: cols).map { Array(items[$0..<min($0 + cols, items.count)]) }
+        ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
+            HStack(spacing: 2) {
+                ForEach(row) { p in
+                    Color.clear
+                        .aspectRatio(1, contentMode: .fit)
+                        .background(Theme.bg3)
+                        .overlay(AnimatedImageView(url: Api.fullUrl((p.thumb ?? "").isEmpty ? p.url : p.thumb!), animate: true, fill: true))
+                        .clipped()
+                        .contentShape(Rectangle())
+                        .onTapGesture { onPick(p) }
+                }
+                if row.count < cols {
+                    ForEach(0..<(cols - row.count), id: \.self) { _ in Color.clear.aspectRatio(1, contentMode: .fit) }
+                }
             }
+            .padding(.bottom, 2)
+            // 倒数第 2 行出现就翻页
+            .onAppear { if let onNearEnd, i >= rows.count - 2 { onNearEnd() } }
         }
     }
 }

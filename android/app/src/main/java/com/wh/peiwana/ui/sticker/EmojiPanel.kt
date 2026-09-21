@@ -159,10 +159,16 @@ private object PanelPrefs {
 class PanelChrome {
     var hidden by mutableStateOf(false)
         private set
-    fun show() { hidden = false }
+    /** 同方向累计滚动量（px）：120Hz 屏每帧只有几 px，单帧判阈值会收不起来；换方向清零 */
+    private var acc = 0f
+    fun show() { hidden = false; acc = 0f }
     val connection = object : NestedScrollConnection {
         override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-            if (available.y < -6f) hidden = true else if (available.y > 6f) hidden = false
+            val d = available.y
+            if (d == 0f) return Offset.Zero
+            if ((d < 0f) != (acc < 0f)) acc = 0f
+            acc += d
+            if (acc < -30f) hidden = true else if (acc > 30f) hidden = false
             return Offset.Zero
         }
     }
