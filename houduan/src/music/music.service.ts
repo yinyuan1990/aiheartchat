@@ -8,8 +8,10 @@ import { TelegramClientService } from '../telegram/telegram.service';
 const MAX_FILE_BYTES = 300 * 1024 * 1024;
 /** 每个来源每轮最多下载的条数（一首 100MB 要下载几十秒，别一次拖太多） */
 const MAX_PER_ROUND = 10;
-/** 曲目只按数量保留：超过 100 首才删最旧的（连文件一起），与天数无关 */
+/** 曲目只按数量保留：**每个来源**超过 100 首才删该来源最旧的（连文件一起），与天数无关 */
 export const MAX_TRACKS = 100;
+/** 最多几个来源频道 */
+export const MAX_SOURCES = 5;
 /** 首次同步往前扫的消息条数 */
 const FIRST_SCAN = 60;
 
@@ -50,19 +52,22 @@ export class MusicService implements OnModuleInit {
 
   // ---------- 对外接口（登录用户） ----------
 
-  /** 曲目列表：最新在前，beforeId 翻页；附带来源标题给页面标题用 */
+  /**
+   * 曲目列表：所有启用来源的歌混排，最新在前（最多 MAX_SOURCES × MAX_TRACKS 首，客户端一次拿全，不翻页）。
+   * 附带 sources（各来源 id / 标题）和每首的 sourceId，客户端想按来源分组随时可用；source 字段保留给老版本当页面标题。
+   */
   async list(beforeId?: bigint) {
-    const [tracks, sources] = await Promise.all([
-      this.prisma.musicTrack.findMany({
-        where: beforeId ? { id: { lt: beforeId } } : undefined,
-        orderBy: [{ postedAt: 'desc' }, { id: 'desc' }],
-        take: MAX_TRACKS,
-        select: { id: true, title: true, performer: true, duration: true, size: true, url: true, cover: true, postedAt: true, playCount: true },
-      }),
-      this.prisma.musicSource.findMany({ where: { enabled: true }, select: { title: true, channel: true }, orderBy: { id: 'asc' } }),
-    ]);
+    const sources = await this.prisma.musicSource.findMany({ where: { enabled: true }, select: { id: true, title: true, channel: true }, orderBy: { id: 'asc' } });
+    const tracks = await this.prisma.musicTrack.findMany({
+      where: { sourceId: { in: sources.map((s) => s.id) }, ...(beforeId ? { id: { lt: beforeId } } : {}) },
+      orderBy: [{ postedAt: 'desc' }, { id: 'desc' }],
+      take: MAX_SOURCES * MAX_TRACKS,
+      select: { id: true, sourceId: true, title: true, performer: true, duration: true, size: true, url: true, cover: true, postedAt: true, playCount: true },
+    });
+    const named = sources.map((s) => ({ id: s.id, title: s.title || s.channel, channel: s.channel }));
     return {
-      source: sources[0] ? { title: sources[0].title || sources[0].channel, channel: sources[0].channel } : null,
+      source: named.length === 1 ? named[0] : named.length > 1 ? { title: '音乐', channel: '' } : null,
+      sources: named,
       list: tracks,
     };
   }
@@ -100,7 +105,7 @@ export class MusicService implements OnModuleInit {
     if (!channel) throw new BadRequestException('请填写频道用户名（t.me/ 后面那段）');
     const info = await this.tg.resolveChannel(channel);
     const { audios, scanned } = await this.fetchAudios(info.entity, { limit: 30 });
-    // 保存后首次同步会导入的数量（按首次扫描条数与总量上限估算）
+    // 保存后首次同步会导入的数量（按首次扫描条数与单来源上限估算）
     const recent = Math.min(audios.length, FIRST_SCAN, MAX_TRACKS);
     return {
       channel: info.username,
@@ -129,6 +134,12 @@ export class MusicService implements OnModuleInit {
         return this.prisma.musicSource.update({ where: { id: old.id }, data: { ...clean, lastMsgId: 0, lastError: '', importedCount: 0 } });
       }
       return this.prisma.musicSource.update({ where: { id: old.id }, data: clean });
+    }
+    // 新增：最多 MAX_SOURCES 个来源（同一频道重复添加算更新，不占名额）
+    const exists = await this.prisma.musicSource.findUnique({ where: { channel: clean.channel }, select: { id: true } });
+    if (!exists) {
+      const n = await this.prisma.musicSource.count();
+      if (n >= MAX_SOURCES) throw new BadRequestException(`最多 ${MAX_SOURCES} 个来源，先删掉一个再加`);
     }
     return this.prisma.musicSource.upsert({ where: { channel: clean.channel }, update: clean, create: clean });
   }
@@ -165,10 +176,10 @@ export class MusicService implements OnModuleInit {
     return this.running;
   }
 
-  /** 后台曲目列表（含来源） */
-  async adminTracks(beforeId?: bigint) {
+  /** 后台曲目列表（含来源 id；可按来源筛） */
+  async adminTracks(beforeId?: bigint, sourceId?: number) {
     return this.prisma.musicTrack.findMany({
-      where: beforeId ? { id: { lt: beforeId } } : undefined,
+      where: { ...(sourceId ? { sourceId } : {}), ...(beforeId ? { id: { lt: beforeId } } : {}) },
       orderBy: { id: 'desc' },
       take: 100,
     });
@@ -204,22 +215,28 @@ export class MusicService implements OnModuleInit {
     }
   }
 
-  /** 只按数量保留：超过 MAX_TRACKS 首时把最旧（按发布时间）的连文件删除；与天数无关 */
+  /** 只按数量保留：**每个来源**超过 MAX_TRACKS 首时把该来源最旧（按发布时间）的连文件删除；与天数无关 */
   async purgeOld() {
-    const rows = await this.prisma.musicTrack.findMany({
-      orderBy: [{ postedAt: 'desc' }, { id: 'desc' }],
-      skip: MAX_TRACKS,
-      select: { id: true, url: true, cover: true },
-      take: 500,
-    });
-    if (!rows.length) return { removed: 0 };
-    await this.prisma.musicTrack.deleteMany({ where: { id: { in: rows.map((r) => r.id) } } });
-    for (const t of rows) {
-      await this.uploads.remove(t.url);
-      if (t.cover) await this.uploads.remove(t.cover);
+    const sources = await this.prisma.musicSource.findMany({ select: { id: true } });
+    let removed = 0;
+    for (const s of sources) {
+      const rows = await this.prisma.musicTrack.findMany({
+        where: { sourceId: s.id },
+        orderBy: [{ postedAt: 'desc' }, { id: 'desc' }],
+        skip: MAX_TRACKS,
+        select: { id: true, url: true, cover: true },
+        take: 500,
+      });
+      if (!rows.length) continue;
+      await this.prisma.musicTrack.deleteMany({ where: { id: { in: rows.map((r) => r.id) } } });
+      for (const t of rows) {
+        await this.uploads.remove(t.url);
+        if (t.cover) await this.uploads.remove(t.cover);
+      }
+      removed += rows.length;
     }
-    this.logger.log(`purged ${rows.length} tracks (over ${MAX_TRACKS})`);
-    return { removed: rows.length };
+    if (removed) this.logger.log(`purged ${removed} tracks (over ${MAX_TRACKS} per source)`);
+    return { removed };
   }
 
   private async removeTracksOf(sourceId: number) {

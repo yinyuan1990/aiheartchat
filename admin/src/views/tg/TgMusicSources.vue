@@ -104,13 +104,14 @@ onMounted(loadSources);
   <div class="card">
     <div style="font-weight: 600; margin-bottom: 6px">音乐 · 频道来源</div>
     <div class="muted" style="margin-bottom: 12px">
-      消息页「音乐」入口的曲目来源。填频道 → 先点<b>「解析」</b>看标题、订阅数、最近的曲目对不对得上 → 再保存。每 10 分钟同步一次，音频转存到自己服务器；<b>最多保留 100 首</b>，超出删最旧的。
+      消息页「音乐」入口的曲目来源。填频道 → 先点<b>「解析」</b>看标题、订阅数、最近的曲目对不对得上 → 再保存。每 10 分钟同步一次，音频转存到自己服务器；<b>最多 5 个来源，每个来源最多保留 100 首</b>（超出删该来源最旧的），用户端各来源的歌混排、最新在前。
+      <span v-if="sources.length >= 5" style="color: #ffb020">已满 5 个来源，要加新的先删一个。</span>
     </div>
     <div class="row" style="flex-wrap: wrap; gap: 12px; align-items: center">
       <label class="muted">频道 <input v-model="srcForm.channel" placeholder="wenan_DJ866 或 https://t.me/wenan_DJ866" style="width: 300px" @keydown.enter="doPreview" /></label>
       <label class="muted" style="display: flex; align-items: center; gap: 6px"><input v-model="srcForm.enabled" type="checkbox" style="width: auto" /> 启用</label>
       <button class="small ghost" :disabled="previewing || !props.loggedIn" @click="doPreview">{{ previewing ? '解析中…' : '解析' }}</button>
-      <button class="small" :disabled="!preview" @click="saveSource">{{ srcForm.id ? '保存修改' : '添加来源' }}</button>
+      <button class="small" :disabled="!preview || (!srcForm.id && sources.length >= 5)" @click="saveSource">{{ srcForm.id ? '保存修改' : '添加来源' }}</button>
       <button v-if="srcForm.id" class="small ghost" @click="srcForm = { channel: '', enabled: true }; preview = null">取消编辑</button>
       <span v-if="!props.loggedIn" class="muted" style="color: #ffb020">先登录 Telegram 账号才能解析</span>
     </div>

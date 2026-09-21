@@ -269,8 +269,8 @@ export class AdminController {
 
   @Get('music/tracks')
   @UseGuards(AdminGuard)
-  musicTracks(@Query('beforeId') beforeId?: string) {
-    return this.music.adminTracks(beforeId ? BigInt(beforeId) : undefined);
+  musicTracks(@Query('beforeId') beforeId?: string, @Query('sourceId') sourceId?: string) {
+    return this.music.adminTracks(beforeId ? BigInt(beforeId) : undefined, sourceId ? Number(sourceId) : undefined);
   }
 
   @Post('music/tracks/:id/delete')
