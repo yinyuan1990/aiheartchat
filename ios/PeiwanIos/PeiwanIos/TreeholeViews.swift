@@ -169,11 +169,18 @@ struct TreeholeSectionView: View {
 /// 分享短链：后端出带 og 标签的页面（微信 / QQ / iMessage 卡片带首图 / 文案），点开跳免登录落地页 /#/treehole/share/:id
 func treeholeShareLink(_ id: String) -> URL { URL(string: "https://app.yyheart.com/s/treehole/\(id)")! }
 
-/// 分享一条树洞：文案前 60 字（没文案就「N 张图片」）+ 短链，系统分享面板
+/// 分享一条树洞：文案前 60 字（没文案就「N 张图片」）+ 短链，系统分享面板。
+/// 纯文字帖没有图：只传一段文字（链接拼在文字里），不单独传 URL——单独传 URL 系统面板会去抓链接预览、顶上显示一个图标位；带图的帖才传 URL 让卡片有图
 func shareTreehole(_ post: TreeholePost) {
     let raw = post.content.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-    let text = raw.isEmpty ? "\(channelName) · \(post.images?.count ?? 0) 张图片" : String(raw.prefix(60))
-    ShareSheet.present([text, treeholeShareLink(post.id)])
+    let imgs = post.images?.count ?? 0
+    let text = raw.isEmpty ? "\(channelName) · \(imgs) 张图片" : String(raw.prefix(60))
+    let link = treeholeShareLink(post.id)
+    if imgs == 0 {
+        ShareSheet.present(["\(text)\n\(link.absoluteString)"])
+    } else {
+        ShareSheet.present([text, link])
+    }
 }
 
 /// 帖子卡：频道名 + 正文 + 阅读/时间 + 评论条（clamp=列表折叠 10 行）

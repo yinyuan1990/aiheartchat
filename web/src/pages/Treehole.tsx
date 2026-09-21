@@ -97,10 +97,12 @@ function shareLink(id: string): string {
   return `${shareBase()}/s/treehole/${id}`;
 }
 
-/** 分享：文案前 60 字（没文案就「N 张图片」），App 内走原生分享面板 */
+/** 分享：文案前 60 字（没文案就「N 张图片」），App 内走原生分享面板。纯文字帖不单独传 url（分享面板不去抓链接预览图），链接拼进文字 */
 export async function shareTreehole(post: TreeholePost, toast: (s: string) => void) {
   const text = post.content?.trim() ? post.content.trim().replace(/\s+/g, ' ').slice(0, 60) : `${CHANNEL_NAME} · ${post.images.length} 张图片`;
-  if ((await shareText(text, shareLink(post.id), CHANNEL_NAME)) === 'copied') toast('链接已复制，去粘贴给好友吧');
+  const link = shareLink(post.id);
+  const r = post.images.length ? await shareText(text, link, CHANNEL_NAME) : await shareText(`${text}\n${link}`, '', CHANNEL_NAME);
+  if (r === 'copied') toast('链接已复制，去粘贴给好友吧');
 }
 
 function ShareIcon({ size = 15 }: { size?: number }) {

@@ -58,18 +58,20 @@ export function shareBase(): string {
  * 浏览器走系统分享，不支持时复制到剪贴板。返回 'native' | 'copied' | 'cancel' | 'fail'。
  */
 export async function shareText(text: string, url: string, title = text): Promise<'native' | 'copied' | 'cancel' | 'fail'> {
+  // url 传空 = 链接已经拼在 text 里，只分享文字（系统面板不去抓链接预览图）
+  const full = url ? `${text}\n${url}` : text;
   const droid = (window as any).PeiwanNative;
   if (droid?.shareText) {
-    try { droid.shareText(`${text}\n${url}`, title); return 'native'; } catch { /* 走下面 */ }
+    try { droid.shareText(full, title); return 'native'; } catch { /* 走下面 */ }
   }
   if (navigator.share) {
-    try { await navigator.share({ title, text, url }); return 'native'; } catch { return 'cancel'; }
+    try { await navigator.share(url ? { title, text, url } : { title, text }); return 'native'; } catch { return 'cancel'; }
   }
   try {
-    await navigator.clipboard.writeText(`${text} ${url}`);
+    await navigator.clipboard.writeText(url ? `${text} ${url}` : text);
     return 'copied';
   } catch {
-    prompt('复制下面的链接分享给好友', url);
+    prompt('复制下面的链接分享给好友', url || text);
     return 'fail';
   }
 }
