@@ -25,19 +25,61 @@ fun MicIcon(tint: Color, size: Dp = 22.dp) {
     }
 }
 
-/** 声波（语音消息）图标 */
+/**
+ * 扬声器（通话页「免提」）图标：SF Symbols `speaker.wave.2` 的样子——
+ * 喇叭主体一笔画成（矩形 + 梯形口），右边两道圆头声波弧。
+ */
 @Composable
 fun VoiceIcon(tint: Color, size: Dp = 18.dp) {
     Canvas(Modifier.size(size)) {
         val w = this.size.width
-        // 喇叭口
-        drawRoundRect(tint, topLeft = Offset(w * 0.1f, w * 0.36f), size = Size(w * 0.22f, w * 0.28f), cornerRadius = CornerRadius(w * 0.04f))
-        val path = androidx.compose.ui.graphics.Path().apply {
-            moveTo(w * 0.28f, w * 0.5f); lineTo(w * 0.5f, w * 0.25f); lineTo(w * 0.5f, w * 0.75f); close()
+        val sw = w * 0.085f
+        val body = androidx.compose.ui.graphics.Path().apply {
+            moveTo(w * 0.12f, w * 0.38f); lineTo(w * 0.26f, w * 0.38f); lineTo(w * 0.46f, w * 0.2f)
+            lineTo(w * 0.46f, w * 0.8f); lineTo(w * 0.26f, w * 0.62f); lineTo(w * 0.12f, w * 0.62f); close()
         }
-        drawPath(path, tint)
-        drawArc(tint, -50f, 100f, false, topLeft = Offset(w * 0.5f, w * 0.28f), size = Size(w * 0.28f, w * 0.44f), style = Stroke(w * 0.06f))
-        drawArc(tint, -50f, 100f, false, topLeft = Offset(w * 0.6f, w * 0.18f), size = Size(w * 0.4f, w * 0.64f), style = Stroke(w * 0.06f))
+        drawPath(body, tint, style = Stroke(sw, join = androidx.compose.ui.graphics.StrokeJoin.Round, cap = androidx.compose.ui.graphics.StrokeCap.Round))
+        drawArc(tint, -42f, 84f, false, topLeft = Offset(w * 0.42f, w * 0.34f), size = Size(w * 0.3f, w * 0.32f), style = Stroke(sw, cap = androidx.compose.ui.graphics.StrokeCap.Round))
+        drawArc(tint, -46f, 92f, false, topLeft = Offset(w * 0.42f, w * 0.2f), size = Size(w * 0.5f, w * 0.6f), style = Stroke(sw, cap = androidx.compose.ui.graphics.StrokeCap.Round))
+    }
+}
+
+/**
+ * 声纹（语音消息 / 输入栏切语音）图标：和 iOS 的 SF Symbols `waveform` 一致——
+ * 7 根圆头竖条，中间高两边低，左右不对称。
+ */
+@Composable
+fun WaveformIcon(tint: Color, size: Dp = 18.dp) {
+    Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        val h = this.size.height
+        val heights = floatArrayOf(0.30f, 0.62f, 0.92f, 0.46f, 0.74f, 0.38f, 0.22f)
+        val sw = w * 0.1f
+        val gap = (w - sw) / (heights.size - 1)
+        heights.forEachIndexed { i, f ->
+            val x = sw / 2 + gap * i
+            val half = h * f / 2
+            drawLine(tint, Offset(x, h / 2 - half), Offset(x, h / 2 + half), strokeWidth = sw, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+        }
+    }
+}
+
+/** 键盘图标（语音模式下切回文字输入）：SF Symbols `keyboard` 的样子——圆角矩形 + 两行键 + 空格条 */
+@Composable
+fun KeyboardIcon(tint: Color, size: Dp = 20.dp) {
+    Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        val sw = w * 0.075f
+        drawRoundRect(tint, topLeft = Offset(sw / 2, w * 0.22f), size = Size(w - sw, w * 0.56f), cornerRadius = CornerRadius(w * 0.1f), style = Stroke(sw))
+        val key = w * 0.07f
+        for (row in 0..1) {
+            val y = w * (0.36f + row * 0.13f)
+            for (i in 0..4) {
+                val x = w * (0.2f + i * 0.15f)
+                drawRoundRect(tint, topLeft = Offset(x - key / 2, y - key / 2), size = Size(key, key), cornerRadius = CornerRadius(key * 0.3f))
+            }
+        }
+        drawLine(tint, Offset(w * 0.3f, w * 0.65f), Offset(w * 0.7f, w * 0.65f), strokeWidth = sw, cap = androidx.compose.ui.graphics.StrokeCap.Round)
     }
 }
 

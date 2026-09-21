@@ -463,7 +463,7 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
                 Box(
                     modifier = Modifier.size(40.dp).clip(RoundedCornerShape(20.dp)).background(Bg3).noRippleClick { voiceMode = !voiceMode; showPanel = false; showSticker = false; focus.clearFocus(); keyboard?.hide() },
                     contentAlignment = Alignment.Center,
-                ) { VoiceIcon(TextSub, 20.dp) }
+                ) { if (voiceMode) KeyboardIcon(TextSub, 20.dp) else WaveformIcon(TextSub, 18.dp) } // 与 iOS 一致：waveform / keyboard
                 Spacer(Modifier.width(8.dp))
 
                 if (voiceMode) {
@@ -476,7 +476,7 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
                             val trans = rememberInfiniteTransition(label = "rec")
                             val a by trans.animateFloat(0.35f, 1f, infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "a")
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                VoiceIcon(Color.White.copy(alpha = a), 18.dp); Spacer(Modifier.width(8.dp)); Text("松开发送", color = Color.White, fontSize = 14.sp)
+                                WaveformIcon(Color.White.copy(alpha = a), 16.dp); Spacer(Modifier.width(8.dp)); Text("松开发送", color = Color.White, fontSize = 14.sp)
                             }
                         } else Text("按住 说话", color = TextMain, fontSize = 14.sp)
                     }
@@ -603,7 +603,7 @@ private fun Bubble(m: MsgItem, mine: Boolean, convType: Int, onImage: (String) -
                         }.padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (voicePlaying) PlayingVoiceBars(fg) else VoiceIcon(fg, 16.dp)
+                        if (voicePlaying) PlayingVoiceBars(fg) else WaveformIcon(fg, 15.dp)
                         Spacer(Modifier.width(8.dp)); Text("${dur}\"", color = fg, fontSize = 14.sp)
                     }
                 }
