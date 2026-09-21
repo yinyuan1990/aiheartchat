@@ -244,14 +244,14 @@ export class AdminController {
   /** 预览：解析频道 + 最近音频列表（不入库），改来源前先核对 */
   @Get('music/sources/preview')
   @UseGuards(AdminGuard)
-  musicPreview(@Query('channel') channel: string) {
-    return this.music.preview(channel ?? '');
+  musicPreview(@Query('channel') channel: string, @Query('maxTracks') maxTracks?: string) {
+    return this.music.preview(channel ?? '', maxTracks ? Number(maxTracks) : undefined);
   }
 
-  /** 新增/修改来源（保存前会解析频道，解析失败不保存；换频道会清掉旧曲目） */
+  /** 新增/修改来源（保存前会解析频道，解析失败不保存；换频道会清掉旧曲目；maxTracks 该来源保留上限 1~500） */
   @Post('music/sources')
   @UseGuards(AdminGuard)
-  musicSaveSource(@Body() body: { id?: number; channel: string; enabled?: boolean }) {
+  musicSaveSource(@Body() body: { id?: number; channel: string; enabled?: boolean; maxTracks?: number }) {
     return this.music.saveSource(body);
   }
 

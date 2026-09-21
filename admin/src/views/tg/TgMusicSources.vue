@@ -6,7 +6,7 @@ const props = defineProps<{ loggedIn: boolean }>();
 const emit = defineEmits<{ (e: 'toast', t: string): void }>();
 
 interface Source {
-  id: number; channel: string; title: string; subscribers: number; enabled: boolean;
+  id: number; channel: string; title: string; subscribers: number; enabled: boolean; maxTracks: number;
   lastMsgId: number; lastSyncAt: string | null; lastError: string; importedCount: number; syncing?: boolean;
 }
 interface PreviewAudio { msgId: number; title: string; performer: string; duration: number; size: number; date: string; hasCover: boolean }
@@ -15,7 +15,8 @@ interface Preview {
   scanned: number; audioCount: number; recentCount: number; audios: PreviewAudio[];
 }
 const sources = ref<Source[]>([]);
-const srcForm = ref<{ id?: number; channel: string; enabled: boolean }>({ channel: '', enabled: true });
+const emptyForm = () => ({ channel: '', enabled: true, maxTracks: 100 });
+const srcForm = ref<{ id?: number; channel: string; enabled: boolean; maxTracks: number }>(emptyForm());
 const preview = ref<Preview | null>(null);
 const previewing = ref(false);
 const syncing = ref<number | null>(null);
@@ -31,7 +32,7 @@ async function doPreview() {
   previewing.value = true;
   preview.value = null;
   try {
-    preview.value = await api<Preview>(`/admin/music/sources/preview?channel=${encodeURIComponent(srcForm.value.channel)}`);
+    preview.value = await api<Preview>(`/admin/music/sources/preview?channel=${encodeURIComponent(srcForm.value.channel)}&maxTracks=${srcForm.value.maxTracks || 100}`);
   } catch (e: any) {
     emit('toast', e.message);
   } finally {
@@ -48,7 +49,7 @@ async function saveSource() {
   }
   try {
     await api('/admin/music/sources', { method: 'POST', body: srcForm.value });
-    srcForm.value = { channel: '', enabled: true };
+    srcForm.value = emptyForm();
     preview.value = null;
     emit('toast', '已保存，每 10 分钟自动同步一次；可点「立即同步」');
     loadSources();
@@ -57,7 +58,7 @@ async function saveSource() {
   }
 }
 function editSource(s: Source) {
-  srcForm.value = { id: s.id, channel: s.channel, enabled: s.enabled };
+  srcForm.value = { id: s.id, channel: s.channel, enabled: s.enabled, maxTracks: s.maxTracks || 100 };
   preview.value = null;
 }
 async function removeSource(s: Source) {
@@ -104,15 +105,16 @@ onMounted(loadSources);
   <div class="card">
     <div style="font-weight: 600; margin-bottom: 6px">音乐 · 频道来源</div>
     <div class="muted" style="margin-bottom: 12px">
-      消息页「音乐」入口的曲目来源。填频道 → 先点<b>「解析」</b>看标题、订阅数、最近的曲目对不对得上 → 再保存。每 10 分钟同步一次，音频转存到自己服务器；<b>最多 5 个来源，每个来源最多保留 100 首</b>（超出删该来源最旧的），用户端各来源的歌混排、最新在前。
+      消息页「音乐」入口的曲目来源。填频道 → 先点<b>「解析」</b>看标题、订阅数、最近的曲目对不对得上 → 再保存。每 10 分钟同步一次，音频转存到自己服务器；<b>最多 5 个来源，每个来源单独设保留上限</b>（默认 100 首，可设 1~500，超出删该来源最旧的；调小后立刻清理），用户端各来源的歌混排、最新在前。
       <span v-if="sources.length >= 5" style="color: #ffb020">已满 5 个来源，要加新的先删一个。</span>
     </div>
     <div class="row" style="flex-wrap: wrap; gap: 12px; align-items: center">
       <label class="muted">频道 <input v-model="srcForm.channel" placeholder="wenan_DJ866 或 https://t.me/wenan_DJ866" style="width: 300px" @keydown.enter="doPreview" /></label>
+      <label class="muted">保留上限 <input v-model.number="srcForm.maxTracks" type="number" min="1" max="500" style="width: 70px" /> 首</label>
       <label class="muted" style="display: flex; align-items: center; gap: 6px"><input v-model="srcForm.enabled" type="checkbox" style="width: auto" /> 启用</label>
       <button class="small ghost" :disabled="previewing || !props.loggedIn" @click="doPreview">{{ previewing ? '解析中…' : '解析' }}</button>
       <button class="small" :disabled="!preview || (!srcForm.id && sources.length >= 5)" @click="saveSource">{{ srcForm.id ? '保存修改' : '添加来源' }}</button>
-      <button v-if="srcForm.id" class="small ghost" @click="srcForm = { channel: '', enabled: true }; preview = null">取消编辑</button>
+      <button v-if="srcForm.id" class="small ghost" @click="srcForm = emptyForm(); preview = null">取消编辑</button>
       <span v-if="!props.loggedIn" class="muted" style="color: #ffb020">先登录 Telegram 账号才能解析</span>
     </div>
 
@@ -131,13 +133,14 @@ onMounted(loadSources);
     </div>
 
     <table v-if="sources.length" style="margin-top: 14px">
-      <thead><tr><th>频道</th><th>标题</th><th>订阅</th><th>状态</th><th>已导入</th><th>上次同步</th><th>错误</th><th>操作</th></tr></thead>
+      <thead><tr><th>频道</th><th>标题</th><th>订阅</th><th>状态</th><th>保留上限</th><th>已导入</th><th>上次同步</th><th>错误</th><th>操作</th></tr></thead>
       <tbody>
         <tr v-for="s in sources" :key="s.id">
           <td><a :href="`https://t.me/${s.channel}`" target="_blank" style="color: var(--accent)">@{{ s.channel }}</a></td>
           <td>{{ s.title }}</td>
           <td class="muted">{{ s.subscribers.toLocaleString() }}</td>
           <td><span class="tag" :class="s.enabled ? 'ok' : 'off'">{{ s.enabled ? '启用' : '停用' }}</span></td>
+          <td>{{ s.maxTracks }} 首</td>
           <td>{{ s.importedCount }} <span class="muted">(至 #{{ s.lastMsgId }})</span></td>
           <td class="muted">{{ s.lastSyncAt ? fmt(s.lastSyncAt) : '—' }}</td>
           <td class="muted" style="max-width: 240px; color: #ff6b6b">{{ s.lastError }}</td>
