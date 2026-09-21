@@ -30,7 +30,25 @@ export function StickerView({ p, size = 140, autoplay = true, style, onClick }: 
   const h = ratio >= 1 ? Math.round(size / ratio) : size;
   const box: CSSProperties = { width: w, height: h, display: 'block', objectFit: 'contain', ...style };
   if (p.format === 'lottie') return <LottieSticker p={p} style={box} autoplay={autoplay} onClick={onClick} />;
+  if (p.format === 'mp4') return <GifVideo p={p} style={box} autoplay={autoplay} onClick={onClick} />;
   return <img src={p.url} alt={p.emoji} style={box} onClick={onClick} loading="lazy" draggable={false} />;
+}
+
+/** GIF（无声 mp4）：静音循环自动播；不在视口就暂停。autoplay=false 时只放动态 WebP 预览（面板网格） */
+function GifVideo({ p, style, autoplay, onClick }: { p: StickerPayload; style: CSSProperties; autoplay: boolean; onClick?: () => void }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver((es) => {
+      const on = es.some((e) => e.isIntersecting);
+      if (on) el.play().catch(() => {}); else el.pause();
+    }, { rootMargin: '80px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [p.url]);
+  if (!autoplay) return <img src={p.thumb || p.url} alt="" style={style} onClick={onClick} loading="lazy" draggable={false} />;
+  return <video ref={ref} src={p.url} poster={p.thumb || undefined} muted loop playsInline autoPlay preload="metadata" style={{ ...style, borderRadius: 10, background: 'var(--bg-input)' }} onClick={onClick} />;
 }
 
 function LottieSticker({ p, style, autoplay, onClick }: { p: StickerPayload; style: CSSProperties; autoplay: boolean; onClick?: () => void }) {

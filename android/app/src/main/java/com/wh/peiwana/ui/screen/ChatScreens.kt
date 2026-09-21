@@ -35,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -48,8 +49,9 @@ import com.wh.peiwana.ui.*
 import com.wh.peiwana.ui.theme.*
 import com.wh.peiwana.ui.sticker.SmileIcon
 import com.wh.peiwana.ui.sticker.StickerImage
-import com.wh.peiwana.ui.sticker.StickerPanel
+import com.wh.peiwana.ui.sticker.EmojiPanel
 import com.wh.peiwana.ui.sticker.StickerStore
+import com.wh.peiwana.ui.sticker.dropLastGrapheme
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
@@ -118,7 +120,7 @@ private fun preview(msg: LastMsg?): String = when {
     msg.type == "text" -> msg.content.take(30)
     msg.type == "image" -> "[图片]"
     msg.type == "video" -> "[视频]"
-    msg.type == "sticker" -> "[表情]"
+    msg.type == "sticker" -> if (msg.content.contains("\"mp4\"")) "[GIF]" else "[表情]"
     msg.type == "audio" -> "[语音]"
     msg.type == "location" -> "[位置]"
     msg.type == "gift" -> "[礼物]"
@@ -283,6 +285,7 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
     var voiceMode by remember { mutableStateOf(false) }
     var showPanel by remember { mutableStateOf(false) }
     var showSticker by remember { mutableStateOf(false) }
+    val inputFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val ctx = LocalContext.current
@@ -488,7 +491,7 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
                             textStyle = androidx.compose.ui.text.TextStyle(color = TextMain, fontSize = 15.sp),
                             cursorBrush = androidx.compose.ui.graphics.SolidColor(Accent),
                             maxLines = 4,
-                            modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) { showPanel = false; showSticker = false } },
+                            modifier = Modifier.fillMaxWidth().focusRequester(inputFocus).onFocusChanged { if (it.isFocused) { showPanel = false; showSticker = false } },
                         )
                     }
                 }
@@ -509,13 +512,15 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
             }
 
             if (showSticker) {
-                StickerPanel(
+                // 贴纸 / GIF 点即发送（消息类型都是 sticker，GIF 的 format=mp4）；「最近使用」由面板自己记
+                EmojiPanel(
                     onPick = { p ->
                         val content = StickerStore.encode(p)
                         WsClient.send(convType, targetId, "sticker", content); appendLocal("sticker", content)
-                        StickerStore.addRecent(ctx, p)
                     },
                     onEmoji = { input += it },
+                    onDelete = { input = dropLastGrapheme(input) },
+                    onKeyboard = { showSticker = false; inputFocus.requestFocus(); keyboard?.show() },
                 )
             }
             // + 号功能面板（九宫格）
@@ -575,7 +580,8 @@ private fun Bubble(m: MsgItem, mine: Boolean, convType: Int, onImage: (String) -
                 "sticker" -> {
                     // 贴纸不画气泡底
                     val p = remember(m.content) { StickerStore.parse(m.content) }
-                    if (p != null) StickerImage(p, 140.dp)
+                    // GIF 比贴纸大一号、带圆角
+                    if (p != null) StickerImage(p, if (p.isGif) 220.dp else 140.dp)
                     else Box(modifier = Modifier.clip(bubbleShape).background(bg).padding(horizontal = 14.dp, vertical = 10.dp)) { Text("[表情]", color = fg, fontSize = 15.sp) }
                 }
                 "audio" -> {

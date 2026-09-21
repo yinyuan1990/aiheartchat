@@ -27,6 +27,8 @@ import { TelegramModule } from './telegram/telegram.module';
 import { MusicModule } from './music/music.module';
 import { GalleryModule } from './gallery/gallery.module';
 import { StickerModule } from './sticker/sticker.module';
+import { EmojiModule } from './emoji/emoji.module';
+import { GifModule } from './gif/gif.module';
 
 @Module({
   imports: [
@@ -56,6 +58,8 @@ import { StickerModule } from './sticker/sticker.module';
     MusicModule,
     GalleryModule,
     StickerModule,
+    EmojiModule,
+    GifModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: RateLimitGuard }],
 })

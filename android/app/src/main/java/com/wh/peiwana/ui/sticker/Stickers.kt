@@ -3,38 +3,35 @@ package com.wh.peiwana.ui.sticker
 import android.content.Context
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.airbnb.lottie.compose.LottieAnimation
 import com.airbnb.lottie.compose.LottieCompositionSpec
 import com.airbnb.lottie.compose.LottieConstants
 import com.airbnb.lottie.compose.rememberLottieComposition
 import com.wh.peiwana.net.Api
-import com.wh.peiwana.ui.noRippleClick
-import com.wh.peiwana.ui.theme.*
+import com.wh.peiwana.ui.theme.Bg3
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
@@ -45,18 +42,20 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 
-/** 一张贴纸：聊天消息 type=sticker 的 content、评论的 sticker 字段都是这个 JSON */
+/** 一张贴纸 / 一条 GIF：聊天消息 type=sticker 的 content、评论的 sticker 字段都是这个 JSON */
 @Serializable
 data class StickerPayload(
     val id: String,
-    /** webp=静态图；lottie=Lottie JSON；awebp=动态 WebP */
+    /** webp=静态图；lottie=Lottie JSON；awebp=动态 WebP；mp4=GIF（无声视频，thumb 是动态 WebP 预览） */
     val format: String = "webp",
     val url: String,
     val thumb: String = "",
     val w: Int = 512,
     val h: Int = 512,
     val emoji: String = "",
-)
+) {
+    val isGif get() = format == "mp4"
+}
 
 @Serializable
 data class StickerSetItem(
@@ -70,7 +69,10 @@ data class StickerSetItem(
 @Serializable
 private data class StickerCatalog(val version: Int = 0, val notModified: Boolean = false, val sets: List<StickerSetItem> = emptyList())
 
-/** 表情包目录（进程级缓存 + SharedPreferences 落盘，按 version 增量）与「最近使用」 */
+@Serializable
+private data class GifPage(val items: List<StickerPayload> = emptyList(), val next: String = "")
+
+/** 表情包目录（进程级缓存 + SharedPreferences 落盘，按 version 增量）、「最近使用」、我的包、GIF */
 object StickerStore {
     private val json = Json { ignoreUnknownKeys = true }
     private const val PREF = "peiwan_stickers"
@@ -80,6 +82,8 @@ object StickerStore {
         private set
     var recent by mutableStateOf<List<StickerPayload>>(emptyList())
         private set
+    var recentGifs by mutableStateOf<List<StickerPayload>>(emptyList())
+        private set
     private var version = 0
     private var loadedFromDisk = false
     private var fetching = false
@@ -88,6 +92,10 @@ object StickerStore {
     fun encode(p: StickerPayload): String = json.encodeToString(p)
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+    private fun saveList(ctx: Context, key: String, list: List<StickerPayload>) =
+        prefs(ctx).edit().putString(key, json.encodeToString(ListSerializer(StickerPayload.serializer()), list)).apply()
+    private fun readList(ctx: Context, key: String): List<StickerPayload>? =
+        prefs(ctx).getString(key, null)?.let { s -> runCatching { json.decodeFromString(ListSerializer(StickerPayload.serializer()), s) }.getOrNull() }
 
     /** 进面板 / 首次渲染贴纸时调用：先用本地缓存，再问后端 version 有没有变 */
     suspend fun ensureLoaded(ctx: Context) {
@@ -96,7 +104,8 @@ object StickerStore {
             val p = prefs(ctx)
             version = p.getInt("version", 0)
             p.getString("sets", null)?.let { s -> runCatching { json.decodeFromString(ListSerializer(StickerSetItem.serializer()), s) }.getOrNull()?.let { sets = it } }
-            p.getString("recent", null)?.let { s -> runCatching { json.decodeFromString(ListSerializer(StickerPayload.serializer()), s) }.getOrNull()?.let { recent = it } }
+            readList(ctx, "recent")?.let { recent = it }
+            readList(ctx, "recent_gif")?.let { recentGifs = it }
         }
         if (fetching) return
         fetching = true
@@ -110,10 +119,7 @@ object StickerStore {
                 // 后台下架的包：把「最近使用」里已经不在目录中的贴纸清掉
                 val alive = sets.flatMap { s -> s.items.map { it.id } }.toHashSet()
                 val pruned = recent.filter { it.id in alive }
-                if (pruned.size != recent.size) {
-                    recent = pruned
-                    prefs(ctx).edit().putString("recent", json.encodeToString(ListSerializer(StickerPayload.serializer()), recent)).apply()
-                }
+                if (pruned.size != recent.size) { recent = pruned; saveList(ctx, "recent", recent) }
             }
         } catch (_: Exception) {
         } finally {
@@ -121,9 +127,15 @@ object StickerStore {
         }
     }
 
+    /** 记一次使用：贴纸进贴纸「最近」，GIF 进 GIF「最近」 */
     fun addRecent(ctx: Context, p: StickerPayload) {
-        recent = (listOf(p) + recent.filter { it.id != p.id }).take(RECENT_MAX)
-        prefs(ctx).edit().putString("recent", json.encodeToString(ListSerializer(StickerPayload.serializer()), recent)).apply()
+        if (p.isGif) {
+            recentGifs = (listOf(p) + recentGifs.filter { it.id != p.id }).take(RECENT_MAX)
+            saveList(ctx, "recent_gif", recentGifs)
+        } else {
+            recent = (listOf(p) + recent.filter { it.id != p.id }).take(RECENT_MAX)
+            saveList(ctx, "recent", recent)
+        }
     }
 
     // ---------- 我的表情包（表情商店） ----------
@@ -134,6 +146,7 @@ object StickerStore {
     private var mineLoadedFromDisk = false
 
     val mineSets: List<StickerSetItem> get() = mineIds.mapNotNull { id -> sets.find { it.id == id } }
+    val otherSets: List<StickerSetItem> get() = sets.filter { it.id !in mineIds }
 
     suspend fun loadMine(ctx: Context) {
         if (!mineLoadedFromDisk) {
@@ -164,11 +177,27 @@ object StickerStore {
 
     @Serializable
     private data class MineResp(val ids: List<Int> = emptyList())
+
+    // ---------- GIF（后端 /gifs：Telegram @gif 中转） ----------
+
+    private val gifPages = HashMap<String, Pair<Long, GifPage>>()
+
+    /** 搜 GIF（q 空 = 热门）；同一页 5 分钟内复用。返回 items + 下一页 offset（空 = 没了） */
+    suspend fun searchGifs(q: String, offset: String = ""): Pair<List<StickerPayload>, String> {
+        val key = "$q|$offset"
+        gifPages[key]?.let { (at, page) -> if (System.currentTimeMillis() - at < 5 * 60 * 1000) return page.items to page.next }
+        val data = Api.request("/gifs?q=${java.net.URLEncoder.encode(q, "UTF-8")}&offset=${java.net.URLEncoder.encode(offset, "UTF-8")}") ?: return emptyList<StickerPayload>() to ""
+        val page = json.decodeFromJsonElement(GifPage.serializer(), data)
+        // 首次搜索后端可能还在后台补齐，结果少时只短缓存
+        gifPages[key] = (System.currentTimeMillis() - if (page.items.size < 10) 4 * 60 * 1000 else 0) to page
+        return page.items to page.next
+    }
 }
 
 /**
- * 渲染一张贴纸（消息气泡 / 评论里用）。size 为长边，按 w/h 保比例。
- * 静态 / 动态 WebP 走 Coil（ImageDecoderDecoder 会自动播动态 WebP）；Lottie 走 lottie-compose（按 url 缓存）。
+ * 渲染一张贴纸 / GIF（消息气泡 / 评论里用）。size 为长边，按 w/h 保比例。
+ * 静态 / 动态 WebP 走 Coil（ImageDecoderDecoder 会自动播动态 WebP）；Lottie 走 lottie-compose；
+ * GIF（mp4）用 ExoPlayer 静音循环，autoplay=false 时只放动态 WebP 预览（面板网格 / 待发小图）。
  */
 @Composable
 fun StickerImage(p: StickerPayload, size: Dp, autoplay: Boolean = true, modifier: Modifier = Modifier) {
@@ -176,213 +205,65 @@ fun StickerImage(p: StickerPayload, size: Dp, autoplay: Boolean = true, modifier
     val w = if (ratio >= 1f) size else size * ratio
     val h = if (ratio >= 1f) size / ratio else size
     val box = modifier.size(w, h)
-    if (p.format == "lottie") {
-        val composition by rememberLottieComposition(LottieCompositionSpec.Url(Api.fullUrl(p.url)))
-        if (composition == null && p.thumb.isNotEmpty()) {
-            AsyncImage(model = Api.fullUrl(p.thumb), contentDescription = p.emoji, contentScale = ContentScale.Fit, modifier = box)
-        } else {
-            LottieAnimation(composition = composition, iterations = if (autoplay) LottieConstants.IterateForever else 1, isPlaying = autoplay, modifier = box)
+    when {
+        p.format == "lottie" -> {
+            val composition by rememberLottieComposition(LottieCompositionSpec.Url(Api.fullUrl(p.url)))
+            if (composition == null && p.thumb.isNotEmpty()) {
+                AsyncImage(model = Api.fullUrl(p.thumb), contentDescription = p.emoji, contentScale = ContentScale.Fit, modifier = box)
+            } else {
+                LottieAnimation(composition = composition, iterations = if (autoplay) LottieConstants.IterateForever else 1, isPlaying = autoplay, modifier = box)
+            }
         }
-    } else {
-        AsyncImage(model = Api.fullUrl(p.url), contentDescription = p.emoji, contentScale = ContentScale.Fit, modifier = box)
+        p.isGif && autoplay -> GifPlayer(p, box.clip(RoundedCornerShape(10.dp)))
+        p.isGif -> AsyncImage(model = Api.fullUrl(p.thumb.ifEmpty { p.url }), contentDescription = null, contentScale = ContentScale.Crop, modifier = box.clip(RoundedCornerShape(8.dp)).background(Bg3))
+        else -> AsyncImage(model = Api.fullUrl(p.url), contentDescription = p.emoji, contentScale = ContentScale.Fit, modifier = box)
     }
 }
 
-/** 面板网格里的小图：和 Telegram 一样动态的也直接播（LazyVerticalGrid 只组合可见的那几行） */
+/** GIF 气泡：mp4 静音循环；ExoPlayer 起播前先垫动态 WebP 预览 */
+@Composable
+private fun GifPlayer(p: StickerPayload, modifier: Modifier) {
+    val ctx = LocalContext.current
+    val url = Api.fullUrl(p.url)
+    var ready by remember(url) { mutableStateOf(false) }
+    val player = remember(url) {
+        ExoPlayer.Builder(ctx).build().apply {
+            setMediaItem(MediaItem.fromUri(url))
+            repeatMode = Player.REPEAT_MODE_ONE
+            volume = 0f
+            playWhenReady = true
+            addListener(object : Player.Listener {
+                override fun onRenderedFirstFrame() { ready = true }
+            })
+            prepare()
+        }
+    }
+    DisposableEffect(url) { onDispose { player.release() } }
+    Box(modifier.background(Bg3)) {
+        AndroidView(
+            modifier = Modifier.matchParentSize(),
+            factory = {
+                PlayerView(it).apply {
+                    this.player = player
+                    useController = false
+                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                    setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
+                }
+            },
+        )
+        if (!ready && p.thumb.isNotEmpty()) {
+            AsyncImage(model = Api.fullUrl(p.thumb), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize())
+        }
+    }
+}
+
+/** 面板网格里的小图：和 Telegram 一样动态的也直接播（LazyVerticalGrid 只组合可见的那几行）；GIF 只放预览 */
 @Composable
 fun StickerThumb(p: StickerPayload, size: Dp, modifier: Modifier = Modifier) {
-    StickerImage(p, size, modifier = modifier)
+    StickerImage(p, size, autoplay = !p.isGif, modifier = modifier)
 }
 
-val EMOJIS = listOf(
-    "😀", "😂", "🥰", "😍", "😘", "😊", "🤔", "😎", "🥺", "😭", "😅", "🙃", "😏", "😴", "🤗", "😡",
-    "❤️", "💕", "💔", "👍", "👏", "🙏", "🌹", "🎉", "🔥", "✨", "🙌", "🤝", "💪", "🍻", "🎂", "🌙",
-)
-
-/**
- * 表情面板（三端同一套交互）：顶部横向 tab（emoji / 最近 / 我加的表情包），右侧固定「+」进表情商店，下面 5 列网格。
- * onEmoji 传了才有 emoji tab（插入文字）；onPick 点贴纸——聊天里即发送，评论里挂到待发评论上。
- */
-@Composable
-fun StickerPanel(onPick: (StickerPayload) -> Unit, onEmoji: ((String) -> Unit)? = null, height: Dp = 260.dp) {
-    val ctx = LocalContext.current
-    LaunchedEffect(Unit) { StickerStore.ensureLoaded(ctx); StickerStore.loadMine(ctx) }
-    val sets = StickerStore.mineSets
-    val recent = StickerStore.recent
-    var showStore by remember { mutableStateOf(false) }
-    // tab：-2 emoji，-1 最近，>=0 表情包 id
-    var tab by remember { mutableIntStateOf(if (onEmoji != null) -2 else if (recent.isNotEmpty()) -1 else sets.firstOrNull()?.id ?: -1) }
-    LaunchedEffect(sets.map { it.id }) {
-        if (tab == -1 && recent.isEmpty() && sets.isNotEmpty() && onEmoji == null) tab = sets.first().id
-        if (tab >= 0 && sets.isNotEmpty() && sets.none { it.id == tab }) tab = sets.first().id
-    }
-
-    Column(Modifier.fillMaxWidth().height(height).background(Bg2)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            LazyRow(Modifier.weight(1f).padding(horizontal = 6.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (onEmoji != null) item { TabCell(tab == -2, { tab = -2 }) { SmileIcon(TextMain, 22.dp) } }
-                item { TabCell(tab == -1, { tab = -1 }) { ClockIcon(TextSub, 20.dp) } }
-                items(sets, key = { it.id }) { s ->
-                    TabCell(tab == s.id, { tab = s.id }) {
-                        if (s.thumb.isNotEmpty()) AsyncImage(model = Api.fullUrl(s.thumb), contentDescription = s.title, contentScale = ContentScale.Fit, modifier = Modifier.size(28.dp))
-                        else Text(s.title.take(2), color = TextSub, fontSize = 11.sp)
-                    }
-                }
-            }
-            Box(Modifier.width(1.dp).height(28.dp).background(Line))
-            Box(Modifier.size(44.dp, 40.dp).noRippleClick { showStore = true }, contentAlignment = Alignment.Center) { PlusIconS(TextSub, 22.dp) }
-        }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
-
-        when {
-            tab == -2 && onEmoji != null -> LazyVerticalGrid(columns = GridCells.Fixed(8), modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(8.dp)) {
-                items(EMOJIS) { e ->
-                    Text(e, fontSize = 24.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(vertical = 6.dp).noRippleClick { onEmoji(e) })
-                }
-            }
-            tab == -1 -> if (recent.isEmpty()) EmptyHint(sets.isNotEmpty()) { showStore = true } else StickerGrid(recent, onPick)
-            else -> {
-                val cur = sets.find { it.id == tab }
-                if (cur == null) EmptyHint(sets.isNotEmpty()) { showStore = true }
-                else Column(Modifier.fillMaxSize()) {
-                    Text(cur.title, color = TextSub, fontSize = 11.sp, modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 2.dp))
-                    StickerGrid(cur.items, onPick)
-                }
-            }
-        }
-    }
-
-    if (showStore) {
-        androidx.compose.ui.window.Dialog(onDismissRequest = { showStore = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-            StickerStoreScreen { showStore = false }
-        }
-    }
-}
-
-@Composable
-private fun EmptyHint(hasSets: Boolean, onStore: () -> Unit) {
-    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Text(if (hasSets) "还没用过表情，先从右边的表情包里挑一个" else "还没有表情包", color = TextSub, fontSize = 13.sp)
-        Spacer(Modifier.height(10.dp))
-        Box(Modifier.clip(RoundedCornerShape(15.dp)).background(Accent).noRippleClick(onStore).padding(horizontal = 16.dp, vertical = 7.dp)) {
-            Text("去表情商店添加", color = Color.White, fontSize = 13.sp)
-        }
-    }
-}
-
-/**
- * 表情商店（全屏 Dialog，从面板「+」进来）：上半「我的表情」可置顶 / 移除，下半「全部」可添加。
- * 库里的包由后台维护；用户只决定自己面板里有哪些、什么顺序。
- */
-@Composable
-fun StickerStoreScreen(onClose: () -> Unit) {
-    val ctx = LocalContext.current
-    val scope = rememberCoroutineScope()
-    LaunchedEffect(Unit) { StickerStore.ensureLoaded(ctx); StickerStore.loadMine(ctx) }
-    val all = StickerStore.sets
-    val mineIds = StickerStore.mineIds
-    val mine = StickerStore.mineSets
-    val others = all.filter { it.id !in mineIds }
-    var busy by remember { mutableStateOf<Int?>(null) }
-    var toast by remember { mutableStateOf("") }
-    LaunchedEffect(toast) { if (toast.isNotEmpty()) { kotlinx.coroutines.delay(1600); toast = "" } }
-    fun run(id: Int, block: suspend () -> Unit) {
-        busy = id
-        scope.launch { runCatching { block() }.onFailure { toast = it.message ?: "操作失败" }; busy = null }
-    }
-    val kindName = mapOf("static" to "静态", "animated" to "动态", "video" to "动态")
-
-    Box(Modifier.fillMaxSize().background(Bg)) {
-        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
-            Row(Modifier.fillMaxWidth().padding(8.dp, 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(40.dp).noRippleClick(onClose), contentAlignment = Alignment.Center) { com.wh.peiwana.ui.BackIcon(TextMain, 24.dp) }
-                Text("表情商店", color = TextMain, fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
-                Spacer(Modifier.size(40.dp))
-            }
-            androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize()) {
-                item { Text("我的表情（${mine.size}）", color = TextSub, fontSize = 12.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, modifier = Modifier.padding(16.dp, 12.dp, 16.dp, 4.dp)) }
-                if (mine.isEmpty()) item { Text("还没有添加表情包，从下面挑几个", color = TextDim, fontSize = 13.sp, modifier = Modifier.padding(16.dp, 14.dp)) }
-                items(mine, key = { "m${it.id}" }) { s ->
-                    val idx = mineIds.indexOf(s.id)
-                    StoreRow(s, kindName[s.kind] ?: "") {
-                        if (idx > 0) StoreBtn("置顶", busy == s.id, false) { run(s.id) { StickerStore.reorderMine(ctx, listOf(s.id) + mineIds.filter { it != s.id }) } }
-                        StoreBtn("移除", busy == s.id, false) { run(s.id) { StickerStore.removeMine(ctx, s.id) } }
-                    }
-                }
-                item { Text("全部表情包（${all.size}）", color = TextSub, fontSize = 12.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, modifier = Modifier.padding(16.dp, 18.dp, 16.dp, 4.dp)) }
-                if (all.isEmpty()) item { Text("表情包还在路上…", color = TextDim, fontSize = 13.sp, modifier = Modifier.padding(16.dp, 14.dp)) }
-                else if (others.isEmpty()) item { Text("都已经添加了", color = TextDim, fontSize = 13.sp, modifier = Modifier.padding(16.dp, 14.dp)) }
-                items(others, key = { "a${it.id}" }) { s ->
-                    StoreRow(s, kindName[s.kind] ?: "") {
-                        StoreBtn("添加", busy == s.id, true) { run(s.id) { StickerStore.addMine(ctx, s.id) } }
-                    }
-                }
-                item { Spacer(Modifier.height(30.dp)) }
-            }
-        }
-        if (toast.isNotEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(toast, color = Color.White, fontSize = 14.sp, modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(Color.Black.copy(alpha = 0.85f)).padding(horizontal = 22.dp, vertical = 10.dp))
-            }
-        }
-    }
-}
-
-@Composable
-private fun StoreRow(s: StickerSetItem, kind: String, actions: @Composable RowScope.() -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (s.thumb.isNotEmpty()) AsyncImage(model = Api.fullUrl(s.thumb), contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.size(44.dp))
-            else Box(Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)).background(Bg3))
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(s.title, color = TextMain, fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, maxLines = 1)
-                Text("${s.items.size} 张 · $kind", color = TextSub, fontSize = 12.sp)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { actions() }
-        }
-        LazyRow(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(s.items.take(8), key = { it.id }) { p -> StickerImage(p, 52.dp, autoplay = false) }
-        }
-    }
-    Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
-}
-
-@Composable
-private fun StoreBtn(label: String, busy: Boolean, primary: Boolean, onClick: () -> Unit) {
-    Box(
-        Modifier.clip(RoundedCornerShape(14.dp)).background(if (primary) Accent else Bg3).noRippleClick { if (!busy) onClick() }.padding(horizontal = 14.dp, vertical = 6.dp),
-    ) { Text(label, color = if (primary) Color.White else TextMain, fontSize = 13.sp) }
-}
-
-/** 加号（面板右侧进商店） */
-@Composable
-private fun PlusIconS(tint: Color, size: Dp) {
-    Canvas(Modifier.size(size)) {
-        val w = this.size.width
-        drawLine(tint, Offset(w * 0.5f, w * 0.2f), Offset(w * 0.5f, w * 0.8f), strokeWidth = w * 0.08f, cap = androidx.compose.ui.graphics.StrokeCap.Round)
-        drawLine(tint, Offset(w * 0.2f, w * 0.5f), Offset(w * 0.8f, w * 0.5f), strokeWidth = w * 0.08f, cap = androidx.compose.ui.graphics.StrokeCap.Round)
-    }
-}
-
-@Composable
-private fun StickerGrid(items: List<StickerPayload>, onPick: (StickerPayload) -> Unit) {
-    LazyVerticalGrid(columns = GridCells.Fixed(5), modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        items(items, key = { it.id }) { p ->
-            Box(Modifier.aspectRatio(1f).clip(RoundedCornerShape(10.dp)).noRippleClick { onPick(p) }, contentAlignment = Alignment.Center) {
-                StickerThumb(p, 60.dp)
-            }
-        }
-    }
-}
-
-@Composable
-private fun TabCell(active: Boolean, onClick: () -> Unit, content: @Composable () -> Unit) {
-    Box(
-        Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(if (active) Bg3 else Color.Transparent).noRippleClick(onClick),
-        contentAlignment = Alignment.Center,
-    ) { content() }
-}
+// ---------- 图标 ----------
 
 /** 笑脸（表情按钮） */
 @Composable
@@ -393,7 +274,7 @@ fun SmileIcon(tint: Color, size: Dp = 22.dp) {
         drawCircle(tint, radius = w * 0.42f, style = Stroke(stroke))
         drawCircle(tint, radius = w * 0.055f, center = Offset(w * 0.36f, w * 0.4f))
         drawCircle(tint, radius = w * 0.055f, center = Offset(w * 0.64f, w * 0.4f))
-        drawArc(tint, startAngle = 20f, sweepAngle = 140f, useCenter = false, topLeft = Offset(w * 0.27f, w * 0.3f), size = Size(w * 0.46f, w * 0.42f), style = Stroke(stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round))
+        drawArc(tint, startAngle = 20f, sweepAngle = 140f, useCenter = false, topLeft = Offset(w * 0.27f, w * 0.3f), size = Size(w * 0.46f, w * 0.42f), style = Stroke(stroke, cap = StrokeCap.Round))
     }
 }
 
@@ -404,7 +285,74 @@ fun ClockIcon(tint: Color, size: Dp = 20.dp) {
         val w = this.size.width
         val stroke = w * 0.08f
         drawCircle(tint, radius = w * 0.42f, style = Stroke(stroke))
-        drawLine(tint, Offset(w * 0.5f, w * 0.26f), Offset(w * 0.5f, w * 0.52f), strokeWidth = stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round)
-        drawLine(tint, Offset(w * 0.5f, w * 0.52f), Offset(w * 0.68f, w * 0.62f), strokeWidth = stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+        drawLine(tint, Offset(w * 0.5f, w * 0.26f), Offset(w * 0.5f, w * 0.52f), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(tint, Offset(w * 0.5f, w * 0.52f), Offset(w * 0.68f, w * 0.62f), strokeWidth = stroke, cap = StrokeCap.Round)
+    }
+}
+
+/** 圆圈加号（顶部条最左，进表情商店，图 6） */
+@Composable
+fun PlusCircleIcon(tint: Color, size: Dp = 24.dp) {
+    Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        val stroke = w * 0.07f
+        drawCircle(tint, radius = w * 0.42f, style = Stroke(stroke))
+        drawLine(tint, Offset(w * 0.5f, w * 0.3f), Offset(w * 0.5f, w * 0.7f), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(tint, Offset(w * 0.3f, w * 0.5f), Offset(w * 0.7f, w * 0.5f), strokeWidth = stroke, cap = StrokeCap.Round)
+    }
+}
+
+/** 放大镜（搜索行） */
+@Composable
+fun SearchIcon(tint: Color, size: Dp = 16.dp) {
+    Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        val stroke = w * 0.1f
+        drawCircle(tint, radius = w * 0.3f, center = Offset(w * 0.42f, w * 0.42f), style = Stroke(stroke))
+        drawLine(tint, Offset(w * 0.64f, w * 0.64f), Offset(w * 0.88f, w * 0.88f), strokeWidth = stroke, cap = StrokeCap.Round)
+    }
+}
+
+/** 地球（切回键盘） */
+@Composable
+fun GlobeIcon(tint: Color, size: Dp = 22.dp) {
+    Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        val stroke = w * 0.07f
+        drawCircle(tint, radius = w * 0.42f, style = Stroke(stroke))
+        drawOval(tint, topLeft = Offset(w * 0.3f, w * 0.08f), size = Size(w * 0.4f, w * 0.84f), style = Stroke(stroke))
+        drawLine(tint, Offset(w * 0.08f, w * 0.5f), Offset(w * 0.92f, w * 0.5f), strokeWidth = stroke)
+        drawLine(tint, Offset(w * 0.5f, w * 0.08f), Offset(w * 0.5f, w * 0.92f), strokeWidth = stroke)
+    }
+}
+
+/** 退格（删一个字） */
+@Composable
+fun BackspaceIcon(tint: Color, size: Dp = 22.dp) {
+    Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        val stroke = w * 0.07f
+        val path = androidx.compose.ui.graphics.Path().apply {
+            moveTo(w * 0.34f, w * 0.22f); lineTo(w * 0.88f, w * 0.22f); lineTo(w * 0.88f, w * 0.78f); lineTo(w * 0.34f, w * 0.78f); lineTo(w * 0.1f, w * 0.5f); close()
+        }
+        drawPath(path, tint, style = Stroke(stroke, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+        drawLine(tint, Offset(w * 0.5f, w * 0.38f), Offset(w * 0.72f, w * 0.62f), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(tint, Offset(w * 0.72f, w * 0.38f), Offset(w * 0.5f, w * 0.62f), strokeWidth = stroke, cap = StrokeCap.Round)
+    }
+}
+
+/** 齿轮（管理我的贴纸） */
+@Composable
+fun GearIcon(tint: Color, size: Dp = 20.dp) {
+    Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        val stroke = w * 0.08f
+        drawCircle(tint, radius = w * 0.14f, style = Stroke(stroke))
+        for (i in 0 until 8) {
+            val a = Math.toRadians(i * 45.0)
+            val c = Offset(w * 0.5f, w * 0.5f)
+            drawLine(tint, c + Offset(Math.cos(a).toFloat() * w * 0.26f, Math.sin(a).toFloat() * w * 0.26f), c + Offset(Math.cos(a).toFloat() * w * 0.42f, Math.sin(a).toFloat() * w * 0.42f), strokeWidth = stroke, cap = StrokeCap.Round)
+        }
+        drawCircle(tint, radius = w * 0.28f, style = Stroke(stroke))
     }
 }

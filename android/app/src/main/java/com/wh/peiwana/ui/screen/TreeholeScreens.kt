@@ -30,12 +30,13 @@ import com.wh.peiwana.ui.*
 import com.wh.peiwana.ui.theme.*
 import com.wh.peiwana.ui.sticker.SmileIcon
 import com.wh.peiwana.ui.sticker.StickerImage
-import com.wh.peiwana.ui.sticker.StickerPanel
+import com.wh.peiwana.ui.sticker.EmojiPanel
+import com.wh.peiwana.ui.sticker.dropLastGrapheme
 import com.wh.peiwana.ui.sticker.StickerPayload
-import com.wh.peiwana.ui.sticker.StickerStore
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
@@ -318,6 +319,7 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
     /** 待发的贴纸：评论里点贴纸先挂到输入栏，再点发送 */
     var sticker by remember { mutableStateOf<StickerPayload?>(null) }
     var showSticker by remember { mutableStateOf(false) }
+    val inputFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     var sending by remember { mutableStateOf(false) }
     var toast by remember { mutableStateOf("") }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -383,7 +385,7 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
                                 color = TextMain, fontSize = 15.sp, lineHeight = 23.sp,
                             )
                         }
-                        c.sticker?.let { StickerImage(it, 96.dp, modifier = Modifier.padding(top = 4.dp)) }
+                        c.sticker?.let { StickerImage(it, if (it.isGif) 160.dp else 96.dp, modifier = Modifier.padding(top = 4.dp)) }
                         Spacer(Modifier.height(3.dp))
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                             Text("回复", color = TextSub, fontSize = 11.sp, modifier = Modifier.noRippleClick { replyTo = c }.padding(end = 10.dp))
@@ -401,7 +403,7 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 sticker?.let { s ->
                     Box {
-                        StickerImage(s, 56.dp)
+                        StickerImage(s, 56.dp, autoplay = !s.isGif)
                         Box(
                             Modifier.align(Alignment.TopEnd).size(18.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.6f)).noRippleClick { sticker = null },
                             contentAlignment = Alignment.Center,
@@ -438,7 +440,7 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
                     textStyle = TextStyle(color = TextMain, fontSize = 15.sp),
                     cursorBrush = SolidColor(Accent),
                     maxLines = 4,
-                    modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) showSticker = false },
+                    modifier = Modifier.fillMaxWidth().focusRequester(inputFocus).onFocusChanged { if (it.isFocused) showSticker = false },
                 )
             }
             Spacer(Modifier.width(8.dp))
@@ -456,8 +458,7 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
                                     sticker?.let { put("stickerId", JsonPrimitive(it.id)) }
                                 })
                             }.onSuccess {
-                                sticker?.let { StickerStore.addRecent(ctx, it) }
-                                input = ""
+                                                                input = ""
                                 replyTo = null
                                 sticker = null
                                 showSticker = false
@@ -473,7 +474,7 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             ) { Text("发送", color = Color.White, fontSize = 13.sp) }
         }
-        if (showSticker) StickerPanel(onPick = { sticker = it }, onEmoji = { input += it })
+        if (showSticker) EmojiPanel(onPick = { sticker = it }, onEmoji = { input += it }, onDelete = { input = dropLastGrapheme(input) }, onKeyboard = { showSticker = false; inputFocus.requestFocus(); keyboard?.show() })
         } // 底部区域 Column
     }
 

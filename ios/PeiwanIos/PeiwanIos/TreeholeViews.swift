@@ -310,7 +310,7 @@ struct TreeholeDetailView: View {
                                         .font(.system(size: 15)).lineSpacing(3)
                                     }
                                     if let s = c.sticker {
-                                        StickerImageView(p: s, size: 96).padding(.top, 2)
+                                        StickerImageView(p: s, size: s.isGif ? 160 : 96).padding(.top, 2)
                                     }
                                     HStack(spacing: 10) {
                                         Spacer()
@@ -381,7 +381,7 @@ struct TreeholeDetailView: View {
                 }
                 .padding(12)
                 if showSticker {
-                    StickerPanel(onPick: { sticker = $0 }, onEmoji: { input += $0 })
+                    EmojiPanel(onPick: { sticker = $0 }, onEmoji: { input += $0 }, onDelete: { input = dropLastGrapheme(input) }, onKeyboard: { showSticker = false; inputFocused = true })
                 }
             }
             .background(Theme.bg2)
@@ -434,8 +434,7 @@ struct TreeholeDetailView: View {
             if let picked { body["stickerId"] = picked.id }
             do {
                 let _: IdResp = try await Api.request("/treehole/\(postId)/comments", method: "POST", body: body)
-                if let picked { StickerStore.shared.addRecent(picked) }
-                input = ""
+                                input = ""
                 replyTo = nil
                 sticker = nil
                 showSticker = false

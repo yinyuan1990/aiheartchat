@@ -8,12 +8,13 @@ import { TelegramModule } from '../telegram/telegram.module';
 import { MusicModule } from '../music/music.module';
 import { GalleryModule } from '../gallery/gallery.module';
 import { StickerModule } from '../sticker/sticker.module';
+import { GifModule } from '../gif/gif.module';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { AdminGuard } from './admin.guard';
 
 @Module({
-  imports: [AuthModule, WalletModule, NewsModule, TreeholeModule, ModuleConfigModule, TelegramModule, MusicModule, GalleryModule, StickerModule],
+  imports: [AuthModule, WalletModule, NewsModule, TreeholeModule, ModuleConfigModule, TelegramModule, MusicModule, GalleryModule, StickerModule, GifModule],
   controllers: [AdminController],
   providers: [AdminService, AdminGuard],
 })

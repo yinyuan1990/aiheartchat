@@ -601,7 +601,7 @@ struct MomentDetailView: View {
                                         .onTapGesture { fullImage = img }
                                 }
                                 if let s = c.sticker {
-                                    StickerImageView(p: s, size: 96)
+                                    StickerImageView(p: s, size: s.isGif ? 160 : 96)
                                 }
                                 Text(timeAgo(c.createdAt)).font(.system(size: 11)).foregroundStyle(Theme.textDim)
                             }
@@ -642,7 +642,7 @@ struct MomentDetailView: View {
                 }
                 .padding(12)
                 if showSticker {
-                    StickerPanel(onPick: { sticker = $0 }, onEmoji: { input += $0 })
+                    EmojiPanel(onPick: { sticker = $0 }, onEmoji: { input += $0 }, onDelete: { input = dropLastGrapheme(input) }, onKeyboard: { showSticker = false; inputFocused = true })
                 }
             }
             .background(Theme.bg2)
@@ -678,8 +678,7 @@ struct MomentDetailView: View {
             var body: [String: Any] = ["content": text]
             if let picked { body["stickerId"] = picked.id }
             let _: CommentItem? = try? await Api.request("/moments/\(momentId)/comments", method: "POST", body: body)
-            if let picked { StickerStore.shared.addRecent(picked) }
-            input = ""
+                        input = ""
             sticker = nil
             showSticker = false
             await load()

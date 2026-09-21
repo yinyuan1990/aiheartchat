@@ -3,8 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api, uploadFile } from '../api';
 import { isEmbedded } from '../bridge';
 import { PullToRefresh } from '../components/PullToRefresh';
-import { addRecent, StickerPayload } from '../stickers';
-import { StickerPanel } from '../components/StickerPanel';
+import { StickerPayload } from '../stickers';
+import { dropLastGrapheme } from '../emojis';
+import { EmojiPanel } from '../components/EmojiPanel';
 import { StickerView } from '../components/StickerView';
 
 /** 私密树洞帖子（匿名，无作者信息） */
@@ -235,7 +236,6 @@ export function TreeholeDetailPage() {
     setBusy(true);
     try {
       await api(`/treehole/${id}/comments`, { method: 'POST', body: { content, replyToId: replyTo?.id, stickerId: sticker?.id } });
-      if (sticker) addRecent(sticker);
       setInput('');
       setSticker(null);
       setShowEmoji(false);
@@ -331,7 +331,7 @@ export function TreeholeDetailPage() {
         />
         <button className="btn-sm" disabled={busy || (!input.trim() && !sticker)} onClick={send}>发送</button>
       </div>
-      {showEmoji && <StickerPanel onPick={(p) => setSticker(p)} onEmoji={(e) => setInput((v) => v + e)} />}
+      {showEmoji && <EmojiPanel onPick={(p) => setSticker(p)} onEmoji={(e) => setInput((v) => v + e)} onDelete={() => setInput((v) => dropLastGrapheme(v))} onKeyboard={() => { setShowEmoji(false); inputRef.current?.focus(); }} />}
 
       {toast && (
         <div style={{ position: 'fixed', top: '45%', left: '50%', transform: 'translate(-50%,-50%)', background: 'rgba(0,0,0,0.85)', padding: '10px 22px', borderRadius: 10, fontSize: 14, zIndex: 300 }}>

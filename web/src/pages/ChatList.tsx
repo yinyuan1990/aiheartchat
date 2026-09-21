@@ -33,7 +33,7 @@ function previewText(msg?: ConversationItem['lastMsg']): string {
     case 'text': return msg.content.slice(0, 30);
     case 'image': return '[图片]';
     case 'video': return '[视频]';
-    case 'sticker': return '[表情]';
+    case 'sticker': return msg.content.includes('"mp4"') ? '[GIF]' : '[表情]';
     case 'gift': return '[礼物]';
     case 'audio': return '[语音]';
     case 'location': return '[位置]';

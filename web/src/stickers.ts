@@ -4,8 +4,8 @@ import { api } from './api';
 /** 一张贴纸（聊天消息 type=sticker 的 content、评论的 sticker 字段都是这个 JSON） */
 export interface StickerPayload {
   id: string;
-  /** webp=静态图；lottie=Lottie JSON；awebp=动态 WebP */
-  format: 'webp' | 'lottie' | 'awebp';
+  /** webp=静态图；lottie=Lottie JSON；awebp=动态 WebP；mp4=GIF（无声视频，thumb 为动态 WebP 预览） */
+  format: 'webp' | 'lottie' | 'awebp' | 'mp4';
   url: string;
   thumb: string;
   w: number;
@@ -88,10 +88,46 @@ function pruneRecent() {
   }
 }
 
+/** 记一次使用：贴纸进贴纸「最近」，GIF（format=mp4）进 GIF 的「最近」 */
 export function addRecent(p: StickerPayload) {
+  if (p.format === 'mp4') { addRecentGif(p); return; }
   const list = [p, ...getRecent().filter((x) => x.id !== p.id)].slice(0, RECENT_MAX);
   try { localStorage.setItem(RECENT_KEY, JSON.stringify(list)); } catch { /* ignore */ }
   notify();
+}
+
+// ---------- GIF（Telegram @gif 中转，后端 /gifs） ----------
+
+const GIF_RECENT_KEY = 'pw_gif_recent';
+const GIF_RECENT_MAX = 24;
+const gifPages = new Map<string, { at: number; items: StickerPayload[]; next: string }>();
+
+export function getRecentGifs(): StickerPayload[] {
+  try {
+    const a = JSON.parse(localStorage.getItem(GIF_RECENT_KEY) || '[]');
+    return Array.isArray(a) ? a : [];
+  } catch {
+    return [];
+  }
+}
+
+export function addRecentGif(p: StickerPayload) {
+  const list = [p, ...getRecentGifs().filter((x) => x.id !== p.id)].slice(0, GIF_RECENT_MAX);
+  try { localStorage.setItem(GIF_RECENT_KEY, JSON.stringify(list)); } catch { /* ignore */ }
+  notify();
+}
+
+/** 搜 GIF（q 空 = 热门）；同一页 5 分钟内复用 */
+export async function searchGifs(q: string, offset = ''): Promise<{ items: StickerPayload[]; next: string }> {
+  const key = `${q}|${offset}`;
+  const hit = gifPages.get(key);
+  if (hit && Date.now() - hit.at < 5 * 60 * 1000) return hit;
+  const r = await api<{ items: StickerPayload[]; next: string }>(`/gifs?q=${encodeURIComponent(q)}&offset=${encodeURIComponent(offset)}`);
+  const page = { at: Date.now(), items: r.items ?? [], next: r.next ?? '' };
+  // 首次搜索后端可能还在后台补齐，结果少时只短缓存
+  if (page.items.length < 10) page.at -= 4 * 60 * 1000;
+  gifPages.set(key, page);
+  return page;
 }
 
 // ---------- 我的表情包（表情商店） ----------
@@ -150,15 +186,16 @@ export function useStickers() {
   const [sets, setSets] = useState<StickerSet[]>(memo?.sets ?? []);
   const [ids, setIds] = useState<number[]>(mineIds ?? []);
   const [recent, setRecent] = useState<StickerPayload[]>(getRecent);
+  const [recentGifs, setRecentGifs] = useState<StickerPayload[]>(getRecentGifs);
   useEffect(() => {
-    const l = () => { setSets(memo?.sets ?? []); setIds(mineIds ?? []); setRecent(getRecent()); };
+    const l = () => { setSets(memo?.sets ?? []); setIds(mineIds ?? []); setRecent(getRecent()); setRecentGifs(getRecentGifs()); };
     listeners.add(l);
     loadStickers();
     loadMine();
     return () => { listeners.delete(l); };
   }, []);
   const mine = ids.map((id) => sets.find((s) => s.id === id)).filter((s): s is StickerSet => !!s);
-  return { sets, mine, mineIds: ids, recent };
+  return { sets, mine, mineIds: ids, recent, recentGifs };
 }
 
 export function parseSticker(content: string): StickerPayload | null {

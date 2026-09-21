@@ -4,8 +4,9 @@ import { api, fmtPoints, uploadFile } from '../api';
 import { useApp } from '../store';
 import { wsManager, MessagePayload } from '../ws';
 import { nearestCity } from '../cities';
-import { addRecent, parseSticker, StickerPayload } from '../stickers';
-import { StickerPanel } from '../components/StickerPanel';
+import { parseSticker, StickerPayload } from '../stickers';
+import { dropLastGrapheme } from '../emojis';
+import { EmojiPanel } from '../components/EmojiPanel';
 import { StickerView } from '../components/StickerView';
 
 interface MsgItem {
@@ -384,7 +385,8 @@ function MsgBubble({ m, mine, convType, onImage }: { m: MsgItem; mine: boolean; 
       break;
     case 'sticker': {
       const p = parseSticker(m.content);
-      body = p ? <StickerView p={p} size={140} /> : <span>[表情]</span>;
+      // GIF 比贴纸大一号、带圆角；贴纸不画气泡底
+      body = p ? <StickerView p={p} size={p.format === 'mp4' ? 220 : 140} /> : <span>[表情]</span>;
       break;
     }
     case 'video':
@@ -476,6 +478,7 @@ export function ChatRoomPage() {
   const [showGroupInfo, setShowGroupInfo] = useState(false);
   const [showPanel, setShowPanel] = useState(false);
   const [showSticker, setShowSticker] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [fullImage, setFullImage] = useState<string | null>(null);
   const [toast, setToast] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -554,10 +557,9 @@ export function ChatRoomPage() {
     setInput('');
   };
 
-  /** 贴纸：点即发（Telegram 式） */
+  /** 贴纸 / GIF：点即发（Telegram 式）；「最近使用」由面板自己记 */
   const sendSticker = (p: StickerPayload) => {
     sendRaw('sticker', JSON.stringify(p));
-    addRecent(p);
   };
 
   const sendMedia = async (files: FileList | null) => {
@@ -636,6 +638,7 @@ export function ChatRoomPage() {
       <div style={{ background: 'var(--bg-card)' }}>
         <div className="row" style={{ padding: 8, gap: 8 }}>
           <input
+            ref={inputRef}
             className="input grow"
             style={{ marginBottom: 0, borderRadius: 20, height: 40 }}
             value={input}
@@ -656,7 +659,14 @@ export function ChatRoomPage() {
             <button className="btn-sm" style={{ height: 40, borderRadius: 20, flexShrink: 0 }} onClick={send}>发送</button>
           )}
         </div>
-        {showSticker && <StickerPanel onPick={sendSticker} onEmoji={(e) => setInput((v) => v + e)} />}
+        {showSticker && (
+          <EmojiPanel
+            onPick={sendSticker}
+            onEmoji={(e) => setInput((v) => v + e)}
+            onDelete={() => setInput((v) => dropLastGrapheme(v))}
+            onKeyboard={() => { setShowSticker(false); inputRef.current?.focus(); }}
+          />
+        )}
         {showPanel && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, padding: '12px 12px 20px' }}>
             {([

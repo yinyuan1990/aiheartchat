@@ -14,8 +14,8 @@ import { TelegramClientService } from '../telegram/telegram.service';
 /** 客户端拿到的单张贴纸（聊天消息 content / 评论 sticker 列都存这个 JSON，自包含，不用回查） */
 export interface StickerPayload {
   id: string;
-  /** webp=静态 WebP；lottie=Lottie JSON（TGS 已解压）；awebp=动态 WebP（视频贴纸转码） */
-  format: 'webp' | 'lottie' | 'awebp';
+  /** webp=静态 WebP；lottie=Lottie JSON（TGS 已解压）；awebp=动态 WebP（视频贴纸转码）；mp4=GIF（无声视频，gif 模块） */
+  format: 'webp' | 'lottie' | 'awebp' | 'mp4';
   url: string;
   /** 静态缩略图（面板网格 / 老设备兜底）；为空时用 url */
   thumb: string;
@@ -193,9 +193,14 @@ export class StickerService {
     return { ok: true, added, users: users.length };
   }
 
-  /** 评论 / 其它模块拿一张贴纸的载荷（集合需启用） */
+  /** 评论 / 其它模块拿一张贴纸的载荷（集合需启用）；`g<id>` 是 GIF（gif 表，format=mp4） */
   async payloadOf(idRaw: string | number | bigint | undefined | null): Promise<StickerPayload | null> {
     if (idRaw === undefined || idRaw === null || idRaw === '') return null;
+    if (typeof idRaw === 'string' && /^g\d+$/.test(idRaw)) {
+      const g = await this.prisma.gif.findUnique({ where: { id: Number(idRaw.slice(1)) } });
+      if (!g || g.blocked || !g.url) throw new BadRequestException('GIF 不存在或已下架');
+      return { id: idRaw, format: 'mp4', url: g.url, thumb: g.thumb, w: g.w, h: g.h, emoji: '' };
+    }
     let id: bigint;
     try { id = BigInt(idRaw); } catch { throw new BadRequestException('贴纸 id 不合法'); }
     const s = await this.prisma.sticker.findUnique({ where: { id } });

@@ -13,6 +13,7 @@ import { TelegramClientService } from '../telegram/telegram.service';
 import { MusicService } from '../music/music.service';
 import { GalleryService } from '../gallery/gallery.service';
 import { StickerService } from '../sticker/sticker.service';
+import { GifService } from '../gif/gif.service';
 
 @Controller('admin')
 export class AdminController {
@@ -28,6 +29,7 @@ export class AdminController {
     private readonly music: MusicService,
     private readonly gallery: GalleryService,
     private readonly stickers: StickerService,
+    private readonly gifs: GifService,
   ) {}
 
   // ---------- 表情包（Telegram 公开贴纸集，后台精选） ----------
@@ -95,6 +97,40 @@ export class AdminController {
   @UseGuards(AdminGuard)
   stickerRemove(@Param('id') id: string, @Query('purge') purge?: string) {
     return this.stickers.removeSet(Number(id), purge === '1' || purge === 'true');
+  }
+
+  // ---------- GIF 缓存（Telegram @gif → MinIO） ----------
+
+  @Get('gifs')
+  @UseGuards(AdminGuard)
+  gifList(@Query('page') page?: string, @Query('size') size?: string, @Query('q') q?: string) {
+    return this.gifs.adminList(Math.max(1, Number(page) || 1), Math.min(100, Number(size) || 40), q ?? '');
+  }
+
+  @Get('gifs/stats')
+  @UseGuards(AdminGuard)
+  gifStats() {
+    return this.gifs.adminStats();
+  }
+
+  /** 屏蔽（删文件、不再出现） */
+  @Post('gifs/:id/block')
+  @UseGuards(AdminGuard)
+  gifBlock(@Param('id') id: string) {
+    return this.gifs.block(Number(id));
+  }
+
+  @Post('gifs/:id/unblock')
+  @UseGuards(AdminGuard)
+  gifUnblock(@Param('id') id: string) {
+    return this.gifs.unblock(Number(id));
+  }
+
+  /** 清空缓存（屏蔽记录保留） */
+  @Post('gifs/purge')
+  @UseGuards(AdminGuard)
+  gifPurge() {
+    return this.gifs.purge();
   }
 
   // ---------- 养眼图片（大厅 tab，名称/保留天数可改，按性别分流） ----------

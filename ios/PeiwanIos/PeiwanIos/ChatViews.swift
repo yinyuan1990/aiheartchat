@@ -53,7 +53,7 @@ private func preview(_ msg: LastMsg?) -> String {
     case "text": return String((msg.content ?? "").prefix(30))
     case "image": return "[图片]"
     case "video": return "[视频]"
-    case "sticker": return "[表情]"
+    case "sticker": return (msg.content ?? "").contains("\"mp4\"") ? "[GIF]" : "[表情]"
     case "audio": return "[语音]"
     case "location": return "[位置]"
     case "gift": return "[礼物]"
@@ -674,10 +674,13 @@ struct ChatRoomView: View {
             .padding(8)
 
             if showSticker {
-                StickerPanel(onPick: { p in
-                    sendMsg("sticker", p.encoded())
-                    StickerStore.shared.addRecent(p)
-                }, onEmoji: { input += $0 })
+                // 贴纸 / GIF 点即发送（消息类型都是 sticker，GIF 的 format=mp4）；「最近使用」由面板自己记
+                EmojiPanel(
+                    onPick: { p in sendMsg("sticker", p.encoded()) },
+                    onEmoji: { input += $0 },
+                    onDelete: { input = dropLastGrapheme(input) },
+                    onKeyboard: { showSticker = false; inputFocused = true }
+                )
             }
             if showPanel { panelGrid }
         }
@@ -880,7 +883,8 @@ struct MsgBubble: View {
         case "sticker":
             // 贴纸不画气泡底
             if let p = StickerPayload.parse(m.content) {
-                StickerImageView(p: p, size: 140)
+                // GIF 比贴纸大一号、带圆角
+                StickerImageView(p: p, size: p.isGif ? 220 : 140)
             } else {
                 Text("[表情]").font(.system(size: 15)).foregroundStyle(fg)
                     .padding(.horizontal, 14).padding(.vertical, 10)

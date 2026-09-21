@@ -4,8 +4,9 @@ import { openNativeChat } from '../bridge';
 import { api, uploadFile } from '../api';
 import { MomentItem } from './Plaza';
 import { useApp } from '../store';
-import { addRecent, StickerPayload } from '../stickers';
-import { StickerPanel } from '../components/StickerPanel';
+import { StickerPayload } from '../stickers';
+import { dropLastGrapheme } from '../emojis';
+import { EmojiPanel } from '../components/EmojiPanel';
 import { StickerView } from '../components/StickerView';
 
 /** 动态详情页：正文 + 全部评论 + 底部固定输入栏 */
@@ -18,6 +19,7 @@ export function MomentDetailPage() {
   const [input, setInput] = useState('');
   const [replyTo, setReplyTo] = useState<{ id: string; nickname: string } | null>(null);
   const [showEmoji, setShowEmoji] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   /** 待发的贴纸（评论里点贴纸先挂到输入栏，再点发送） */
   const [sticker, setSticker] = useState<StickerPayload | null>(null);
   const [liked, setLiked] = useState(false);
@@ -70,7 +72,6 @@ export function MomentDetailPage() {
     setBusy(true);
     try {
       await api(`/moments/${id}/comments`, { method: 'POST', body: { content, imageUrl, stickerId: sticker?.id, replyToId: replyTo?.id } });
-      if (sticker) addRecent(sticker);
       setInput('');
       setSticker(null);
       setReplyTo(null);
@@ -190,6 +191,7 @@ export function MomentDetailPage() {
           onClick={() => imgRef.current?.click()}
         >+</span>
         <input
+          ref={inputRef}
           className="input grow"
           style={{ marginBottom: 0, padding: '10px 14px' }}
           value={input}
@@ -205,7 +207,7 @@ export function MomentDetailPage() {
       </div>
 
       {/* 表情面板：emoji 插入文字，贴纸挂到待发评论 */}
-      {showEmoji && <StickerPanel onPick={(p) => setSticker(p)} onEmoji={(e) => setInput((v) => v + e)} />}
+      {showEmoji && <EmojiPanel onPick={(p) => setSticker(p)} onEmoji={(e) => setInput((v) => v + e)} onDelete={() => setInput((v) => dropLastGrapheme(v))} onKeyboard={() => { setShowEmoji(false); inputRef.current?.focus(); }} />}
 
       <input ref={imgRef} type="file" accept="image/*" hidden onChange={(e) => sendImage(e.target.files)} />
       {toast && (

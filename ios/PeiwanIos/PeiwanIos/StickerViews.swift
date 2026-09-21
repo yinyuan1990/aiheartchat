@@ -1,19 +1,22 @@
 import SwiftUI
 import ImageIO
+import AVFoundation
 import Lottie
 
 // MARK: - 模型
 
-/// 一张贴纸：聊天消息 type=sticker 的 content、评论的 sticker 字段都是这个 JSON
+/// 一张贴纸 / 一条 GIF：聊天消息 type=sticker 的 content、评论的 sticker 字段都是这个 JSON
 struct StickerPayload: Codable, Hashable, Identifiable {
     var id: String = ""
-    /// webp=静态图；lottie=Lottie JSON；awebp=动态 WebP
+    /// webp=静态图；lottie=Lottie JSON；awebp=动态 WebP；mp4=GIF（无声视频，thumb 是动态 WebP 预览）
     var format: String = "webp"
     var url: String = ""
     var thumb: String? = ""
     var w: Int? = 512
     var h: Int? = 512
     var emoji: String? = ""
+
+    var isGif: Bool { format == "mp4" }
 
     var aspect: CGFloat {
         let ww = CGFloat(w ?? 512), hh = CGFloat(h ?? 512)
@@ -44,14 +47,19 @@ private struct StickerCatalog: Codable {
     var sets: [StickerSetItem]? = []
 }
 
-/// 表情包目录（UserDefaults 落盘，按 version 增量）与「最近使用」
+private struct GifPage: Codable {
+    var items: [StickerPayload]? = []
+    var next: String? = ""
+}
+
+/// 表情包目录（UserDefaults 落盘，按 version 增量）、「最近使用」、我的包、GIF
 @MainActor
 final class StickerStore: ObservableObject {
     static let shared = StickerStore()
     @Published var sets: [StickerSetItem] = []
     @Published var recent: [StickerPayload] = []
+    @Published var recentGifs: [StickerPayload] = []
     private var version = 0
-    private var loaded = false
     private var fetching = false
     private let recentMax = 24
 
@@ -60,6 +68,7 @@ final class StickerStore: ObservableObject {
         version = d.integer(forKey: "stk_version")
         if let data = d.data(forKey: "stk_sets"), let s = try? JSONDecoder().decode([StickerSetItem].self, from: data) { sets = s }
         if let data = d.data(forKey: "stk_recent"), let r = try? JSONDecoder().decode([StickerPayload].self, from: data) { recent = r }
+        if let data = d.data(forKey: "stk_recent_gif"), let r = try? JSONDecoder().decode([StickerPayload].self, from: data) { recentGifs = r }
     }
 
     /// 进面板 / 首次渲染贴纸时调用：先用本地缓存，再问后端 version 有没有变
@@ -75,7 +84,6 @@ final class StickerStore: ObservableObject {
         let d = UserDefaults.standard
         d.set(version, forKey: "stk_version")
         if let data = try? JSONEncoder().encode(sets) { d.set(data, forKey: "stk_sets") }
-        loaded = true
         // 后台下架的包：把「最近使用」里已经不在目录中的贴纸清掉
         let alive = Set(sets.flatMap { $0.items.map(\.id) })
         let pruned = recent.filter { alive.contains($0.id) }
@@ -85,9 +93,15 @@ final class StickerStore: ObservableObject {
         }
     }
 
+    /// 记一次使用：贴纸进贴纸「最近」，GIF 进 GIF「最近」
     func addRecent(_ p: StickerPayload) {
-        recent = ([p] + recent.filter { $0.id != p.id }).prefix(recentMax).map { $0 }
-        if let data = try? JSONEncoder().encode(recent) { UserDefaults.standard.set(data, forKey: "stk_recent") }
+        if p.isGif {
+            recentGifs = ([p] + recentGifs.filter { $0.id != p.id }).prefix(recentMax).map { $0 }
+            if let data = try? JSONEncoder().encode(recentGifs) { UserDefaults.standard.set(data, forKey: "stk_recent_gif") }
+        } else {
+            recent = ([p] + recent.filter { $0.id != p.id }).prefix(recentMax).map { $0 }
+            if let data = try? JSONEncoder().encode(recent) { UserDefaults.standard.set(data, forKey: "stk_recent") }
+        }
     }
 
     // MARK: 我的表情包（表情商店）
@@ -96,6 +110,7 @@ final class StickerStore: ObservableObject {
     @Published var mineIds: [Int] = (UserDefaults.standard.array(forKey: "stk_mine") as? [Int]) ?? []
 
     var mineSets: [StickerSetItem] { mineIds.compactMap { id in sets.first { $0.id == id } } }
+    var otherSets: [StickerSetItem] { sets.filter { !mineIds.contains($0.id) } }
 
     private struct MineResp: Codable { var ids: [Int]? }
 
@@ -123,11 +138,28 @@ final class StickerStore: ObservableObject {
         let r: MineResp = try await Api.request("/stickers/mine", method: "PUT", body: ["ids": ids])
         applyMine(r)
     }
+
+    // MARK: GIF（后端 /gifs：Telegram @gif 中转）
+
+    private var gifPages: [String: (Date, [StickerPayload], String)] = [:]
+
+    /// 搜 GIF（q 空 = 热门）；同一页 5 分钟内复用。返回 items + 下一页 offset（空 = 没了）
+    func searchGifs(_ q: String, offset: String = "") async throws -> ([StickerPayload], String) {
+        let key = "\(q)|\(offset)"
+        if let hit = gifPages[key], Date().timeIntervalSince(hit.0) < 300 { return (hit.1, hit.2) }
+        let enc = { (s: String) in s.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "" }
+        let page: GifPage = try await Api.request("/gifs?q=\(enc(q))&offset=\(enc(offset))")
+        let items = page.items ?? [], next = page.next ?? ""
+        // 首次搜索后端可能还在后台补齐，结果少时只短缓存
+        gifPages[key] = (Date().addingTimeInterval(items.count < 10 ? -240 : 0), items, next)
+        return (items, next)
+    }
 }
 
 // MARK: - 渲染
 
-/// 渲染一张贴纸。size 为长边，按 w/h 保比例。静态 WebP → RemoteImage；动态 WebP → ImageIO 逐帧；Lottie → lottie-ios。
+/// 渲染一张贴纸 / GIF。size 为长边，按 w/h 保比例。静态 WebP → RemoteImage；动态 WebP → ImageIO 逐帧；Lottie → lottie-ios；
+/// GIF（mp4）→ AVPlayer 静音循环，autoplay=false 时只放动态 WebP 预览（面板网格 / 待发小图）。
 struct StickerImageView: View {
     let p: StickerPayload
     var size: CGFloat = 140
@@ -152,6 +184,16 @@ struct StickerImageView: View {
                 }
             case "awebp":
                 AnimatedImageView(url: Api.fullUrl(p.url), animate: autoplay)
+            case "mp4":
+                if autoplay {
+                    GifVideoView(url: Api.fullUrl(p.url), poster: Api.fullUrl(p.thumb ?? ""))
+                        .background(Theme.bg3)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                } else {
+                    AnimatedImageView(url: Api.fullUrl((p.thumb ?? "").isEmpty ? p.url : p.thumb!), animate: true, fill: true)
+                        .background(Theme.bg3)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
             default:
                 RemoteImage(url: p.url)
             }
@@ -161,12 +203,12 @@ struct StickerImageView: View {
     }
 }
 
-/// 面板网格里的小图：和 Telegram 一样动态的也直接播（LazyVGrid 只创建可见的那几行）
+/// 面板网格里的小图：和 Telegram 一样动态的也直接播（LazyVGrid 只创建可见的那几行）；GIF 只放预览
 struct StickerThumbView: View {
     let p: StickerPayload
     var size: CGFloat = 56
     var body: some View {
-        StickerImageView(p: p, size: size)
+        StickerImageView(p: p, size: size, autoplay: !p.isGif)
     }
 }
 
@@ -174,6 +216,7 @@ struct StickerThumbView: View {
 struct AnimatedImageView: UIViewRepresentable {
     let url: String
     var animate: Bool
+    var fill = false
 
     final class Box {
         var stop = false
@@ -184,7 +227,7 @@ struct AnimatedImageView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> UIImageView {
         let v = UIImageView()
-        v.contentMode = .scaleAspectFit
+        v.contentMode = fill ? .scaleAspectFill : .scaleAspectFit
         v.clipsToBounds = true
         return v
     }
@@ -221,285 +264,80 @@ enum AnimatedImageCache {
     }
 }
 
-// MARK: - 面板
+/// GIF（无声 mp4）：AVPlayer 静音循环；起播前先垫动态 WebP 预览
+struct GifVideoView: UIViewRepresentable {
+    let url: String
+    var poster: String
 
-let stickerEmojis = [
-    "😀", "😂", "🥰", "😍", "😘", "😊", "🤔", "😎", "🥺", "😭", "😅", "🙃", "😏", "😴", "🤗", "😡",
-    "❤️", "💕", "💔", "👍", "👏", "🙏", "🌹", "🎉", "🔥", "✨", "🙌", "🤝", "💪", "🍻", "🎂", "🌙",
-]
+    final class PlayerView: UIView {
+        let playerLayer = AVPlayerLayer()
+        let poster = UIImageView()
+        var player: AVPlayer?
+        var url = ""
+        var observer: NSObjectProtocol?
+        var ready: NSKeyValueObservation?
 
-/// 表情面板（三端同一套交互）：顶部横向 tab（emoji / 最近 / 各表情包封面），下面 5 列网格。
-/// onEmoji 传了才有 emoji tab（插入文字）；onPick 点贴纸——聊天里即发送，评论里挂到待发评论上。
-struct StickerPanel: View {
-    var onPick: (StickerPayload) -> Void
-    var onEmoji: ((String) -> Void)? = nil
-    var height: CGFloat = 260
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            poster.contentMode = .scaleAspectFill
+            poster.clipsToBounds = true
+            addSubview(poster)
+            playerLayer.videoGravity = .resizeAspectFill
+            layer.addSublayer(playerLayer)
+        }
+        required init?(coder: NSCoder) { fatalError() }
 
-    @ObservedObject private var store = StickerStore.shared
-    /// -2 emoji，-1 最近，>=0 表情包 id
-    @State private var tab: Int = -3
-    @State private var showStore = false
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            poster.frame = bounds
+            playerLayer.frame = bounds
+        }
 
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 0) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 4) {
-                        if onEmoji != nil {
-                            tabCell(active: tab == -2) { tab = -2 } content: {
-                                Image(systemName: "face.smiling").font(.system(size: 20)).foregroundStyle(Theme.text)
-                            }
-                        }
-                        tabCell(active: tab == -1) { tab = -1 } content: {
-                            Image(systemName: "clock").font(.system(size: 18)).foregroundStyle(Theme.textSub)
-                        }
-                        ForEach(store.mineSets) { s in
-                            tabCell(active: tab == s.id) { tab = s.id } content: {
-                                if let t = s.thumb, !t.isEmpty {
-                                    RemoteImage(url: t).frame(width: 28, height: 28)
-                                } else {
-                                    Text(String((s.title ?? "").prefix(2))).font(.system(size: 11)).foregroundStyle(Theme.textSub)
-                                }
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 6).padding(.vertical, 6)
-                }
-                Divider().overlay(Theme.line).frame(height: 28)
-                // 表情商店入口
-                Button { showStore = true } label: {
-                    Image(systemName: "plus").font(.system(size: 18, weight: .semibold)).foregroundStyle(Theme.text)
-                        .frame(width: 44, height: 40)
-                }
-                .buttonStyle(.plain)
-            }
-            Divider().overlay(Theme.line)
-
-            Group {
-                if tab == -2, let onEmoji {
-                    ScrollView {
-                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 8), spacing: 2) {
-                            ForEach(stickerEmojis, id: \.self) { e in
-                                Text(e).font(.system(size: 26)).padding(.vertical, 6)
-                                    .frame(maxWidth: .infinity)
-                                    .contentShape(Rectangle())
-                                    .onTapGesture { onEmoji(e) }
-                            }
-                        }
-                        .padding(8)
-                    }
-                } else if tab == -1 {
-                    if store.recent.isEmpty {
-                        VStack(spacing: 10) {
-                            Text(store.mineSets.isEmpty ? "还没有表情包，点右上角 + 去表情商店添加" : "还没用过表情，先从右边的表情包里挑一个")
-                                .font(.system(size: 13)).foregroundStyle(Theme.textSub)
-                            if store.mineSets.isEmpty {
-                                Button("去添加") { showStore = true }
-                                    .font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.accent)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else {
-                        grid(store.recent)
-                    }
-                } else if let cur = store.sets.first(where: { $0.id == tab }) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(cur.title ?? "").font(.system(size: 11)).foregroundStyle(Theme.textSub)
-                            .padding(.leading, 12).padding(.top, 8).padding(.bottom, 2)
-                        grid(cur.items)
-                    }
-                } else {
-                    Text("加载中…").font(.system(size: 13)).foregroundStyle(Theme.textSub)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        func load(_ u: String, poster p: String) {
+            guard u != url, let src = URL(string: u) else { return }
+            url = u
+            stop()
+            if !p.isEmpty {
+                let target = p
+                Task { @MainActor [weak self] in
+                    guard let self, let data = await AnimatedImageCache.data(for: target), self.url == u else { return }
+                    self.poster.image = UIImage(data: data)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .frame(height: height)
-        .background(Theme.bg2)
-        .fullScreenCover(isPresented: $showStore) { StickerStoreView() }
-        .task {
-            if tab == -3 { tab = onEmoji != nil ? -2 : (store.recent.isEmpty ? (store.mineSets.first?.id ?? -1) : -1) }
-            await store.ensureLoaded()
-            await store.loadMine()
-            if tab == -1, store.recent.isEmpty, onEmoji == nil, let first = store.mineSets.first { tab = first.id }
-        }
-        .onChange(of: store.mineIds) { ids in
-            // 当前 tab 的包被移除 → 回到最近
-            if tab >= 0, !ids.contains(tab) { tab = -1 }
-        }
-    }
-
-    private func grid(_ items: [StickerPayload]) -> some View {
-        ScrollView {
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 5), spacing: 6) {
-                ForEach(items) { p in
-                    StickerThumbView(p: p, size: 60)
-                        .frame(maxWidth: .infinity)
-                        .aspectRatio(1, contentMode: .fit)
-                        .contentShape(Rectangle())
-                        .onTapGesture { onPick(p) }
-                }
+            let item = AVPlayerItem(url: src)
+            let pl = AVPlayer(playerItem: item)
+            pl.isMuted = true
+            pl.actionAtItemEnd = .none
+            observer = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { [weak pl] _ in
+                pl?.seek(to: .zero); pl?.play()
             }
-            .padding(8)
-        }
-    }
-
-    private func tabCell<C: View>(active: Bool, action: @escaping () -> Void, @ViewBuilder content: () -> C) -> some View {
-        Button(action: action) {
-            content()
-                .frame(width: 40, height: 40)
-                .background(RoundedRectangle(cornerRadius: 10).fill(active ? Theme.bg3 : Color.clear))
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-// MARK: - 表情商店
-
-/// 表情商店（全屏，从面板「+」进来）：上半「我的表情」可置顶 / 移除，下半「全部」可添加。
-/// 库里的包由后台维护；用户只决定自己面板里有哪些、什么顺序。
-struct StickerStoreView: View {
-    @Environment(\.dismiss) private var dismiss
-    @ObservedObject private var store = StickerStore.shared
-    @State private var busy: Int? = nil
-    @State private var toast: String? = nil
-
-    private var others: [StickerSetItem] { store.sets.filter { !store.mineIds.contains($0.id) } }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.left").font(.system(size: 18, weight: .semibold)).foregroundStyle(Theme.text)
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.plain)
-                Spacer()
-                Text("表情商店").font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.text)
-                Spacer()
-                Color.clear.frame(width: 44, height: 44)
+            ready = item.observe(\.status, options: [.new]) { [weak self] it, _ in
+                if it.status == .readyToPlay { DispatchQueue.main.async { self?.poster.isHidden = true } }
             }
-            .background(Theme.bg)
-            Divider().overlay(Theme.line)
-
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    section("我的表情（\(store.mineSets.count)）")
-                    if store.mineSets.isEmpty {
-                        empty("还没有添加表情包，从下面挑几个")
-                    }
-                    ForEach(Array(store.mineSets.enumerated()), id: \.element.id) { i, s in
-                        row(s) {
-                            HStack(spacing: 6) {
-                                if i > 0 {
-                                    btn("置顶", primary: false, disabled: busy == s.id) {
-                                        run(s.id) { try await store.reorderMine([s.id] + store.mineIds.filter { $0 != s.id }) }
-                                    }
-                                }
-                                btn("移除", primary: false, disabled: busy == s.id) {
-                                    run(s.id) { try await store.removeMine(s.id) }
-                                }
-                            }
-                        }
-                    }
-
-                    section("全部表情包（\(store.sets.count)）").padding(.top, 8)
-                    if store.sets.isEmpty {
-                        empty("表情包还在路上…")
-                    } else if others.isEmpty {
-                        empty("都已经添加了")
-                    }
-                    ForEach(others) { s in
-                        row(s) {
-                            btn("添加", primary: true, disabled: busy == s.id) {
-                                run(s.id) { try await store.addMine(s.id) }
-                            }
-                        }
-                    }
-                    Color.clear.frame(height: 30)
-                }
-            }
+            playerLayer.player = pl
+            player = pl
+            pl.play()
         }
-        .background(Theme.bg.ignoresSafeArea())
-        .overlay(alignment: .bottom) {
-            if let t = toast {
-                Text(t).font(.system(size: 13)).foregroundStyle(.white)
-                    .padding(.horizontal, 14).padding(.vertical, 8)
-                    .background(Capsule().fill(Color.black.opacity(0.75)))
-                    .padding(.bottom, 40)
-            }
-        }
-        .task {
-            await store.ensureLoaded()
-            await store.loadMine()
+
+        func stop() {
+            if let o = observer { NotificationCenter.default.removeObserver(o) }
+            observer = nil
+            ready = nil
+            player?.pause()
+            player = nil
+            playerLayer.player = nil
+            poster.isHidden = false
         }
     }
 
-    private func run(_ id: Int, _ job: @escaping () async throws -> Void) {
-        busy = id
-        Task {
-            do { try await job() } catch { show(error.localizedDescription) }
-            busy = nil
-        }
+    func makeUIView(context: Context) -> PlayerView { PlayerView() }
+
+    func updateUIView(_ v: PlayerView, context: Context) {
+        v.load(url, poster: poster)
     }
 
-    private func show(_ msg: String) {
-        toast = msg
-        Task { try? await Task.sleep(nanoseconds: 1_800_000_000); if toast == msg { toast = nil } }
-    }
-
-    private func section(_ title: String) -> some View {
-        Text(title).font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.textSub)
-            .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 4)
-    }
-
-    private func empty(_ text: String) -> some View {
-        Text(text).font(.system(size: 13)).foregroundStyle(Theme.textSub)
-            .padding(.horizontal, 16).padding(.vertical, 18)
-    }
-
-    private func kindText(_ k: String?) -> String {
-        switch k { case "static": return "静态"; case "animated", "video": return "动态"; default: return "" }
-    }
-
-    private func row<A: View>(_ s: StickerSetItem, @ViewBuilder actions: () -> A) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 12) {
-                if let t = s.thumb, !t.isEmpty {
-                    RemoteImage(url: t).frame(width: 44, height: 44)
-                } else {
-                    RoundedRectangle(cornerRadius: 10).fill(Theme.bg3).frame(width: 44, height: 44)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(s.title ?? "").font(.system(size: 15, weight: .medium)).foregroundStyle(Theme.text).lineLimit(1)
-                    Text("\(s.items.count) 张 · \(kindText(s.kind))").font(.system(size: 12)).foregroundStyle(Theme.textSub)
-                }
-                Spacer(minLength: 8)
-                actions()
-            }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(s.items.prefix(8)) { p in
-                        StickerImageView(p: p, size: 52, autoplay: false)
-                    }
-                }
-            }
-        }
-        .padding(.horizontal, 16).padding(.vertical, 12)
-        .overlay(alignment: .bottom) { Divider().overlay(Theme.line) }
-    }
-
-    private func btn(_ label: String, primary: Bool, disabled: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(label).font(.system(size: 13, weight: .medium))
-                .foregroundStyle(primary ? .white : Theme.text)
-                .padding(.horizontal, 14).padding(.vertical, 6)
-                .background(Capsule().fill(primary ? Theme.accent : Theme.bg3))
-        }
-        .buttonStyle(.plain)
-        .disabled(disabled)
-        .opacity(disabled ? 0.5 : 1)
+    static func dismantleUIView(_ v: PlayerView, coordinator: ()) {
+        v.stop()
     }
 }
 
@@ -509,7 +347,7 @@ struct PendingStickerChip: View {
     var onRemove: () -> Void
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            StickerImageView(p: p, size: 56)
+            StickerImageView(p: p, size: 56, autoplay: !p.isGif)
             Button(action: onRemove) {
                 Image(systemName: "xmark")
                     .font(.system(size: 9, weight: .bold)).foregroundStyle(.white)

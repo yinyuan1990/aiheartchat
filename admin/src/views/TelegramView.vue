@@ -5,10 +5,11 @@ import TgTreeholeSources from './tg/TgTreeholeSources.vue';
 import TgMusicSources from './tg/TgMusicSources.vue';
 import TgGallerySources from './tg/TgGallerySources.vue';
 import TgStickerSets from './tg/TgStickerSets.vue';
+import TgGifCache from './tg/TgGifCache.vue';
 
-/** 所有 Telegram 来源集中在这一页：账号 → 养眼图片 / 音乐 / 树洞 / 表情包 */
+/** 所有 Telegram 来源集中在这一页：账号 → 养眼图片 / 音乐 / 树洞 / 表情包 / GIF */
 const loggedIn = ref(false);
-const section = ref<'gallery' | 'music' | 'treehole' | 'stickers'>('gallery');
+const section = ref<'gallery' | 'music' | 'treehole' | 'stickers' | 'gifs'>('gallery');
 const toast = ref('');
 function showToast(t: string) {
   toast.value = t;
@@ -29,12 +30,14 @@ function onStatus(s: TgStatus) {
       <button class="small" :class="section === 'music' ? '' : 'ghost'" @click="section = 'music'">音乐</button>
       <button class="small" :class="section === 'treehole' ? '' : 'ghost'" @click="section = 'treehole'">私密树洞</button>
       <button class="small" :class="section === 'stickers' ? '' : 'ghost'" @click="section = 'stickers'">表情包</button>
+      <button class="small" :class="section === 'gifs' ? '' : 'ghost'" @click="section = 'gifs'">GIF</button>
     </div>
 
     <TgGallerySources v-if="section === 'gallery'" :logged-in="loggedIn" @toast="showToast" />
     <TgMusicSources v-if="section === 'music'" :logged-in="loggedIn" @toast="showToast" />
     <TgTreeholeSources v-if="section === 'treehole'" @toast="showToast" />
     <TgStickerSets v-if="section === 'stickers'" :logged-in="loggedIn" @toast="showToast" />
+    <TgGifCache v-if="section === 'gifs'" :logged-in="loggedIn" @toast="showToast" />
 
     <div v-if="toast" class="toast">{{ toast }}</div>
   </div>

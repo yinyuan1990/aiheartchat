@@ -787,6 +787,31 @@ model UserStickerSet {
   @@map("user_sticker_set")
 }
 
+/// GIF（来自 Telegram @gif inline bot，无声 mp4）：按需中转到 MinIO 缓存，LRU 清理
+model Gif {
+  id         Int      @id @default(autoincrement())
+  /// Telegram document id 或 web 结果 url 的 hash，去重键
+  key        String   @unique @db.VarChar(64)
+  /// MinIO 上的 mp4 /res/ 路径
+  url        String   @default("") @db.VarChar(300)
+  /// 网格预览：160px 动态 WebP
+  thumb      String   @default("") @db.VarChar(300)
+  w          Int      @default(0)
+  h          Int      @default(0)
+  duration   Int      @default(0)
+  size       Int      @default(0)
+  /// 最近命中的搜索词（后台排查用）
+  query      String   @default("") @db.VarChar(120)
+  hits       Int      @default(0)
+  /// 后台屏蔽：不再出现在结果里，文件已删
+  blocked    Boolean  @default(false)
+  lastUsedAt DateTime @default(now()) @map("last_used_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([lastUsedAt])
+  @@map("gif")
+}
+
 model Sticker {
   id        BigInt   @id @default(autoincrement())
   setId     Int      @map("set_id")
