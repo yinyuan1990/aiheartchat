@@ -170,16 +170,28 @@ struct TreeholeSectionView: View {
 func treeholeShareLink(_ id: String) -> URL { URL(string: "https://app.yyheart.com/s/treehole/\(id)")! }
 
 /// 分享一条树洞：文案前 60 字（没文案就「N 张图片」）+ 短链，系统分享面板。
-/// 纯文字帖没有图：只传一段文字（链接拼在文字里），不单独传 URL——单独传 URL 系统面板会去抓链接预览、顶上显示一个图标位；带图的帖才传 URL 让卡片有图
+/// 面板顶部的预览用 `ShareLinkItem` 自己给（标题 = 文案，缩略图 = 首图或 App 图标），不让系统去抓链接——
+/// 之前传 String / URL 系统会为链接留一个缩略图位再去拉 og 图，纯文字帖没有图、有图帖图还没下下来，顶上就是一个空白图位。
+/// 纯文字帖：链接拼在文字里只传一项；带图帖：文字 + 单独的 URL（微信 / 信息那边才出带图的链接卡片）。
 func shareTreehole(_ post: TreeholePost) {
     let raw = post.content.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-    let imgs = post.images?.count ?? 0
-    let text = raw.isEmpty ? "\(channelName) · \(imgs) 张图片" : String(raw.prefix(60))
+    let imgs = post.images ?? []
+    let text = raw.isEmpty ? "\(channelName) · \(imgs.count) 张图片" : String(raw.prefix(60))
     let link = treeholeShareLink(post.id)
-    if imgs == 0 {
-        ShareSheet.present(["\(text)\n\(link.absoluteString)"])
-    } else {
-        ShareSheet.present([text, link])
+    guard let first = imgs.first else {
+        ShareSheet.present([ShareLinkItem(payload: "\(text)\n\(link.absoluteString)", title: text, url: link)])
+        return
+    }
+    // 带图：先把首图拿到手（缓存没有就下一次，最多等 3 秒）再弹面板，缩略图立刻就有
+    Task { @MainActor in
+        let full = Api.fullUrl(first)
+        var img = RemoteImageCache.cache.object(forKey: full as NSString)
+        if img == nil, let u = URL(string: full) {
+            var req = URLRequest(url: u)
+            req.timeoutInterval = 3
+            img = (try? await URLSession.shared.data(for: req)).flatMap { UIImage(data: $0.0) }
+        }
+        ShareSheet.present([ShareLinkItem(payload: text, title: text, url: link, image: img), link])
     }
 }
 

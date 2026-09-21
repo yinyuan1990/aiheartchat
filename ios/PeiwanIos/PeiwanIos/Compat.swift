@@ -1,4 +1,5 @@
 import Combine
+import LinkPresentation
 import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
@@ -165,6 +166,55 @@ enum ShareSheet {
             x: top.view.bounds.midX, y: top.view.bounds.midY, width: 1, height: 1
         )
         top.present(vc, animated: true)
+    }
+
+    /// App 图标（Info.plist 里主图标的最后一个尺寸），分享面板顶部当缩略图用
+    static var appIcon: UIImage? {
+        guard let icons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
+              let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
+              let files = primary["CFBundleIconFiles"] as? [String], let name = files.last else { return nil }
+        return UIImage(named: name)
+    }
+}
+
+/**
+ 分享面板顶部预览由我们自己给（`LPLinkMetadata`），系统不再去抓链接。
+ 之前直接传 String / URL：面板顶上会为链接留一个缩略图位，然后去拉 og 页面的图——纯文字帖没有 og:image、有图帖的图还在下载，
+ 结果就是一个空白的图位。现在：标题 = 文案，缩略图 = 帖子首图（已下载好传进来）或 App 图标，立刻就有、不会空白。
+ `payload` 是真正交给目标 App（微信 / 信息…）的内容（一段文字，链接可拼在里面）。
+ */
+final class ShareLinkItem: NSObject, UIActivityItemSource {
+    private let payload: String
+    private let title: String
+    private let url: URL?
+    private let image: UIImage?
+
+    init(payload: String, title: String, url: URL?, image: UIImage? = nil) {
+        self.payload = payload
+        self.title = title
+        self.url = url
+        self.image = image
+    }
+
+    func activityViewControllerPlaceholderItem(_ activityViewController: UIActivityViewController) -> Any { payload }
+
+    func activityViewController(_ activityViewController: UIActivityViewController, itemForActivityType activityType: UIActivity.ActivityType?) -> Any? { payload }
+
+    func activityViewController(_ activityViewController: UIActivityViewController, subjectForActivityType activityType: UIActivity.ActivityType?) -> String { title }
+
+    func activityViewControllerLinkMetadata(_ activityViewController: UIActivityViewController) -> LPLinkMetadata? {
+        let m = LPLinkMetadata()
+        m.title = title
+        if let url {
+            m.originalURL = url
+            m.url = url
+        }
+        if let image {
+            m.imageProvider = NSItemProvider(object: image)
+        } else if let icon = ShareSheet.appIcon {
+            m.iconProvider = NSItemProvider(object: icon)
+        }
+        return m
     }
 }
 
