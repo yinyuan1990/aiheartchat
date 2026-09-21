@@ -221,13 +221,20 @@ export class GalleryService implements OnModuleInit {
     return { started: true, running: true };
   }
 
+  /** 后台列表：开了「屏蔽文字」的受众，后台也不显示文案（和用户端一致，只回 textHidden 标记；库里原文不动） */
   async adminPosts(audience?: number, beforeId?: bigint) {
-    const rows = await this.prisma.galleryPost.findMany({
-      where: { ...(audience ? { audience } : {}), ...(beforeId ? { id: { lt: beforeId } } : {}) },
-      orderBy: { id: 'desc' },
-      take: 60,
+    const [rows, s] = await Promise.all([
+      this.prisma.galleryPost.findMany({
+        where: { ...(audience ? { audience } : {}), ...(beforeId ? { id: { lt: beforeId } } : {}) },
+        orderBy: { id: 'desc' },
+        take: 60,
+      }),
+      this.settings(),
+    ]);
+    return rows.map((r) => {
+      const hide = r.audience === 2 ? s.hideTextF : s.hideTextM;
+      return { ...r, text: hide ? '' : r.text, textHidden: hide && !!r.text, media: safeJson<GalleryMedia[]>(r.media, []) };
     });
-    return rows.map((r) => ({ ...r, media: safeJson<GalleryMedia[]>(r.media, []) }));
   }
 
   async adminDeletePost(id: bigint) {

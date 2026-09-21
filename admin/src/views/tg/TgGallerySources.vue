@@ -16,6 +16,7 @@ async function saveSettings() {
   try {
     settings.value = await api('/admin/gallery/settings', { method: 'PUT', body: settings.value });
     emit('toast', '已保存，tab 名称 / 保留天数 / 屏蔽文字即时生效');
+    loadPosts(); // 屏蔽文字切换后列表里的文案跟着变
   } catch (e: any) {
     emit('toast', e.message);
   } finally {
@@ -112,7 +113,7 @@ async function syncNow(s: Source) {
 
 // ---------- 已同步帖子 ----------
 interface Post {
-  id: string; audience: number; text: string; viewCount: number; postedAt: string;
+  id: string; audience: number; text: string; textHidden?: boolean; viewCount: number; postedAt: string;
   media: { type: 'image' | 'video'; url: string; cover?: string; duration?: number }[];
 }
 const posts = ref<Post[]>([]);
@@ -249,10 +250,9 @@ onMounted(() => { loadSettings(); loadSources(); loadPosts(); });
               </div>
             </td>
             <td class="muted" style="max-width: 320px; white-space: pre-wrap; font-size: 12px">
-              <!-- 后台永远显示原文；该受众开了「屏蔽文字」只是用户端不显示，这里打个标 -->
-              <span v-if="(p.audience === 2 ? settings.hideTextF : settings.hideTextM) && p.text" class="tag off" style="margin-right: 4px; font-size: 10px">用户端不显示</span>
-              <template v-if="p.text">{{ p.text.length > 120 ? p.text.slice(0, 120) + '…' : p.text }}</template>
-              <span v-else style="opacity: 0.5">（无文字：频道原帖没文字，或文案全是广告被过滤）</span>
+              <!-- 该受众开了「屏蔽文字」：后台和用户端一样不显示文案，只打个标 -->
+              <span v-if="p.textHidden" class="tag off" style="font-size: 10px">已屏蔽文字</span>
+              <template v-else>{{ p.text.length > 120 ? p.text.slice(0, 120) + '…' : p.text }}</template>
             </td>
             <td class="muted">{{ p.viewCount }}</td>
             <td class="muted">{{ fmt(p.postedAt) }}</td>
