@@ -168,34 +168,43 @@ struct StickerImageView: View {
     private var w: CGFloat { p.aspect >= 1 ? size : size * p.aspect }
     private var h: CGFloat { p.aspect >= 1 ? size / p.aspect : size }
 
+    /// 解码降采样目标：显示尺寸 × 屏幕倍率（再大也看不出区别，白费 CPU 和内存）
+    private var px: CGFloat { size * UIScreen.main.scale }
+
     var body: some View {
         Group {
             switch p.format {
             case "lottie":
-                if !autoplay, let t = p.thumb, !t.isEmpty {
-                    RemoteImage(url: t)
+                if !autoplay {
+                    StaticThumbView(url: (p.thumb ?? "").isEmpty ? p.url : p.thumb!, maxPixel: px)
                 } else if let u = URL(string: Api.fullUrl(p.url)) {
                     LottieView {
                         try await LottieAnimation.loadedFrom(url: u)
                     } placeholder: {
-                        if let t = p.thumb, !t.isEmpty { RemoteImage(url: t) } else { Color.clear }
+                        if let t = p.thumb, !t.isEmpty { StaticThumbView(url: t, maxPixel: px) } else { Color.clear }
                     }
-                    .playbackMode(autoplay ? .playing(.fromProgress(0, toProgress: 1, loopMode: .loop)) : .paused(at: .progress(0)))
+                    .playbackMode(.playing(.fromProgress(0, toProgress: 1, loopMode: .loop)))
                 }
             case "awebp":
-                AnimatedImageView(url: Api.fullUrl(p.url), animate: autoplay)
+                if autoplay {
+                    AnimatedImageView(url: Api.fullUrl(p.url), animate: true, maxPixel: px)
+                } else {
+                    // 不播时只要一张静态图：有 thumb 用 thumb，否则解动图首帧
+                    StaticThumbView(url: (p.thumb ?? "").isEmpty ? p.url : p.thumb!, maxPixel: px)
+                }
             case "mp4":
                 if autoplay {
                     GifVideoView(url: Api.fullUrl(p.url), poster: Api.fullUrl(p.thumb ?? ""))
                         .background(Theme.bg3)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                 } else {
-                    AnimatedImageView(url: Api.fullUrl((p.thumb ?? "").isEmpty ? p.url : p.thumb!), animate: true, fill: true)
+                    AnimatedImageView(url: Api.fullUrl((p.thumb ?? "").isEmpty ? p.url : p.thumb!), animate: true, fill: true, maxPixel: px)
                         .background(Theme.bg3)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
             default:
-                RemoteImage(url: p.url)
+                // 静态 WebP：也走后台降采样解码（RemoteImage 是主线程按原图解）
+                StaticThumbView(url: p.url, maxPixel: px)
             }
         }
         .frame(width: w, height: h)
@@ -212,18 +221,26 @@ struct StickerThumbView: View {
     }
 }
 
-/// 动态 WebP / GIF / APNG：用 ImageIO 的 CGAnimateImageData 逐帧回调（iOS 14+ 支持 WebP），不依赖第三方库
+/**
+ 动态 WebP / GIF / APNG 播放（iOS 14+ ImageIO 原生支持 WebP，不依赖第三方库）。
+
+ 之前用 `CGAnimateImageDataWithBlock`：它在主线程逐帧解码，GIF 弹框一屏 20 多个瓦片同时播就把主线程占满，来回滑明显卡。
+ 现在自己起播放器 `AnimatedPlayer`：帧在后台队列解码（并按显示尺寸降采样），只把解好的一帧丢回主线程显示；
+ 任一时刻只持有当前帧，内存和流式方案一样小；文件数据用 NSCache 缓存，滑走再滑回不重新下载。
+ */
 struct AnimatedImageView: UIViewRepresentable {
     let url: String
     var animate: Bool
     var fill = false
+    /// 解码时降采样到的最大像素（长边）。0 = 不降采样。面板小图 / GIF 瓦片传显示尺寸×scale 即可
+    var maxPixel: CGFloat = 0
 
-    final class Box {
-        var stop = false
+    final class Holder {
         var url = ""
+        var player: AnimatedPlayer?
     }
 
-    func makeCoordinator() -> Box { Box() }
+    func makeCoordinator() -> Holder { Holder() }
 
     func makeUIView(context: Context) -> UIImageView {
         let v = UIImageView()
@@ -235,32 +252,189 @@ struct AnimatedImageView: UIViewRepresentable {
     func updateUIView(_ v: UIImageView, context: Context) {
         let holder = context.coordinator
         guard holder.url != url else { return }
-        holder.url = url // 上一个动画的回调发现 url 变了会自行停止
+        holder.url = url
+        holder.player?.stop()
+        holder.player = nil
+        v.image = nil
         let target = url
         let animate = self.animate
+        let maxPixel = self.maxPixel
         Task { @MainActor in
             guard let data = await AnimatedImageCache.data(for: target), holder.url == target else { return }
-            v.image = UIImage(data: data)
-            guard animate else { return }
-            CGAnimateImageDataWithBlock(data as CFData, nil) { _, cg, stop in
-                if holder.stop || holder.url != target { stop.pointee = true; return }
-                v.image = UIImage(cgImage: cg)
+            if animate {
+                let player = AnimatedPlayer(data: data, maxPixel: maxPixel) { [weak v] img in v?.image = img }
+                holder.player = player
+                player.start()
+            } else {
+                // 只要首帧：后台解一张（降采样）回来
+                let img = await StaticThumbCache.decode(data: data, key: target, maxPixel: maxPixel)
+                if holder.url == target { v.image = img }
             }
         }
     }
 
-    static func dismantleUIView(_ uiView: UIImageView, coordinator: Box) {
-        coordinator.stop = true
+    static func dismantleUIView(_ uiView: UIImageView, coordinator: Holder) {
+        coordinator.player?.stop()
+        coordinator.player = nil
+        coordinator.url = ""
     }
 }
 
+/// 逐帧播放器：后台解码、主线程显示。所有实例共用一个并发队列（qos userInitiated），不额外开线程
+final class AnimatedPlayer {
+    private static let queue = DispatchQueue(label: "peiwan.anim.decode", qos: .userInitiated, attributes: .concurrent)
+    private let source: CGImageSource?
+    private let count: Int
+    private let durations: [TimeInterval]
+    private let options: CFDictionary
+    private let downsample: Bool
+    private let onFrame: (UIImage) -> Void
+    private var stopped = false
+    private var index = 0
+
+    init(data: Data, maxPixel: CGFloat, onFrame: @escaping (UIImage) -> Void) {
+        self.onFrame = onFrame
+        // kCGImageSourceShouldCache=false：不让 ImageIO 把解过的帧全留在内存里
+        let src = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary)
+        source = src
+        count = src.map { CGImageSourceGetCount($0) } ?? 0
+        durations = src.map { s in (0..<CGImageSourceGetCount(s)).map { AnimatedPlayer.frameDuration(s, $0) } } ?? []
+        var opt: [CFString: Any] = [kCGImageSourceShouldCacheImmediately: true]
+        downsample = maxPixel > 0
+        if downsample {
+            opt[kCGImageSourceCreateThumbnailFromImageAlways] = true
+            opt[kCGImageSourceCreateThumbnailWithTransform] = true
+            opt[kCGImageSourceThumbnailMaxPixelSize] = Int(maxPixel)
+        }
+        options = opt as CFDictionary
+    }
+
+    func start() {
+        guard count > 0 else { return }
+        stopped = false
+        schedule(after: 0)
+    }
+
+    func stop() { stopped = true }
+
+    private func schedule(after delay: TimeInterval) {
+        AnimatedPlayer.queue.asyncAfter(deadline: .now() + delay) { [weak self] in self?.tick() }
+    }
+
+    private func tick() {
+        guard !stopped, let source else { return }
+        let i = index
+        let started = CFAbsoluteTimeGetCurrent()
+        // 降采样解码：给了 maxPixel 走 thumbnail 接口（长边 maxPixel），否则原尺寸解
+        let cg = i < count
+            ? (downsample ? CGImageSourceCreateThumbnailAtIndex(source, i, options) : CGImageSourceCreateImageAtIndex(source, i, options))
+            : nil
+        guard !stopped else { return }
+        if let cg {
+            let img = UIImage(cgImage: cg)
+            DispatchQueue.main.async { [weak self] in
+                guard let self, !self.stopped else { return }
+                self.onFrame(img)
+            }
+        }
+        index = (i + 1) % max(count, 1)
+        // 静态图（1 帧）显示一次即止
+        if count <= 1 { return }
+        let spent = CFAbsoluteTimeGetCurrent() - started
+        schedule(after: max(0.016, durations[i] - spent))
+    }
+
+    /// 单帧时长：GIF / APNG / WebP 各自的属性字典；缺省 0.1s（ImageIO 对 ≤10ms 的 GIF 也按 100ms 处理）
+    static func frameDuration(_ src: CGImageSource, _ i: Int) -> TimeInterval {
+        guard let props = CGImageSourceCopyPropertiesAtIndex(src, i, nil) as? [CFString: Any] else { return 0.1 }
+        let candidates: [(CFString, CFString, CFString)] = [
+            (kCGImagePropertyWebPDictionary, kCGImagePropertyWebPUnclampedDelayTime, kCGImagePropertyWebPDelayTime),
+            (kCGImagePropertyGIFDictionary, kCGImagePropertyGIFUnclampedDelayTime, kCGImagePropertyGIFDelayTime),
+            (kCGImagePropertyPNGDictionary, kCGImagePropertyAPNGUnclampedDelayTime, kCGImagePropertyAPNGDelayTime),
+        ]
+        for (dict, unclamped, clamped) in candidates {
+            if let d = props[dict] as? [CFString: Any] {
+                let v = (d[unclamped] as? Double) ?? (d[clamped] as? Double) ?? 0.1
+                return v < 0.011 ? 0.1 : v
+            }
+        }
+        return 0.1
+    }
+}
+
+/// 文件数据缓存（动态 WebP / GIF 预览），滑走再滑回不重新下载；同一 url 并发请求只发一次
 enum AnimatedImageCache {
-    private static let cache = NSCache<NSString, NSData>()
+    private static let cache: NSCache<NSString, NSData> = {
+        let c = NSCache<NSString, NSData>()
+        c.totalCostLimit = 64 * 1024 * 1024
+        return c
+    }()
+    private static var inflight: [String: Task<Data?, Never>] = [:]
+
+    @MainActor
     static func data(for url: String) async -> Data? {
         if let d = cache.object(forKey: url as NSString) { return d as Data }
-        guard let u = URL(string: url), let (d, _) = try? await URLSession.shared.data(from: u) else { return nil }
-        cache.setObject(d as NSData, forKey: url as NSString)
+        if let t = inflight[url] { return await t.value }
+        let t = Task<Data?, Never> {
+            guard let u = URL(string: url), let (d, _) = try? await URLSession.shared.data(from: u) else { return nil }
+            return d
+        }
+        inflight[url] = t
+        let d = await t.value
+        inflight[url] = nil
+        if let d { cache.setObject(d as NSData, forKey: url as NSString, cost: d.count) }
         return d
+    }
+}
+
+/// 静态缩略图：后台降采样解码成位图后缓存 UIImage（列表滑动时不再在主线程解大图）
+enum StaticThumbCache {
+    private static let cache: NSCache<NSString, UIImage> = {
+        let c = NSCache<NSString, UIImage>()
+        c.countLimit = 600
+        return c
+    }()
+
+    static func cached(_ key: String) -> UIImage? { cache.object(forKey: key as NSString) }
+
+    /// 下载 + 解码（首帧，长边 maxPixel）
+    static func image(url: String, maxPixel: CGFloat) async -> UIImage? {
+        let key = "\(url)@\(Int(maxPixel))"
+        if let img = cached(key) { return img }
+        guard let data = await AnimatedImageCache.data(for: url) else { return nil }
+        return await decode(data: data, key: url, maxPixel: maxPixel)
+    }
+
+    static func decode(data: Data, key: String, maxPixel: CGFloat) async -> UIImage? {
+        let ck = "\(key)@\(Int(maxPixel))"
+        if let img = cached(ck) { return img }
+        let img = await Task.detached(priority: .userInitiated) { () -> UIImage? in
+            guard let src = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary) else { return nil }
+            var opt: [CFString: Any] = [kCGImageSourceShouldCacheImmediately: true, kCGImageSourceCreateThumbnailWithTransform: true]
+            if maxPixel > 0 { opt[kCGImageSourceCreateThumbnailFromImageAlways] = true; opt[kCGImageSourceThumbnailMaxPixelSize] = Int(maxPixel) }
+            let cg = maxPixel > 0 ? CGImageSourceCreateThumbnailAtIndex(src, 0, opt as CFDictionary) : CGImageSourceCreateImageAtIndex(src, 0, opt as CFDictionary)
+            return cg.map { UIImage(cgImage: $0) }
+        }.value
+        if let img { cache.setObject(img, forKey: ck as NSString) }
+        return img
+    }
+}
+
+/// 静态缩略图视图：任何格式（静态 WebP / 动态 WebP 首帧 / Lottie 的 thumb）都只解一张降采样位图，商店 sheet 预览用
+struct StaticThumbView: View {
+    let url: String
+    var maxPixel: CGFloat = 256
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image { Image(uiImage: image).resizable().scaledToFit() } else { Color.clear }
+        }
+        .task(id: url) {
+            let full = Api.fullUrl(url)
+            if let c = StaticThumbCache.cached("\(full)@\(Int(maxPixel))") { image = c; return }
+            image = await StaticThumbCache.image(url: full, maxPixel: maxPixel)
+        }
     }
 }
 
