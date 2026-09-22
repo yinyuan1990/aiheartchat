@@ -724,6 +724,33 @@ model GalleryPost {
   @@map("gallery_post")
 }
 
+// ---------- 频道转发（推广）：把别的公开频道的新消息转发到我们自己的推广频道（默认 @smsd2030），与 App 内容无关 ----------
+
+model TgForwardSource {
+  id             Int       @id @default(autoincrement())
+  /// 来源频道用户名（不带 @）
+  channel        String    @unique @db.VarChar(64)
+  title          String    @default("") @db.VarChar(120)
+  subscribers    Int       @default(0)
+  enabled        Boolean   @default(true)
+  /// 隐藏「转发自 xx」头（当成自己频道的原创发出）
+  dropAuthor     Boolean   @default(true) @map("drop_author")
+  /// 只转带图片 / 视频的消息
+  mediaOnly      Boolean   @default(false) @map("media_only")
+  /// 每轮（10 分钟）最多转发条数（相册算 1 条），防止刷屏和被限流
+  maxPerRun      Int       @default(3) @map("max_per_run")
+  /// 屏蔽词（逗号分隔）：文案含这些词的消息不转
+  blockWords     String    @default("") @map("block_words") @db.VarChar(500)
+  /// 已处理到的最大消息 id（添加时定位到当前最新，只转之后新发的）
+  lastMsgId      Int       @default(0) @map("last_msg_id")
+  lastSyncAt     DateTime? @map("last_sync_at")
+  lastError      String    @default("") @map("last_error") @db.VarChar(300)
+  forwardedCount Int       @default(0) @map("forwarded_count")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@map("tg_forward_source")
+}
+
 /// 曲目：音频文件已转存到 MinIO，最多保留 100 首
 model MusicTrack {
   id        BigInt   @id @default(autoincrement())

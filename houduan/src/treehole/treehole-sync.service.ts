@@ -236,6 +236,10 @@ export function parseChannelPage(html: string): TgPost[] {
   for (const b of blocks) {
     const idM = b.match(/data-post="[^"/]+\/(\d+)"/);
     if (!idM) continue;
+    // 「Channel created」「Channel photo updated」这类系统消息（class 带 service_message）不是帖子，跳过；
+    // 新建的频道头两条就是这种，不过滤会被当成文字帖导进树洞
+    const headM = b.match(/<div class="tgme_widget_message\b[^"]*"/);
+    if (headM && /\bservice_message\b/.test(headM[0])) continue;
     const msgId = Number(idM[1]);
     const textM = b.match(/<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/);
     const text = textM ? htmlToText(textM[1]) : '';

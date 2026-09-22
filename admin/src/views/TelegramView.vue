@@ -6,10 +6,11 @@ import TgMusicSources from './tg/TgMusicSources.vue';
 import TgGallerySources from './tg/TgGallerySources.vue';
 import TgStickerSets from './tg/TgStickerSets.vue';
 import TgGifCache from './tg/TgGifCache.vue';
+import TgForward from './tg/TgForward.vue';
 
-/** 所有 Telegram 来源集中在这一页：账号 → 养眼图片 / 音乐 / 树洞 / 表情包 / GIF */
+/** 所有 Telegram 来源集中在这一页：账号 → 养眼图片 / 音乐 / 树洞 / 表情包 / GIF / 频道转发（推广，与 App 内容无关） */
 const loggedIn = ref(false);
-const section = ref<'gallery' | 'music' | 'treehole' | 'stickers' | 'gifs'>('gallery');
+const section = ref<'gallery' | 'music' | 'treehole' | 'stickers' | 'gifs' | 'forward'>('gallery');
 const toast = ref('');
 function showToast(t: string) {
   toast.value = t;
@@ -31,6 +32,7 @@ function onStatus(s: TgStatus) {
       <button class="small" :class="section === 'treehole' ? '' : 'ghost'" @click="section = 'treehole'">私密树洞</button>
       <button class="small" :class="section === 'stickers' ? '' : 'ghost'" @click="section = 'stickers'">表情包</button>
       <button class="small" :class="section === 'gifs' ? '' : 'ghost'" @click="section = 'gifs'">GIF</button>
+      <button class="small" :class="section === 'forward' ? '' : 'ghost'" @click="section = 'forward'">频道转发（推广）</button>
     </div>
 
     <TgGallerySources v-if="section === 'gallery'" :logged-in="loggedIn" @toast="showToast" />
@@ -38,6 +40,7 @@ function onStatus(s: TgStatus) {
     <TgTreeholeSources v-if="section === 'treehole'" @toast="showToast" />
     <TgStickerSets v-if="section === 'stickers'" :logged-in="loggedIn" @toast="showToast" />
     <TgGifCache v-if="section === 'gifs'" :logged-in="loggedIn" @toast="showToast" />
+    <TgForward v-if="section === 'forward'" :logged-in="loggedIn" @toast="showToast" />
 
     <div v-if="toast" class="toast">{{ toast }}</div>
   </div>

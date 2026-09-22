@@ -15,6 +15,7 @@ import { GalleryService } from '../gallery/gallery.service';
 import { StickerService } from '../sticker/sticker.service';
 import { GifService } from '../gif/gif.service';
 import { HallTabsService } from '../module/hall-tabs.service';
+import { TgForwardService } from '../tgforward/tg-forward.service';
 
 @Controller('admin')
 export class AdminController {
@@ -32,7 +33,53 @@ export class AdminController {
     private readonly stickers: StickerService,
     private readonly gifs: GifService,
     private readonly hallTabs: HallTabsService,
+    private readonly tgForward: TgForwardService,
   ) {}
+
+  // ---------- 频道转发（推广：别人的频道 → 我们的推广频道，与 App 内容无关） ----------
+
+  @Get('tg-forward/status')
+  @UseGuards(AdminGuard)
+  tgForwardStatus() {
+    return this.tgForward.status();
+  }
+
+  @Put('tg-forward/target')
+  @UseGuards(AdminGuard)
+  tgForwardTarget(@Body() body: { channel: string }) {
+    return this.tgForward.saveTarget(body?.channel ?? '');
+  }
+
+  @Get('tg-forward/sources')
+  @UseGuards(AdminGuard)
+  tgForwardSources() {
+    return this.tgForward.listSources();
+  }
+
+  @Get('tg-forward/sources/preview')
+  @UseGuards(AdminGuard)
+  tgForwardPreview(@Query('channel') channel: string) {
+    return this.tgForward.preview(channel ?? '');
+  }
+
+  @Post('tg-forward/sources')
+  @UseGuards(AdminGuard)
+  tgForwardSave(@Body() body: { id?: number; channel: string; enabled?: boolean; dropAuthor?: boolean; mediaOnly?: boolean; maxPerRun?: number; blockWords?: string; backfill?: number }) {
+    return this.tgForward.saveSource(body);
+  }
+
+  @Delete('tg-forward/sources/:id')
+  @UseGuards(AdminGuard)
+  tgForwardRemove(@Param('id') id: string) {
+    return this.tgForward.removeSource(Number(id));
+  }
+
+  /** 立即转发新消息；?backfill=N 不看游标、把最近 N 条转过去 */
+  @Post('tg-forward/sources/:id/sync')
+  @UseGuards(AdminGuard)
+  tgForwardSync(@Param('id') id: string, @Query('backfill') backfill?: string) {
+    return this.tgForward.syncOne(Number(id), Number(backfill) || 0);
+  }
 
   // ---------- 表情包（Telegram 公开贴纸集，后台精选） ----------
 
