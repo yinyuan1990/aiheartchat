@@ -26,7 +26,19 @@ Write-Host '>> 安装依赖（social-auto-upload + requests）…'
 # 上游个别 uploader 还 import 的是 playwright（不是 patchright），一并装上，不然 sau 启动就报 ModuleNotFoundError
 & $python -m pip install -q requests playwright -i https://pypi.tuna.tsinghua.edu.cn/simple
 
-Write-Host '>> 安装 patchright Chromium（先试 npmmirror 镜像，没有对应版本就直连）…'
+# 离线内核：如果 publisher\browsers\ 里放了从别的机器拷来的 chromium-1208 / chromium_headless_shell-1208 等目录，先复制到 ms-playwright，下面就不用下载 170MB+
+$pwHome = Join-Path $env:LOCALAPPDATA 'ms-playwright'
+if (Test-Path browsers) {
+  New-Item -ItemType Directory -Force $pwHome | Out-Null
+  Get-ChildItem browsers -Directory | ForEach-Object {
+    if (-not (Test-Path (Join-Path $pwHome $_.Name))) {
+      Write-Host ">> 复制离线浏览器内核 $($_.Name)…"
+      Copy-Item $_.FullName $pwHome -Recurse
+    }
+  }
+}
+
+Write-Host '>> 安装 patchright Chromium（本机已有就跳过；否则先试 npmmirror 镜像，再直连）…'
 $env:PLAYWRIGHT_DOWNLOAD_HOST = 'https://npmmirror.com/mirrors/playwright'
 & $python -m patchright install chromium
 if ($LASTEXITCODE -ne 0) {
