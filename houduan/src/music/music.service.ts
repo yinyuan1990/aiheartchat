@@ -1,4 +1,8 @@
 import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { promises as fs } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { randomUUID } from 'crypto';
 import { Api } from 'telegram';
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadService } from '../upload/upload.service';
@@ -18,6 +22,12 @@ export const MAX_SOURCES = 5;
 function clampMax(v: unknown, fallback = MAX_TRACKS): number {
   const n = Math.floor(Number(v));
   return Number.isFinite(n) && n > 0 ? Math.min(MAX_TRACKS_CAP, n) : fallback;
+}
+/** 检查间隔（分钟）：默认 10，可设 5~1440 */
+export const DEFAULT_INTERVAL_MIN = 10;
+function clampInterval(v: unknown): number {
+  const n = Math.floor(Number(v));
+  return Number.isFinite(n) && n > 0 ? Math.min(1440, Math.max(5, n)) : DEFAULT_INTERVAL_MIN;
 }
 /** 首次同步往前扫的消息条数 */
 const FIRST_SCAN = 60;
@@ -45,6 +55,8 @@ export interface TgAudio {
 export class MusicService implements OnModuleInit {
   private readonly logger = new Logger('Music');
   private running = false;
+  /** 正在同步的来源 id（后台只给这一个标「同步中」，之前是全局一个标志、所有来源一起亮） */
+  private syncingId: number | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -53,8 +65,9 @@ export class MusicService implements OnModuleInit {
   ) {}
 
   onModuleInit() {
+    // 每分钟看一眼，谁到点（lastSyncAt + intervalMin）谁同步；各来源间隔可不同
     setTimeout(() => void this.tick(), 30_000);
-    setInterval(() => void this.tick(), 10 * 60 * 1000);
+    setInterval(() => void this.tick(), 60 * 1000);
   }
 
   // ---------- 对外接口（登录用户） ----------
@@ -99,9 +112,14 @@ export class MusicService implements OnModuleInit {
 
   // ---------- 后台：来源管理 ----------
 
+  /** 后台列表：syncing 只标正在同步的那个；nextSyncAt = 上次同步 + 间隔（没同步过 = 下一分钟） */
   async listSources() {
     const rows = await this.prisma.musicSource.findMany({ orderBy: { id: 'asc' } });
-    return rows.map((r) => ({ ...r, syncing: this.running }));
+    return rows.map((r) => ({
+      ...r,
+      syncing: this.syncingId === r.id,
+      nextSyncAt: r.lastSyncAt ? new Date(r.lastSyncAt.getTime() + r.intervalMin * 60_000) : new Date(Date.now() + 60_000),
+    }));
   }
 
   /**
@@ -127,11 +145,14 @@ export class MusicService implements OnModuleInit {
   }
 
   /** 保存来源：会先解析频道，解析不到（拼错/私有/不是频道）直接报错不保存 */
-  async saveSource(data: { id?: number; channel: string; enabled?: boolean; maxTracks?: number }) {
+  async saveSource(data: { id?: number; channel: string; enabled?: boolean; maxTracks?: number; intervalMin?: number }) {
     const channel = normalizeChannel(data.channel);
     if (!channel) throw new BadRequestException('请填写频道用户名（t.me/ 后面那段）');
     const info = await this.tg.resolveChannel(channel);
-    const clean = { channel: info.username, title: info.title.slice(0, 120), subscribers: info.subscribers, enabled: data.enabled ?? true, maxTracks: clampMax(data.maxTracks) };
+    const clean = {
+      channel: info.username, title: info.title.slice(0, 120), subscribers: info.subscribers, enabled: data.enabled ?? true,
+      maxTracks: clampMax(data.maxTracks), intervalMin: clampInterval(data.intervalMin),
+    };
     if (data.id) {
       const old = await this.prisma.musicSource.findUnique({ where: { id: Number(data.id) } });
       if (!old) throw new NotFoundException('来源不存在');
@@ -171,9 +192,7 @@ export class MusicService implements OnModuleInit {
     this.running = true;
     void (async () => {
       try {
-        await this.syncSource(src);
-      } catch (e: any) {
-        this.logger.warn(`manual sync ${src.channel} failed: ${e?.message ?? e}`);
+        await this.runSource(src);
       } finally {
         this.running = false;
       }
@@ -184,6 +203,18 @@ export class MusicService implements OnModuleInit {
   /** 当前是否有同步任务在跑（后台轮询用） */
   get syncing() {
     return this.running;
+  }
+
+  /** 同步一个来源并处理异常 / 标记（tick 与手动共用） */
+  private async runSource(src: { id: number; channel: string; lastMsgId: number }) {
+    this.syncingId = src.id;
+    try {
+      await this.syncSource(src);
+    } catch (e: any) {
+      this.logger.warn(`sync ${src.channel} failed: ${e?.message ?? e}`);
+    } finally {
+      this.syncingId = null;
+    }
   }
 
   /** 后台曲目列表（含来源 id；可按来源筛） */
@@ -210,16 +241,17 @@ export class MusicService implements OnModuleInit {
     if (this.running) return;
     this.running = true;
     try {
+      const all = await this.prisma.musicSource.findMany({ where: { enabled: true } });
+      // 到点的才同步：lastSyncAt + intervalMin <= now（没同步过的立刻）
+      const now = Date.now();
+      const due = all.filter((s) => !s.lastSyncAt || s.lastSyncAt.getTime() + s.intervalMin * 60_000 <= now);
+      if (!due.length) return;
       await this.purgeOld().catch((e) => this.logger.warn(`purge failed: ${e?.message ?? e}`));
-      const sources = await this.prisma.musicSource.findMany({ where: { enabled: true } });
-      if (!sources.length) return;
       if (!(await this.tg.isLoggedIn())) {
         this.logger.warn('Telegram 未登录，跳过音乐同步');
         return;
       }
-      for (const s of sources) {
-        try { await this.syncSource(s); } catch (e: any) { this.logger.warn(`sync ${s.channel} failed: ${e?.message ?? e}`); }
-      }
+      for (const s of due) await this.runSource(s);
     } finally {
       this.running = false;
     }
@@ -291,13 +323,23 @@ export class MusicService implements OnModuleInit {
         }
 
         const started = Date.now();
-        const buf = await client.downloadMedia(msg, {});
-        if (!Buffer.isBuffer(buf) || buf.length < 1024) { maxId = Math.max(maxId, audio.msgId); skipped++; continue; }
+        // 下到临时文件再流式传 MinIO：整首读成 Buffer（100MB+，GramJS 拼块时还有一份副本）会把 api 容器 OOM 杀掉，
+        // 之前就是卡在这一步——每次重启后同步到这首又被杀，表现为「一直同步中」
         const ext = pickExt(audio.mime, audio.fileName);
-        const { url } = await this.uploads.putInternal('music', ext, buf, audio.mime || 'audio/mpeg', {
-          // 浏览器/播放器拿到中文文件名
-          'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(`${audio.title}.${ext}`)}`,
-        });
+        const tmp = join(tmpdir(), `pw-music-${randomUUID()}.${ext}`);
+        let size = 0;
+        let url = '';
+        try {
+          await client.downloadMedia(msg, { outputFile: tmp });
+          size = (await fs.stat(tmp).catch(() => ({ size: 0 }))).size;
+          if (size < 1024) { maxId = Math.max(maxId, audio.msgId); skipped++; continue; }
+          ({ url } = await this.uploads.putInternalFile('music', ext, tmp, audio.mime || 'audio/mpeg', {
+            // 浏览器/播放器拿到中文文件名
+            'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(`${audio.title}.${ext}`)}`,
+          }));
+        } finally {
+          await fs.unlink(tmp).catch(() => {});
+        }
         let cover = '';
         const coverSize = audio.hasCover ? largestThumb(msg) : undefined;
         if (coverSize) {
@@ -312,13 +354,13 @@ export class MusicService implements OnModuleInit {
           data: {
             sourceId: src.id, sourceKey: key,
             title: audio.title.slice(0, 200), performer: audio.performer.slice(0, 120),
-            duration: audio.duration, size: buf.length, mime: audio.mime || 'audio/mpeg',
+            duration: audio.duration, size, mime: audio.mime || 'audio/mpeg',
             url, cover, postedAt: audio.date,
           },
         });
         imported++; downloaded++;
         maxId = Math.max(maxId, audio.msgId);
-        this.logger.log(`+ ${audio.title} (${(buf.length / 1048576).toFixed(1)}MB, ${((Date.now() - started) / 1000).toFixed(0)}s)`);
+        this.logger.log(`+ ${audio.title} (${(size / 1048576).toFixed(1)}MB, ${((Date.now() - started) / 1000).toFixed(0)}s)`);
         // 边同步边推进游标，进程中途重启不会重复下载
         await this.prisma.musicSource.update({ where: { id: src.id }, data: { lastMsgId: maxId } });
       }

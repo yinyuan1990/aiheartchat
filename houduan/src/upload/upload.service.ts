@@ -76,6 +76,17 @@ export class UploadService implements OnModuleInit {
     return { url: `/res/${this.bucket}/${object}` };
   }
 
+  /**
+   * 同上，但从本地文件流式上传（MinIO fPutObject），文件不进 Node 堆：
+   * 音乐同步一首 100MB+ 的曲子若整个读成 Buffer，再加 GramJS 下载时的分块副本，api 容器（512MB 上限）会被 OOM 杀掉。
+   */
+  async putInternalFile(prefix: string, ext: string, filePath: string, mimetype: string, extraMeta: Record<string, string> = {}) {
+    const clean = (ext || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8) || 'bin';
+    const object = `${prefix}/${new Date().toISOString().slice(0, 10)}/${randomUUID()}.${clean}`;
+    await this.client.fPutObject(this.bucket, object, filePath, { 'Content-Type': mimetype, ...extraMeta });
+    return { url: `/res/${this.bucket}/${object}` };
+  }
+
   /** 删除站内资源（只认本 bucket 的 /res/<bucket>/ 路径，其它忽略） */
   async remove(url: string) {
     const prefix = `/res/${this.bucket}/`;

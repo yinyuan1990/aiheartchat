@@ -298,7 +298,7 @@ export class AdminController {
   /** 新增/修改来源（保存前会解析频道，解析失败不保存；换频道会清掉旧曲目；maxTracks 该来源保留上限 1~500） */
   @Post('music/sources')
   @UseGuards(AdminGuard)
-  musicSaveSource(@Body() body: { id?: number; channel: string; enabled?: boolean; maxTracks?: number }) {
+  musicSaveSource(@Body() body: { id?: number; channel: string; enabled?: boolean; maxTracks?: number; intervalMin?: number }) {
     return this.music.saveSource(body);
   }
 

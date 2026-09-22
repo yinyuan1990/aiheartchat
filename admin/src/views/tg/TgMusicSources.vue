@@ -6,8 +6,8 @@ const props = defineProps<{ loggedIn: boolean }>();
 const emit = defineEmits<{ (e: 'toast', t: string): void }>();
 
 interface Source {
-  id: number; channel: string; title: string; subscribers: number; enabled: boolean; maxTracks: number;
-  lastMsgId: number; lastSyncAt: string | null; lastError: string; importedCount: number; syncing?: boolean;
+  id: number; channel: string; title: string; subscribers: number; enabled: boolean; maxTracks: number; intervalMin: number;
+  lastMsgId: number; lastSyncAt: string | null; nextSyncAt: string | null; lastError: string; importedCount: number; syncing?: boolean;
 }
 interface PreviewAudio { msgId: number; title: string; performer: string; duration: number; size: number; date: string; hasCover: boolean }
 interface Preview {
@@ -15,8 +15,8 @@ interface Preview {
   scanned: number; audioCount: number; recentCount: number; audios: PreviewAudio[];
 }
 const sources = ref<Source[]>([]);
-const emptyForm = () => ({ channel: '', enabled: true, maxTracks: 100 });
-const srcForm = ref<{ id?: number; channel: string; enabled: boolean; maxTracks: number }>(emptyForm());
+const emptyForm = () => ({ channel: '', enabled: true, maxTracks: 100, intervalMin: 10 });
+const srcForm = ref<{ id?: number; channel: string; enabled: boolean; maxTracks: number; intervalMin: number }>(emptyForm());
 const preview = ref<Preview | null>(null);
 const previewing = ref(false);
 const syncing = ref<number | null>(null);
@@ -51,14 +51,14 @@ async function saveSource() {
     await api('/admin/music/sources', { method: 'POST', body: srcForm.value });
     srcForm.value = emptyForm();
     preview.value = null;
-    emit('toast', '已保存，每 10 分钟自动同步一次；可点「立即同步」');
+    emit('toast', '已保存，按设定间隔自动同步；可点「立即同步」');
     loadSources();
   } catch (e: any) {
     emit('toast', e.message);
   }
 }
 function editSource(s: Source) {
-  srcForm.value = { id: s.id, channel: s.channel, enabled: s.enabled, maxTracks: s.maxTracks || 100 };
+  srcForm.value = { id: s.id, channel: s.channel, enabled: s.enabled, maxTracks: s.maxTracks || 100, intervalMin: s.intervalMin || 10 };
   preview.value = null;
 }
 async function removeSource(s: Source) {
@@ -98,6 +98,12 @@ function fmtDur(s: number) {
   if (!s) return '—';
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
+function fmtInterval(min: number) {
+  if (!min) return '10 分钟';
+  if (min % 1440 === 0) return `${min / 1440} 天`;
+  if (min % 60 === 0) return `${min / 60} 小时`;
+  return `${min} 分钟`;
+}
 onMounted(loadSources);
 </script>
 
@@ -105,12 +111,13 @@ onMounted(loadSources);
   <div class="card">
     <div style="font-weight: 600; margin-bottom: 6px">音乐 · 频道来源</div>
     <div class="muted" style="margin-bottom: 12px">
-      消息页「音乐」入口的曲目来源。填频道 → 先点<b>「解析」</b>看标题、订阅数、最近的曲目对不对得上 → 再保存。每 10 分钟同步一次，音频转存到自己服务器；<b>最多 5 个来源，每个来源单独设保留上限</b>（默认 100 首，可设 1~500，超出删该来源最旧的；调小后立刻清理），用户端各来源的歌混排、最新在前。
+      消息页「音乐」入口的曲目来源。填频道 → 先点<b>「解析」</b>看标题、订阅数、最近的曲目对不对得上 → 再保存。音频转存到自己服务器；<b>最多 5 个来源，每个来源单独设保留上限和检查间隔</b>（上限默认 100 首，可设 1~500，超出删该来源最旧的、调小后立刻清理；间隔默认 10 分钟，可设 5~1440，频道更新不频繁的可以放长），用户端各来源的歌混排、最新在前。每轮每个来源最多下 10 首，一首 100MB 要几十秒，没下完的下一轮接着。
       <span v-if="sources.length >= 5" style="color: #ffb020">已满 5 个来源，要加新的先删一个。</span>
     </div>
     <div class="row" style="flex-wrap: wrap; gap: 12px; align-items: center">
       <label class="muted">频道 <input v-model="srcForm.channel" placeholder="wenan_DJ866 或 https://t.me/wenan_DJ866" style="width: 300px" @keydown.enter="doPreview" /></label>
       <label class="muted">保留上限 <input v-model.number="srcForm.maxTracks" type="number" min="1" max="500" style="width: 70px" /> 首</label>
+      <label class="muted">检查间隔 <input v-model.number="srcForm.intervalMin" type="number" min="5" max="1440" style="width: 70px" /> 分钟</label>
       <label class="muted" style="display: flex; align-items: center; gap: 6px"><input v-model="srcForm.enabled" type="checkbox" style="width: auto" /> 启用</label>
       <button class="small ghost" :disabled="previewing || !props.loggedIn" @click="doPreview">{{ previewing ? '解析中…' : '解析' }}</button>
       <button class="small" :disabled="!preview || (!srcForm.id && sources.length >= 5)" @click="saveSource">{{ srcForm.id ? '保存修改' : '添加来源' }}</button>
@@ -133,16 +140,18 @@ onMounted(loadSources);
     </div>
 
     <table v-if="sources.length" style="margin-top: 14px">
-      <thead><tr><th>频道</th><th>标题</th><th>订阅</th><th>状态</th><th>保留上限</th><th>已导入</th><th>上次同步</th><th>错误</th><th>操作</th></tr></thead>
+      <thead><tr><th>频道</th><th>标题</th><th>订阅</th><th>状态</th><th>保留上限</th><th>间隔</th><th>已导入</th><th>上次同步</th><th>下次检查</th><th>错误</th><th>操作</th></tr></thead>
       <tbody>
         <tr v-for="s in sources" :key="s.id">
           <td><a :href="`https://t.me/${s.channel}`" target="_blank" style="color: var(--accent)">@{{ s.channel }}</a></td>
           <td>{{ s.title }}</td>
           <td class="muted">{{ s.subscribers.toLocaleString() }}</td>
-          <td><span class="tag" :class="s.enabled ? 'ok' : 'off'">{{ s.enabled ? '启用' : '停用' }}</span></td>
+          <td><span class="tag" :class="s.syncing ? 'ok' : s.enabled ? 'ok' : 'off'">{{ s.syncing ? '同步中' : s.enabled ? '启用' : '停用' }}</span></td>
           <td>{{ s.maxTracks }} 首</td>
+          <td>{{ fmtInterval(s.intervalMin) }}</td>
           <td>{{ s.importedCount }} <span class="muted">(至 #{{ s.lastMsgId }})</span></td>
-          <td class="muted">{{ s.lastSyncAt ? fmt(s.lastSyncAt) : '—' }}</td>
+          <td class="muted">{{ s.lastSyncAt ? fmt(s.lastSyncAt) : '还没同步过' }}</td>
+          <td class="muted">{{ s.enabled ? (s.nextSyncAt ? fmt(s.nextSyncAt) : '—') : '已停用' }}</td>
           <td class="muted" style="max-width: 240px; color: #ff6b6b">{{ s.lastError }}</td>
           <td>
             <div class="row">

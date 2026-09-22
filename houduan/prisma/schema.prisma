@@ -671,6 +671,8 @@ model MusicSource {
   enabled       Boolean  @default(true)
   /// 该来源最多保留多少首（超出删最旧的），后台可单独设，1~500
   maxTracks     Int      @default(100) @map("max_tracks")
+  /// 检查间隔（分钟），后台可按频道更新频率单独设，5~1440，默认 10
+  intervalMin   Int      @default(10) @map("interval_min")
   /// 已同步到的最大消息 id
   lastMsgId     Int      @default(0) @map("last_msg_id")
   lastSyncAt    DateTime? @map("last_sync_at")
