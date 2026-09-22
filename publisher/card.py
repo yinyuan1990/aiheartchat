@@ -1,7 +1,8 @@
 """把文案渲染成 3:4 卡片图（抖音 / 快手 / 小红书没有纯文字帖，最少要一张图）。
 
 用 patchright（Playwright 同源）的 Chromium 截一段 HTML：Windows 自带微软雅黑，字体不用另装。
-正文长了自动拆成多张（每张约 MAX_CHARS 字），小红书 / 抖音图文本来就支持多图。
+分页按**实际排版高度**算（不是按字数——十几行短句字数少但很高，按字数会把底部标语压住）：
+把剩下的段落全塞进卡片渲染一次，读每个 <p> 的底边，只保留落在底线之上的那几段，剩下的下一张接着；小红书 / 抖音图文本来就支持多图。
 """
 from __future__ import annotations
 
@@ -12,8 +13,12 @@ from pathlib import Path
 from patchright.sync_api import sync_playwright
 
 W, H = 1080, 1440
-MAX_CHARS = 230
-MAX_CARDS = 4
+MAX_CARDS = 6
+CARD_TOP = 200
+# 卡片底边不能超过这条线（底部标语 bottom:64px + 一行高度，再留一点呼吸）
+LIMIT = H - 200
+# 一段最多多少字（再长按句子拆，避免一段就撑满一张）
+MAX_PARA = 160
 
 TEMPLATE = """<!doctype html><html><head><meta charset="utf-8"><style>
 html,body{{margin:0;padding:0}}
@@ -42,69 +47,88 @@ body{{width:{w}px;height:{h}px;background:linear-gradient(160deg,#ff5f8f 0%,#ff8
 </body></html>"""
 
 
-def split_content(content: str, max_chars: int = MAX_CHARS) -> list[str]:
-    """按段落切成几张卡片的文字；一段太长就按句子切。"""
-    paras = [p.strip() for p in re.split(r"\n\s*\n|\n", content) if p.strip()]
-    chunks: list[str] = []
-    cur = ""
-    for p in paras:
-        pieces = [p] if len(p) <= max_chars else re.findall(r"[^。！？!?；;]+[。！？!?；;]?", p)
-        for piece in pieces:
-            if len(cur) + len(piece) + 1 > max_chars and cur:
-                chunks.append(cur)
+def _paragraphs(content: str) -> list[str]:
+    """按行拆段；一段太长按句子再拆"""
+    out: list[str] = []
+    for p in (s.strip() for s in re.split(r"\n\s*\n|\n", content)):
+        if not p:
+            continue
+        if len(p) <= MAX_PARA:
+            out.append(p)
+            continue
+        cur = ""
+        for piece in re.findall(r"[^。！？!?；;]+[。！？!?；;]?", p):
+            if len(cur) + len(piece) > MAX_PARA and cur:
+                out.append(cur)
                 cur = piece
             else:
-                cur = f"{cur}\n{piece}" if cur else piece
-    if cur:
-        chunks.append(cur)
-    if len(chunks) > MAX_CARDS:
-        # 超出的并进最后一张（会稍挤）
-        chunks = chunks[: MAX_CARDS - 1] + ["\n".join(chunks[MAX_CARDS - 1 :])]
-    return chunks or [content]
+                cur += piece
+        if cur:
+            out.append(cur)
+    return out or [content.strip()]
 
 
-def _font_size(n: int) -> tuple[int, int]:
-    if n <= 90:
+def _font_for(paras: list[str]) -> tuple[int, int]:
+    """字号 / 段距：字少行少就放大一点，好看；行多就用标准字号"""
+    n = sum(len(p) for p in paras)
+    lines = len(paras)
+    if n <= 90 and lines <= 5:
         return 46, 30
-    if n <= 160:
+    if n <= 160 and lines <= 8:
         return 40, 26
-    if n <= 230:
-        return 36, 22
-    return 32, 18
+    return 36, 22
+
+
+def _doc(paras: list[str], title: str, fs: int, pm: int, brand: str, slogan: str, page_tag: str) -> str:
+    body = "".join(f"<p>{html.escape(p)}</p>" for p in paras)
+    return TEMPLATE.format(
+        w=W, h=H, top=CARD_TOP, cw=W - 144, ts=52 if fs >= 40 else 48, fs=fs, pm=pm, qtop=110,
+        title=f'<div class="title">{html.escape(title)}</div>' if title else "",
+        body=body, brand=html.escape(brand), slogan=html.escape(slogan), page=page_tag,
+    )
 
 
 def render_cards(out_dir: Path, name: str, title: str, content: str, brand: str, slogan: str, headless: bool = True) -> list[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
-    chunks = split_content(content)
+    remaining = _paragraphs(content)
     paths: list[Path] = []
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=headless)
         page = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
-        for i, chunk in enumerate(chunks):
-            fs, pm = _font_size(len(chunk))
-            body = "".join(f"<p>{html.escape(line)}</p>" for line in chunk.split("\n") if line.strip())
-            show_title = title if (i == 0 and title) else ""
-            page_tag = f'<div class="page">{i + 1} / {len(chunks)}</div>' if len(chunks) > 1 else ""
-            doc = TEMPLATE.format(
-                w=W, h=H, top=200, cw=W - 144, ts=52, fs=fs, pm=pm, qtop=110,
-                title=f'<div class="title">{html.escape(show_title)}</div>' if show_title else "",
-                body=body, brand=html.escape(brand), slogan=html.escape(slogan), page=page_tag,
+
+        # 第一遍：按标准字号分页（每张先把剩余全部放进去量一次，取放得下的那几段）
+        pages: list[list[str]] = []
+        while remaining and len(pages) < MAX_CARDS:
+            first = not pages
+            page.set_content(_doc(remaining, title if first else "", 36, 22, brand, slogan, ""), wait_until="load")
+            bottoms: list[float] = page.evaluate(
+                "Array.from(document.querySelectorAll('.body p')).map(e => e.getBoundingClientRect().bottom)"
             )
-            page.set_content(doc, wait_until="load")
-            # 卡片超高时缩小字号再来一次（最多两次）
-            for _ in range(2):
+            card_pad_bottom = 64
+            fit = sum(1 for b in bottoms if b + card_pad_bottom <= LIMIT)
+            if fit == 0:
+                fit = 1  # 一段就放不下：硬放，第二遍会缩字号
+            if len(pages) == MAX_CARDS - 1:
+                fit = len(remaining)  # 最后一张兜底全放，第二遍缩字号
+            pages.append(remaining[:fit])
+            remaining = remaining[fit:]
+
+        # 第二遍：逐张出图；字少的放大字号，放不下再缩
+        for i, paras in enumerate(pages):
+            fs, pm = _font_for(paras)
+            show_title = title if i == 0 else ""
+            page_tag = f'<div class="page">{i + 1} / {len(pages)}</div>' if len(pages) > 1 else ""
+            for _ in range(6):
+                page.set_content(_doc(paras, show_title, fs, pm, brand, slogan, page_tag), wait_until="load")
                 bottom = page.evaluate("document.querySelector('.card').getBoundingClientRect().bottom")
-                if bottom <= H - 200:
+                if bottom <= LIMIT or fs <= 24:
                     break
-                fs = max(26, fs - 4)
-                doc = TEMPLATE.format(
-                    w=W, h=H, top=200, cw=W - 144, ts=48, fs=fs, pm=max(12, pm - 4), qtop=110,
-                    title=f'<div class="title">{html.escape(show_title)}</div>' if show_title else "",
-                    body=body, brand=html.escape(brand), slogan=html.escape(slogan), page=page_tag,
-                )
-                page.set_content(doc, wait_until="load")
+                fs -= 3
+                pm = max(10, pm - 3)
             out = out_dir / f"{name}-{i + 1}.png"
             page.screenshot(path=str(out), full_page=False, type="png")
             paths.append(out)
         browser.close()
     return paths
+
+
