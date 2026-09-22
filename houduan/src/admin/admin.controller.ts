@@ -16,10 +16,12 @@ import { StickerService } from '../sticker/sticker.service';
 import { GifService } from '../gif/gif.service';
 import { HallTabsService } from '../module/hall-tabs.service';
 import { TgForwardService } from '../tgforward/tg-forward.service';
+import { PublishService } from '../publish/publish.service';
 
 @Controller('admin')
 export class AdminController {
   constructor(
+    private readonly publish: PublishService,
     private readonly admin: AdminService,
     private readonly news: NewsService,
     private readonly treehole: TreeholeService,
@@ -35,6 +37,57 @@ export class AdminController {
     private readonly hallTabs: HallTabsService,
     private readonly tgForward: TgForwardService,
   ) {}
+
+  // ---------- 内容分发（推广：树洞新帖 → AI 改写 → 小红书 / 抖音 / 快手 / 知乎，发布机在操作者本机） ----------
+
+  @Get('publish/overview')
+  @UseGuards(AdminGuard)
+  publishOverview() {
+    return this.publish.overview();
+  }
+
+  @Put('publish/settings')
+  @UseGuards(AdminGuard)
+  publishSettings(@Body() body: { enabled?: boolean; platforms?: string[]; dailyMax?: number; hourStart?: number; hourEnd?: number; gapMin?: number }) {
+    return this.publish.saveSettings(body ?? {});
+  }
+
+  @Post('publish/token/rotate')
+  @UseGuards(AdminGuard)
+  publishRotateToken() {
+    return this.publish.rotateToken();
+  }
+
+  @Get('publish/jobs')
+  @UseGuards(AdminGuard)
+  publishJobs(@Query('status') status?: string, @Query('platform') platform?: string, @Query('beforeId') beforeId?: string) {
+    return this.publish.jobs(status !== undefined && status !== '' ? Number(status) : undefined, platform || undefined, beforeId ? BigInt(beforeId) : undefined);
+  }
+
+  @Post('publish/jobs/:id/retry')
+  @UseGuards(AdminGuard)
+  publishRetry(@Param('id') id: string) {
+    return this.publish.retry(BigInt(id));
+  }
+
+  @Post('publish/jobs/:id/skip')
+  @UseGuards(AdminGuard)
+  publishSkip(@Param('id') id: string) {
+    return this.publish.skip(BigInt(id));
+  }
+
+  @Delete('publish/jobs/:id')
+  @UseGuards(AdminGuard)
+  publishRemove(@Param('id') id: string) {
+    return this.publish.remove(BigInt(id));
+  }
+
+  /** 测试发布：拿最近一条树洞帖（或 postId）立刻给指定平台排任务，不受上限 / 时段限制 */
+  @Post('publish/test')
+  @UseGuards(AdminGuard)
+  publishTest(@Body() body: { postId?: string; platforms?: string[] }) {
+    return this.publish.testPublish(body?.postId ? BigInt(body.postId) : undefined, body?.platforms);
+  }
 
   // ---------- 频道转发（推广：别人的频道 → 我们的推广频道，与 App 内容无关） ----------
 

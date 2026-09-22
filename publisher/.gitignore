@@ -1,0 +1,7 @@
+config.json
+.venv/
+vendor/
+profiles/
+cards/
+logs/
+__pycache__/

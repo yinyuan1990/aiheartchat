@@ -726,6 +726,37 @@ model GalleryPost {
   @@map("gallery_post")
 }
 
+// ---------- 内容分发（推广）：树洞同步进来的新帖 → AI 改写 → 发到小红书 / 抖音 / 快手 / 知乎；发布机跑在操作者本机轮询领任务 ----------
+
+model PublishJob {
+  id          BigInt    @id @default(autoincrement())
+  postId      BigInt    @map("post_id")
+  /// xiaohongshu | douyin | kuaishou | zhihu
+  platform    String    @db.VarChar(16)
+  /// AI 出的标题（小红书 ≤20 字）
+  title       String    @default("") @db.VarChar(120)
+  /// AI 出的正文（发平台的文案，卡片图上也是它）
+  content     String    @db.Text
+  /// 逗号分隔的话题标签
+  tags        String    @default("") @db.VarChar(300)
+  /// 0 待发 1 已被发布机领走 2 成功 3 失败（已放弃）4 跳过
+  status      Int       @default(0) @db.TinyInt
+  /// 不早于此时间领取（每日上限 / 发布时段 / 间隔顺延出来的排期）
+  scheduledAt DateTime  @map("scheduled_at")
+  claimedAt   DateTime? @map("claimed_at")
+  doneAt      DateTime? @map("done_at")
+  attempts    Int       @default(0)
+  error       String    @default("") @db.VarChar(500)
+  /// 发布成功后的帖子地址（发布机能拿到时回填）
+  resultUrl   String    @default("") @map("result_url") @db.VarChar(300)
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@unique([postId, platform])
+  @@index([status, scheduledAt])
+  @@index([platform, scheduledAt])
+  @@map("publish_job")
+}
+
 // ---------- 频道转发（推广）：把别的公开频道的新消息转发到我们自己的推广频道（默认 @smsd2030），与 App 内容无关 ----------
 
 model TgForwardSource {
