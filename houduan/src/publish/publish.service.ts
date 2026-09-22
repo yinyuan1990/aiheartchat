@@ -17,6 +17,8 @@ const MAX_ATTEMPTS = 3;
 const CLAIM_TIMEOUT_MS = 30 * 60_000;
 /** 正文太短的树洞帖不发 */
 const MIN_TEXT = 30;
+/** 出稿兜底过滤：引流 / 交友 / 联系方式相关词（小红书第一条就因「非官方渠道导流 + 高风险交友」把号冻了） */
+const BANNED = /https?:\/\/|www\.|t\.me|微信|vx|wx|QQ|扣扣|手机号|电话|下载|关注我|私信|私聊|评论区找|加我|扩列|处对象|找对象|想认识|脱单|相亲|交友|约会|同城|约炮|心之音|树洞|App|app|应用/;
 
 interface Settings {
   enabled: boolean;
@@ -38,6 +40,8 @@ interface AgentState {
   lastSeen: string;
   host: string;
   accounts: Record<string, { ok: boolean; msg: string; checkedAt: string }>;
+  /** 发布机出口 IP 检查：ok=false（开着 VPN，出口在国外）时发布机自己会停发 */
+  ip: { ok: boolean; ip: string; where: string; msg: string } | null;
 }
 
 interface Draft { title: string; content: string; tags: string[] }
@@ -54,7 +58,7 @@ interface Draft { title: string; content: string; tags: string[] }
 export class PublishService implements OnModuleInit {
   private readonly logger = new Logger('Publish');
   private scanning = false;
-  private agent: AgentState = { lastSeen: '', host: '', accounts: {} };
+  private agent: AgentState = { lastSeen: '', host: '', accounts: {}, ip: null };
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -259,16 +263,21 @@ export class PublishService implements OnModuleInit {
   // ---------- AI 改写 ----------
 
   private async draft(text: string, platform: Platform): Promise<Draft> {
+    // tags 只从这个池子里挑：小红书对「交友 / 相亲 / 脱单 / 树洞」这类词直接判「高风险交友」
+    const TAG_POOL = '情感、心事、成长、生活感悟、随笔、故事、治愈、文字、日常、人生、亲密关系、自我成长、情绪';
     const spec: Record<Platform, string> = {
-      xiaohongshu: '小红书图文笔记：title 不超过 20 个字、口语化有钩子可带 1 个 emoji；content 120~300 字，分 3~5 个短段，每段可用 emoji 开头，结尾一句引发共鸣或提问；tags 给 5 个不带 # 的话题词（如 情感、树洞、心事、恋爱、成长）。',
-      douyin: '抖音图文：title 不超过 30 个字有悬念；content 80~200 字，短句分行；tags 给 4 个不带 # 的话题词。',
-      kuaishou: '快手图文：title 不超过 30 个字直白接地气；content 80~200 字，短句分行；tags 给 4 个不带 # 的话题词。',
-      zhihu: '知乎「想法」（纯文本短帖）：title 留空字符串；content 150~400 字，像在知乎认真聊天的语气，有观点有细节，段落之间空一行，结尾可以抛一个问题；tags 给 3 个话题词。',
+      xiaohongshu: `小红书图文笔记：title 不超过 20 个字、口语化有钩子可带 1 个 emoji；content 120~300 字，分 3~5 个短段，每段可用 emoji 开头，结尾一句引发共鸣或提问；tags 从「${TAG_POOL}」里挑 5 个。`,
+      douyin: `抖音图文：title 不超过 30 个字有悬念；content 80~200 字，短句分行；tags 从「${TAG_POOL}」里挑 4 个。`,
+      kuaishou: `快手图文：title 不超过 30 个字直白接地气；content 80~200 字，短句分行；tags 从「${TAG_POOL}」里挑 4 个。`,
+      zhihu: `知乎「想法」（纯文本短帖）：title 留空字符串；content 150~400 字，像在知乎认真聊天的语气，有观点有细节，段落之间空一行，结尾可以抛一个问题；tags 从「${TAG_POOL}」里挑 3 个。`,
     };
     const system = [
-      '你是一个情感类自媒体运营，把匿名树洞投稿改写成适合平台发布的文案。',
-      '要求：第一人称保留倾诉感；不得出现真实人名、手机号、地名门牌等隐私；不得出现平台违禁或极端词（自杀、自残、约炮、出轨细节、脏话、政治），涉及的用委婉说法软化；',
-      '不要出现任何链接、二维码、联系方式、App 名或"下载"字样；不要用"树洞投稿"之类的元描述开头；不要编造原文没有的事实。',
+      '你是一个情感类自媒体运营，把一段匿名的个人心事改写成适合平台发布的文案（像博主自己在分享感悟）。',
+      '硬性要求：',
+      '1. 第一人称保留倾诉感，但不要编造原文没有的事实；不得出现真实人名、手机号、地名门牌等隐私。',
+      '2. 不得出现平台违禁或极端词（自杀、自残、约炮、性暗示、出轨细节、脏话、政治），涉及的用委婉说法软化。',
+      '3. 绝对不能有任何引流 / 交友含义：不出现链接、二维码、微信、QQ、手机号、App 名、品牌名、"下载""关注我""私信""评论区找我""加我""扩列""处对象""找对象""想认识""脱单""相亲""交友""约会""同城"等词，也不要邀请读者联系或见面。',
+      '4. 不要用"树洞""投稿""匿名"之类的元描述，直接讲事。',
       '只输出 JSON：{"title": string, "content": string, "tags": string[]}。',
     ].join('\n');
     const user = `平台要求：${spec[platform]}\n\n原文：\n${text.slice(0, 1500)}`;
@@ -282,6 +291,9 @@ export class PublishService implements OnModuleInit {
         const tags = (Array.isArray(j.tags) ? j.tags : []).map((t: unknown) => String(t).replace(/^#/, '').replace(/[#\s,，]/g, '').trim()).filter(Boolean).slice(0, 5);
         if (content.length < 20) throw new Error('正文过短');
         if (platform !== 'zhihu' && !title) throw new Error('缺标题');
+        // 兜底过滤：AI 偶尔不听话，命中引流 / 交友词就重来
+        const hit = `${title} ${content} ${tags.join(' ')}`.match(BANNED);
+        if (hit) throw new Error(`命中敏感词「${hit[0]}」`);
         return { title: platform === 'zhihu' ? '' : title, content: content.slice(0, 1000), tags };
       } catch (e) {
         lastErr = e;
@@ -298,10 +310,13 @@ export class PublishService implements OnModuleInit {
     return token === s.token;
   }
 
-  async heartbeat(body: { host?: string; accounts?: Record<string, { ok: boolean; msg?: string; checkedAt?: string }> }) {
+  async heartbeat(body: { host?: string; accounts?: Record<string, { ok: boolean; msg?: string; checkedAt?: string }>; ip?: { ok?: boolean; ip?: string; where?: string; msg?: string } }) {
     const now = new Date().toISOString();
     this.agent.lastSeen = now;
     this.agent.host = String(body.host ?? '').slice(0, 60);
+    if (body.ip && typeof body.ip === 'object' && Object.keys(body.ip).length) {
+      this.agent.ip = { ok: !!body.ip.ok, ip: String(body.ip.ip ?? '').slice(0, 60), where: String(body.ip.where ?? '').slice(0, 80), msg: String(body.ip.msg ?? '').slice(0, 160) };
+    }
     if (body.accounts) {
       for (const [k, v] of Object.entries(body.accounts)) {
         if (!(PLATFORMS as readonly string[]).includes(k)) continue;

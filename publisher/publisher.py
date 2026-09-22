@@ -1,7 +1,8 @@
 """心之音 · 内容分发发布机（跑在操作者本机 Windows 上）。
 
     python publisher.py login <xiaohongshu|douyin|kuaishou|zhihu>   扫码登录一个平台（有界面浏览器）
-    python publisher.py check                                        检查各平台登录状态并上报后台
+    python publisher.py logout <平台>                                退出（删本地登录态，换号用）
+    python publisher.py check                                        检查出口 IP + 各平台登录状态并上报后台
     python publisher.py card                                         用一段示例文案渲染卡片图到 cards/ 看效果
     python publisher.py run                                          常驻：轮询后台领任务 → 渲染卡片 → 发布 → 回写
 
@@ -56,8 +57,9 @@ def load_config() -> dict:
     cfg.setdefault("headless", True)
     cfg.setdefault("poll_sec", 60)
     cfg.setdefault("check_min", 30)
-    cfg.setdefault("brand", "心之音 · 私密树洞")
-    cfg.setdefault("slogan", "匿名说心事，总有人懂你")
+    # 卡片底部：默认不放品牌 / App 名（小红书判「非官方渠道导流」就是冲着这个来的），只放一句标语
+    cfg.setdefault("brand", "")
+    cfg.setdefault("slogan", "爱情与金钱无关，和内心相连")
     if not cfg.get("token") or "填这里" in cfg["token"]:
         print("config.json 里的 token 还没填")
         sys.exit(2)
@@ -78,8 +80,36 @@ class Api:
             return j["data"]
         return j
 
-    def heartbeat(self, accounts: dict) -> dict:
-        return self._unwrap(requests.post(f"{self.base}/publish/agent/heartbeat", headers=self.h, json={"host": socket.gethostname(), "accounts": accounts}, timeout=20))
+    def heartbeat(self, accounts: dict, ip: dict | None = None) -> dict:
+        return self._unwrap(requests.post(f"{self.base}/publish/agent/heartbeat", headers=self.h, json={"host": socket.gethostname(), "accounts": accounts, "ip": ip or {}}, timeout=20))
+
+
+# ---------- 出口 IP 检查（本机开着 VPN 就不发：发布定位会变成国外，账号很快被判异常） ----------
+
+_ip_cache: dict = {"at": 0.0, "res": None}
+
+
+def check_ip(force: bool = False) -> dict:
+    """返回 {ok, ip, where, msg}；ok = 出口在中国大陆。5 分钟缓存。走系统代理（requests 默认信任环境代理），所以 VPN 开着就能测出来"""
+    if not force and _ip_cache["res"] and time.time() - _ip_cache["at"] < 300:
+        return _ip_cache["res"]
+    res = {"ok": False, "ip": "", "where": "", "msg": "无法获取出口 IP"}
+    try:
+        r = requests.get("http://ip-api.com/json/?lang=zh-CN&fields=status,country,countryCode,regionName,city,query", timeout=10)
+        j = r.json()
+        if j.get("status") == "success":
+            cn = j.get("countryCode") == "CN"
+            where = f"{j.get('country', '')} {j.get('regionName', '')} {j.get('city', '')}".strip()
+            res = {"ok": cn, "ip": j.get("query", ""), "where": where, "msg": "出口在国内" if cn else f"出口在 {where}，像是开着 VPN，暂停发布"}
+    except Exception as e:  # noqa: BLE001
+        try:
+            t = requests.get("https://myip.ipip.net", timeout=10).text.strip()
+            cn = "中国" in t and "台湾" not in t and "香港" not in t
+            res = {"ok": cn, "ip": "", "where": t[:80], "msg": "出口在国内" if cn else f"{t[:60]}，暂停发布"}
+        except Exception:  # noqa: BLE001
+            res["msg"] = f"无法获取出口 IP：{str(e)[:80]}"
+    _ip_cache.update(at=time.time(), res=res)
+    return res
 
     def next(self, platforms: list[str]):
         return self._unwrap(requests.get(f"{self.base}/publish/agent/next", headers=self.h, params={"platforms": ",".join(platforms)}, timeout=20))
@@ -149,8 +179,7 @@ def publish_job(cfg: dict, job: dict) -> tuple[bool, str, str]:
     tags = [t for t in (job.get("tags") or []) if t]
     if p == "zhihu":
         import zhihu
-        body = content if not title else f"{title}\n\n{content}"
-        ok, url, err = zhihu.post_pin(PROFILES / "zhihu", body, bool(cfg["headless"]), LOGS)
+        ok, url, err = zhihu.post_pin(PROFILES / "zhihu", content, bool(cfg["headless"]), LOGS, title=title)
         return ok, url, err
     import card
     images = card.render_cards(CARDS, f"job{job['id']}", title, content, cfg["brand"], cfg["slogan"], headless=True)
@@ -182,12 +211,34 @@ def cmd_login(cfg: dict, platform: str):
 
 
 def cmd_check(cfg: dict):
+    ip = check_ip(force=True)
+    log.info("出口 IP：%s %s → %s", ip.get("ip"), ip.get("where"), "OK" if ip["ok"] else "不在国内，会暂停发布")
     accounts = check_all(cfg)
     try:
-        Api(cfg).heartbeat(accounts)
+        Api(cfg).heartbeat(accounts, ip)
         print("已上报后台")
     except Exception as e:  # noqa: BLE001
         print(f"上报后台失败：{e}")
+    return 0
+
+
+def cmd_logout(cfg: dict, platform: str):
+    """退出某平台：删本地登录态（账号废了换新号时用）。抖音 / 快手 / 小红书是 vendor/cookies 下的 json，知乎是 profiles/zhihu 整个目录"""
+    if platform not in ALL_PLATFORMS:
+        print(f"平台只能是 {' / '.join(ALL_PLATFORMS)}")
+        return 2
+    import shutil
+    if platform == "zhihu":
+        shutil.rmtree(PROFILES / "zhihu", ignore_errors=True)
+    else:
+        f = VENDOR / "cookies" / f"{platform}_{cfg['account']}.json"
+        if f.exists():
+            f.unlink()
+    log.info("%s 已登出（本地登录态已删除），要换号请重新 login", NAMES[platform])
+    try:
+        Api(cfg).heartbeat({platform: {"ok": False, "msg": "已登出", "checkedAt": datetime.now().astimezone().isoformat()}})
+    except Exception:  # noqa: BLE001
+        pass
     return 0
 
 
@@ -218,9 +269,12 @@ def cmd_run(cfg: dict):
                 if bad:
                     accounts.update(check_all({**cfg, "platforms": bad}))
                 last_recheck = time.time()
-            api.heartbeat(accounts)
+            ip = check_ip()
+            api.heartbeat(accounts, ip)
             ready = [p for p, a in accounts.items() if a.get("ok")]
-            if not ready:
+            if not ip["ok"]:
+                log.warning("出口 IP 不在国内（%s %s），不领任务；关掉 VPN 或把发布机放到没有 VPN 的电脑", ip.get("ip"), ip.get("where") or ip.get("msg"))
+            elif not ready:
                 log.warning("没有任何平台处于已登录状态，等待…（python publisher.py login 平台）")
             else:
                 job = api.next(ready)
@@ -248,15 +302,15 @@ def cmd_run(cfg: dict):
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) < 2 or argv[1] not in {"login", "check", "card", "run"}:
+    if len(argv) < 2 or argv[1] not in {"login", "logout", "check", "card", "run"}:
         print(__doc__)
         return 2
     cfg = load_config()
-    if argv[1] == "login":
+    if argv[1] in ("login", "logout"):
         if len(argv) < 3:
-            print("用法：python publisher.py login <xiaohongshu|douyin|kuaishou|zhihu>")
+            print(f"用法：python publisher.py {argv[1]} <xiaohongshu|douyin|kuaishou|zhihu>")
             return 2
-        return cmd_login(cfg, argv[2])
+        return cmd_login(cfg, argv[2]) if argv[1] == "login" else cmd_logout(cfg, argv[2])
     if argv[1] == "check":
         return cmd_check(cfg)
     if argv[1] == "card":

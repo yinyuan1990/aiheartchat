@@ -31,6 +31,19 @@ exe 由 `build-exe.ps1` 从 `publisher_gui.py` 打包（PyInstaller onefile，�
 - 某平台在后台显示「未登录 / 失效」→ 重新 `login 该平台`，发布机每 3 分钟会自动重新检查没登录的平台，不用重启。
 - 电脑要常开：电源设置里睡眠改「从不」。
 
+## VPN / 出口 IP
+
+发布机每次领任务前先查出口 IP（ip-api.com，走系统代理所以 VPN 开着就测得出来）；**不在中国大陆就不领任务**，日志和后台「内容分发」页都会标「国外（VPN？已停发）」。
+本机开着 TUN / 全局模式的 VPN 时浏览器加 `--no-proxy-server` 也绕不开（实测仍是德国 IP），所以要么发布时关 VPN / 把 VPN 切成规则模式让国内直连，要么把发布机放到没有 VPN 的电脑上。
+
+## 换到另一台电脑
+
+1. 把整个 `publisher` 文件夹拷过去（`.venv` / `vendor` / `profiles` / `cards` / `logs` 可以不拷，会重建）。
+2. 那台机器装 Python 3.10~3.12（勾 Add to PATH）和 git，然后在 `publisher` 目录 `powershell -ExecutionPolicy Bypass -File setup.ps1`。
+3. 把 `config.json` 的 token 填好（或直接拷本机的 `config.json`），`build-exe.ps1` 打一个 exe（或用 bat）。
+4. 四个平台重新「登录」（登录态不跟着走），`install-task.ps1` 注册自启。
+5. 本机这边 `Stop-ScheduledTask PeiwanPublisher; Unregister-ScheduledTask PeiwanPublisher -Confirm:$false`，两台同时跑会抢任务（虽然不会重复发，但登录状态会互相覆盖）。
+
 ## 结构
 
 - `publisher.py` 主程序（领任务 / 心跳 / 发布 / 登录 / 检查）

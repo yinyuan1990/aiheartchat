@@ -3,7 +3,7 @@ import { onMounted, onUnmounted, ref } from 'vue';
 import { api } from '../api';
 
 interface Settings { enabled: boolean; platforms: string[]; dailyMax: number; hourStart: number; hourEnd: number; gapMin: number; token: string; lastPostId: string }
-interface Agent { online: boolean; lastSeen: string; host: string; accounts: Record<string, { ok: boolean; msg: string; checkedAt: string }> }
+interface Agent { online: boolean; lastSeen: string; host: string; accounts: Record<string, { ok: boolean; msg: string; checkedAt: string }>; ip: { ok: boolean; ip: string; where: string; msg: string } | null }
 interface Overview { settings: Settings; agent: Agent; counts: Record<string, number>; platforms: { key: string; name: string }[] }
 interface Job {
   id: string; postId: string; platform: string; platformName: string; title: string; content: string; tags: string; status: number;
@@ -113,6 +113,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
       <div v-if="ov" class="row" style="flex-wrap: wrap; gap: 14px; align-items: center; font-size: 13px">
         <span class="tag" :class="ov.agent.online ? 'ok' : 'off'">{{ ov.agent.online ? '在线' : '离线' }}</span>
         <span class="muted">上次心跳 {{ fmt(ov.agent.lastSeen) }}<template v-if="ov.agent.host"> · {{ ov.agent.host }}</template></span>
+        <span v-if="ov.agent.ip" :title="ov.agent.ip.msg">出口 IP <span class="tag" :class="ov.agent.ip.ok ? 'ok' : 'off'">{{ ov.agent.ip.ok ? '国内' : '国外（VPN？已停发）' }}</span> <span class="muted">{{ ov.agent.ip.ip }} {{ ov.agent.ip.where }}</span></span>
         <template v-for="p in ov.platforms" :key="p.key">
           <span v-if="ov.agent.accounts[p.key]" :title="ov.agent.accounts[p.key].msg">
             {{ p.name }} <span class="tag" :class="ov.agent.accounts[p.key].ok ? 'ok' : 'off'">{{ ov.agent.accounts[p.key].ok ? '已登录' : '未登录 / 失效' }}</span>

@@ -12,15 +12,16 @@ from patchright.sync_api import BrowserContext, Page, sync_playwright
 
 HOME = "https://www.zhihu.com/"
 SIGNIN = "https://www.zhihu.com/signin"
-PIN_PAGE = "https://www.zhihu.com/pin"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 
 def _context(p, profile: Path, headless: bool) -> BrowserContext:
     profile.mkdir(parents=True, exist_ok=True)
+    # channel="chromium"：用完整 Chromium 的 new headless。默认的 headless shell 里知乎首页的想法编辑器（Draft.js）渲染不出来
+    # --no-proxy-server：不走系统代理（本机开着 VPN 时，浏览器仍直连，发布定位才是国内；TUN 全局模式挡不住，见 publisher 的出口 IP 检查）
     return p.chromium.launch_persistent_context(
-        str(profile), headless=headless, viewport={"width": 1280, "height": 900}, user_agent=UA, locale="zh-CN",
-        args=["--disable-blink-features=AutomationControlled"],
+        str(profile), headless=headless, channel="chromium", viewport={"width": 1280, "height": 900}, user_agent=UA, locale="zh-CN",
+        args=["--disable-blink-features=AutomationControlled", "--no-proxy-server"],
     )
 
 
@@ -68,86 +69,114 @@ def check(profile: Path, headless: bool = True) -> tuple[bool, str]:
             ctx.close()
 
 
-def post_pin(profile: Path, content: str, headless: bool, shot_dir: Path) -> tuple[bool, str, str]:
-    """发一条想法。返回 (ok, url, error)。失败时截图到 shot_dir 方便排查。"""
+def post_pin(profile: Path, content: str, headless: bool, shot_dir: Path, title: str = "", dry_run: bool = False) -> tuple[bool, str, str]:
+    """
+    发一条想法。返回 (ok, url, error)。失败时截图到 shot_dir 方便排查。
+
+    知乎当前（2026-09）的结构（/pin 页已 404）：首页顶部 `.WriteArea` 里有占位「分享此刻的想法...」，点一下展开编辑器：
+    可选标题 `textarea[placeholder=标题]` + Draft.js 正文 `.public-DraftEditor-content[role=textbox]` + 蓝色「发布」按钮（有字才可点）。
+    编辑器会自动存草稿，所以先全选删掉再输入。
+    """
+    def shot(tag: str):
+        try:
+            page.screenshot(path=str(shot_dir / f"zhihu-{tag}-{int(time.time())}.png"))
+        except Exception:
+            pass
+
     with sync_playwright() as p:
         ctx = _context(p, profile, headless)
         page = ctx.new_page()
         try:
-            page.goto(PIN_PAGE, wait_until="domcontentloaded", timeout=45000)
+            page.goto(HOME, wait_until="domcontentloaded", timeout=45000)
             me = _me(page)
             if not me or not me.get("name"):
                 return False, "", "知乎登录失效"
-            page.wait_for_timeout(2500)
-            # 想法页顶部就是编辑框（占位「分享你此刻的想法…」）；有些版本要先点一下占位才出现 contenteditable
-            editor = None
-            for sel in ['.PinEditor [contenteditable="true"]', '[data-testid="pin-editor"] [contenteditable="true"]', '.Editable-content[contenteditable="true"]', '[contenteditable="true"]']:
-                loc = page.locator(sel).first
-                if loc.count() and loc.is_visible():
-                    editor = loc
-                    break
-            if editor is None:
-                ph = page.get_by_text("分享你此刻的想法", exact=False).first
-                if ph.count():
-                    ph.click()
-                    page.wait_for_timeout(1000)
-                    loc = page.locator('[contenteditable="true"]').first
-                    if loc.count():
-                        editor = loc
-            if editor is None:
-                page.screenshot(path=str(shot_dir / f"zhihu-noeditor-{int(time.time())}.png"))
-                return False, "", "没找到想法编辑框（知乎页面可能改版，看 logs 截图）"
+            area = page.locator(".WriteArea").first
+            try:
+                area.wait_for(state="visible", timeout=20000)
+            except Exception:
+                shot("nowritearea")
+                return False, "", "首页没找到写想法区域（知乎页面可能改版，看 logs 截图）"
+            ph = area.get_by_text("分享此刻的想法", exact=False).first
+            if ph.count():
+                ph.click()
+            editor = area.locator('.public-DraftEditor-content[role="textbox"], [contenteditable="true"]').first
+            try:
+                editor.wait_for(state="visible", timeout=20000)
+            except Exception:
+                shot("noeditor")
+                return False, "", "想法编辑框没有展开（看 logs 截图）"
+            # 清掉自动保存的旧草稿
             editor.click()
-            page.wait_for_timeout(500)
-            # 逐段输入：段落之间回车两次
+            page.keyboard.press("Control+A")
+            page.keyboard.press("Delete")
+            page.wait_for_timeout(300)
+            if title:
+                t = area.locator("textarea").first
+                if t.count() and t.is_visible():
+                    t.click()
+                    t.fill("")
+                    page.keyboard.type(title[:50], delay=15)
+                    editor.click()
             paras = [s for s in content.split("\n") if s.strip()]
             for i, para in enumerate(paras):
                 page.keyboard.type(para, delay=12)
                 if i < len(paras) - 1:
                     page.keyboard.press("Enter")
-                    page.keyboard.press("Enter")
-            page.wait_for_timeout(800)
-            btn = None
-            for sel in ['.PinEditor button:has-text("发布")', 'button:has-text("发布")']:
-                loc = page.locator(sel).filter(has_not_text="定时").first
-                if loc.count() and loc.is_visible() and loc.is_enabled():
-                    btn = loc
-                    break
-            if btn is None:
-                page.screenshot(path=str(shot_dir / f"zhihu-nobtn-{int(time.time())}.png"))
+            page.wait_for_timeout(1200)
+            btn = area.locator('button:has-text("发布")').first
+            if not btn.count():
+                shot("nobtn")
                 return False, "", "没找到「发布」按钮"
+            for _ in range(20):
+                if btn.is_enabled():
+                    break
+                page.wait_for_timeout(300)
+            if not btn.is_enabled():
+                shot("btndisabled")
+                return False, "", "「发布」按钮一直是灰的（内容没输进去？）"
+            if dry_run:
+                # 只验证流程：截图留证，清掉输入，不点发布
+                shot("dryrun")
+                editor.click()
+                page.keyboard.press("Control+A")
+                page.keyboard.press("Delete")
+                page.wait_for_timeout(500)
+                return True, "", ""
             btn.click()
-            page.wait_for_timeout(4000)
-            # 发布后编辑框应清空；再查最新一条想法拿地址
-            token = me.get("url_token") or ""
+            # 发布成功后编辑器收回成占位；等最多 15 秒
+            posted = False
+            for _ in range(30):
+                page.wait_for_timeout(500)
+                if area.get_by_text("分享此刻的想法", exact=False).count() and not editor.is_visible():
+                    posted = True
+                    break
+                err = page.locator(".Notification, .Toast, [class*='Toast'], [class*='error']").first
+                if err.count() and err.is_visible():
+                    txt = (err.inner_text() or "").strip()
+                    if txt and "成功" not in txt:
+                        shot("err")
+                        return False, "", f"知乎提示：{txt[:120]}"
             url = ""
+            token = me.get("url_token") or ""
             if token:
                 try:
                     r = page.request.get(f"https://www.zhihu.com/api/v4/members/{token}/pins?limit=1&offset=0", timeout=15000)
                     if r.ok:
                         data = r.json().get("data") or []
-                        if data and data[0].get("id"):
-                            created = int(data[0].get("created") or 0)
-                            if time.time() - created < 300:
-                                url = f"https://www.zhihu.com/pin/{data[0]['id']}"
+                        if data and data[0].get("id") and time.time() - int(data[0].get("created") or 0) < 600:
+                            url = f"https://www.zhihu.com/pin/{data[0]['id']}"
+                            posted = True
                 except Exception:
                     pass
-            if not url:
-                # 页面上没有报错、编辑框已清空也算成功
-                err = page.locator(".Notification, .ErrorMessage, [class*='error']").first
-                if err.count() and err.is_visible():
-                    page.screenshot(path=str(shot_dir / f"zhihu-err-{int(time.time())}.png"))
-                    return False, "", f"知乎提示：{err.inner_text()[:120]}"
-                remain = (editor.inner_text() or "").strip() if editor.count() else ""
-                if remain and remain[:20] in content:
-                    page.screenshot(path=str(shot_dir / f"zhihu-notsent-{int(time.time())}.png"))
-                    return False, "", "点了发布但内容没发出去（可能触发验证）"
+            if not posted:
+                shot("notsent")
+                return False, "", "点了发布但没确认成功（可能触发验证，看 logs 截图）"
             return True, url, ""
         except Exception as e:  # noqa: BLE001
-            try:
-                page.screenshot(path=str(shot_dir / f"zhihu-exc-{int(time.time())}.png"))
-            except Exception:
-                pass
+            shot("exc")
             return False, "", f"知乎发布异常：{str(e)[:200]}"
         finally:
             ctx.close()
+
+

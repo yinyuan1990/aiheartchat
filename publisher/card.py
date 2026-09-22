@@ -29,7 +29,8 @@ body{{width:{w}px;height:{h}px;background:linear-gradient(160deg,#ff5f8f 0%,#ff8
 .quote{{position:absolute;left:72px;top:{qtop}px;font-size:120px;color:rgba(255,255,255,.6);font-family:Georgia,serif;line-height:1}}
 .foot{{position:absolute;left:0;right:0;bottom:64px;text-align:center;color:#fff}}
 .brand{{font-size:34px;font-weight:700;letter-spacing:2px;text-shadow:0 2px 10px rgba(0,0,0,.15)}}
-.slogan{{font-size:24px;opacity:.9;margin-top:10px}}
+.slogan{{font-size:30px;font-weight:600;letter-spacing:3px;opacity:.95;margin-top:10px;text-shadow:0 2px 10px rgba(0,0,0,.15)}}
+.brand:empty,.slogan:empty{{display:none}}
 .page{{position:absolute;right:80px;top:56px;color:rgba(255,255,255,.85);font-size:26px;letter-spacing:2px}}
 </style></head><body>
 <div class="blob" style="width:420px;height:420px;right:-140px;top:-160px"></div>

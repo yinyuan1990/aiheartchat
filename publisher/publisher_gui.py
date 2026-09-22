@@ -72,7 +72,10 @@ class App(tk.Tk):
             lbl.grid(row=i, column=1, sticky="w")
             self.lbl_acc[key] = lbl
             ttk.Button(box, text="登录", command=lambda k=key, n=name: self.login(k, n)).grid(row=i, column=2, padx=4)
-        ttk.Button(box, text="检查全部登录状态并上报后台", command=self.check).grid(row=len(PLATFORMS), column=0, columnspan=3, sticky="w", pady=(8, 0))
+            ttk.Button(box, text="登出 / 换号", command=lambda k=key, n=name: self.logout(k, n)).grid(row=i, column=3, padx=4)
+        ttk.Button(box, text="检查出口 IP + 全部登录状态，并上报后台", command=self.check).grid(row=len(PLATFORMS), column=0, columnspan=3, sticky="w", pady=(8, 0))
+        self.lbl_ip = ttk.Label(box, text="出口 IP：未检查", foreground="#8e8e93")
+        self.lbl_ip.grid(row=len(PLATFORMS) + 1, column=0, columnspan=4, sticky="w", pady=(6, 0))
 
         mid = ttk.Frame(self, padding=(10, 6))
         mid.pack(fill="x")
@@ -144,6 +147,17 @@ class App(tk.Tk):
             self.after(200, lambda: self.after_check_ui(out))
         self.in_thread(work)
 
+    def logout(self, key: str, name: str):
+        if not messagebox.askyesno("登出", f"确定登出 {name}？本地登录态会删除，之后可以用新账号重新「登录」。"):
+            return
+
+        def work():
+            self.set_busy(True, f"正在登出 {name}…")
+            code, out = run_hidden([str(PY), "publisher.py", "logout", key], 60)
+            self.set_busy(False, f"{name} 已登出" if code == 0 else f"登出失败：{out[-120:]}")
+            self.lbl_acc[key].configure(text="已登出", foreground="#d33")
+        self.in_thread(work)
+
     def check(self):
         def work():
             self.set_busy(True, "正在检查四个平台登录状态（每个几秒）…")
@@ -153,6 +167,10 @@ class App(tk.Tk):
         self.in_thread(work)
 
     def after_check_ui(self, out: str):
+        for line in out.splitlines():
+            if "出口 IP：" in line:
+                ok = "OK" in line
+                self.lbl_ip.configure(text=line.split("INFO", 1)[-1].strip(), foreground="#1a9c4b" if ok else "#d33")
         for key, name in PLATFORMS:
             for line in out.splitlines():
                 if f"{name} 登录状态" in line:
@@ -180,6 +198,11 @@ class App(tk.Tk):
         # 从日志里带出最近一次各平台状态
         try:
             lines = LOG.read_text(encoding="utf-8", errors="replace").splitlines()[-400:]
+            for line in reversed(lines):
+                if "出口 IP" in line:
+                    bad = "不在国内" in line
+                    self.lbl_ip.configure(text=line.split("INFO", 1)[-1].split("WARNING", 1)[-1].strip()[:110], foreground="#d33" if bad else "#1a9c4b")
+                    break
             for key, name in PLATFORMS:
                 for line in reversed(lines):
                     if f"{name} 登录状态" in line:
