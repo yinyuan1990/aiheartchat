@@ -11,6 +11,12 @@ powershell -ExecutionPolicy Bypass -File setup.ps1     # 克隆 vendor、建 .ve
 powershell -ExecutionPolicy Bypass -File install-task.ps1   # 注册登录自启（pythonw 后台跑，无窗口），并立刻启动
 ```
 
+## 日常操作：双击 `发布机.exe`
+
+小窗口里有：后台发布任务 启动 / 停止 / 重启、四个平台「登录」按钮（弹浏览器扫码）、检查登录状态、token 编辑、看卡片样式、日志实时滚动、打开后台网页。
+exe 由 `build-exe.ps1` 从 `publisher_gui.py` 打包（PyInstaller onefile，不进 git；改了 GUI 重新跑一次脚本）。它不带依赖，运行时调用同目录的 `.venv` 和 `publisher.py`。
+也可以双击 `登录-xx.bat` / `检查登录状态.bat`。
+
 ## 日常命令（在 publisher 目录）
 
 ```powershell

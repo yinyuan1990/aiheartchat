@@ -5,3 +5,6 @@ profiles/
 cards/
 logs/
 __pycache__/
+build/
+*.exe
+*.spec
