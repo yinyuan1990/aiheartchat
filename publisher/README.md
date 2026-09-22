@@ -38,11 +38,10 @@ exe 由 `build-exe.ps1` 从 `publisher_gui.py` 打包（PyInstaller onefile，�
 
 ## 换到另一台电脑
 
-1. 把整个 `publisher` 文件夹拷过去（`.venv` / `vendor` / `profiles` / `cards` / `logs` 可以不拷，会重建）。
-2. 那台机器装 Python 3.10~3.12（勾 Add to PATH）和 git，然后在 `publisher` 目录 `powershell -ExecutionPolicy Bypass -File setup.ps1`。
-3. 把 `config.json` 的 token 填好（或直接拷本机的 `config.json`），`build-exe.ps1` 打一个 exe（或用 bat）。
-4. 四个平台重新「登录」（登录态不跟着走），`install-task.ps1` 注册自启。
-5. 本机这边 `Stop-ScheduledTask PeiwanPublisher; Unregister-ScheduledTask PeiwanPublisher -Confirm:$false`，两台同时跑会抢任务（虽然不会重复发，但登录状态会互相覆盖）。
+1. 整个 `publisher` 文件夹打 zip 拷过去（**`.venv` 不用带**，里面写死了旧机器的 Python 路径；`vendor`、`profiles`、`config.json`、`发布机.exe` 都带上）。
+2. 新机器上双击 **`新机安装.bat`**：自动下载安装 Python 3.11 和 Git（静默）→ 重建 `.venv`、装依赖、下载浏览器内核 → 注册开机自启并启动。全程不用敲命令。
+3. 双击 `发布机.exe`，四个平台点「登录」扫码（抖音 / 快手 / 小红书的登录态不跟着走，知乎的在 `profiles` 里可能还有效）。
+4. 旧电脑这边：`Stop-ScheduledTask PeiwanPublisher; Unregister-ScheduledTask PeiwanPublisher -Confirm:$false`，两台同时跑会抢任务（不会重复发，但登录状态会互相覆盖）。
 
 ## 结构
 
