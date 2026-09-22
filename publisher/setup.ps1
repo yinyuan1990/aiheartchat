@@ -13,6 +13,10 @@ if (-not (Test-Path vendor\social-auto-upload\sau_cli.py)) {
 if (-not (Test-Path vendor\social-auto-upload\conf.py)) {
   Copy-Item vendor\social-auto-upload\conf.example.py vendor\social-auto-upload\conf.py
 }
+# 我们对上游的补丁（vendor 不进 git，改动放 patches/ 里，安装时覆盖过去）：
+#   douyin_uploader_main.py → 抖音图文页标题 / 正文框多选择器 + 找不到时截图和输入框列表
+Write-Host '>> 应用本地补丁…'
+Copy-Item patches\douyin_uploader_main.py vendor\social-auto-upload\uploader\douyin_uploader\main.py -Force
 
 if (-not (Test-Path .venv\Scripts\python.exe)) {
   Write-Host '>> 创建虚拟环境 .venv（Python 3.10~3.12）…'
