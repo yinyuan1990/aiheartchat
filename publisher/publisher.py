@@ -83,6 +83,12 @@ class Api:
     def heartbeat(self, accounts: dict, ip: dict | None = None) -> dict:
         return self._unwrap(requests.post(f"{self.base}/publish/agent/heartbeat", headers=self.h, json={"host": socket.gethostname(), "accounts": accounts, "ip": ip or {}}, timeout=20))
 
+    def next(self, platforms: list[str]):
+        return self._unwrap(requests.get(f"{self.base}/publish/agent/next", headers=self.h, params={"platforms": ",".join(platforms)}, timeout=20))
+
+    def result(self, job_id: str, ok: bool, url: str = "", error: str = ""):
+        return self._unwrap(requests.post(f"{self.base}/publish/agent/result", headers=self.h, json={"id": job_id, "ok": ok, "url": url, "error": error}, timeout=20))
+
 
 # ---------- 出口 IP 检查（本机开着 VPN 就不发：发布定位会变成国外，账号很快被判异常） ----------
 
@@ -110,12 +116,6 @@ def check_ip(force: bool = False) -> dict:
             res["msg"] = f"无法获取出口 IP：{str(e)[:80]}"
     _ip_cache.update(at=time.time(), res=res)
     return res
-
-    def next(self, platforms: list[str]):
-        return self._unwrap(requests.get(f"{self.base}/publish/agent/next", headers=self.h, params={"platforms": ",".join(platforms)}, timeout=20))
-
-    def result(self, job_id: str, ok: bool, url: str = "", error: str = ""):
-        return self._unwrap(requests.post(f"{self.base}/publish/agent/result", headers=self.h, json={"id": job_id, "ok": ok, "url": url, "error": error}, timeout=20))
 
 
 # ---------- sau（抖音 / 快手 / 小红书） ----------
