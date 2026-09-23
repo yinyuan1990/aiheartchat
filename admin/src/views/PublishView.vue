@@ -2,7 +2,8 @@
 import { onMounted, onUnmounted, ref } from 'vue';
 import { api } from '../api';
 
-interface Settings { enabled: boolean; platforms: string[]; dailyMax: number; hourStart: number; hourEnd: number; gapMin: number; token: string; lastPostId: string; mode: 'raw' | 'ai' }
+type Mode = 'raw' | 'ai';
+interface Settings { enabled: boolean; platforms: string[]; dailyMax: number; hourStart: number; hourEnd: number; gapMin: number; token: string; lastPostId: string; modes: Record<string, Mode> }
 interface Agent { online: boolean; lastSeen: string; host: string; accounts: Record<string, { ok: boolean; msg: string; checkedAt: string }>; ip: { ok: boolean; ip: string; where: string; msg: string } | null }
 interface Overview { settings: Settings; agent: Agent; counts: Record<string, number>; platforms: { key: string; name: string }[] }
 interface Job {
@@ -11,7 +12,7 @@ interface Job {
 }
 
 const ov = ref<Overview | null>(null);
-const form = ref<{ enabled: boolean; platforms: string[]; dailyMax: number; hourStart: number; hourEnd: number; gapMin: number; mode: 'raw' | 'ai' }>({ enabled: false, platforms: [], dailyMax: 5, hourStart: 9, hourEnd: 23, gapMin: 45, mode: 'raw' });
+const form = ref<{ enabled: boolean; platforms: string[]; dailyMax: number; hourStart: number; hourEnd: number; gapMin: number; modes: Record<string, Mode> }>({ enabled: false, platforms: [], dailyMax: 5, hourStart: 9, hourEnd: 23, gapMin: 45, modes: {} });
 const jobs = ref<Job[]>([]);
 const filterStatus = ref('');
 const filterPlatform = ref('');
@@ -31,11 +32,11 @@ function fmt(t?: string | null) {
   if (!t) return '—';
   return new Date(t).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
-async function loadOverview() {
+async function loadOverview(fillForm = false) {
   try {
     ov.value = await api<Overview>('/admin/publish/overview');
     const s = ov.value.settings;
-    form.value = { enabled: s.enabled, platforms: [...s.platforms], dailyMax: s.dailyMax, hourStart: s.hourStart, hourEnd: s.hourEnd, gapMin: s.gapMin, mode: s.mode ?? 'raw' };
+    if (fillForm) form.value = { enabled: s.enabled, platforms: [...s.platforms], dailyMax: s.dailyMax, hourStart: s.hourStart, hourEnd: s.hourEnd, gapMin: s.gapMin, modes: { ...(s.modes ?? {}) } };
     if (!testPlatforms.value.length) testPlatforms.value = [...s.platforms];
   } catch (e: any) { show(e.message); }
 }
@@ -80,7 +81,7 @@ function toggle(list: string[], key: string) {
   if (i >= 0) list.splice(i, 1); else list.push(key);
 }
 onMounted(() => {
-  loadOverview(); loadJobs();
+  loadOverview(true); loadJobs();
   timer = window.setInterval(() => { loadOverview(); loadJobs(); }, 15000);
 });
 onUnmounted(() => { if (timer) clearInterval(timer); });
@@ -93,7 +94,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
     <div class="card">
       <div style="font-weight: 600; margin-bottom: 6px">规则</div>
       <div class="muted" style="margin-bottom: 12px">
-        私密树洞里 <b>Telegram 同步进来的每一条新帖</b>，自动用 AI 改写成各平台文案（敏感词软化、不带链接），渲染成卡片图，由你本机的发布机以真实浏览器发到下面勾选的平台。<b>不挑不审</b>；超过每日上限的顺延到之后几天，3 天内排不进的跳过。开启时以当前最新一条为起点，之前的旧帖不发。
+        私密树洞里 <b>Telegram 同步进来的每一条新帖</b>，按各平台的文案模式（原文直发 / AI 改写，见下方）出稿，渲染成卡片图，由你本机的发布机以真实浏览器发到下面勾选的平台。<b>不挑不审</b>；超过每日上限的顺延到之后几天，3 天内排不进的跳过。开启时以当前最新一条为起点，之前的旧帖不发。
       </div>
       <div class="row" style="flex-wrap: wrap; gap: 14px; align-items: center">
         <label class="muted" style="display: flex; align-items: center; gap: 6px"><input v-model="form.enabled" type="checkbox" style="width: auto" /> <b :style="{ color: form.enabled ? 'var(--accent)' : '' }">{{ form.enabled ? '已开启' : '已关闭' }}</b></label>
@@ -108,9 +109,16 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
       </div>
       <div class="row" style="flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line)">
         <span class="muted">文案：</span>
-        <label class="muted" style="display: flex; align-items: center; gap: 6px"><input v-model="form.mode" type="radio" value="raw" style="width: auto" /> <b>原文直发</b>（一个字不改、不过滤；标题取第一句、按平台截长度）</label>
-        <label class="muted" style="display: flex; align-items: center; gap: 6px"><input v-model="form.mode" type="radio" value="ai" style="width: auto" /> <b>AI 改写</b>（按平台出标题 / 正文 / 话题，敏感词软化、去引流词）</label>
-        <span class="muted" style="font-size: 12px">改了点上面「保存」，只影响之后新入队的任务</span>
+        <label v-for="p in ov?.platforms ?? []" :key="p.key" class="muted" style="display: flex; align-items: center; gap: 4px">
+          {{ p.name }}
+          <select v-model="form.modes[p.key]" style="width: auto">
+            <option value="raw">原文直发</option>
+            <option value="ai">AI 改写</option>
+          </select>
+        </label>
+        <div class="muted" style="font-size: 12px; width: 100%">
+          <b>原文直发</b>：一个字不改、不过滤，标题取第一句按平台截长度；<b>AI 改写</b>：按平台出标题 / 正文 / 话题，敏感词软化、去引流词。改了点上面「保存」，只影响之后新入队的任务（含测试发布）。
+        </div>
       </div>
     </div>
 
@@ -143,7 +151,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
         <label v-for="p in ov?.platforms ?? []" :key="p.key" class="muted" style="display: flex; align-items: center; gap: 4px">
           <input type="checkbox" style="width: auto" :checked="testPlatforms.includes(p.key)" @change="toggle(testPlatforms, p.key)" /> {{ p.name }}
         </label>
-        <button class="small" :disabled="testing" @click="testPublish">{{ testing ? 'AI 改写中…' : '立刻测试一条' }}</button>
+        <button class="small" :disabled="testing" @click="testPublish">{{ testing ? '出稿中…' : '立刻测试一条' }}</button>
         <span class="muted" style="font-size: 12px">不受上限 / 时段限制；发布机在线的话一两分钟内会发出去，结果在下面看</span>
       </div>
     </div>

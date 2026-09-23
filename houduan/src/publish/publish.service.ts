@@ -34,9 +34,11 @@ interface Settings {
   token: string;
   /** 只处理这个 id 之后的树洞帖（开启时定在当前最新，旧帖不发） */
   lastPostId: string;
-  /** raw = 原文直发（不改写、不过滤，只按平台截长度）；ai = DeepSeek 按平台改写 + 敏感词过滤 */
-  mode: 'raw' | 'ai';
+  /** 每个平台的文案模式：raw = 原文直发（不改写、不过滤，只按平台截长度）；ai = DeepSeek 按平台改写 + 敏感词过滤 */
+  modes: Record<Platform, Mode>;
 }
+
+type Mode = 'raw' | 'ai';
 
 interface AgentState {
   lastSeen: string;
@@ -81,6 +83,10 @@ export class PublishService implements OnModuleInit {
     }
     const platforms = get('platforms').split(',').map((s) => s.trim()).filter((s): s is Platform => (PLATFORMS as readonly string[]).includes(s));
     const hours = get('hours').split('-').map((n) => Number(n));
+    // publish_modes = "xiaohongshu:ai,zhihu:raw"；没写到的平台沿用旧的全局 publish_mode，再没有就是 raw
+    const fallback: Mode = get('mode') === 'ai' ? 'ai' : 'raw';
+    const stored = Object.fromEntries(get('modes').split(',').map((kv) => kv.split(':').map((x) => x.trim())));
+    const modes = Object.fromEntries(PLATFORMS.map((p) => [p, stored[p] === 'ai' ? 'ai' : stored[p] === 'raw' ? 'raw' : fallback])) as Record<Platform, Mode>;
     return {
       enabled: get('enabled') === '1',
       platforms: platforms.length ? platforms : ['xiaohongshu', 'zhihu'],
@@ -90,7 +96,7 @@ export class PublishService implements OnModuleInit {
       gapMin: Math.min(600, Math.max(0, Number(get('gap_min')) || 45)),
       token,
       lastPostId: get('last_post_id') || '0',
-      mode: get('mode') === 'ai' ? 'ai' : 'raw',
+      modes,
     };
   }
 
@@ -98,7 +104,7 @@ export class PublishService implements OnModuleInit {
     await this.prisma.sysSetting.upsert({ where: { key: `publish_${key}` }, create: { key: `publish_${key}`, value }, update: { value } });
   }
 
-  async saveSettings(data: { enabled?: boolean; platforms?: string[]; dailyMax?: number; hourStart?: number; hourEnd?: number; gapMin?: number; mode?: string }) {
+  async saveSettings(data: { enabled?: boolean; platforms?: string[]; dailyMax?: number; hourStart?: number; hourEnd?: number; gapMin?: number; modes?: Record<string, string> }) {
     const cur = await this.settings();
     if (data.enabled !== undefined) {
       // 从关到开：水位定在当前最新一条，之前同步进来的旧帖不发
@@ -116,7 +122,10 @@ export class PublishService implements OnModuleInit {
       await this.set('hours', `${s}-${e}`);
     }
     if (data.gapMin !== undefined) await this.set('gap_min', String(Math.min(600, Math.max(0, Number(data.gapMin) || 0))));
-    if (data.mode !== undefined) await this.set('mode', data.mode === 'ai' ? 'ai' : 'raw');
+    if (data.modes && typeof data.modes === 'object') {
+      const m = data.modes;
+      await this.set('modes', PLATFORMS.map((p) => `${p}:${m[p] === undefined ? cur.modes[p] : m[p] === 'ai' ? 'ai' : 'raw'}`).join(','));
+    }
     return this.overview();
   }
 
@@ -178,7 +187,7 @@ export class PublishService implements OnModuleInit {
     if (!targets.length) throw new BadRequestException('没有选择平台');
     const out: { platform: string; id: string; title: string }[] = [];
     for (const p of targets) {
-      const draft = await this.draft(post.content, p);
+      const draft = await this.draft(post.content, p, s);
       await this.prisma.publishJob.deleteMany({ where: { postId: post.id, platform: p } });
       const j = await this.prisma.publishJob.create({
         data: { postId: post.id, platform: p, title: draft.title, content: draft.content, tags: draft.tags.join(','), scheduledAt: new Date() },
@@ -197,7 +206,6 @@ export class PublishService implements OnModuleInit {
       await this.releaseStale();
       const s = await this.settings();
       if (!s.enabled || !s.platforms.length) return;
-      if (s.mode === 'ai' && !process.env.AI_API_KEY) { this.logger.warn('AI_API_KEY 未配置，内容分发跳过'); return; }
       // 只发 Telegram 同步进来的（source=2）、正常状态、水位之后的帖子；一次最多 5 条，剩下的下一分钟
       const posts = await this.prisma.treeholePost.findMany({
         where: { id: { gt: BigInt(s.lastPostId) }, source: 2, status: 0 },
@@ -233,7 +241,7 @@ export class PublishService implements OnModuleInit {
       }
       let draft: Draft;
       try {
-        draft = await this.draft(text, p);
+        draft = await this.draft(text, p, s);
       } catch (e: any) {
         await this.prisma.publishJob.create({ data: { postId: post.id, platform: p, content: text.slice(0, 500), status: 3, error: `AI 改写失败：${String(e?.message ?? e).slice(0, 200)}`, scheduledAt: new Date(), doneAt: new Date() } });
         continue;
@@ -272,9 +280,10 @@ export class PublishService implements OnModuleInit {
   private static readonly TITLE_MAX: Record<Platform, number> = { xiaohongshu: 20, douyin: 30, kuaishou: 30, zhihu: 0, shipinhao: 22 };
   private static readonly CONTENT_MAX: Record<Platform, number> = { xiaohongshu: 1000, douyin: 1000, kuaishou: 1000, zhihu: 2000, shipinhao: 1000 };
 
-  private async draft(text: string, platform: Platform): Promise<Draft> {
-    const s = await this.settings();
-    return s.mode === 'ai' ? this.draftAi(text, platform) : this.draftRaw(text, platform);
+  private async draft(text: string, platform: Platform, s: Settings): Promise<Draft> {
+    if (s.modes[platform] !== 'ai') return this.draftRaw(text, platform);
+    if (!process.env.AI_API_KEY) throw new BadRequestException(`${PLATFORM_NAMES[platform]} 设为 AI 改写，但 AI_API_KEY 未配置`);
+    return this.draftAi(text, platform);
   }
 
   /** 原文直发：一个字不改、不过滤（操作者要求）；只做平台硬性限制——标题取第一句截到上限，正文截到上限，tags 固定三个 */
