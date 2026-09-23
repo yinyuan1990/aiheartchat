@@ -18,34 +18,42 @@ HOME_URL = "https://channels.weixin.qq.com/platform"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 
+_DUMP_JS = """() => ({
+    url: location.href,
+    inputs: Array.from(document.querySelectorAll('input,textarea,[contenteditable="true"]')).filter(e=>e.getClientRects().length)
+        .map(e=>({tag:e.tagName, type:e.type||'', ph:e.getAttribute('placeholder')||e.getAttribute('data-placeholder')||'', cls:(e.className||'').toString().slice(0,60)})),
+    clickables: Array.from(document.querySelectorAll('button,a,[role=button],[class*=btn],[class*=tab],[class*=menu] li,[class*=nav] li'))
+        .filter(e=>e.getClientRects().length).map(e=>(e.innerText||'').trim().replace(/\\s+/g,' ')).filter(t=>t && t.length<24).slice(0,60)
+})"""
+
+
 def _dump(page: Page, shot_dir: Path, tag: str, log) -> None:
+    """截图 + 把每个 frame（视频号助手的正文在 iframe 里，主文档几乎是空的）里可见的输入框 / 可点元素写进日志"""
     try:
         shot_dir.mkdir(exist_ok=True)
         page.screenshot(path=str(shot_dir / f"shipinhao-{tag}-{int(time.time())}.png"))
-        info = page.evaluate(
-            """() => ({
-                url: location.href,
-                inputs: Array.from(document.querySelectorAll('input,textarea,[contenteditable="true"]')).filter(e=>e.getClientRects().length)
-                    .map(e=>({tag:e.tagName, type:e.type||'', ph:e.getAttribute('placeholder')||e.getAttribute('data-placeholder')||'', cls:(e.className||'').toString().slice(0,60)})),
-                buttons: Array.from(document.querySelectorAll('button,[role=button],.weui-desktop-btn,.tab,[class*=tab]')).filter(e=>e.getClientRects().length)
-                    .map(e=>(e.innerText||'').trim()).filter(t=>t && t.length<20).slice(0,40)
-            })"""
-        )
-        log.error("视频号页面结构：%s", json.dumps(info, ensure_ascii=False)[:1500])
+        for fr in page.frames:
+            try:
+                info = fr.evaluate(_DUMP_JS)
+                log.error("视频号 frame[%s]：%s", fr.url[:80], json.dumps(info, ensure_ascii=False)[:1400])
+            except Exception:  # noqa: BLE001
+                pass
     except Exception:  # noqa: BLE001
         pass
 
 
 def _first_visible(page: Page, selectors: list[str], timeout_ms: int = 15000):
+    """在所有 frame 里找第一个可见的元素（视频号助手的内容在 iframe 里）"""
     deadline = time.time() + timeout_ms / 1000
     while time.time() < deadline:
-        for sel in selectors:
-            loc = page.locator(sel).first
-            try:
-                if loc.count() and loc.is_visible():
-                    return loc, sel
-            except Exception:  # noqa: BLE001
-                pass
+        for fr in page.frames:
+            for sel in selectors:
+                try:
+                    loc = fr.locator(sel).first
+                    if loc.count() and loc.is_visible():
+                        return loc, sel
+                except Exception:  # noqa: BLE001
+                    pass
         page.wait_for_timeout(500)
     return None, ""
 
@@ -61,7 +69,8 @@ def post_note(cookie_file: Path, images: list[Path], title: str, content: str, t
         try:
             page.goto(CREATE_URL, wait_until="domcontentloaded", timeout=60000)
             page.wait_for_timeout(3000)
-            if "login" in page.url or page.locator("text=扫码登录").count():
+            login_el, _ = _first_visible(page, ["text=扫码登录", "text=微信扫码"], 1500)
+            if "login" in page.url or login_el is not None:
                 return False, "", "视频号登录失效，重新 login shipinhao"
 
             # 1. 切到「图文」
@@ -112,8 +121,8 @@ def post_note(cookie_file: Path, images: list[Path], title: str, content: str, t
                     page.keyboard.press("Enter")
             page.wait_for_timeout(1000)
             # 标题框单独存在的话也填一下
-            tbox = page.locator('input[placeholder*="标题"]').first
-            if tbox.count() and tbox.is_visible() and title:
+            tbox, _ = _first_visible(page, ['input[placeholder*="标题"]'], 1500)
+            if tbox is not None and title:
                 tbox.fill(title[:22])
 
             # 4. 发表
@@ -129,10 +138,11 @@ def post_note(cookie_file: Path, images: list[Path], title: str, content: str, t
             # 成功：跳到动态列表 / 离开 create 页
             for _ in range(40):
                 page.wait_for_timeout(500)
-                if "post/create" not in page.url or page.locator("text=发表成功").count():
+                ok_el, _ = _first_visible(page, ["text=发表成功", "text=发布成功"], 200)
+                if ok_el is not None or all("post/create" not in fr.url for fr in page.frames):
                     return True, "", ""
-                err = page.locator(".weui-desktop-toast, .weui-desktop-dialog__bd, [class*='toast']").first
-                if err.count() and err.is_visible():
+                err, _ = _first_visible(page, [".weui-desktop-toast", ".weui-desktop-dialog__bd", "[class*='toast']"], 200)
+                if err is not None:
                     t = (err.inner_text() or "").strip()
                     if t and "成功" not in t:
                         _dump(page, shot_dir, "err", log)
