@@ -1,6 +1,6 @@
 """心之音 · 内容分发发布机（跑在操作者本机 Windows 上）。
 
-    python publisher.py login <xiaohongshu|douyin|kuaishou|zhihu>   扫码登录一个平台（有界面浏览器）
+    python publisher.py login <xiaohongshu|douyin|kuaishou|zhihu|shipinhao>   扫码登录一个平台（有界面浏览器）
     python publisher.py logout <平台>                                退出（删本地登录态，换号用）
     python publisher.py check                                        检查出口 IP + 各平台登录状态并上报后台
     python publisher.py card                                         用一段示例文案渲染卡片图到 cards/ 看效果
@@ -30,8 +30,10 @@ CARDS = ROOT / "cards"
 LOGS = ROOT / "logs"
 PROFILES = ROOT / "profiles"
 SAU_PLATFORMS = {"xiaohongshu", "douyin", "kuaishou"}
-ALL_PLATFORMS = ["xiaohongshu", "douyin", "kuaishou", "zhihu"]
-NAMES = {"xiaohongshu": "小红书", "douyin": "抖音", "kuaishou": "快手", "zhihu": "知乎"}
+ALL_PLATFORMS = ["xiaohongshu", "douyin", "kuaishou", "zhihu", "shipinhao"]
+NAMES = {"xiaohongshu": "小红书", "douyin": "抖音", "kuaishou": "快手", "zhihu": "知乎", "shipinhao": "视频号"}
+# 我们的平台 key → sau 里的名字（视频号在 sau 里叫 tencent；登录 / 校验复用它，图文发布走自写 shipinhao.py）
+SAU_NAME = {"xiaohongshu": "xiaohongshu", "douyin": "douyin", "kuaishou": "kuaishou", "shipinhao": "tencent"}
 
 LOGS.mkdir(exist_ok=True)
 log = logging.getLogger("publisher")
@@ -61,7 +63,7 @@ def load_config() -> dict:
     cfg.setdefault("check_min", 360)
     # 这些平台定时检查时不开浏览器（只看本地 cookie 文件）；发布时用有界面浏览器
     cfg.setdefault("no_periodic_check", ["xiaohongshu"])
-    cfg.setdefault("headed_platforms", ["xiaohongshu"])
+    cfg.setdefault("headed_platforms", ["xiaohongshu", "shipinhao"])
     # 卡片底部：默认不放品牌 / App 名（小红书判「非官方渠道导流」就是冲着这个来的），只放一句标语
     cfg.setdefault("brand", "")
     cfg.setdefault("slogan", "爱情与金钱无关，和内心相连")
@@ -169,13 +171,13 @@ def check_all(cfg: dict, periodic: bool = False) -> dict:
                 if p == "zhihu":
                     ok, msg = (PROFILES / "zhihu").exists(), "按本地登录态，未联网核对"
                 else:
-                    ok = (VENDOR / "cookies" / f"{p}_{cfg['account']}.json").exists()
+                    ok = cookie_file(p, cfg).exists()
                     msg = "按本地 cookie 文件，未联网核对（避免被判脚本浏览）" if ok else "还没登录"
             elif p == "zhihu":
                 import zhihu
                 ok, msg = zhihu.check(PROFILES / "zhihu", headless=bool(cfg["headless"]))
             else:
-                ok, msg = sau_check(p, cfg["account"])
+                ok, msg = sau_check(SAU_NAME[p], cfg["account"])
         except Exception as e:  # noqa: BLE001
             ok, msg = False, f"检查异常：{str(e)[:150]}"
         accounts[p] = {"ok": ok, "msg": msg, "checkedAt": datetime.now().astimezone().isoformat()}
@@ -199,8 +201,16 @@ def publish_job(cfg: dict, job: dict) -> tuple[bool, str, str]:
     # 小红书用有界面浏览器发（headed_platforms）：无头浏览器的指纹是它判「脚本工具」的主要依据之一；发布前再随机等一会，别每次都是领到任务立刻动手
     headed = p in cfg.get("headed_platforms", [])
     time.sleep(random.uniform(20, 120))
-    ok, out = sau_upload_note(p, cfg["account"], images, title, content, tags, headed=headed)
+    if p == "shipinhao":
+        import shipinhao
+        return shipinhao.post_note(cookie_file(p, cfg), images, title, content, tags, headed, LOGS, log)
+    ok, out = sau_upload_note(SAU_NAME[p], cfg["account"], images, title, content, tags, headed=headed)
     return ok, "", ("" if ok else out)
+
+
+def cookie_file(platform: str, cfg: dict) -> Path:
+    """sau 存 cookie 的文件（视频号在 sau 里叫 tencent）"""
+    return VENDOR / "cookies" / f"{SAU_NAME.get(platform, platform)}_{cfg['account']}.json"
 
 
 # ---------- 命令 ----------
@@ -214,8 +224,8 @@ def cmd_login(cfg: dict, platform: str):
         ok, msg = zhihu.login(PROFILES / "zhihu")
         print(msg)
     else:
-        print(f"正在打开 {NAMES[platform]} 创作者后台，请用手机 App 扫码登录…（二维码若没显示，看 vendor 目录下生成的二维码图片）")
-        code, out = sau([platform, "login", "--account", cfg["account"]], timeout=600, headed=True)
+        print(f"正在打开 {NAMES[platform]} 创作者后台，请用手机 {'微信' if platform == 'shipinhao' else NAMES[platform] + ' App'} 扫码登录…（二维码若没显示，看 vendor 目录下生成的二维码图片）")
+        code, out = sau([SAU_NAME[platform], "login", "--account", cfg["account"]], timeout=600, headed=True)
         ok = code == 0
         print(out[-800:])
     if ok:
@@ -247,7 +257,7 @@ def cmd_logout(cfg: dict, platform: str):
     if platform == "zhihu":
         shutil.rmtree(PROFILES / "zhihu", ignore_errors=True)
     else:
-        f = VENDOR / "cookies" / f"{platform}_{cfg['account']}.json"
+        f = cookie_file(platform, cfg)
         if f.exists():
             f.unlink()
     log.info("%s 已登出（本地登录态已删除），要换号请重新 login", NAMES[platform])
@@ -324,7 +334,7 @@ def main(argv: list[str]) -> int:
     cfg = load_config()
     if argv[1] in ("login", "logout"):
         if len(argv) < 3:
-            print(f"用法：python publisher.py {argv[1]} <xiaohongshu|douyin|kuaishou|zhihu>")
+            print(f"用法：python publisher.py {argv[1]} <xiaohongshu|douyin|kuaishou|zhihu|shipinhao>")
             return 2
         return cmd_login(cfg, argv[2]) if argv[1] == "login" else cmd_logout(cfg, argv[2])
     if argv[1] == "check":

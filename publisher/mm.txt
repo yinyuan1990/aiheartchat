@@ -1,0 +1,5 @@
+"no_periodic_check": ["xiaohongshu"],
+"headed_platforms": ["xiaohongshu"],
+
+
+"check_min": 30 改成 360

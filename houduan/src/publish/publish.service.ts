@@ -3,9 +3,9 @@ import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 
 /** 支持的平台（发布机按这个 key 认） */
-export const PLATFORMS = ['xiaohongshu', 'douyin', 'kuaishou', 'zhihu'] as const;
+export const PLATFORMS = ['xiaohongshu', 'douyin', 'kuaishou', 'zhihu', 'shipinhao'] as const;
 export type Platform = (typeof PLATFORMS)[number];
-export const PLATFORM_NAMES: Record<Platform, string> = { xiaohongshu: '小红书', douyin: '抖音', kuaishou: '快手', zhihu: '知乎' };
+export const PLATFORM_NAMES: Record<Platform, string> = { xiaohongshu: '小红书', douyin: '抖音', kuaishou: '快手', zhihu: '知乎', shipinhao: '视频号' };
 
 /** 排期最多往后推几天，再排不进就跳过（树洞一天十几条，四个平台全发会被限流） */
 const MAX_DAYS_AHEAD = 3;
@@ -272,6 +272,7 @@ export class PublishService implements OnModuleInit {
       douyin: `抖音图文：title 不超过 30 个字有悬念；content 80~200 字，短句分行；tags 从「${TAG_POOL}」里挑 4 个。`,
       kuaishou: `快手图文：title 不超过 30 个字直白接地气；content 80~200 字，短句分行；tags 从「${TAG_POOL}」里挑 4 个。`,
       zhihu: `知乎「想法」（纯文本短帖）：title 留空字符串；content 150~400 字，像在知乎认真聊天的语气，有观点有细节，段落之间空一行，结尾可以抛一个问题；tags 从「${TAG_POOL}」里挑 3 个。`,
+      shipinhao: `微信视频号图文动态：title 不超过 22 个字、平实不猎奇（微信用户偏成熟）；content 80~200 字，短句分行；tags 从「${TAG_POOL}」里挑 3 个。`,
     };
     const system = [
       '你是一个情感类自媒体运营，把一段匿名的个人心事改写成适合平台发布的文案（像博主自己在分享感悟）。',
@@ -288,7 +289,7 @@ export class PublishService implements OnModuleInit {
       try {
         const raw = await callModel([{ role: 'system', content: system }, { role: 'user', content: user }], 0.9);
         const j = JSON.parse(raw.replace(/^```json\s*|```$/g, '').trim());
-        const title = String(j.title ?? '').replace(/\s+/g, ' ').trim().slice(0, platform === 'xiaohongshu' ? 20 : 30);
+        const title = String(j.title ?? '').replace(/\s+/g, ' ').trim().slice(0, platform === 'xiaohongshu' ? 20 : platform === 'shipinhao' ? 22 : 30);
         const content = String(j.content ?? '').trim();
         const tags = (Array.isArray(j.tags) ? j.tags : []).map((t: unknown) => String(t).replace(/^#/, '').replace(/[#\s,，]/g, '').trim()).filter(Boolean).slice(0, 5);
         if (content.length < 20) throw new Error('正文过短');

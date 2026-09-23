@@ -19,7 +19,7 @@ PY = ROOT / ".venv" / "Scripts" / "python.exe"
 LOG = ROOT / "logs" / "publisher.log"
 CONFIG = ROOT / "config.json"
 TASK = "PeiwanPublisher"
-PLATFORMS = [("xiaohongshu", "小红书"), ("douyin", "抖音"), ("kuaishou", "快手"), ("zhihu", "知乎")]
+PLATFORMS = [("xiaohongshu", "小红书"), ("douyin", "抖音"), ("kuaishou", "快手"), ("zhihu", "知乎"), ("shipinhao", "视频号")]
 ADMIN_URL = "https://admin.yyheart.com/"
 CREATE_NO_WINDOW = 0x08000000
 
@@ -44,7 +44,7 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("心之音 · 发布机")
-        self.geometry("760x560")
+        self.geometry("800x600")
         self.minsize(680, 480)
         self.busy = False
         self._build()
