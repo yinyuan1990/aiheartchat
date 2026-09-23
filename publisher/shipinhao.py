@@ -68,33 +68,41 @@ def post_note(cookie_file: Path, images: list[Path], title: str, content: str, t
         ctx = browser.new_context(storage_state=str(cookie_file), user_agent=UA, viewport={"width": 1400, "height": 900}, locale="zh-CN")
         page = ctx.new_page()
         try:
-            page.goto(CREATE_URL, wait_until="domcontentloaded", timeout=60000)
+            # /post/create 是「发表动态」= 纯视频表单，没有图文开关；图文入口在首页：
+            # 「最近视频 | 最近图文」切到「最近图文」后，右上橙色按钮从「发表视频」变成「发表图文」
+            page.goto(HOME_URL, wait_until="domcontentloaded", timeout=60000)
             try:
                 page.wait_for_load_state("networkidle", timeout=20000)
             except Exception:  # noqa: BLE001
                 pass
-            page.wait_for_timeout(3000)
-            _dump(page, shot_dir, "create-page", log)  # 先把发表页长什么样记下来（元素定下来后可删）
+            page.wait_for_timeout(2000)
             login_el, _ = _first_visible(page, ["text=扫码登录", "text=微信扫码"], 1500)
             if "login" in page.url or login_el is not None:
                 return False, "", "视频号登录失效，重新 login shipinhao"
 
-            # 1. 切到「图文」
-            tab, sel = _first_visible(page, [
-                'text=/^图文$/', '.post-type-tab:has-text("图文")', '[class*="tab"]:has-text("图文")',
-                'button:has-text("发表图文")', 'text=发表图文', 'text=图文动态', 'text=发布图文',
-            ], 12000)
-            if tab is None:
-                # 也可能在首页有「发表图文」入口
-                page.goto(HOME_URL, wait_until="domcontentloaded", timeout=60000)
-                page.wait_for_timeout(2500)
-                tab, sel = _first_visible(page, ['button:has-text("发表图文")', 'text=发表图文', 'text=图文'], 8000)
+            # 1. 首页 → 最近图文 → 发表图文
+            tab, sel = _first_visible(page, ["text=最近图文"], 20000)
             if tab is None:
                 _dump(page, shot_dir, "notab", log)
-                return False, "", "没找到「图文」入口（看 logs 截图与日志里的按钮列表）"
+                return False, "", "首页没找到「最近图文」标签（看 logs 截图与日志）"
             tab.click()
-            log.info("视频号：切到图文（%s）", sel)
+            page.wait_for_timeout(1500)
+            btn, sel = _first_visible(page, ['button:has-text("发表图文")', 'text=发表图文', 'a:has-text("发表图文")'], 15000)
+            if btn is None:
+                _dump(page, shot_dir, "nonotebtn", log)
+                return False, "", "点了「最近图文」但没出现「发表图文」按钮（看 logs 截图与日志）"
+            btn.click()
+            log.info("视频号：进入发表图文（%s）", sel)
             page.wait_for_timeout(2000)
+            if len(ctx.pages) > 1:  # 有些入口是新标签页打开
+                page = ctx.pages[-1]
+            try:
+                page.wait_for_load_state("networkidle", timeout=20000)
+            except Exception:  # noqa: BLE001
+                pass
+            page.wait_for_timeout(2500)
+            log.info("视频号：图文发表页 URL = %s", page.url)
+            _dump(page, shot_dir, "note-page", log)  # 记一次图文页结构，元素定下来后可删
 
             # 2. 传图
             file_input = None
