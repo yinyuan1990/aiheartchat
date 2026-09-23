@@ -20,6 +20,7 @@ UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like 
 
 _DUMP_JS = """() => ({
     url: location.href,
+    text: (document.body ? document.body.innerText : '').replace(/\\s+/g,' ').slice(0, 400),
     inputs: Array.from(document.querySelectorAll('input,textarea,[contenteditable="true"]')).filter(e=>e.getClientRects().length)
         .map(e=>({tag:e.tagName, type:e.type||'', ph:e.getAttribute('placeholder')||e.getAttribute('data-placeholder')||'', cls:(e.className||'').toString().slice(0,60)})),
     clickables: Array.from(document.querySelectorAll('button,a,[role=button],[class*=btn],[class*=tab],[class*=menu] li,[class*=nav] li'))
@@ -68,7 +69,12 @@ def post_note(cookie_file: Path, images: list[Path], title: str, content: str, t
         page = ctx.new_page()
         try:
             page.goto(CREATE_URL, wait_until="domcontentloaded", timeout=60000)
+            try:
+                page.wait_for_load_state("networkidle", timeout=20000)
+            except Exception:  # noqa: BLE001
+                pass
             page.wait_for_timeout(3000)
+            _dump(page, shot_dir, "create-page", log)  # 先把发表页长什么样记下来（元素定下来后可删）
             login_el, _ = _first_visible(page, ["text=扫码登录", "text=微信扫码"], 1500)
             if "login" in page.url or login_el is not None:
                 return False, "", "视频号登录失效，重新 login shipinhao"
