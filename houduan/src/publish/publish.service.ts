@@ -34,6 +34,8 @@ interface Settings {
   token: string;
   /** 只处理这个 id 之后的树洞帖（开启时定在当前最新，旧帖不发） */
   lastPostId: string;
+  /** raw = 原文直发（不改写、不过滤，只按平台截长度）；ai = DeepSeek 按平台改写 + 敏感词过滤 */
+  mode: 'raw' | 'ai';
 }
 
 interface AgentState {
@@ -88,6 +90,7 @@ export class PublishService implements OnModuleInit {
       gapMin: Math.min(600, Math.max(0, Number(get('gap_min')) || 45)),
       token,
       lastPostId: get('last_post_id') || '0',
+      mode: get('mode') === 'ai' ? 'ai' : 'raw',
     };
   }
 
@@ -95,7 +98,7 @@ export class PublishService implements OnModuleInit {
     await this.prisma.sysSetting.upsert({ where: { key: `publish_${key}` }, create: { key: `publish_${key}`, value }, update: { value } });
   }
 
-  async saveSettings(data: { enabled?: boolean; platforms?: string[]; dailyMax?: number; hourStart?: number; hourEnd?: number; gapMin?: number }) {
+  async saveSettings(data: { enabled?: boolean; platforms?: string[]; dailyMax?: number; hourStart?: number; hourEnd?: number; gapMin?: number; mode?: string }) {
     const cur = await this.settings();
     if (data.enabled !== undefined) {
       // 从关到开：水位定在当前最新一条，之前同步进来的旧帖不发
@@ -113,6 +116,7 @@ export class PublishService implements OnModuleInit {
       await this.set('hours', `${s}-${e}`);
     }
     if (data.gapMin !== undefined) await this.set('gap_min', String(Math.min(600, Math.max(0, Number(data.gapMin) || 0))));
+    if (data.mode !== undefined) await this.set('mode', data.mode === 'ai' ? 'ai' : 'raw');
     return this.overview();
   }
 
@@ -193,7 +197,7 @@ export class PublishService implements OnModuleInit {
       await this.releaseStale();
       const s = await this.settings();
       if (!s.enabled || !s.platforms.length) return;
-      if (!process.env.AI_API_KEY) { this.logger.warn('AI_API_KEY 未配置，内容分发跳过'); return; }
+      if (s.mode === 'ai' && !process.env.AI_API_KEY) { this.logger.warn('AI_API_KEY 未配置，内容分发跳过'); return; }
       // 只发 Telegram 同步进来的（source=2）、正常状态、水位之后的帖子；一次最多 5 条，剩下的下一分钟
       const posts = await this.prisma.treeholePost.findMany({
         where: { id: { gt: BigInt(s.lastPostId) }, source: 2, status: 0 },
@@ -262,9 +266,28 @@ export class PublishService implements OnModuleInit {
     return null;
   }
 
-  // ---------- AI 改写 ----------
+  // ---------- 出稿：原文 / AI 改写 ----------
+
+  /** 各平台标题上限（原文模式取第一句当标题）与正文上限 */
+  private static readonly TITLE_MAX: Record<Platform, number> = { xiaohongshu: 20, douyin: 30, kuaishou: 30, zhihu: 0, shipinhao: 22 };
+  private static readonly CONTENT_MAX: Record<Platform, number> = { xiaohongshu: 1000, douyin: 1000, kuaishou: 1000, zhihu: 2000, shipinhao: 1000 };
 
   private async draft(text: string, platform: Platform): Promise<Draft> {
+    const s = await this.settings();
+    return s.mode === 'ai' ? this.draftAi(text, platform) : this.draftRaw(text, platform);
+  }
+
+  /** 原文直发：一个字不改、不过滤（操作者要求）；只做平台硬性限制——标题取第一句截到上限，正文截到上限，tags 固定三个 */
+  private draftRaw(text: string, platform: Platform): Draft {
+    const tmax = PublishService.TITLE_MAX[platform];
+    const cmax = PublishService.CONTENT_MAX[platform];
+    const firstLine = text.split(/\n/).map((l) => l.trim()).find((l) => l.length > 0) ?? '';
+    const firstSentence = firstLine.split(/[。！？!?；;]/)[0] || firstLine;
+    const title = tmax > 0 ? firstSentence.replace(/[，,、：:\s]+$/, '').slice(0, tmax) : '';
+    return { title, content: text.slice(0, cmax), tags: ['情感', '心事', '故事'] };
+  }
+
+  private async draftAi(text: string, platform: Platform): Promise<Draft> {
     // tags 只从这个池子里挑：小红书对「交友 / 相亲 / 脱单 / 树洞」这类词直接判「高风险交友」
     const TAG_POOL = '情感、心事、成长、生活感悟、随笔、故事、治愈、文字、日常、人生、亲密关系、自我成长、情绪';
     const spec: Record<Platform, string> = {

@@ -2,7 +2,7 @@
 import { onMounted, onUnmounted, ref } from 'vue';
 import { api } from '../api';
 
-interface Settings { enabled: boolean; platforms: string[]; dailyMax: number; hourStart: number; hourEnd: number; gapMin: number; token: string; lastPostId: string }
+interface Settings { enabled: boolean; platforms: string[]; dailyMax: number; hourStart: number; hourEnd: number; gapMin: number; token: string; lastPostId: string; mode: 'raw' | 'ai' }
 interface Agent { online: boolean; lastSeen: string; host: string; accounts: Record<string, { ok: boolean; msg: string; checkedAt: string }>; ip: { ok: boolean; ip: string; where: string; msg: string } | null }
 interface Overview { settings: Settings; agent: Agent; counts: Record<string, number>; platforms: { key: string; name: string }[] }
 interface Job {
@@ -11,7 +11,7 @@ interface Job {
 }
 
 const ov = ref<Overview | null>(null);
-const form = ref<{ enabled: boolean; platforms: string[]; dailyMax: number; hourStart: number; hourEnd: number; gapMin: number }>({ enabled: false, platforms: [], dailyMax: 5, hourStart: 9, hourEnd: 23, gapMin: 45 });
+const form = ref<{ enabled: boolean; platforms: string[]; dailyMax: number; hourStart: number; hourEnd: number; gapMin: number; mode: 'raw' | 'ai' }>({ enabled: false, platforms: [], dailyMax: 5, hourStart: 9, hourEnd: 23, gapMin: 45, mode: 'raw' });
 const jobs = ref<Job[]>([]);
 const filterStatus = ref('');
 const filterPlatform = ref('');
@@ -35,7 +35,7 @@ async function loadOverview() {
   try {
     ov.value = await api<Overview>('/admin/publish/overview');
     const s = ov.value.settings;
-    form.value = { enabled: s.enabled, platforms: [...s.platforms], dailyMax: s.dailyMax, hourStart: s.hourStart, hourEnd: s.hourEnd, gapMin: s.gapMin };
+    form.value = { enabled: s.enabled, platforms: [...s.platforms], dailyMax: s.dailyMax, hourStart: s.hourStart, hourEnd: s.hourEnd, gapMin: s.gapMin, mode: s.mode ?? 'raw' };
     if (!testPlatforms.value.length) testPlatforms.value = [...s.platforms];
   } catch (e: any) { show(e.message); }
 }
@@ -105,6 +105,12 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
         <label class="muted">时段 <input v-model.number="form.hourStart" type="number" min="0" max="23" style="width: 50px" /> ~ <input v-model.number="form.hourEnd" type="number" min="1" max="24" style="width: 50px" /> 点</label>
         <label class="muted">同平台间隔 ≥ <input v-model.number="form.gapMin" type="number" min="0" max="600" style="width: 56px" /> 分钟</label>
         <button class="small" @click="save">保存</button>
+      </div>
+      <div class="row" style="flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line)">
+        <span class="muted">文案：</span>
+        <label class="muted" style="display: flex; align-items: center; gap: 6px"><input v-model="form.mode" type="radio" value="raw" style="width: auto" /> <b>原文直发</b>（一个字不改、不过滤；标题取第一句、按平台截长度）</label>
+        <label class="muted" style="display: flex; align-items: center; gap: 6px"><input v-model="form.mode" type="radio" value="ai" style="width: auto" /> <b>AI 改写</b>（按平台出标题 / 正文 / 话题，敏感词软化、去引流词）</label>
+        <span class="muted" style="font-size: 12px">改了点上面「保存」，只影响之后新入队的任务</span>
       </div>
     </div>
 
