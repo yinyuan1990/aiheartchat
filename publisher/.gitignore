@@ -10,3 +10,6 @@ build/
 *.spec
 browsers/
 *.zip
+videos/
+footage/
+bgm/
