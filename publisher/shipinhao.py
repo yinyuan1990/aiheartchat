@@ -18,14 +18,21 @@ HOME_URL = "https://channels.weixin.qq.com/platform"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 
-_DUMP_JS = """() => ({
+_DUMP_JS = """() => {
+  // 连 shadow DOM 一起翻（视频号助手部分组件把内容放在 shadow root 里，普通 querySelectorAll 看不到）
+  const all = [];
+  const walk = (root) => { for (const e of root.querySelectorAll('*')) { all.push(e); if (e.shadowRoot) walk(e.shadowRoot); } };
+  walk(document);
+  const vis = (e) => e.getClientRects().length;
+  return {
     url: location.href,
-    text: (document.body ? document.body.innerText : '').replace(/\\s+/g,' ').slice(0, 400),
-    inputs: Array.from(document.querySelectorAll('input,textarea,[contenteditable="true"]')).filter(e=>e.getClientRects().length)
-        .map(e=>({tag:e.tagName, type:e.type||'', ph:e.getAttribute('placeholder')||e.getAttribute('data-placeholder')||'', cls:(e.className||'').toString().slice(0,60)})),
-    clickables: Array.from(document.querySelectorAll('button,a,[role=button],[class*=btn],[class*=tab],[class*=menu] li,[class*=nav] li'))
-        .filter(e=>e.getClientRects().length).map(e=>(e.innerText||'').trim().replace(/\\s+/g,' ')).filter(t=>t && t.length<24).slice(0,60)
-})"""
+    text: (document.body ? document.body.innerText : '').replace(/\\s+/g,' ').slice(0, 300),
+    inputs: all.filter(e => /^(INPUT|TEXTAREA)$/.test(e.tagName) || e.hasAttribute('contenteditable')).filter(vis)
+        .map(e=>({tag:e.tagName, type:e.type||'', ce:e.getAttribute('contenteditable'), ph:e.getAttribute('placeholder')||e.getAttribute('data-placeholder')||'', cls:(e.className||'').toString().slice(0,60)})),
+    clickables: all.filter(e => /^(BUTTON|A)$/.test(e.tagName) || e.getAttribute('role')==='button' || /btn|tab/.test((e.className||'').toString())).filter(vis)
+        .map(e=>(e.innerText||'').trim().replace(/\\s+/g,' ')).filter(t=>t && t.length<24).slice(0,60)
+  };
+}"""
 
 
 def _dump(page: Page, shot_dir: Path, tag: str, log) -> None:
@@ -120,24 +127,33 @@ def post_note(cookie_file: Path, images: list[Path], title: str, content: str, t
 
             # 3. 描述：标题 + 正文 + 话题
             text = "\n".join(x for x in [title.strip(), content.strip(), " ".join(f"#{t}" for t in tags)] if x)
+            # 图文页（图文管理 / 发表动态）：「图文标题」input（填写标题，22 个字符内）+「图文描述」富文本（占位「添加描述，1000个字符内」）。
+            # 描述框的 contenteditable 值不一定是 "true"，直接点占位文字聚焦最稳
             box, sel = _first_visible(page, [
-                '[contenteditable="true"]', 'textarea[placeholder*="描述"]', 'textarea[placeholder*="说点"]', 'textarea[placeholder*="添加"]', 'textarea',
+                'text=添加描述', '[contenteditable]:not([contenteditable="false"])', '.input-editor', '[data-placeholder*="描述"]',
+                'textarea[placeholder*="描述"]', 'textarea',
             ], 15000)
             if box is None:
                 _dump(page, shot_dir, "nobox", log)
                 return False, "", "没找到描述输入框"
+            log.info("视频号：描述框（%s）", sel)
             box.click()
+            page.wait_for_timeout(400)
             page.keyboard.press("Control+A")
             page.keyboard.press("Delete")
-            for i, line in enumerate(text.split("\n")):
+            body_text = "\n".join(x for x in [content.strip(), " ".join(f"#{t}" for t in tags)] if x) if title else text
+            for i, line in enumerate(body_text.split("\n")):
                 page.keyboard.type(line, delay=8)
-                if i < text.count("\n"):
+                if i < body_text.count("\n"):
                     page.keyboard.press("Enter")
-            page.wait_for_timeout(1000)
-            # 标题框单独存在的话也填一下
-            tbox, _ = _first_visible(page, ['input[placeholder*="标题"]'], 1500)
+            page.keyboard.press("Escape")  # 收起 #话题 联想
+            page.wait_for_timeout(800)
+            # 图文标题
+            tbox, _ = _first_visible(page, ['input[placeholder*="标题"]'], 3000)
             if tbox is not None and title:
+                tbox.click()
                 tbox.fill(title[:22])
+                log.info("视频号：标题已填")
 
             # 4. 发表
             btn, sel = _first_visible(page, ['button:has-text("发表"):not(:has-text("草稿"))', '.form-btns button:has-text("发表")', 'button.weui-desktop-btn_primary:has-text("发表")'], 10000)
