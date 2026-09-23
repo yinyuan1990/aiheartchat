@@ -6,6 +6,7 @@
   "headless": true,
   "poll_sec": 60,
   "check_min": 30,
+  "card_style": "notes",
   "brand": "",
   "slogan": "爱情与金钱无关，和内心相连"
 }

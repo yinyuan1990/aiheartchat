@@ -182,7 +182,7 @@ def publish_job(cfg: dict, job: dict) -> tuple[bool, str, str]:
         ok, url, err = zhihu.post_pin(PROFILES / "zhihu", content, bool(cfg["headless"]), LOGS, title=title)
         return ok, url, err
     import card
-    images = card.render_cards(CARDS, f"job{job['id']}", title, content, cfg["brand"], cfg["slogan"], headless=True)
+    images = card.render_cards(CARDS, f"job{job['id']}", title, content, cfg["brand"], cfg["slogan"], headless=True, style=cfg.get("card_style", "notes"))
     ok, out = sau_upload_note(p, cfg["account"], images, title, content, tags)
     return ok, "", ("" if ok else out)
 
