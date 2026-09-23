@@ -1,4 +1,4 @@
-{
+﻿{
   "api": "https://api.yyheart.com/api",
   "token": "从后台「内容分发」页复制发布机 token 填这里",
   "platforms": ["xiaohongshu", "douyin", "kuaishou", "zhihu"],
@@ -6,7 +6,7 @@
   "headless": true,
   "poll_sec": 60,
   "check_min": 30,
-  "card_style": "notes",
+  "card_style": "random",
   "brand": "",
   "slogan": "爱情与金钱无关，和内心相连"
 }

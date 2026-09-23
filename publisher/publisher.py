@@ -1,4 +1,4 @@
-"""心之音 · 内容分发发布机（跑在操作者本机 Windows 上）。
+﻿"""心之音 · 内容分发发布机（跑在操作者本机 Windows 上）。
 
     python publisher.py login <xiaohongshu|douyin|kuaishou|zhihu>   扫码登录一个平台（有界面浏览器）
     python publisher.py logout <平台>                                退出（删本地登录态，换号用）
@@ -182,7 +182,7 @@ def publish_job(cfg: dict, job: dict) -> tuple[bool, str, str]:
         ok, url, err = zhihu.post_pin(PROFILES / "zhihu", content, bool(cfg["headless"]), LOGS, title=title)
         return ok, url, err
     import card
-    images = card.render_cards(CARDS, f"job{job['id']}", title, content, cfg["brand"], cfg["slogan"], headless=True, style=cfg.get("card_style", "notes"))
+    images = card.render_cards(CARDS, f"job{job['id']}", title, content, cfg["brand"], cfg["slogan"], headless=True, style=cfg.get("card_style", "random"))
     ok, out = sau_upload_note(p, cfg["account"], images, title, content, tags)
     return ok, "", ("" if ok else out)
 

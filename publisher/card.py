@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import html
+import random
 import re
 from datetime import datetime
 from pathlib import Path
@@ -21,76 +22,99 @@ LIMIT = H - 200
 # 一段最多多少字（再长按句子拆，避免一段就撑满一张）
 MAX_PARA = 160
 
-FONT_STACK = '-apple-system,"SF Pro Display","SF Pro Text","PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif'
+SANS = '"PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif'
+SERIF = '"Songti SC","SimSun","Noto Serif SC",serif'
+CN_NUM = "〇一二三四五六七八九"
 
-# 三套样式共用同一套结构：.card > (.meta?)(.title)(.body) + .foot；只有 CSS 和装饰不同
+# 三套样式（操作者从 card-preview.html 里挑的 1 / 3 / 4），每条任务随机用一套。
+# 结构共用：.wrap（版心，定位在 CARD_TOP）> .meta（只在第一页）+ .title + .body ；.foot 底部标语；.page 右上页码
 STYLES: dict[str, dict[str, str]] = {
-    # 原来的玫红渐变（保留对比）
-    "rose": {
-        "css": """
-body{background:linear-gradient(160deg,#ff5f8f 0%,#ff8fb0 55%,#ffd1dd 100%)}
-.blob{position:absolute;border-radius:50%;background:rgba(255,255,255,.18)}
-.card{background:#fff;border-radius:40px;padding:72px 72px 64px;box-shadow:0 30px 80px rgba(120,20,50,.25)}
-.title{color:#1b1b1f;letter-spacing:.5px;margin:0 0 34px}
-.body{color:#2b2b30;letter-spacing:.3px}
-.quote{position:absolute;left:72px;top:110px;font-size:120px;color:rgba(255,255,255,.6);font-family:Georgia,serif;line-height:1}
-.foot{color:#fff}
-.slogan{font-size:30px;font-weight:600;letter-spacing:3px;text-shadow:0 2px 10px rgba(0,0,0,.15)}
-.page{color:rgba(255,255,255,.85)}
+    # 1 信笺：米色横线纸、宋体、右上红印章、中文日期
+    "letter": {
+        "css": f"""
+body{{background:#F5EFE3;background-image:repeating-linear-gradient(180deg,transparent 0 79px,rgba(120,90,60,.13) 79px 81px);font-family:{SERIF}}}
+.wrap{{padding:0 38px}}
+.meta{{font-size:26px;color:#9A7B5A;letter-spacing:4px;margin:0 0 38px}}
+.title{{font-size:58px;color:#3A2A1E;letter-spacing:2px;margin:0 0 44px}}
+.body{{font-size:38px;color:#3F332A;line-height:80px;letter-spacing:1.5px}}
+.body p{{margin:0}}
+.seal{{position:absolute;right:110px;top:120px;width:92px;height:92px;border:4px solid #C0392B;border-radius:12px;color:#C0392B;font-size:46px;line-height:88px;text-align:center;font-weight:700;opacity:.85;transform:rotate(-8deg)}}
+.foot{{color:#B0453A}}
+.slogan{{font-size:28px;letter-spacing:5px}}
+.page{{color:#9A7B5A}}
 """,
-        "deco": '<div class="blob" style="width:420px;height:420px;right:-140px;top:-160px"></div><div class="blob" style="width:260px;height:260px;left:-90px;bottom:180px"></div><div class="quote">&ldquo;</div>',
-        "meta": "",
+        "deco": '<div class="seal">心</div>',
+        "meta": '<div class="meta">{date_cn}</div>',
+        "top": 150,
     },
-    # A：iOS 备忘录 —— 系统灰底、白卡、细分隔线、时间戳小字，克制
-    "notes": {
-        "css": """
-body{background:#F2F2F7}
-.card{background:#fff;border-radius:28px;padding:56px 64px 60px;box-shadow:0 2px 6px rgba(0,0,0,.04),0 18px 48px rgba(0,0,0,.07)}
-.meta{font-size:26px;color:#8E8E93;letter-spacing:.5px;margin:0 0 22px;font-weight:500}
-.title{color:#1C1C1E;letter-spacing:-.6px;margin:0 0 26px;padding-bottom:26px;border-bottom:1.5px solid #E5E5EA}
-.body{color:#3A3A3C;letter-spacing:.2px}
-.foot{color:#8E8E93}
-.slogan{font-size:27px;font-weight:500;letter-spacing:1.5px}
-.page{color:#AEAEB2}
+    # 3 杂志：白底、大数字日期、英文小字、粗黑线
+    "magazine": {
+        "css": f"""
+body{{background:#FFFFFF;font-family:{SANS};color:#111}}
+.wrap{{padding:0 28px}}
+.meta{{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:6px solid #111;padding-bottom:26px;margin-bottom:60px}}
+.num{{font-size:120px;font-weight:200;letter-spacing:-4px;line-height:1;font-family:"Helvetica Neue",Arial,sans-serif}}
+.en{{font-size:22px;letter-spacing:6px;color:#666;text-align:right;line-height:1.7;font-family:"Helvetica Neue",Arial,sans-serif}}
+.title{{font-size:60px;font-weight:800;letter-spacing:-1px;margin:0 0 48px}}
+.body{{font-size:36px;line-height:74px;color:#333}}
+.body p{{margin:0}}
+.foot{{left:100px;right:100px;border-top:2px solid #111;padding-top:24px;text-align:left;color:#111}}
+.slogan{{font-size:26px;letter-spacing:4px}}
+.page{{color:#666;font-family:"Helvetica Neue",Arial,sans-serif}}
 """,
         "deco": "",
-        "meta": '<div class="meta">{date}</div>',
+        "meta": '<div class="meta"><div class="num">{date_num}</div><div class="en">ANONYMOUS<br>LETTER · NO.{serial}</div></div>',
+        "top": 120,
     },
-    # B：iOS 桌面毛玻璃 —— 淡彩网格渐变背景、半透明磨砂卡片、彩色小竖条、胶囊标语
-    "glass": {
-        "css": """
-body{background:#EEF0FA;background-image:radial-gradient(60% 50% at 15% 10%,#CBD6FF 0%,transparent 60%),radial-gradient(55% 45% at 90% 20%,#FFD4E5 0%,transparent 60%),radial-gradient(60% 55% at 50% 100%,#FFF0C8 0%,transparent 65%),radial-gradient(45% 40% at 85% 85%,#D7F5E9 0%,transparent 60%)}
-.card{background:rgba(255,255,255,.70);backdrop-filter:blur(30px);border:1.5px solid rgba(255,255,255,.75);border-radius:34px;padding:60px 64px 60px;box-shadow:0 24px 70px rgba(70,80,140,.14)}
-.bar{width:12px;height:52px;border-radius:6px;background:linear-gradient(180deg,#FF6B8B,#FFA06B);margin:0 0 22px}
-.title{color:#1C1C1E;letter-spacing:-.6px;margin:0 0 28px}
-.body{color:#2C2C2E;letter-spacing:.2px}
-.foot{color:#636366}
-.slogan{display:inline-block;font-size:26px;font-weight:600;letter-spacing:1.5px;padding:14px 34px;border-radius:999px;background:rgba(255,255,255,.65);border:1px solid rgba(255,255,255,.9);box-shadow:0 8px 24px rgba(70,80,140,.10)}
-.page{color:#8E8E93}
+    # 4 奶油治愈：暖米底、奶白卡、宋体棕字标题、三点分隔
+    "cream": {
+        "css": f"""
+body{{background:#F7F1E8;font-family:{SANS}}}
+.wrap{{background:#FFFCF7;border-radius:36px;padding:76px 72px 70px;box-shadow:0 26px 70px rgba(120,90,60,.16)}}
+.title{{font-family:{SERIF};font-size:60px;color:#5B4636;margin:0 0 34px}}
+.meta{{color:#D9B48F;letter-spacing:14px;font-size:30px;margin:0 0 34px}}
+.body{{font-size:38px;line-height:76px;color:#4A4038}}
+.body p{{margin:0}}
+.foot{{color:#8C6F58}}
+.slogan{{font-size:28px;letter-spacing:4px}}
+.page{{color:#B59F8C}}
 """,
         "deco": "",
-        "meta": '<div class="bar"></div>',
+        "meta": '<div class="meta">· · ·</div>',
+        "meta_after_title": "1",
+        "top": 120,
     },
 }
 
 TEMPLATE = """<!doctype html><html><head><meta charset="utf-8"><style>
 html,body{{margin:0;padding:0}}
-body{{width:{w}px;height:{h}px;font-family:{font};position:relative;overflow:hidden}}
-.card{{position:absolute;left:72px;top:{top}px;width:{cw}px;box-sizing:border-box}}
-.title{{font-size:{ts}px;font-weight:700;line-height:1.35}}
-.body{{font-size:{fs}px;line-height:1.78;word-break:break-all}}
-.body p{{margin:0 0 {pm}px}}
-.body p:last-child{{margin-bottom:0}}
-.foot{{position:absolute;left:0;right:0;bottom:64px;text-align:center}}
+body{{width:{w}px;height:{h}px;position:relative;overflow:hidden}}
+.wrap{{position:absolute;left:72px;top:{top}px;width:{cw}px;box-sizing:border-box}}
+.title{{font-weight:700;line-height:1.35}}
+.body{{word-break:break-all}}
+.foot{{position:absolute;left:0;right:0;bottom:76px;text-align:center}}
 .slogan:empty{{display:none}}
 .page{{position:absolute;right:80px;top:56px;font-size:26px;letter-spacing:2px}}
 {style_css}
 </style></head><body>
 {deco}
 {page}
-<div class="card">{meta}{title}<div class="body">{body}</div></div>
+<div class="wrap">{head}<div class="body">{body}</div></div>
 <div class="foot"><div class="slogan">{slogan}</div></div>
 </body></html>"""
+
+
+def _cn_date(now: datetime) -> str:
+    m = now.month
+    d = now.day
+    ms = "十" if m == 10 else ("十一" if m == 11 else ("十二" if m == 12 else CN_NUM[m]))
+    if d < 10:
+        ds = CN_NUM[d]
+    elif d < 20:
+        ds = "十" + (CN_NUM[d % 10] if d % 10 else "")
+    else:
+        ds = CN_NUM[d // 10] + "十" + (CN_NUM[d % 10] if d % 10 else "")
+    return f"{ms}月{ds}日"
 
 
 def _paragraphs(content: str) -> list[str]:
@@ -125,20 +149,35 @@ def _font_for(paras: list[str]) -> tuple[int, int]:
     return 36, 22
 
 
-def _doc(paras: list[str], title: str, fs: int, pm: int, slogan: str, page_tag: str, style: str, first: bool) -> str:
-    st = STYLES.get(style, STYLES["notes"])
+def _doc(paras: list[str], title: str, fs: int, pm: int, slogan: str, page_tag: str, style: str, first: bool, serial: str = "") -> str:
+    st = STYLES[style]
     body = "".join(f"<p>{html.escape(p)}</p>" for p in paras)
     now = datetime.now()
-    meta = st["meta"].format(date=f"{now.month}月{now.day}日 {now:%H:%M}") if first else ""
+    meta = st["meta"].format(date_cn=_cn_date(now), date_num=f"{now.month:02d}.{now.day:02d}", serial=serial or f"{now.timetuple().tm_yday:03d}") if first else ""
+    title_html = f'<div class="title">{html.escape(title)}</div>' if title else ""
+    head = (title_html + meta) if st.get("meta_after_title") else (meta + title_html)
+    # 字号缩放：fs 是基准 36，各样式按比例缩
+    scale = fs / 36
+    css = st["css"] + f"\n.body{{font-size:{int(38 * scale)}px;line-height:{int(78 * scale)}px}}\n.body p{{margin:0 0 {pm - 22}px}}" if fs != 36 else st["css"]
     return TEMPLATE.format(
-        w=W, h=H, top=CARD_TOP, cw=W - 144, ts=52 if fs >= 40 else 48, fs=fs, pm=pm, font=FONT_STACK,
-        title=f'<div class="title">{html.escape(title)}</div>' if title else "",
-        body=body, slogan=html.escape(slogan), page=page_tag, style_css=st["css"], deco=st["deco"], meta=meta,
+        w=W, h=H, top=st.get("top", CARD_TOP), cw=W - 144,
+        head=head, body=body, slogan=html.escape(slogan), page=page_tag, style_css=css, deco=st["deco"],
     )
 
 
-def render_cards(out_dir: Path, name: str, title: str, content: str, brand: str, slogan: str, headless: bool = True, style: str = "notes") -> list[Path]:
-    """brand 参数保留兼容（现在不印品牌）；style = rose | notes | glass"""
+def pick_style(name: str = "") -> str:
+    """每条任务随机一套；同一任务的几张图用同一套（按 name 定种子）"""
+    keys = sorted(STYLES)
+    if name:
+        return keys[sum(ord(c) for c in name) % len(keys)]
+    return random.choice(keys)
+
+
+def render_cards(out_dir: Path, name: str, title: str, content: str, brand: str, slogan: str, headless: bool = True, style: str = "random") -> list[Path]:
+    """brand 参数保留兼容（不印品牌）；style = letter | magazine | cream | random（默认随机，同一任务各页一致）"""
+    if style not in STYLES:
+        style = pick_style(name)
+    serial = "".join(ch for ch in name if ch.isdigit())[-3:].rjust(3, "0") if any(ch.isdigit() for ch in name) else ""
     out_dir.mkdir(parents=True, exist_ok=True)
     remaining = _paragraphs(content)
     paths: list[Path] = []
@@ -150,7 +189,7 @@ def render_cards(out_dir: Path, name: str, title: str, content: str, brand: str,
         pages: list[list[str]] = []
         while remaining and len(pages) < MAX_CARDS:
             first = not pages
-            page.set_content(_doc(remaining, title if first else "", 36, 22, slogan, "", style, first), wait_until="load")
+            page.set_content(_doc(remaining, title if first else "", 36, 22, slogan, "", style, first, serial), wait_until="load")
             bottoms: list[float] = page.evaluate(
                 "Array.from(document.querySelectorAll('.body p')).map(e => e.getBoundingClientRect().bottom)"
             )
@@ -169,8 +208,8 @@ def render_cards(out_dir: Path, name: str, title: str, content: str, brand: str,
             show_title = title if i == 0 else ""
             page_tag = f'<div class="page">{i + 1} / {len(pages)}</div>' if len(pages) > 1 else ""
             for _ in range(6):
-                page.set_content(_doc(paras, show_title, fs, pm, slogan, page_tag, style, i == 0), wait_until="load")
-                bottom = page.evaluate("document.querySelector('.card').getBoundingClientRect().bottom")
+                page.set_content(_doc(paras, show_title, fs, pm, slogan, page_tag, style, i == 0, serial), wait_until="load")
+                bottom = page.evaluate("document.querySelector('.wrap').getBoundingClientRect().bottom")
                 if bottom <= LIMIT or fs <= 24:
                     break
                 fs -= 3
