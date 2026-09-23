@@ -254,7 +254,9 @@ export class PublishService implements OnModuleInit {
       const winEnd = dayStart + s.hourEnd * 3_600_000;
       const count = await this.prisma.publishJob.count({ where: { platform, status: { in: [0, 1, 2] }, scheduledAt: { gte: new Date(dayStart), lt: new Date(dayStart + 86_400_000) } } });
       if (count >= s.dailyMax) continue;
-      const t = Math.max(now, winStart, minByGap);
+      // 随机抖 3~25 分钟：别每条都卡在整点 / 固定间隔上（小红书按"操作习惯不像真人"给过警告）
+      const jitter = (3 + Math.random() * 22) * 60_000;
+      const t = Math.max(now, winStart, minByGap) + jitter;
       if (t < winEnd) return new Date(t);
     }
     return null;

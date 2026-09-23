@@ -1,4 +1,4 @@
-﻿"""心之音 · 内容分发发布机（跑在操作者本机 Windows 上）。
+"""心之音 · 内容分发发布机（跑在操作者本机 Windows 上）。
 
     python publisher.py login <xiaohongshu|douyin|kuaishou|zhihu>   扫码登录一个平台（有界面浏览器）
     python publisher.py logout <平台>                                退出（删本地登录态，换号用）
@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import platform as _platform
+import random
 import socket
 import subprocess
 import sys
@@ -56,7 +57,11 @@ def load_config() -> dict:
     cfg.setdefault("account", "main")
     cfg.setdefault("headless", True)
     cfg.setdefault("poll_sec", 60)
-    cfg.setdefault("check_min", 30)
+    # 定时联网核对登录态的间隔：6 小时。之前 30 分钟一次，小红书把这种规律访问判成脚本浏览（账号异常提醒）
+    cfg.setdefault("check_min", 360)
+    # 这些平台定时检查时不开浏览器（只看本地 cookie 文件）；发布时用有界面浏览器
+    cfg.setdefault("no_periodic_check", ["xiaohongshu"])
+    cfg.setdefault("headed_platforms", ["xiaohongshu"])
     # 卡片底部：默认不放品牌 / App 名（小红书判「非官方渠道导流」就是冲着这个来的），只放一句标语
     cfg.setdefault("brand", "")
     cfg.setdefault("slogan", "爱情与金钱无关，和内心相连")
@@ -142,23 +147,31 @@ def sau_check(platform: str, account: str) -> tuple[bool, str]:
     return ok, ("cookie 有效" if ok else (out[-200:] or "cookie 无效或还没登录"))
 
 
-def sau_upload_note(platform: str, account: str, images: list[Path], title: str, note: str, tags: list[str]) -> tuple[bool, str]:
+def sau_upload_note(platform: str, account: str, images: list[Path], title: str, note: str, tags: list[str], headed: bool = False) -> tuple[bool, str]:
     args = [platform, "upload-note", "--account", account, "--images", *[str(i) for i in images], "--title", title or note[:20], "--note", note]
     if tags:
         args += ["--tags", ",".join(tags)]
-    code, out = sau(args, timeout=900)
+    code, out = sau(args, timeout=900, headed=headed)
     return code == 0, out[-500:]
 
 
 # ---------- 状态检查 / 心跳 ----------
 
-def check_all(cfg: dict) -> dict:
+def check_all(cfg: dict, periodic: bool = False) -> dict:
+    """periodic=True 是后台定时检查：no_periodic_check 里的平台（默认小红书）不真去开浏览器——
+    小红书把无头浏览器每半小时访问一次创作者后台判成「不常见的浏览行为 / 脚本自动浏览」，只看本地 cookie 文件在不在，真实状态由发布结果反映"""
     accounts: dict = {}
     for p in cfg["platforms"]:
         if p not in ALL_PLATFORMS:
             continue
         try:
-            if p == "zhihu":
+            if periodic and p in cfg.get("no_periodic_check", []):
+                if p == "zhihu":
+                    ok, msg = (PROFILES / "zhihu").exists(), "按本地登录态，未联网核对"
+                else:
+                    ok = (VENDOR / "cookies" / f"{p}_{cfg['account']}.json").exists()
+                    msg = "按本地 cookie 文件，未联网核对（避免被判脚本浏览）" if ok else "还没登录"
+            elif p == "zhihu":
                 import zhihu
                 ok, msg = zhihu.check(PROFILES / "zhihu", headless=bool(cfg["headless"]))
             else:
@@ -183,7 +196,10 @@ def publish_job(cfg: dict, job: dict) -> tuple[bool, str, str]:
         return ok, url, err
     import card
     images = card.render_cards(CARDS, f"job{job['id']}", title, content, cfg["brand"], cfg["slogan"], headless=True, style=cfg.get("card_style", "random"))
-    ok, out = sau_upload_note(p, cfg["account"], images, title, content, tags)
+    # 小红书用有界面浏览器发（headed_platforms）：无头浏览器的指纹是它判「脚本工具」的主要依据之一；发布前再随机等一会，别每次都是领到任务立刻动手
+    headed = p in cfg.get("headed_platforms", [])
+    time.sleep(random.uniform(20, 120))
+    ok, out = sau_upload_note(p, cfg["account"], images, title, content, tags, headed=headed)
     return ok, "", ("" if ok else out)
 
 
@@ -255,19 +271,19 @@ def cmd_card(cfg: dict):
 def cmd_run(cfg: dict):
     api = Api(cfg)
     log.info("发布机启动：%s，平台 %s，轮询 %ss", _platform.node(), ",".join(cfg["platforms"]), cfg["poll_sec"])
-    accounts = check_all(cfg)
+    accounts = check_all(cfg, periodic=True)
     last_check = time.time()
     last_recheck = time.time()
     while True:
         try:
             if time.time() - last_check > cfg["check_min"] * 60:
-                accounts = check_all(cfg)
+                accounts = check_all(cfg, periodic=True)
                 last_check = last_recheck = time.time()
-            elif time.time() - last_recheck > 3 * 60:
-                # 没登录的平台每 3 分钟再看一眼：你刚在另一个窗口 login 完，这里很快就能接上
+            elif time.time() - last_recheck > 5 * 60:
+                # 没登录的平台每 5 分钟看一眼本地登录态文件（login 完很快能接上；不联网、不开浏览器）
                 bad = [p for p, a in accounts.items() if not a.get("ok")]
                 if bad:
-                    accounts.update(check_all({**cfg, "platforms": bad}))
+                    accounts.update(check_all({**cfg, "platforms": bad, "no_periodic_check": bad}, periodic=True))
                 last_recheck = time.time()
             ip = check_ip()
             api.heartbeat(accounts, ip)
