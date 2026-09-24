@@ -29,7 +29,9 @@ def _overlay_ass(total: float, slogan: str, ai_tag: str, outro: list[str] | None
         events.append(f"Dialogue: 5,{a},{b},Box,,0,0,0,,{{\\fad(400,0)\\an7\\pos(0,0)\\p1}}m 0 0 l {W} 0 {W} {H} 0 {H}{{\\p0}}")
         for i, line in enumerate(outro):
             y = 820 if i == 0 else 960 + (i - 1) * 100
-            events.append(f"Dialogue: 6,{a},{b},{'Card' if i == 0 else 'CardS'},,0,0,0,,{{\\fad(400,0)\\an5\\pos({W // 2},{y})}}{line}")
+            # 英文比中文宽，第一行缩到 72 号才放得下一行
+            fs = "\\fs72" if i == 0 and is_latin(line) else ""
+            events.append(f"Dialogue: 6,{a},{b},{'Card' if i == 0 else 'CardS'},,0,0,0,,{{\\fad(400,0)\\an5\\pos({W // 2},{y}){fs}}}{line}")
     return (
         f"[Script Info]\nScriptType: v4.00+\nPlayResX: {W}\nPlayResY: {H}\n\n[V4+ Styles]\n"
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"

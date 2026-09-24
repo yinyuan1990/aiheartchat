@@ -14,6 +14,7 @@ import json
 import logging
 import platform as _platform
 import random
+import re
 import socket
 import subprocess
 import sys
@@ -82,6 +83,10 @@ def load_config() -> dict:
     cfg.setdefault("x_promo", "第一个陪玩美女代币（USDC 链）👉 https://ccfspt.com/token/0x870B91f9aF1f73F80E42826eb5f7400c9e97D37c")
     cfg.setdefault("x_reply", cfg["x_promo"])
     cfg.setdefault("x_outro", ["第一个陪玩美女代币", "USDC 链上发行", "ccfspt.com", "链接见帖子和评论区"])
+    # YouTube 同样三处（英文）：简介第一行 / 发完自己评论一条并尝试置顶 / 视频片尾卡
+    cfg.setdefault("yt_promo", "The first e-girl companion token (USDC chain) 👉 https://ccfspt.com/token/0x870B91f9aF1f73F80E42826eb5f7400c9e97D37c")
+    cfg.setdefault("yt_reply", cfg["yt_promo"])
+    cfg.setdefault("yt_outro", ["E-Girl Companion Token", "The first one, on the USDC chain", "ccfspt.com", "Link in description & comments"])
     if not cfg.get("token") or "填这里" in cfg["token"]:
         print("config.json 里的 token 还没填")
         sys.exit(2)
@@ -283,7 +288,7 @@ def publish_video(cfg: dict, job: dict) -> tuple[bool, str, str]:
         narration = "\n".join(paragraphs)
         # 原文模式的标题就是第一句，别念两遍（屏幕上照样显示标题）
         speak_title = bool(title) and not narration.replace(" ", "").startswith(title.replace(" ", "")[:8])
-        slides.render(title, narration, images, out, slogan, voice=voice, speak_title=speak_title, ai_tag=ai_tag, outro=cfg.get("x_outro") if p == "x" else None)
+        slides.render(title, narration, images, out, slogan, voice=voice, speak_title=speak_title, ai_tag=ai_tag, outro={"x": cfg.get("x_outro"), "youtube": cfg.get("yt_outro")}.get(p))
         if p != "x" or len(paragraphs) <= 1 or media_duration(out) <= X_MAX_SEC:
             break
         paragraphs, images = paragraphs[:-1], images[:-1]
@@ -295,8 +300,30 @@ def publish_video(cfg: dict, job: dict) -> tuple[bool, str, str]:
 
         text = "\n".join(s for s in [title, cfg.get("x_promo") or "", " ".join(f"#{t}" for t in tags[:3])] if s)
         return xpost.post_video(PROFILES / "x", out, text, headless=False, shot_dir=LOGS, log=log, reply=cfg.get("x_reply") or "")
-    ok, err = sau_upload_video(SAU_NAME[p], cfg["account"], out, title, content[:4500] if english else content[:900], tags, headed=headed)
-    return ok, "", ("" if ok else err)
+    desc = content[:4500] if english else content[:900]
+    if p == "youtube" and cfg.get("yt_promo"):
+        desc = cfg["yt_promo"] + "\n\n" + desc
+    ok, sau_out = sau_upload_video(SAU_NAME[p], cfg["account"], out, title, desc, tags, headed=headed)
+    if not ok:
+        return False, "", sau_out
+    url = ""
+    if p == "youtube":
+        # sau 发布成功最后一行会带视频链接
+        m = re.search(r"https?://(?:youtu\.be/|www\.youtube\.com/(?:watch\?v=|shorts/))[\w-]+", sau_out)
+        url = m.group(0) if m else ""
+        if cfg.get("yt_reply"):
+            if url:
+                import yt_comment
+
+                time.sleep(30)
+                c_ok, c_err = yt_comment.comment(cookie_file(p, cfg), url, cfg["yt_reply"], LOGS)
+                if c_ok:
+                    log.info("YouTube 已在 %s 下评论推广链接%s", url, f"（{c_err}）" if c_err else "并置顶")
+                else:
+                    log.warning("YouTube 视频发成功了，但评论推广链接失败：%s", c_err)
+            else:
+                log.warning("YouTube 视频发成功了，但没拿到视频链接，没评论推广链接")
+    return True, url, ""
 
 
 def publish_job(cfg: dict, job: dict) -> tuple[bool, str, str]:
