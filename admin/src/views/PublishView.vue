@@ -199,7 +199,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
       <div style="font-weight: 600; margin-bottom: 6px">X 美女图（Telegram 频道 → X 纯图帖，只发 X）</div>
       <div class="muted" style="margin-bottom: 12px">
         每天 <b>{{ xpForm.fetchHour }} 点</b>用后台登录的 Telegram 账号拉来源频道<b>最近 24 小时</b>的图片，存到服务器 MinIO（<code>xpics/日期/</code>）进图片池；
-        按每天次数在上面的发布时段（{{ form.hourStart }}~{{ form.hourEnd }} 点）里平均排开，每次从池子取几张（同一相册的放一起），<b>不带任何文字</b>，由外网发布机发到 X。不占上面 X 的每日条数。X 一条最多 4 张图。
+        按每天次数在上面的发布时段（{{ form.hourStart }}~{{ form.hourEnd }} 点）里平均排开，每次从池子取几张（同一相册的放一起），<b>正文不带文字</b>，由外网发布机发到 X，发完自动回复一条 USDC 代币链接。不占上面 X 的每日条数。X 一条最多 4 张图。
       </div>
       <div class="row" style="flex-wrap: wrap; gap: 14px; align-items: center">
         <label class="muted" style="display: flex; align-items: center; gap: 6px"><input v-model="xpForm.enabled" type="checkbox" style="width: auto" /> <b :style="{ color: xpForm.enabled ? 'var(--accent)' : '' }">{{ xpForm.enabled ? '已开启' : '已关闭' }}</b></label>

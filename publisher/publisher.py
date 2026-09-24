@@ -323,8 +323,8 @@ def publish_video(cfg: dict, job: dict) -> tuple[bool, str, str]:
     return True, url, ""
 
 
-def publish_pics(job: dict) -> tuple[bool, str, str]:
-    """X 美女图：后台从 TG 频道拉好的 2~4 张图，纯图发 X，不带文字、不回复"""
+def publish_pics(cfg: dict, job: dict) -> tuple[bool, str, str]:
+    """X 美女图：后台从 TG 频道拉好的 2~4 张图，纯图发 X（正文不带文字），发完回复一条代币推广（x_reply）"""
     if job["platform"] != "x":
         return False, "", "纯图任务只支持 X"
     urls = (job.get("media") or {}).get("images") or []
@@ -343,7 +343,7 @@ def publish_pics(job: dict) -> tuple[bool, str, str]:
     time.sleep(random.uniform(20, 120))
     import x as xpost
 
-    return xpost.post_media(PROFILES / "x", files, "", headless=False, shot_dir=LOGS, log=log)
+    return xpost.post_media(PROFILES / "x", files, "", headless=False, shot_dir=LOGS, log=log, reply=cfg.get("x_reply") or "")
 
 
 def publish_job(cfg: dict, job: dict) -> tuple[bool, str, str]:
@@ -354,7 +354,7 @@ def publish_job(cfg: dict, job: dict) -> tuple[bool, str, str]:
     if job.get("format") == "video":
         return publish_video(cfg, job)
     if job.get("format") == "pics":
-        return publish_pics(job)
+        return publish_pics(cfg, job)
     if p == "zhihu":
         import zhihu
         ok, url, err = zhihu.post_pin(PROFILES / "zhihu", content, bool(cfg["headless"]), LOGS, title=title)
