@@ -67,6 +67,21 @@ def check(profile: Path, headless: bool = False) -> tuple[bool, str]:
             ctx.close()
 
 
+def _press(page: Page, btn, log=None) -> None:
+    """X 的发帖按钮常被透明浮层挡住点不动：先正常点，不行按 Ctrl+Enter（发帖快捷键），再不行 JS 直接点"""
+    try:
+        btn.click(timeout=10000)
+        return
+    except Exception as e:  # noqa: BLE001
+        if log:
+            log.info("X 发帖按钮点不动（%s），改用 Ctrl+Enter", str(e).splitlines()[-1][:120])
+    page.locator('[data-testid="tweetTextarea_0"]').first.click()
+    page.keyboard.press("Control+Enter")
+    page.wait_for_timeout(3000)
+    if btn.count() and btn.is_visible():
+        btn.evaluate("b => b.click()")
+
+
 def _latest_status_url(page: Page) -> str:
     """发帖成功但 toast 没给链接时：去自己主页找最新一条（跳过置顶）"""
     prof = page.locator('[data-testid="AppTabBar_Profile_Link"]').first
@@ -85,7 +100,7 @@ def _latest_status_url(page: Page) -> str:
     return ""
 
 
-def _reply(page: Page, url: str, text: str) -> tuple[bool, str]:
+def _reply(page: Page, url: str, text: str, log=None) -> tuple[bool, str]:
     page.goto(url, wait_until="domcontentloaded", timeout=60000)
     box = page.locator('[data-testid="tweetTextarea_0"]').first
     box.wait_for(state="visible", timeout=30000)
@@ -102,7 +117,7 @@ def _reply(page: Page, url: str, text: str) -> tuple[bool, str]:
     else:
         return False, "回复按钮一直不可点"
     page.wait_for_timeout(1000)
-    btn.click()
+    _press(page, btn, log)
     page.wait_for_timeout(5000)
     return True, ""
 
@@ -149,7 +164,7 @@ def post_video(profile: Path, video: Path, text: str, headless: bool, shot_dir: 
                 shot("notready")
                 return False, "", "视频上传 10 分钟还没好（看 logs 截图）"
             page.wait_for_timeout(1500)
-            btn.click()
+            _press(page, btn, log)
             url, sent = "", False
             for _ in range(60):
                 page.wait_for_timeout(1000)
@@ -171,7 +186,7 @@ def post_video(profile: Path, video: Path, text: str, headless: bool, shot_dir: 
                 try:
                     page.wait_for_timeout(5000)
                     url = url or _latest_status_url(page)
-                    ok, err = _reply(page, url, reply) if url else (False, "找不到刚发的帖子链接")
+                    ok, err = _reply(page, url, reply, log) if url else (False, "找不到刚发的帖子链接")
                 except Exception as e:  # noqa: BLE001
                     ok, err = False, str(e)[:200]
                 if log:

@@ -61,6 +61,21 @@ def wrap_words(text: str, max_len: int) -> list[str]:
     return lines
 
 
+def wrap_cjk(text: str, max_len: int) -> list[str]:
+    """中文按字数折行：每行不超过 max_len 字，尽量断在标点后面（标点留在行尾）"""
+    lines: list[str] = []
+    rest = text.strip()
+    while len(rest) > max_len:
+        cut = max((i + 1 for i, c in enumerate(rest[:max_len + 1]) if c in "，。！？、；：,.!?;: "), default=0)
+        if cut < max_len // 2:
+            cut = max_len
+        lines.append(rest[:cut].strip())
+        rest = rest[cut:].strip()
+    if rest:
+        lines.append(rest)
+    return lines
+
+
 def sentences(text: str, max_len: int = 16) -> list[str]:
     """按标点切成字幕句；太长的再按逗号 / 长度硬切。英文按句号 / 逗号切，再按单词折成 ≤24 字符的行"""
     if is_latin(text):
