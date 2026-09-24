@@ -78,6 +78,8 @@ def load_config() -> dict:
     cfg.setdefault("video_voice_en", "en-US-AriaNeural")
     cfg.setdefault("video_voices", {})
     cfg.setdefault("slogan_en", "Love has nothing to do with money. It's about the heart.")
+    # X 每条帖子都带的代币推广行（空字符串 = 不带）
+    cfg.setdefault("x_promo", "第一个陪玩约单美女代币（USDC 链）👉 https://ccfspt.com/token/0x870B91f9aF1f73F80E42826eb5f7400c9e97D37c")
     if not cfg.get("token") or "填这里" in cfg["token"]:
         print("config.json 里的 token 还没填")
         sys.exit(2)
@@ -289,7 +291,7 @@ def publish_video(cfg: dict, job: dict) -> tuple[bool, str, str]:
     if p == "x":
         import x as xpost
 
-        text = "\n".join(s for s in [title, " ".join(f"#{t}" for t in tags[:3])] if s)
+        text = "\n".join(s for s in [title, cfg.get("x_promo") or "", " ".join(f"#{t}" for t in tags[:3])] if s)
         return xpost.post_video(PROFILES / "x", out, text, headless=False, shot_dir=LOGS, log=log)
     ok, err = sau_upload_video(SAU_NAME[p], cfg["account"], out, title, content[:4500] if english else content[:900], tags, headed=headed)
     return ok, "", ("" if ok else err)
