@@ -749,6 +749,10 @@ model PublishJob {
   error       String    @default("") @db.VarChar(500)
   /// 发布成功后的帖子地址（发布机能拿到时回填）
   resultUrl   String    @default("") @map("result_url") @db.VarChar(300)
+  /// note = 图文（卡片图）；video = 连续剧照视频（万相组图 + 配音字幕，发布机合成）
+  format      String    @default("note") @db.VarChar(8)
+  /// video 用：JSON {paragraphs: 旁白分段, images: 每段一张图的完整 URL, scenes: 画面描述}；空 = 还没出图
+  media       String    @default("") @db.VarChar(6000)
   createdAt   DateTime  @default(now()) @map("created_at")
 
   @@unique([postId, platform])

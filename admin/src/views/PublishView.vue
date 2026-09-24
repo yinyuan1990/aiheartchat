@@ -3,16 +3,21 @@ import { onMounted, onUnmounted, ref } from 'vue';
 import { api } from '../api';
 
 type Mode = 'raw' | 'ai';
-interface Settings { enabled: boolean; platforms: string[]; dailyMax: number; hourStart: number; hourEnd: number; gapMin: number; token: string; lastPostId: string; modes: Record<string, Mode>; dailyMaxes: Record<string, number> }
+interface Settings { enabled: boolean; platforms: string[]; dailyMax: number; hourStart: number; hourEnd: number; gapMin: number; token: string; lastPostId: string; modes: Record<string, Mode>; dailyMaxes: Record<string, number>; formats: Record<string, 'note' | 'video'> }
 interface Agent { online: boolean; lastSeen: string; host: string; accounts: Record<string, { ok: boolean; msg: string; checkedAt: string }>; ip: { ok: boolean; ip: string; where: string; msg: string } | null }
 interface Overview { settings: Settings; agent: Agent; counts: Record<string, number>; platforms: { key: string; name: string }[] }
 interface Job {
   id: string; postId: string; platform: string; platformName: string; title: string; content: string; tags: string; status: number;
   scheduledAt: string; claimedAt: string | null; doneAt: string | null; attempts: number; error: string; resultUrl: string; createdAt: string; source: string;
+  format: 'note' | 'video'; media: string;
+}
+function mediaImages(j: Job): string[] {
+  if (j.format !== 'video' || !j.media) return [];
+  try { return JSON.parse(j.media).images ?? []; } catch { return []; }
 }
 
 const ov = ref<Overview | null>(null);
-const form = ref<{ enabled: boolean; platforms: string[]; hourStart: number; hourEnd: number; gapMin: number; modes: Record<string, Mode>; dailyMaxes: Record<string, number> }>({ enabled: false, platforms: [], hourStart: 9, hourEnd: 23, gapMin: 45, modes: {}, dailyMaxes: {} });
+const form = ref<{ enabled: boolean; platforms: string[]; hourStart: number; hourEnd: number; gapMin: number; modes: Record<string, Mode>; dailyMaxes: Record<string, number>; formats: Record<string, 'note' | 'video'> }>({ enabled: false, platforms: [], hourStart: 9, hourEnd: 23, gapMin: 45, modes: {}, dailyMaxes: {}, formats: {} });
 const jobs = ref<Job[]>([]);
 const filterStatus = ref('');
 const filterPlatform = ref('');
@@ -36,7 +41,7 @@ async function loadOverview(fillForm = false) {
   try {
     ov.value = await api<Overview>('/admin/publish/overview');
     const s = ov.value.settings;
-    if (fillForm) form.value = { enabled: s.enabled, platforms: [...s.platforms], hourStart: s.hourStart, hourEnd: s.hourEnd, gapMin: s.gapMin, modes: { ...(s.modes ?? {}) }, dailyMaxes: { ...(s.dailyMaxes ?? {}) } };
+    if (fillForm) form.value = { enabled: s.enabled, platforms: [...s.platforms], hourStart: s.hourStart, hourEnd: s.hourEnd, gapMin: s.gapMin, modes: { ...(s.modes ?? {}) }, dailyMaxes: { ...(s.dailyMaxes ?? {}) }, formats: { ...(s.formats ?? {}) } };
     if (!testPlatforms.value.length) testPlatforms.value = [...s.platforms];
   } catch (e: any) { show(e.message); }
 }
@@ -114,10 +119,15 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
             <option value="raw">原文直发</option>
             <option value="ai">AI 改写</option>
           </select>
+          <select v-if="p.key !== 'zhihu'" v-model="form.formats[p.key]" style="width: auto">
+            <option value="note">图文</option>
+            <option value="video">视频</option>
+          </select>
           每天 <input v-model.number="form.dailyMaxes[p.key]" type="number" min="1" max="50" style="width: 50px" /> 条
         </label>
         <div class="muted" style="font-size: 12px; width: 100%">
-          <b>原文直发</b>：一个字不改、不过滤，标题取第一句按平台截长度；<b>AI 改写</b>：按平台出标题 / 正文 / 话题，敏感词软化、去引流词。改了点上面「保存」，只影响之后新入队的任务（含测试发布）。
+          <b>原文直发</b>：一个字不改、不过滤，标题取第一句按平台截长度；<b>AI 改写</b>：按平台出标题 / 正文 / 话题，敏感词软化、去引流词。
+          <b>视频</b>：文案切成 4~7 段旁白，万相 2.7 组图每段出一张剧照（0.2 元/张，同一帖子多个视频平台共用一组图），发布机合成配音字幕视频再发；任务排到 6 小时内才出图。改了点上面「保存」，只影响之后新入队的任务（含测试发布）。
         </div>
       </div>
     </div>
@@ -174,11 +184,15 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
           <template v-for="j in jobs" :key="j.id">
             <tr>
               <td class="muted">{{ j.id }}<br /><span style="font-size: 11px">帖 #{{ j.postId }}</span></td>
-              <td>{{ j.platformName }}</td>
+              <td>{{ j.platformName }}<br /><span class="muted" style="font-size: 11px">{{ j.format === 'video' ? '视频' : '图文' }}</span></td>
               <td style="max-width: 360px; cursor: pointer" @click="expanded = expanded === j.id ? null : j.id">
                 <div style="font-weight: 600">{{ j.title || '（无标题）' }}</div>
                 <div class="muted" style="font-size: 12px; white-space: pre-wrap" :style="expanded === j.id ? {} : { overflow: 'hidden', maxHeight: '36px' }">{{ j.content }}</div>
                 <div v-if="j.tags" class="muted" style="font-size: 11px">#{{ j.tags.split(',').join(' #') }}</div>
+                <div v-if="j.format === 'video' && !j.media && j.status === 0" class="muted" style="font-size: 11px; color: var(--accent)">等待出图（排到 6 小时内自动出，一组约 1~3 分钟）</div>
+                <div v-if="mediaImages(j).length" style="display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap" @click.stop>
+                  <a v-for="(u, k) in mediaImages(j)" :key="k" :href="u" target="_blank"><img :src="u" style="width: 42px; height: 75px; object-fit: cover; border-radius: 4px" /></a>
+                </div>
                 <div v-if="expanded === j.id" class="muted" style="font-size: 11px; margin-top: 6px; border-top: 1px dashed var(--line); padding-top: 4px">原文：{{ j.source }}…</div>
               </td>
               <td><span class="tag" :class="STATUS[j.status]?.cls">{{ STATUS[j.status]?.text }}</span><br /><span class="muted" style="font-size: 11px">第 {{ j.attempts }} 次</span></td>

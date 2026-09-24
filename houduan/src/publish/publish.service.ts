@@ -38,9 +38,15 @@ interface Settings {
   lastPostId: string;
   /** 每个平台的文案模式：raw = 原文直发（不改写、不过滤，只按平台截长度）；ai = DeepSeek 按平台改写 + 敏感词过滤 */
   modes: Record<Platform, Mode>;
+  /** 每个平台发图文还是视频（知乎只能图文） */
+  formats: Record<Platform, Format>;
 }
 
 type Mode = 'raw' | 'ai';
+type Format = 'note' | 'video';
+const DEFAULT_FORMATS: Record<Platform, Format> = { xiaohongshu: 'note', douyin: 'note', kuaishou: 'video', zhihu: 'note', shipinhao: 'video' };
+/** 视频号视频的「短标题」上限 */
+const SHIPINHAO_VIDEO_TITLE_MAX = 16;
 
 interface AgentState {
   lastSeen: string;
@@ -93,6 +99,9 @@ export class PublishService implements OnModuleInit {
     const dailyMax = clampDaily(get('daily_max'), 5);
     const storedMax = Object.fromEntries(get('daily_maxes').split(',').map((kv) => kv.split(':').map((x) => x.trim())));
     const dailyMaxes = Object.fromEntries(PLATFORMS.map((p) => [p, clampDaily(storedMax[p], dailyMax)])) as Record<Platform, number>;
+    // publish_formats = "kuaishou:video,shipinhao:video"；没写到的平台用 DEFAULT_FORMATS
+    const storedFmt = Object.fromEntries(get('formats').split(',').map((kv) => kv.split(':').map((x) => x.trim())));
+    const formats = Object.fromEntries(PLATFORMS.map((p) => [p, p === 'zhihu' ? 'note' : storedFmt[p] === 'video' ? 'video' : storedFmt[p] === 'note' ? 'note' : DEFAULT_FORMATS[p]])) as Record<Platform, Format>;
     return {
       enabled: get('enabled') === '1',
       platforms: platforms.length ? platforms : ['xiaohongshu', 'zhihu'],
@@ -104,6 +113,7 @@ export class PublishService implements OnModuleInit {
       token,
       lastPostId: get('last_post_id') || '0',
       modes,
+      formats,
     };
   }
 
@@ -111,7 +121,7 @@ export class PublishService implements OnModuleInit {
     await this.prisma.sysSetting.upsert({ where: { key: `publish_${key}` }, create: { key: `publish_${key}`, value }, update: { value } });
   }
 
-  async saveSettings(data: { enabled?: boolean; platforms?: string[]; dailyMax?: number; hourStart?: number; hourEnd?: number; gapMin?: number; modes?: Record<string, string>; dailyMaxes?: Record<string, number> }) {
+  async saveSettings(data: { enabled?: boolean; platforms?: string[]; dailyMax?: number; hourStart?: number; hourEnd?: number; gapMin?: number; modes?: Record<string, string>; dailyMaxes?: Record<string, number>; formats?: Record<string, string> }) {
     const cur = await this.settings();
     if (data.enabled !== undefined) {
       // 从关到开：水位定在当前最新一条，之前同步进来的旧帖不发
@@ -136,6 +146,10 @@ export class PublishService implements OnModuleInit {
     if (data.dailyMaxes && typeof data.dailyMaxes === 'object') {
       const m = data.dailyMaxes;
       await this.set('daily_maxes', PLATFORMS.map((p) => `${p}:${m[p] === undefined ? cur.dailyMaxes[p] : clampDaily(m[p], cur.dailyMaxes[p])}`).join(','));
+    }
+    if (data.formats && typeof data.formats === 'object') {
+      const m = data.formats;
+      await this.set('formats', PLATFORMS.map((p) => `${p}:${p === 'zhihu' ? 'note' : m[p] === undefined ? cur.formats[p] : m[p] === 'video' ? 'video' : 'note'}`).join(','));
     }
     return this.overview();
   }
@@ -201,7 +215,7 @@ export class PublishService implements OnModuleInit {
       const draft = await this.draft(post.content, p, s);
       await this.prisma.publishJob.deleteMany({ where: { postId: post.id, platform: p } });
       const j = await this.prisma.publishJob.create({
-        data: { postId: post.id, platform: p, title: draft.title, content: draft.content, tags: draft.tags.join(','), scheduledAt: new Date() },
+        data: { postId: post.id, platform: p, title: draft.title, content: draft.content, tags: draft.tags.join(','), format: s.formats[p], scheduledAt: new Date() },
       });
       out.push({ platform: p, id: j.id.toString(), title: draft.title });
     }
@@ -257,7 +271,7 @@ export class PublishService implements OnModuleInit {
         await this.prisma.publishJob.create({ data: { postId: post.id, platform: p, content: text.slice(0, 500), status: 3, error: `AI 改写失败：${String(e?.message ?? e).slice(0, 200)}`, scheduledAt: new Date(), doneAt: new Date() } });
         continue;
       }
-      await this.prisma.publishJob.create({ data: { postId: post.id, platform: p, title: draft.title, content: draft.content, tags: draft.tags.join(','), scheduledAt: when } });
+      await this.prisma.publishJob.create({ data: { postId: post.id, platform: p, title: draft.title, content: draft.content, tags: draft.tags.join(','), format: s.formats[p], scheduledAt: when } });
       this.logger.log(`queued #${post.id} → ${p} @ ${when.toISOString()}`);
     }
   }
@@ -373,21 +387,38 @@ export class PublishService implements OnModuleInit {
     return { ok: true, platforms: s.platforms, enabled: s.enabled };
   }
 
-  /** 领一条到点的任务（按 scheduledAt 最早）。platforms = 发布机本地已登录的平台 */
-  async claim(platforms: string[]) {
+  /**
+   * 领一条到点的任务（按 scheduledAt 最早）。platforms = 发布机本地已登录的平台；
+   * formats = 发布机支持的形式（老版本发布机不传 = 只会发图文，不给它视频任务）；视频任务要等出完图（media 非空）才下发
+   */
+  async claim(platforms: string[], formats: string[] = ['note']) {
     this.agent.lastSeen = new Date().toISOString();
     const list = platforms.filter((p) => (PLATFORMS as readonly string[]).includes(p));
     if (!list.length) return null;
+    const canVideo = formats.includes('video');
     const j = await this.prisma.publishJob.findFirst({
-      where: { status: 0, platform: { in: list }, scheduledAt: { lte: new Date() } },
+      where: {
+        status: 0,
+        platform: { in: list },
+        scheduledAt: { lte: new Date() },
+        OR: canVideo ? [{ format: 'note' }, { format: 'video', media: { not: '' } }] : [{ format: 'note' }],
+      },
       orderBy: { scheduledAt: 'asc' },
     });
     if (!j) return null;
     // 乐观锁：status 仍为 0 才领得到
     const r = await this.prisma.publishJob.updateMany({ where: { id: j.id, status: 0 }, data: { status: 1, claimedAt: new Date(), attempts: { increment: 1 } } });
     if (!r.count) return null;
-    const tmax = PublishService.TITLE_MAX[j.platform as Platform];
-    return { id: j.id.toString(), platform: j.platform, title: tmax ? j.title.slice(0, tmax) : j.title, content: j.content, tags: j.tags ? j.tags.split(',') : [], attempts: j.attempts + 1 };
+    const video = j.format === 'video';
+    const tmax = video && j.platform === 'shipinhao' ? SHIPINHAO_VIDEO_TITLE_MAX : PublishService.TITLE_MAX[j.platform as Platform];
+    let media: unknown = null;
+    if (video) {
+      try { media = JSON.parse(j.media); } catch { media = null; }
+    }
+    return {
+      id: j.id.toString(), platform: j.platform, title: tmax ? j.title.slice(0, tmax) : j.title, content: j.content, tags: j.tags ? j.tags.split(',') : [],
+      attempts: j.attempts + 1, format: j.format, media,
+    };
   }
 
   async result(body: { id: string; ok: boolean; url?: string; error?: string }) {
@@ -423,7 +454,7 @@ function bjDayStart(now: number, d: number): number {
   return day * 86_400_000 - off;
 }
 
-async function callModel(messages: { role: string; content: string }[], temperature?: number): Promise<string> {
+export async function callModel(messages: { role: string; content: string }[], temperature?: number): Promise<string> {
   const base = (process.env.AI_BASE_URL ?? 'https://api.deepseek.com/v1').replace(/\/$/, '');
   const model = process.env.AI_MODEL ?? 'deepseek-chat';
   const ctrl = new AbortController();

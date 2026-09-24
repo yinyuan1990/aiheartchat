@@ -29,6 +29,8 @@ Write-Host '>> 安装依赖（social-auto-upload + requests）…'
 & $python -m pip install -q -e .\vendor\social-auto-upload -i https://pypi.tuna.tsinghua.edu.cn/simple
 # 上游个别 uploader 还 import 的是 playwright（不是 patchright），一并装上，不然 sau 启动就报 ModuleNotFoundError
 & $python -m pip install -q requests playwright -i https://pypi.tuna.tsinghua.edu.cn/simple
+# 视频任务（快手 / 视频号）：edge-tts 配音、imageio-ffmpeg 自带 ffmpeg、pillow 处理图片
+& $python -m pip install -q edge-tts imageio-ffmpeg pillow -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 # 离线内核：如果 publisher\browsers\ 里放了从别的机器拷来的 chromium-1208 / chromium_headless_shell-1208 等目录，先复制到 ms-playwright，下面就不用下载 170MB+
 $pwHome = Join-Path $env:LOCALAPPDATA 'ms-playwright'

@@ -27,10 +27,11 @@ export class PublishAgentController {
     return this.publish.heartbeat(body ?? {});
   }
 
-  /** 领一条到点的任务；platforms = 本机已登录的平台（逗号分隔）。没有则回 null */
+  /** 领一条到点的任务；platforms = 本机已登录的平台，formats = 本机支持的形式（note,video；不传只给图文），都逗号分隔。没有则回 null */
   @Get('next')
-  next(@Query('platforms') platforms?: string) {
-    return this.publish.claim((platforms ?? '').split(',').map((s) => s.trim()).filter(Boolean));
+  next(@Query('platforms') platforms?: string, @Query('formats') formats?: string) {
+    const split = (s?: string) => (s ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+    return this.publish.claim(split(platforms), formats ? split(formats) : ['note']);
   }
 
   @Post('result')

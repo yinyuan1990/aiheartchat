@@ -67,6 +67,9 @@ def load_config() -> dict:
     # 卡片底部：默认不放品牌 / App 名（小红书判「非官方渠道导流」就是冲着这个来的），只放一句标语
     cfg.setdefault("brand", "")
     cfg.setdefault("slogan", "爱情与金钱无关，和内心相连")
+    # 视频配音（edge-tts 音色，见 video/tts.py VOICES）：可按平台单独设
+    cfg.setdefault("video_voice", "xiaoxiao")
+    cfg.setdefault("video_voices", {})
     if not cfg.get("token") or "填这里" in cfg["token"]:
         print("config.json 里的 token 还没填")
         sys.exit(2)
@@ -91,7 +94,8 @@ class Api:
         return self._unwrap(requests.post(f"{self.base}/publish/agent/heartbeat", headers=self.h, json={"host": socket.gethostname(), "accounts": accounts, "ip": ip or {}}, timeout=20))
 
     def next(self, platforms: list[str]):
-        return self._unwrap(requests.get(f"{self.base}/publish/agent/next", headers=self.h, params={"platforms": ",".join(platforms)}, timeout=20))
+        formats = "note,video" if video_ready() else "note"
+        return self._unwrap(requests.get(f"{self.base}/publish/agent/next", headers=self.h, params={"platforms": ",".join(platforms), "formats": formats}, timeout=20))
 
     def result(self, job_id: str, ok: bool, url: str = "", error: str = ""):
         return self._unwrap(requests.post(f"{self.base}/publish/agent/result", headers=self.h, json={"id": job_id, "ok": ok, "url": url, "error": error}, timeout=20))
@@ -185,13 +189,81 @@ def check_all(cfg: dict, periodic: bool = False) -> dict:
     return accounts
 
 
+def sau_upload_video(platform: str, account: str, video: Path, title: str, desc: str, tags: list[str], headed: bool = False) -> tuple[bool, str]:
+    # 视频号（tencent）有 --tags；快手等把话题拼在描述里
+    if tags and platform != "tencent":
+        desc = (desc + "\n" + " ".join(f"#{t}" for t in tags)).strip()
+    args = [platform, "upload-video", "--account", account, "--file", str(video), "--title", title or desc[:16], "--desc", desc]
+    if tags and platform == "tencent":
+        args += ["--tags", ",".join(tags)]
+    code, out = sau(args, timeout=1500, headed=headed)
+    return code == 0, out[-500:]
+
+
 # ---------- 发布一条 ----------
+
+_video_ok: bool | None = None
+
+
+def video_ready() -> bool:
+    """本机装了合成视频要的依赖（edge-tts / imageio-ffmpeg / pillow）才向后台领视频任务"""
+    global _video_ok
+    if _video_ok is None:
+        try:
+            import edge_tts  # noqa: F401
+            import imageio_ffmpeg  # noqa: F401
+            import PIL  # noqa: F401
+
+            _video_ok = True
+        except ImportError as e:
+            log.warning("缺视频依赖（%s），只领图文任务；运行 安装视频依赖.bat 后重启", e)
+            _video_ok = False
+    return _video_ok
+
+
+def publish_video(cfg: dict, job: dict) -> tuple[bool, str, str]:
+    """视频任务：下载后台出好的连续剧照 → 配音 + 逐字字幕 + BGM 合成竖版视频（video/slides.py）→ sau upload-video"""
+    from video import slides
+
+    p = job["platform"]
+    title = job.get("title") or ""
+    content = job.get("content") or ""
+    tags = [t for t in (job.get("tags") or []) if t]
+    media = job.get("media") or {}
+    paragraphs = [s for s in media.get("paragraphs") or [] if s]
+    urls = media.get("images") or []
+    if not paragraphs or not urls:
+        return False, "", "视频任务缺图片或旁白"
+    work = CARDS / f"job{job['id']}-video"
+    work.mkdir(parents=True, exist_ok=True)
+    images = []
+    for i, u in enumerate(urls):
+        f = work / f"{i + 1:02d}.png"
+        if not f.exists():
+            r = requests.get(u, timeout=120)
+            r.raise_for_status()
+            f.write_bytes(r.content)
+        images.append(f)
+    narration = "\n".join(paragraphs)
+    # 原文模式的标题就是第一句，别念两遍（屏幕上照样显示标题）
+    speak_title = bool(title) and not narration.replace(" ", "").startswith(title.replace(" ", "")[:8])
+    voice = (cfg.get("video_voices") or {}).get(p) or cfg.get("video_voice") or "xiaoxiao"
+    out = CARDS / f"job{job['id']}.mp4"
+    slides.render(title, narration, images, out, cfg["slogan"], voice=voice, speak_title=speak_title)
+    log.info("任务 #%s 视频已合成 %s", job["id"], out.name)
+    headed = p in cfg.get("headed_platforms", [])
+    time.sleep(random.uniform(20, 120))
+    ok, err = sau_upload_video(SAU_NAME[p], cfg["account"], out, title, content[:900], tags, headed=headed)
+    return ok, "", ("" if ok else err)
+
 
 def publish_job(cfg: dict, job: dict) -> tuple[bool, str, str]:
     p = job["platform"]
     title = job.get("title") or ""
     content = job.get("content") or ""
     tags = [t for t in (job.get("tags") or []) if t]
+    if job.get("format") == "video":
+        return publish_video(cfg, job)
     if p == "zhihu":
         import zhihu
         ok, url, err = zhihu.post_pin(PROFILES / "zhihu", content, bool(cfg["headless"]), LOGS, title=title)

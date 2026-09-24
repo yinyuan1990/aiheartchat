@@ -31,18 +31,19 @@ def _overlay_ass(total: float, slogan: str, ai_tag: str) -> str:
     )
 
 
-def render(title: str, content: str, images: list[Path], out: Path, slogan: str = "", voice: str = "xiaoxiao", bgm: bool = True, ai_tag: str = "AI 生成") -> Path:
+def render(title: str, content: str, images: list[Path], out: Path, slogan: str = "", voice: str = "xiaoxiao", bgm: bool = True, ai_tag: str = "AI 生成", speak_title: bool = True) -> Path:
     if not images:
         raise ValueError("没有图片")
     WORK.mkdir(parents=True, exist_ok=True)
     tmp = Path(tempfile.mkdtemp(prefix="sl-", dir=str(WORK)))
     try:
         body_text = "\n".join(paragraphs(content))
-        speech = (title + "。\n" if title else "") + body_text
+        spoken_title = title if (title and speak_title) else ""
+        speech = (spoken_title + "。\n" if spoken_title else "") + body_text
         voice_mp3 = tmp / "voice.mp3"
         dur, char_t, _ = tts.synth(speech, voice_mp3, voice=voice)
         total = dur + TAIL_SEC
-        off = len(title) + 2 if title else 0
+        off = len(spoken_title) + 2 if spoken_title else 0
         (tmp / "subs.ass").write_text(_ass(title, body_text, char_t, total, off), encoding="utf-8")
         (tmp / "overlay.ass").write_text(_overlay_ass(total, slogan, ai_tag), encoding="utf-8")
 
