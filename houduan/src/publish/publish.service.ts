@@ -23,8 +23,10 @@ const BANNED = /https?:\/\/|www\.|t\.me|微信|vx|wx|QQ|扣扣|手机号|电话|
 interface Settings {
   enabled: boolean;
   platforms: Platform[];
-  /** 每平台每天最多几条 */
+  /** 每平台每天最多几条（各平台没单独设时的默认值） */
   dailyMax: number;
+  /** 各平台每天最多几条 */
+  dailyMaxes: Record<Platform, number>;
   /** 允许发布的小时段 [start, end)，如 9~23 */
   hourStart: number;
   hourEnd: number;
@@ -87,10 +89,15 @@ export class PublishService implements OnModuleInit {
     const fallback: Mode = get('mode') === 'ai' ? 'ai' : 'raw';
     const stored = Object.fromEntries(get('modes').split(',').map((kv) => kv.split(':').map((x) => x.trim())));
     const modes = Object.fromEntries(PLATFORMS.map((p) => [p, stored[p] === 'ai' ? 'ai' : stored[p] === 'raw' ? 'raw' : fallback])) as Record<Platform, Mode>;
+    // publish_daily_maxes = "kuaishou:1,shipinhao:1"；没写到的平台用 publish_daily_max
+    const dailyMax = clampDaily(get('daily_max'), 5);
+    const storedMax = Object.fromEntries(get('daily_maxes').split(',').map((kv) => kv.split(':').map((x) => x.trim())));
+    const dailyMaxes = Object.fromEntries(PLATFORMS.map((p) => [p, clampDaily(storedMax[p], dailyMax)])) as Record<Platform, number>;
     return {
       enabled: get('enabled') === '1',
       platforms: platforms.length ? platforms : ['xiaohongshu', 'zhihu'],
-      dailyMax: Math.min(50, Math.max(1, Number(get('daily_max')) || 5)),
+      dailyMax,
+      dailyMaxes,
       hourStart: Number.isFinite(hours[0]) && hours.length === 2 ? Math.min(23, Math.max(0, hours[0])) : 9,
       hourEnd: Number.isFinite(hours[1]) && hours.length === 2 ? Math.min(24, Math.max(1, hours[1])) : 23,
       gapMin: Math.min(600, Math.max(0, Number(get('gap_min')) || 45)),
@@ -104,7 +111,7 @@ export class PublishService implements OnModuleInit {
     await this.prisma.sysSetting.upsert({ where: { key: `publish_${key}` }, create: { key: `publish_${key}`, value }, update: { value } });
   }
 
-  async saveSettings(data: { enabled?: boolean; platforms?: string[]; dailyMax?: number; hourStart?: number; hourEnd?: number; gapMin?: number; modes?: Record<string, string> }) {
+  async saveSettings(data: { enabled?: boolean; platforms?: string[]; dailyMax?: number; hourStart?: number; hourEnd?: number; gapMin?: number; modes?: Record<string, string>; dailyMaxes?: Record<string, number> }) {
     const cur = await this.settings();
     if (data.enabled !== undefined) {
       // 从关到开：水位定在当前最新一条，之前同步进来的旧帖不发
@@ -125,6 +132,10 @@ export class PublishService implements OnModuleInit {
     if (data.modes && typeof data.modes === 'object') {
       const m = data.modes;
       await this.set('modes', PLATFORMS.map((p) => `${p}:${m[p] === undefined ? cur.modes[p] : m[p] === 'ai' ? 'ai' : 'raw'}`).join(','));
+    }
+    if (data.dailyMaxes && typeof data.dailyMaxes === 'object') {
+      const m = data.dailyMaxes;
+      await this.set('daily_maxes', PLATFORMS.map((p) => `${p}:${m[p] === undefined ? cur.dailyMaxes[p] : clampDaily(m[p], cur.dailyMaxes[p])}`).join(','));
     }
     return this.overview();
   }
@@ -265,7 +276,7 @@ export class PublishService implements OnModuleInit {
       const winStart = dayStart + s.hourStart * 3_600_000;
       const winEnd = dayStart + s.hourEnd * 3_600_000;
       const count = await this.prisma.publishJob.count({ where: { platform, status: { in: [0, 1, 2] }, scheduledAt: { gte: new Date(dayStart), lt: new Date(dayStart + 86_400_000) } } });
-      if (count >= s.dailyMax) continue;
+      if (count >= s.dailyMaxes[platform]) continue;
       // 随机抖 3~25 分钟：别每条都卡在整点 / 固定间隔上（小红书按"操作习惯不像真人"给过警告）
       const jitter = (3 + Math.random() * 22) * 60_000;
       const t = Math.max(now, winStart, minByGap) + jitter;
@@ -397,6 +408,11 @@ export class PublishService implements OnModuleInit {
     }
     return { ok: true };
   }
+}
+
+function clampDaily(v: unknown, fallback: number): number {
+  const n = Math.floor(Number(v));
+  return Number.isFinite(n) && n >= 1 ? Math.min(50, n) : fallback;
 }
 
 /** 北京时间 d 天后那天的 0 点（毫秒时间戳） */

@@ -3,7 +3,7 @@ import { onMounted, onUnmounted, ref } from 'vue';
 import { api } from '../api';
 
 type Mode = 'raw' | 'ai';
-interface Settings { enabled: boolean; platforms: string[]; dailyMax: number; hourStart: number; hourEnd: number; gapMin: number; token: string; lastPostId: string; modes: Record<string, Mode> }
+interface Settings { enabled: boolean; platforms: string[]; dailyMax: number; hourStart: number; hourEnd: number; gapMin: number; token: string; lastPostId: string; modes: Record<string, Mode>; dailyMaxes: Record<string, number> }
 interface Agent { online: boolean; lastSeen: string; host: string; accounts: Record<string, { ok: boolean; msg: string; checkedAt: string }>; ip: { ok: boolean; ip: string; where: string; msg: string } | null }
 interface Overview { settings: Settings; agent: Agent; counts: Record<string, number>; platforms: { key: string; name: string }[] }
 interface Job {
@@ -12,7 +12,7 @@ interface Job {
 }
 
 const ov = ref<Overview | null>(null);
-const form = ref<{ enabled: boolean; platforms: string[]; dailyMax: number; hourStart: number; hourEnd: number; gapMin: number; modes: Record<string, Mode> }>({ enabled: false, platforms: [], dailyMax: 5, hourStart: 9, hourEnd: 23, gapMin: 45, modes: {} });
+const form = ref<{ enabled: boolean; platforms: string[]; hourStart: number; hourEnd: number; gapMin: number; modes: Record<string, Mode>; dailyMaxes: Record<string, number> }>({ enabled: false, platforms: [], hourStart: 9, hourEnd: 23, gapMin: 45, modes: {}, dailyMaxes: {} });
 const jobs = ref<Job[]>([]);
 const filterStatus = ref('');
 const filterPlatform = ref('');
@@ -36,7 +36,7 @@ async function loadOverview(fillForm = false) {
   try {
     ov.value = await api<Overview>('/admin/publish/overview');
     const s = ov.value.settings;
-    if (fillForm) form.value = { enabled: s.enabled, platforms: [...s.platforms], dailyMax: s.dailyMax, hourStart: s.hourStart, hourEnd: s.hourEnd, gapMin: s.gapMin, modes: { ...(s.modes ?? {}) } };
+    if (fillForm) form.value = { enabled: s.enabled, platforms: [...s.platforms], hourStart: s.hourStart, hourEnd: s.hourEnd, gapMin: s.gapMin, modes: { ...(s.modes ?? {}) }, dailyMaxes: { ...(s.dailyMaxes ?? {}) } };
     if (!testPlatforms.value.length) testPlatforms.value = [...s.platforms];
   } catch (e: any) { show(e.message); }
 }
@@ -102,19 +102,19 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
         <label v-for="p in ov?.platforms ?? []" :key="p.key" class="muted" style="display: flex; align-items: center; gap: 4px">
           <input type="checkbox" style="width: auto" :checked="form.platforms.includes(p.key)" @change="toggle(form.platforms, p.key)" /> {{ p.name }}
         </label>
-        <label class="muted">每平台每天最多 <input v-model.number="form.dailyMax" type="number" min="1" max="50" style="width: 56px" /> 条</label>
         <label class="muted">时段 <input v-model.number="form.hourStart" type="number" min="0" max="23" style="width: 50px" /> ~ <input v-model.number="form.hourEnd" type="number" min="1" max="24" style="width: 50px" /> 点</label>
         <label class="muted">同平台间隔 ≥ <input v-model.number="form.gapMin" type="number" min="0" max="600" style="width: 56px" /> 分钟</label>
         <button class="small" @click="save">保存</button>
       </div>
       <div class="row" style="flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line)">
-        <span class="muted">文案：</span>
+        <span class="muted">各平台：</span>
         <label v-for="p in ov?.platforms ?? []" :key="p.key" class="muted" style="display: flex; align-items: center; gap: 4px">
           {{ p.name }}
           <select v-model="form.modes[p.key]" style="width: auto">
             <option value="raw">原文直发</option>
             <option value="ai">AI 改写</option>
           </select>
+          每天 <input v-model.number="form.dailyMaxes[p.key]" type="number" min="1" max="50" style="width: 50px" /> 条
         </label>
         <div class="muted" style="font-size: 12px; width: 100%">
           <b>原文直发</b>：一个字不改、不过滤，标题取第一句按平台截长度；<b>AI 改写</b>：按平台出标题 / 正文 / 话题，敏感词软化、去引流词。改了点上面「保存」，只影响之后新入队的任务（含测试发布）。
