@@ -19,7 +19,8 @@ PY = ROOT / ".venv" / "Scripts" / "python.exe"
 LOG = ROOT / "logs" / "publisher.log"
 CONFIG = ROOT / "config.json"
 TASK = "PeiwanPublisher"
-PLATFORMS = [("xiaohongshu", "小红书"), ("douyin", "抖音"), ("kuaishou", "快手"), ("zhihu", "知乎"), ("shipinhao", "视频号")]
+ALL_PLATFORMS = [("xiaohongshu", "小红书"), ("douyin", "抖音"), ("kuaishou", "快手"), ("zhihu", "知乎"), ("shipinhao", "视频号"), ("x", "X"), ("youtube", "YouTube")]
+OVERSEAS = {"x", "youtube"}
 ADMIN_URL = "https://admin.yyheart.com/"
 CREATE_NO_WINDOW = 0x08000000
 
@@ -40,10 +41,30 @@ def task_state() -> str:
     return {"Running": "运行中", "Ready": "已停止", "Disabled": "已禁用"}.get(s, s)
 
 
+def load_platforms() -> list[tuple[str, str]]:
+    """只显示 config.json 里 platforms 配的平台（国内机 = 国内五个，外网机 = X / YouTube）"""
+    try:
+        keys = json.loads(CONFIG.read_text(encoding="utf-8")).get("platforms") or []
+    except Exception:  # noqa: BLE001
+        keys = []
+    picked = [(k, n) for k, n in ALL_PLATFORMS if k in keys]
+    return picked or [(k, n) for k, n in ALL_PLATFORMS if k not in OVERSEAS]
+
+
+PLATFORMS = load_platforms()
+IS_OVERSEAS = all(k in OVERSEAS for k, _ in PLATFORMS)
+
+
+def ip_line_ok(line: str) -> bool:
+    """publisher.py 的出口 IP 日志是「→ 国内，只发国内平台」或「→ 国外，只发 X / YouTube」；外网机要国外出口才算正常"""
+    domestic = "→ 国内" in line
+    return domestic != IS_OVERSEAS
+
+
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("心之音 · 发布机")
+        self.title("心之音 · 外网发布机（X / YouTube）" if IS_OVERSEAS else "心之音 · 发布机")
         self.geometry("800x600")
         self.minsize(680, 480)
         self.busy = False
@@ -63,7 +84,8 @@ class App(tk.Tk):
         ttk.Button(top, text="重启", command=lambda: self.task("restart")).grid(row=0, column=4, padx=4)
         ttk.Button(top, text="打开后台网页", command=lambda: webbrowser.open(ADMIN_URL)).grid(row=0, column=5, padx=12)
 
-        box = ttk.LabelFrame(self, text="平台登录（点「登录」弹浏览器扫码；状态来自最近一次检查）", padding=10)
+        hint = "平台登录（点「登录」弹浏览器登录账号，要走国外出口；状态来自最近一次检查）" if IS_OVERSEAS else "平台登录（点「登录」弹浏览器扫码；状态来自最近一次检查）"
+        box = ttk.LabelFrame(self, text=hint, padding=10)
         box.pack(fill="x", padx=10)
         self.lbl_acc: dict[str, ttk.Label] = {}
         for i, (key, name) in enumerate(PLATFORMS):
@@ -76,6 +98,9 @@ class App(tk.Tk):
         ttk.Button(box, text="检查出口 IP + 全部登录状态，并上报后台", command=self.check).grid(row=len(PLATFORMS), column=0, columnspan=3, sticky="w", pady=(8, 0))
         self.lbl_ip = ttk.Label(box, text="出口 IP：未检查", foreground="#8e8e93")
         self.lbl_ip.grid(row=len(PLATFORMS) + 1, column=0, columnspan=4, sticky="w", pady=(6, 0))
+        if any(k == "x" for k, _ in PLATFORMS):
+            ttk.Label(box, text="X 登录后要在 设置 → 隐私和安全 → 你发布的内容 里勾上「将你发布的媒体标记为可能包含敏感内容」",
+                      foreground="#8e8e93").grid(row=len(PLATFORMS) + 2, column=0, columnspan=4, sticky="w", pady=(4, 0))
 
         mid = ttk.Frame(self, padding=(10, 6))
         mid.pack(fill="x")
@@ -83,8 +108,9 @@ class App(tk.Tk):
         self.var_token = tk.StringVar(value=self.read_token())
         ttk.Entry(mid, textvariable=self.var_token, width=54).pack(side="left", padx=4)
         ttk.Button(mid, text="保存", command=self.save_token).pack(side="left")
-        ttk.Button(mid, text="看卡片样式", command=self.card).pack(side="left", padx=(16, 0))
-        ttk.Button(mid, text="打开日志文件夹", command=lambda: os.startfile(str(LOG.parent))).pack(side="left", padx=4)
+        if not IS_OVERSEAS:
+            ttk.Button(mid, text="看卡片样式", command=self.card).pack(side="left", padx=(16, 0))
+        ttk.Button(mid, text="打开日志文件夹", command=lambda: os.startfile(str(LOG.parent))).pack(side="left", padx=(16 if IS_OVERSEAS else 4, 4))
 
         ttk.Label(self, text="日志（自动刷新）", padding=(10, 4, 0, 0)).pack(anchor="w")
         frame = ttk.Frame(self)
@@ -131,6 +157,12 @@ class App(tk.Tk):
                 # 计划任务 Stop 只结束主进程，把残留的 python 子进程一起清掉
                 run_hidden(["powershell", "-NoProfile", "-Command", "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*publisher.py run*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"], 30)
             if action in ("start", "restart"):
+                if task_state() == "已禁用":
+                    code, out = run_hidden(["powershell", "-NoProfile", "-Command", f"Enable-ScheduledTask -TaskName {TASK} | Out-Null"], 30)
+                    if code != 0:
+                        self.after(0, lambda: messagebox.showerror("启用失败", f"计划任务被禁用了，启用失败（可能要右键 exe 以管理员身份运行）：\n{out[-300:]}"))
+                        self.set_busy(False, "")
+                        return
                 code, out = run_hidden(["powershell", "-NoProfile", "-Command", f"Start-ScheduledTask -TaskName {TASK}"], 30)
                 if code != 0:
                     self.after(0, lambda: messagebox.showerror("启动失败", out or "计划任务不存在，先运行 install-task.ps1"))
@@ -140,7 +172,8 @@ class App(tk.Tk):
 
     def login(self, key: str, name: str):
         def work():
-            self.set_busy(True, f"正在打开 {name} 登录窗口，请用手机 {name} App 扫码…（最长等 10 分钟）")
+            how = "请在弹出的浏览器里登录账号" if key in OVERSEAS else f"请用手机 {'微信' if key == 'shipinhao' else name + ' App'} 扫码"
+            self.set_busy(True, f"正在打开 {name} 登录窗口，{how}…（最长等 10 分钟）")
             code, out = run_hidden([str(PY), "publisher.py", "login", key], 660)
             tail = out.strip().splitlines()[-1] if out.strip() else ""
             self.set_busy(False, ("✓ " if code == 0 else "✗ ") + f"{name}：{tail[:120]}")
@@ -160,7 +193,7 @@ class App(tk.Tk):
 
     def check(self):
         def work():
-            self.set_busy(True, "正在检查四个平台登录状态（每个几秒）…")
+            self.set_busy(True, f"正在检查 {len(PLATFORMS)} 个平台登录状态（每个几秒到几十秒）…")
             code, out = run_hidden([str(PY), "publisher.py", "check"], 300)
             self.set_busy(False, "检查完成" if code == 0 else "检查出错，看日志")
             self.after(200, lambda: self.after_check_ui(out))
@@ -169,8 +202,7 @@ class App(tk.Tk):
     def after_check_ui(self, out: str):
         for line in out.splitlines():
             if "出口 IP：" in line:
-                ok = "OK" in line
-                self.lbl_ip.configure(text=line.split("INFO", 1)[-1].strip(), foreground="#1a9c4b" if ok else "#d33")
+                self.lbl_ip.configure(text=line.split("INFO", 1)[-1].strip()[:110], foreground="#1a9c4b" if ip_line_ok(line) else "#d33")
         for key, name in PLATFORMS:
             for line in out.splitlines():
                 if f"{name} 登录状态" in line:
@@ -199,9 +231,8 @@ class App(tk.Tk):
         try:
             lines = LOG.read_text(encoding="utf-8", errors="replace").splitlines()[-400:]
             for line in reversed(lines):
-                if "出口 IP" in line:
-                    bad = "不在国内" in line
-                    self.lbl_ip.configure(text=line.split("INFO", 1)[-1].split("WARNING", 1)[-1].strip()[:110], foreground="#d33" if bad else "#1a9c4b")
+                if "出口 IP：" in line:
+                    self.lbl_ip.configure(text=line.split("INFO", 1)[-1].strip()[:110], foreground="#1a9c4b" if ip_line_ok(line) else "#d33")
                     break
             for key, name in PLATFORMS:
                 for line in reversed(lines):
