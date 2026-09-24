@@ -312,17 +312,14 @@ def publish_video(cfg: dict, job: dict) -> tuple[bool, str, str]:
         m = re.search(r"https?://(?:youtu\.be/|www\.youtube\.com/(?:watch\?v=|shorts/))[\w-]+", sau_out)
         url = m.group(0) if m else ""
         if cfg.get("yt_reply"):
-            if url:
-                import yt_comment
+            import yt_comment
 
-                time.sleep(30)
-                c_ok, c_err = yt_comment.comment(cookie_file(p, cfg), url, cfg["yt_reply"], LOGS)
-                if c_ok:
-                    log.info("YouTube 已在 %s 下评论推广链接%s", url, f"（{c_err}）" if c_err else "并置顶")
-                else:
-                    log.warning("YouTube 视频发成功了，但评论推广链接失败：%s", c_err)
+            time.sleep(30)
+            c_ok, url, c_err = yt_comment.comment(cookie_file(p, cfg), url, cfg["yt_reply"], LOGS)
+            if c_ok:
+                log.info("YouTube 已在 %s 下评论推广链接%s", url, f"（{c_err}）" if c_err else "并置顶")
             else:
-                log.warning("YouTube 视频发成功了，但没拿到视频链接，没评论推广链接")
+                log.warning("YouTube 视频发成功了，但评论推广链接失败：%s", c_err)
     return True, url, ""
 
 
