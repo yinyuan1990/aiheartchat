@@ -1,4 +1,4 @@
-"""生成两种形式的样片看效果：python video_demo.py [1|2|all] → videos/demo-typewriter.mp4 / videos/demo-broll.mp4"""
+"""生成样片看效果：python video_demo.py [1|2|3|all] → videos/demo-typewriter.mp4 / demo-broll.mp4 / demo-slides.mp4"""
 from __future__ import annotations
 
 import sys
@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
-from video import broll, typewriter
+from video import broll, imagegen, slides, typewriter
 from video.common import WORK
 
 TITLE = "那年冬天，没吹干的头发"
@@ -24,6 +24,29 @@ BODY = """我妈再婚那年，我二十出头。
 风很冷，正好。"""
 SLOGAN = "爱情与金钱无关，和内心相连"
 
+# 形式 3：连续剧照（树洞 #57「对门那盏灯」，去掉了露骨部分）
+SLIDES_TITLE = "对门那盏灯，我只开给他看"
+SLIDES_BODY = """我离婚后搬回老小区，对门是个开出租车的，四十出头，一个人住。
+有天我钥匙掉进楼下花坛，他帮我捡，泥蹭在他裤腿上。我请他上来喝口水，他站在门口，不进。
+第二次是下雨，他送快递上楼，衣服湿透。我把毛巾递出去，这次他进门了，站在垫子上滴水。
+后来变成他夜班收车后，上来坐一会儿，去阳台抽根烟。
+现在我下班，先看他的车在不在车位。在，我就把灯开着。不在，我就把灯关了，省电。
+有次他小孩周末来住，我在门镜里看见一个男孩背着书包。那天，我灯没开。
+周一他车又停回来了，我还是开了灯。他没上来。烟灰缸还在阳台，烟蒂是我前天留下的。"""
+SLIDES_STYLE = "cinematic film still, 35mm film photo, realistic, warm tungsten light, shallow depth of field, subtle film grain, contemporary China"
+SLIDES_CHARACTERS = ""
+_W = "a beautiful Chinese woman in a wine-red silk slip dress and a beige knit cardigan, long wavy black hair, early 30s"
+# 一段旁白一张图（7 段 → 7 张）。免费模型画不好两个人同框：只画「我」和物件，男人用背影 / 第一视角带过
+SLIDES_SCENES = [
+    f"{_W}, standing alone at the foot of an old apartment block at dusk, lonely expression",
+    f"{_W}, holding a set of muddy keys in her palm next to a flowerbed at dusk, looking down",
+    f"{_W}, leaning on an apartment door frame at night, handing a white towel toward the camera, rain in the stairwell, dim yellow light",
+    f"{_W}, standing in a dark living room watching the blurred back of a man smoking on the balcony, city lights outside",
+    f"{_W}, looking up at a lit apartment window in a residential parking lot at night, a green and white taxi parked beside her",
+    f"{_W}, close-up of her eye at a door peephole, dim corridor light on her face, sad",
+    "close-up of a glass ashtray with a single cigarette butt on a balcony windowsill at night, warm light from the window",
+]
+
 if __name__ == "__main__":
     which = sys.argv[1] if len(sys.argv) > 1 else "all"
     WORK.mkdir(exist_ok=True)
@@ -35,3 +58,9 @@ if __name__ == "__main__":
         t = time.time()
         p = broll.render(TITLE, BODY, WORK / "demo-broll.mp4", SLOGAN)
         print(f"形式2 → {p}  ({time.time() - t:.0f}s)")
+    if which in ("3", "all"):
+        t = time.time()
+        imgs = imagegen.storyboard(SLIDES_SCENES, SLIDES_CHARACTERS, SLIDES_STYLE, WORK / "demo-slides-img")
+        print(f"形式3 出图 {len(imgs)} 张 ({time.time() - t:.0f}s)")
+        p = slides.render(SLIDES_TITLE, SLIDES_BODY, imgs, WORK / "demo-slides.mp4", SLOGAN)
+        print(f"形式3 → {p}  ({time.time() - t:.0f}s)")
