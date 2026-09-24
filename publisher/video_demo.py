@@ -47,6 +47,17 @@ SLIDES_SCENES = [
     "close-up of a glass ashtray with a single cigarette butt on a balcony windowsill at night, warm light from the window",
 ]
 
+# 形式 4：同一个故事，万相 2.7 组图一次出 7 张（需要 DASHSCOPE_API_KEY）
+WANX_PROMPT = """电影感写实组图，竖版，35mm胶片质感，暖黄钨丝灯与夜色，浅景深，轻微胶片颗粒，当代中国老小区。同一个故事的7张连续画面，人物外貌和服装必须前后一致，画面中不要出现任何文字。
+人物：林，30岁左右的中国女人，五官精致，眼神慵懒疏离，微卷黑长发，身材曼妙，穿酒红色丝质吊带长裙，外搭一件滑落肩头的米色针织开衫；老周，40岁出头的出租车司机，寸头，胡茬，肩膀宽，穿深灰色旧夹克。
+第一张：黄昏，老小区楼下单元门口，林独自站着，神情落寞。
+第二张：黄昏，楼下花坛边，老周蹲着从泥里捡起一串钥匙，裤腿蹭了泥，林站在旁边低头看他。
+第三张：雨夜，老楼楼道昏黄的声控灯下，老周浑身湿透抱着快递箱站在门口，林倚着门框递给他一条白毛巾。
+第四张：深夜阳台，老周背对镜头抽烟，烟被风吹散，远处城市灯火；林站在亮着暖灯的客厅门口看着他的背影。
+第五张：傍晚，小区停车位停着一辆绿白色出租车，林穿黑色修身连衣裙，抬头望向一扇亮着灯的窗户。
+第六张：从门上猫眼看出去的鱼眼视角，昏暗楼道里，老周牵着一个背书包的小男孩走进对门。
+第七张：夜晚阳台窗台特写，玻璃烟灰缸里只有一个烟蒂，旁边搭着那件米色针织开衫，窗内透出暖黄灯光。"""
+
 if __name__ == "__main__":
     which = sys.argv[1] if len(sys.argv) > 1 else "all"
     WORK.mkdir(exist_ok=True)
@@ -64,3 +75,12 @@ if __name__ == "__main__":
         print(f"形式3 出图 {len(imgs)} 张 ({time.time() - t:.0f}s)")
         p = slides.render(SLIDES_TITLE, SLIDES_BODY, imgs, WORK / "demo-slides.mp4", SLOGAN)
         print(f"形式3 → {p}  ({time.time() - t:.0f}s)")
+    if which == "4":
+        t = time.time()
+        d = WORK / "demo-wanx-img"
+        imgs = sorted(d.glob("*.jpg")) if d.exists() else []
+        if len(imgs) < 7:
+            imgs = imagegen.wanx_sequence(WANX_PROMPT, d, n=7)
+        print(f"形式4 出图 {len(imgs)} 张 ({time.time() - t:.0f}s)")
+        p = slides.render(SLIDES_TITLE, SLIDES_BODY, imgs, WORK / "demo-wanx.mp4", SLOGAN)
+        print(f"形式4 → {p}  ({time.time() - t:.0f}s)")
