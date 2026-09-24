@@ -118,8 +118,23 @@ def _reply(page: Page, url: str, text: str, log=None) -> tuple[bool, str]:
         return False, "回复按钮一直不可点"
     page.wait_for_timeout(1000)
     _press(page, btn, log)
-    page.wait_for_timeout(5000)
-    return True, ""
+    # 有时点完会弹出完整的回复框（按钮在弹框里），要再点一次弹框里的
+    dialog_btn = page.locator('[role="dialog"] [data-testid="tweetButton"]').first
+    for _ in range(8):
+        page.wait_for_timeout(1000)
+        if dialog_btn.count() and dialog_btn.is_visible():
+            if log:
+                log.info("X 回复弹出了回复框，点框里的按钮")
+            _press(page, dialog_btn, log)
+            break
+    # 输入框里还留着推广文字 = 没发出去
+    probe = text.strip().splitlines()[0][:8]
+    for _ in range(15):
+        page.wait_for_timeout(1000)
+        left = [t for t in page.locator('[data-testid="tweetTextarea_0"]').all() if t.is_visible() and probe in (t.inner_text() or "")]
+        if not left:
+            return True, ""
+    return False, "点了回复但文字还在输入框里，没发出去"
 
 
 def post_video(profile: Path, video: Path, text: str, headless: bool, shot_dir: Path, log=None, reply: str = "") -> tuple[bool, str, str]:
