@@ -1,0 +1,5 @@
+config.json
+output/
+build/
+*.exe
+__pycache__/
