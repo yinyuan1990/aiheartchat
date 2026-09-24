@@ -11,8 +11,8 @@ export const OVERSEAS: readonly Platform[] = ['x', 'youtube'];
 /** 发英文的平台（标题 / 正文 / 旁白都翻译成英文） */
 export const ENGLISH: readonly Platform[] = ['youtube'];
 
-/** 排期最多往后推几天，再排不进就跳过（树洞一天十几条，四个平台全发会被限流） */
-const MAX_DAYS_AHEAD = 3;
+/** 排期最多往后推几天（后台可调 publish_queue_days），再排不进就跳过：每日上限小于每天新帖数的平台不会越积越多 */
+const DEFAULT_QUEUE_DAYS = 1;
 /** 一次 AI 改写失败重试次数 */
 const AI_RETRY = 2;
 /** 发布失败最多重试几次（每次顺延 30 分钟） */
@@ -36,6 +36,8 @@ interface Settings {
   hourEnd: number;
   /** 同平台两条之间至少隔几分钟 */
   gapMin: number;
+  /** 当天排满后最多往后排几天（0 = 只排当天），再排不进的新帖跳过 */
+  queueDays: number;
   /** 发布机鉴权 token */
   token: string;
   /** 只处理这个 id 之后的树洞帖（开启时定在当前最新，旧帖不发） */
@@ -117,6 +119,7 @@ export class PublishService implements OnModuleInit {
       hourStart: Number.isFinite(hours[0]) && hours.length === 2 ? Math.min(23, Math.max(0, hours[0])) : 9,
       hourEnd: Number.isFinite(hours[1]) && hours.length === 2 ? Math.min(24, Math.max(1, hours[1])) : 23,
       gapMin: Math.min(600, Math.max(0, Number(get('gap_min')) || 45)),
+      queueDays: get('queue_days') === '' ? DEFAULT_QUEUE_DAYS : Math.min(7, Math.max(0, Math.floor(Number(get('queue_days'))) || 0)),
       token,
       lastPostId: get('last_post_id') || '0',
       modes,
@@ -128,7 +131,7 @@ export class PublishService implements OnModuleInit {
     await this.prisma.sysSetting.upsert({ where: { key: `publish_${key}` }, create: { key: `publish_${key}`, value }, update: { value } });
   }
 
-  async saveSettings(data: { enabled?: boolean; platforms?: string[]; dailyMax?: number; hourStart?: number; hourEnd?: number; gapMin?: number; modes?: Record<string, string>; dailyMaxes?: Record<string, number>; formats?: Record<string, string> }) {
+  async saveSettings(data: { enabled?: boolean; platforms?: string[]; dailyMax?: number; hourStart?: number; hourEnd?: number; gapMin?: number; queueDays?: number; modes?: Record<string, string>; dailyMaxes?: Record<string, number>; formats?: Record<string, string> }) {
     const cur = await this.settings();
     if (data.enabled !== undefined) {
       // 从关到开：水位定在当前最新一条，之前同步进来的旧帖不发
@@ -146,6 +149,7 @@ export class PublishService implements OnModuleInit {
       await this.set('hours', `${s}-${e}`);
     }
     if (data.gapMin !== undefined) await this.set('gap_min', String(Math.min(600, Math.max(0, Number(data.gapMin) || 0))));
+    if (data.queueDays !== undefined) await this.set('queue_days', String(Math.min(7, Math.max(0, Math.floor(Number(data.queueDays)) || 0))));
     if (data.modes && typeof data.modes === 'object') {
       const m = data.modes;
       await this.set('modes', PLATFORMS.map((p) => `${p}:${m[p] === undefined ? cur.modes[p] : m[p] === 'ai' ? 'ai' : 'raw'}`).join(','));
@@ -279,7 +283,7 @@ export class PublishService implements OnModuleInit {
       if (exists) continue;
       const when = await this.nextSlot(p, s);
       if (!when) {
-        await this.prisma.publishJob.create({ data: { postId: post.id, platform: p, content: text.slice(0, 500), status: 4, error: `${MAX_DAYS_AHEAD} 天内排期已满，跳过`, scheduledAt: new Date(), doneAt: new Date() } });
+        await this.prisma.publishJob.create({ data: { postId: post.id, platform: p, content: text.slice(0, 500), status: 4, error: s.queueDays ? `今天和之后 ${s.queueDays} 天的排期都满了，跳过` : '今天的排期满了，跳过', scheduledAt: new Date(), doneAt: new Date() } });
         continue;
       }
       let draft: Draft;
@@ -295,7 +299,7 @@ export class PublishService implements OnModuleInit {
   }
 
   /**
-   * 该平台下一个可用时间：从今天起最多往后 MAX_DAYS_AHEAD 天，找一天已排 < dailyMax 的，
+   * 该平台下一个可用时间：从今天起最多往后 queueDays 天，找一天已排 < dailyMax 的，
    * 时间 = max(现在, 该天时段开始, 该平台最后一条排期 + gapMin)，且必须落在时段内，否则去下一天。
    * 时间按服务器本地时区（容器 TZ 默认 UTC，这里用北京时间算）。
    */
@@ -304,7 +308,7 @@ export class PublishService implements OnModuleInit {
     // X 美女图（format=pics）单独算次数，不占树洞帖的每日上限 / 间隔
     const last = await this.prisma.publishJob.findFirst({ where: { platform, format: { not: 'pics' }, status: { in: [0, 1, 2] } }, orderBy: { scheduledAt: 'desc' }, select: { scheduledAt: true } });
     const minByGap = last ? last.scheduledAt.getTime() + s.gapMin * 60_000 : 0;
-    for (let d = 0; d <= MAX_DAYS_AHEAD; d++) {
+    for (let d = 0; d <= s.queueDays; d++) {
       const dayStart = bjDayStart(now, d);
       const winStart = dayStart + s.hourStart * 3_600_000;
       const winEnd = dayStart + s.hourEnd * 3_600_000;

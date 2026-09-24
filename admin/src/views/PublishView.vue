@@ -3,7 +3,7 @@ import { onMounted, onUnmounted, ref } from 'vue';
 import { api } from '../api';
 
 type Mode = 'raw' | 'ai';
-interface Settings { enabled: boolean; platforms: string[]; dailyMax: number; hourStart: number; hourEnd: number; gapMin: number; token: string; lastPostId: string; modes: Record<string, Mode>; dailyMaxes: Record<string, number>; formats: Record<string, 'note' | 'video'> }
+interface Settings { enabled: boolean; platforms: string[]; dailyMax: number; hourStart: number; hourEnd: number; gapMin: number; queueDays: number; token: string; lastPostId: string; modes: Record<string, Mode>; dailyMaxes: Record<string, number>; formats: Record<string, 'note' | 'video'> }
 interface Agent { online: boolean; lastSeen: string; host: string; accounts: Record<string, { ok: boolean; msg: string; checkedAt: string }>; ip: { ok: boolean; ip: string; where: string; msg: string } | null }
 interface PlatformInfo { key: string; name: string; overseas: boolean; english: boolean; fixedFormat: 'note' | 'video' | null }
 interface Overview { settings: Settings; agents: Agent[]; counts: Record<string, number>; platforms: PlatformInfo[] }
@@ -56,7 +56,7 @@ function lastResult(s?: XPicsSettings) {
 }
 
 const ov = ref<Overview | null>(null);
-const form = ref<{ enabled: boolean; platforms: string[]; hourStart: number; hourEnd: number; gapMin: number; modes: Record<string, Mode>; dailyMaxes: Record<string, number>; formats: Record<string, 'note' | 'video'> }>({ enabled: false, platforms: [], hourStart: 9, hourEnd: 23, gapMin: 45, modes: {}, dailyMaxes: {}, formats: {} });
+const form = ref<{ enabled: boolean; platforms: string[]; hourStart: number; hourEnd: number; gapMin: number; queueDays: number; modes: Record<string, Mode>; dailyMaxes: Record<string, number>; formats: Record<string, 'note' | 'video'> }>({ enabled: false, platforms: [], hourStart: 9, hourEnd: 23, gapMin: 45, queueDays: 1, modes: {}, dailyMaxes: {}, formats: {} });
 const jobs = ref<Job[]>([]);
 const JOB_SIZE = 20;
 const jobPage = ref(1);
@@ -83,7 +83,7 @@ async function loadOverview(fillForm = false) {
   try {
     ov.value = await api<Overview>('/admin/publish/overview');
     const s = ov.value.settings;
-    if (fillForm) form.value = { enabled: s.enabled, platforms: [...s.platforms], hourStart: s.hourStart, hourEnd: s.hourEnd, gapMin: s.gapMin, modes: { ...(s.modes ?? {}) }, dailyMaxes: { ...(s.dailyMaxes ?? {}) }, formats: { ...(s.formats ?? {}) } };
+    if (fillForm) form.value = { enabled: s.enabled, platforms: [...s.platforms], hourStart: s.hourStart, hourEnd: s.hourEnd, gapMin: s.gapMin, queueDays: s.queueDays ?? 1, modes: { ...(s.modes ?? {}) }, dailyMaxes: { ...(s.dailyMaxes ?? {}) }, formats: { ...(s.formats ?? {}) } };
     if (!testPlatforms.value.length) testPlatforms.value = [...s.platforms];
   } catch (e: any) { show(e.message); }
 }
@@ -149,7 +149,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
     <div class="card">
       <div style="font-weight: 600; margin-bottom: 6px">规则</div>
       <div class="muted" style="margin-bottom: 12px">
-        私密树洞里 <b>Telegram 同步进来的每一条新帖</b>，按各平台的文案模式（原文直发 / AI 改写，见下方）出稿，渲染成卡片图，由你本机的发布机以真实浏览器发到下面勾选的平台。<b>不挑不审</b>；超过每日上限的顺延到之后几天，3 天内排不进的跳过。开启时以当前最新一条为起点，之前的旧帖不发。
+        私密树洞里 <b>Telegram 同步进来的每一条新帖</b>，按各平台的文案模式（原文直发 / AI 改写，见下方）出稿，渲染成卡片图，由你本机的发布机以真实浏览器发到下面勾选的平台。<b>不挑不审</b>；超过每日上限的顺延，最多往后排「当天满了最多往后排 N 天」，再排不进的跳过（任务列表里记为「跳过」），所以每日条数少的平台队列不会越积越多。开启时以当前最新一条为起点，之前的旧帖不发。
       </div>
       <div class="row" style="flex-wrap: wrap; gap: 14px; align-items: center">
         <label class="muted" style="display: flex; align-items: center; gap: 6px"><input v-model="form.enabled" type="checkbox" style="width: auto" /> <b :style="{ color: form.enabled ? 'var(--accent)' : '' }">{{ form.enabled ? '已开启' : '已关闭' }}</b></label>
@@ -159,6 +159,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
         </label>
         <label class="muted">时段 <input v-model.number="form.hourStart" type="number" min="0" max="23" style="width: 50px" /> ~ <input v-model.number="form.hourEnd" type="number" min="1" max="24" style="width: 50px" /> 点</label>
         <label class="muted">同平台间隔 ≥ <input v-model.number="form.gapMin" type="number" min="0" max="600" style="width: 56px" /> 分钟</label>
+        <label class="muted" title="每天新帖比某平台的每日条数多时，多出来的最多往后排几天，再排不下就跳过，队列不会越积越多">当天满了最多往后排 <input v-model.number="form.queueDays" type="number" min="0" max="7" style="width: 44px" /> 天（0 = 只排当天）</label>
         <button class="small" @click="save">保存</button>
       </div>
       <div class="row" style="flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line)">

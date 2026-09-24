@@ -50,7 +50,7 @@ export class AdminController {
 
   @Put('publish/settings')
   @UseGuards(AdminGuard)
-  publishSettings(@Body() body: { enabled?: boolean; platforms?: string[]; dailyMax?: number; hourStart?: number; hourEnd?: number; gapMin?: number; modes?: Record<string, string>; dailyMaxes?: Record<string, number>; formats?: Record<string, string> }) {
+  publishSettings(@Body() body: { enabled?: boolean; platforms?: string[]; dailyMax?: number; hourStart?: number; hourEnd?: number; gapMin?: number; queueDays?: number; modes?: Record<string, string>; dailyMaxes?: Record<string, number>; formats?: Record<string, string> }) {
     return this.publish.saveSettings(body ?? {});
   }
 
