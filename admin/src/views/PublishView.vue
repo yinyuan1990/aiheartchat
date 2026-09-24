@@ -19,7 +19,7 @@ function mediaImages(j: Job): string[] {
 const FORMAT_NAME: Record<string, string> = { note: '图文', video: '视频', pics: '纯图' };
 
 interface XPicsSettings { enabled: boolean; channel: string; daily: number; min: number; max: number; fetchHour: number; lastFetch: string; lastResult: string }
-interface XPicsStatus { settings: XPicsSettings; pool: number; busy: boolean; samples: string[]; today: { id: string; status: number; scheduledAt: string; manual: boolean; resultUrl: string; error: string }[] }
+interface XPicsStatus { settings: XPicsSettings; pool: number; unchecked: number; rejected: number; rejectedSamples: { url: string; reason: string }[]; busy: boolean; samples: string[]; today: { id: string; status: number; scheduledAt: string; manual: boolean; resultUrl: string; error: string }[] }
 const xp = ref<XPicsStatus | null>(null);
 const xpForm = ref({ enabled: false, channel: '', daily: 5, min: 2, max: 4, fetchHour: 0 });
 async function loadXPics(fillForm = false) {
@@ -212,7 +212,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
         <button class="small ghost" @click="postXPicsNow">立即发一条</button>
       </div>
       <div class="muted" style="margin-top: 10px; font-size: 12px; line-height: 1.8">
-        图片池剩 <b>{{ xp?.pool ?? 0 }}</b> 张 · 最近拉取：{{ lastResult(xp?.settings) }}<br />
+        图片池可用 <b>{{ xp?.pool ?? 0 }}</b> 张 · 待检查 {{ xp?.unchecked ?? 0 }} · 已过滤 {{ xp?.rejected ?? 0 }}（截图 / 拼图 / 带文字水印 / 非真人女性 / 疑似未成年 / 露点，通义千问看图自动筛）· 最近拉取：{{ lastResult(xp?.settings) }}<br />
         今天：
         <template v-if="xp?.today.length">
           <span v-for="t in xp.today" :key="t.id" style="margin-right: 10px">
@@ -225,6 +225,12 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
       </div>
       <div v-if="xp?.samples.length" style="display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap">
         <a v-for="(u, k) in xp.samples" :key="k" :href="u" target="_blank"><img :src="u" style="width: 56px; height: 56px; object-fit: cover; border-radius: 4px" /></a>
+      </div>
+      <div v-if="xp?.rejectedSamples.length" class="muted" style="font-size: 12px; margin-top: 8px">最近被过滤的：</div>
+      <div v-if="xp?.rejectedSamples.length" style="display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap">
+        <a v-for="(r, k) in xp.rejectedSamples" :key="k" :href="r.url" target="_blank" :title="r.reason" style="text-align: center; font-size: 11px; color: var(--muted, #888); width: 56px">
+          <img :src="r.url" style="width: 56px; height: 56px; object-fit: cover; border-radius: 4px; opacity: 0.6" /><br />{{ r.reason }}
+        </a>
       </div>
     </div>
 

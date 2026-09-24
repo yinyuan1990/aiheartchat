@@ -17,6 +17,21 @@ const MIN_BYTES = 15 * 1024;
 const MANUAL_TAG = 'manual';
 /** 拉取失败后隔多久再自动重试 */
 const RETRY_MS = 30 * 60_000;
+/** 可用池 = 没用过 + 检查过 + 合格 */
+const USABLE = { jobId: null, checked: true, skipReason: '' };
+/** 检查图片用的视觉模型（百炼 OpenAI 兼容接口） */
+const VL_MODEL = process.env.XPICS_VL_MODEL || 'qwen-vl-plus';
+const VL_PROMPT = [
+  '判断这张图片能不能当作「美女写真」直接转发。只输出 JSON：{"ok": true 或 false, "reason": "不合格的原因，10 个字以内，合格留空"}。',
+  '以下任一情况 ok=false：',
+  '1. 手机或电脑截图、App / 网页界面（有状态栏、点赞数、粉丝数、按钮、聊天界面、个人主页等）；',
+  '2. 多张图拼在一起的拼图 / 九宫格；',
+  '3. 画面上有明显的文字、水印、联系方式、二维码、网址、价格；',
+  '4. 主体不是真人女性（风景、物品、男性、动漫卡通）；',
+  '5. 人物看起来可能未成年；',
+  '6. 露点或色情。',
+  '其他正常的女性照片 ok=true。',
+].join('\n');
 
 interface XPicsSettings {
   enabled: boolean;
@@ -104,17 +119,21 @@ export class XPicsService implements OnModuleInit {
   async status() {
     const s = await this.settings();
     const dayStart = bjDayStart(Date.now(), 0);
-    const [pool, today, samples] = await Promise.all([
-      this.prisma.xPic.count({ where: { jobId: null } }),
+    const [pool, unchecked, rejected, rejectedSamples, today, samples] = await Promise.all([
+      this.prisma.xPic.count({ where: USABLE }),
+      this.prisma.xPic.count({ where: { jobId: null, checked: false } }),
+      this.prisma.xPic.count({ where: { checked: true, skipReason: { not: '' } } }),
+      this.prisma.xPic.findMany({ where: { checked: true, skipReason: { not: '' } }, orderBy: { id: 'desc' }, take: 8, select: { url: true, skipReason: true } }),
       this.prisma.publishJob.findMany({
         where: { platform: 'x', format: 'pics', scheduledAt: { gte: new Date(dayStart), lt: new Date(dayStart + 86_400_000) } },
         orderBy: { scheduledAt: 'asc' },
         select: { id: true, status: true, scheduledAt: true, tags: true, resultUrl: true, error: true },
       }),
-      this.prisma.xPic.findMany({ where: { jobId: null }, orderBy: { postedAt: 'desc' }, take: 12, select: { url: true } }),
+      this.prisma.xPic.findMany({ where: USABLE, orderBy: { postedAt: 'desc' }, take: 12, select: { url: true } }),
     ]);
     return {
-      settings: s, pool, busy: this.busy,
+      settings: s, pool, unchecked, rejected, busy: this.busy,
+      rejectedSamples: rejectedSamples.map((r) => ({ url: r.url, reason: r.skipReason })),
       today: today.map((j) => ({ ...j, id: j.id.toString(), manual: j.tags === MANUAL_TAG })),
       samples: samples.map((x) => x.url),
     };
@@ -127,6 +146,7 @@ export class XPicsService implements OnModuleInit {
     if (this.busy) return { started: false, busy: true };
     void this.run(async () => {
       await this.fetch();
+      await this.review(MAX_FETCH);
       if ((await this.settings()).enabled) await this.plan();
     });
     return { started: true, busy: true };
@@ -135,7 +155,10 @@ export class XPicsService implements OnModuleInit {
   /** 立即发一条：从池子取图排一条马上发的任务（不占每日次数） */
   async postNow() {
     const job = await this.makeJob(new Date(), true);
-    if (!job) throw new BadRequestException('图片池里的图不够一条了，先点「立即获取」');
+    if (!job) {
+      const unchecked = await this.prisma.xPic.count({ where: { jobId: null, checked: false } });
+      throw new BadRequestException(unchecked ? `还有 ${unchecked} 张图在检查，稍等一两分钟再点` : '图片池里的合格图不够一条了，先点「立即获取」');
+    }
     return { id: job.id.toString(), images: job.count };
   }
 
@@ -144,11 +167,16 @@ export class XPicsService implements OnModuleInit {
   private async tick() {
     if (this.busy) return;
     const s = await this.settings();
-    if (!s.enabled) return;
     await this.run(async () => {
+      // 关着也把池子里没检查的图查完，手动「立即发一条」要用
+      await this.review(30);
+      if (!s.enabled) return;
       const now = Date.now();
       const due = s.lastFetch !== bjDate(now) && bjHour(now) >= s.fetchHour;
-      if (due && now - this.lastFailAt > RETRY_MS) await this.fetch();
+      if (due && now - this.lastFailAt > RETRY_MS) {
+        await this.fetch();
+        await this.review(MAX_FETCH);
+      }
       // 今天拉过了才排（没拉到就先用池子里剩下的，也照排）
       if ((await this.settings()).lastFetch === bjDate(now) || !due) await this.plan();
     });
@@ -213,6 +241,27 @@ export class XPicsService implements OnModuleInit {
     }
   }
 
+  /** 用视觉模型检查池子里还没检查的图（截图 / 拼图 / 带文字水印 / 非真人女性 / 疑似未成年 / 露点 → 不合格）；模型调不通就留着下轮再查 */
+  private async review(limit: number) {
+    if (!process.env.DASHSCOPE_API_KEY) return;
+    const rows = await this.prisma.xPic.findMany({ where: { jobId: null, checked: false }, orderBy: { id: 'asc' }, take: limit });
+    let bad = 0;
+    for (const r of rows) {
+      try {
+        const res = await fetch(r.url);
+        if (!res.ok) throw new Error(`下载 ${res.status}`);
+        const b64 = Buffer.from(await res.arrayBuffer()).toString('base64');
+        const reason = await classify(`data:image/jpeg;base64,${b64}`);
+        await this.prisma.xPic.update({ where: { id: r.id }, data: { checked: true, skipReason: reason.slice(0, 100) } });
+        if (reason) bad++;
+      } catch (e: any) {
+        this.logger.warn(`review x_pic #${r.id}: ${e?.message ?? e}`);
+        return;
+      }
+    }
+    if (rows.length) this.logger.log(`reviewed ${rows.length} pics, rejected ${bad}`);
+  }
+
   /** 把今天没排满的次数在发布时段里平均排开（已过去的时间点不补） */
   private async plan() {
     const s = await this.settings();
@@ -238,7 +287,7 @@ export class XPicsService implements OnModuleInit {
   private async makeJob(when: Date, manual: boolean) {
     const s = await this.settings();
     const want = s.min + Math.floor(Math.random() * (s.max - s.min + 1));
-    const pool = await this.prisma.xPic.findMany({ where: { jobId: null }, orderBy: [{ postedAt: 'desc' }, { msgId: 'asc' }], take: 300 });
+    const pool = await this.prisma.xPic.findMany({ where: USABLE, orderBy: [{ postedAt: 'desc' }, { msgId: 'asc' }], take: 300 });
     const groups = new Map<string, typeof pool>();
     for (const p of pool) groups.set(p.groupKey, [...(groups.get(p.groupKey) ?? []), p]);
     const picked: typeof pool = [];
@@ -256,6 +305,33 @@ export class XPicsService implements OnModuleInit {
     });
     await this.prisma.xPic.updateMany({ where: { id: { in: picked.map((p) => p.id) } }, data: { jobId: job.id } });
     return { id: job.id, count: picked.length };
+  }
+}
+
+/** 返回不合格原因，合格返回空字符串；接口失败抛错 */
+async function classify(dataUrl: string): Promise<string> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 60_000);
+  try {
+    const res = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.DASHSCOPE_API_KEY}` },
+      body: JSON.stringify({
+        model: VL_MODEL,
+        messages: [{ role: 'user', content: [{ type: 'image_url', image_url: { url: dataUrl } }, { type: 'text', text: VL_PROMPT }] }],
+        max_tokens: 100,
+      }),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) throw new Error(`视觉模型 ${res.status} ${(await res.text()).slice(0, 120)}`);
+    const data: any = await res.json();
+    const raw = String(data?.choices?.[0]?.message?.content ?? '');
+    const m = raw.match(/\{[\s\S]*\}/);
+    if (!m) throw new Error(`视觉模型输出看不懂：${raw.slice(0, 80)}`);
+    const j = JSON.parse(m[0]);
+    return j.ok === true ? '' : String(j.reason || '不合格').trim() || '不合格';
+  } finally {
+    clearTimeout(timer);
   }
 }
 

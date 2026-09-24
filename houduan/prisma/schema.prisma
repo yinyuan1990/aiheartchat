@@ -776,6 +776,10 @@ model XPic {
   postedAt  DateTime  @map("posted_at")
   /// 被哪个 publish_job 用掉了；null = 还在池子里
   jobId     BigInt?   @map("job_id")
+  /// 视觉模型检查过了没有（没检查的不进可用池）
+  checked    Boolean  @default(false)
+  /// 检查不合格的原因（截图 / 拼图 / 有文字水印…）；空 = 合格
+  skipReason String   @default("") @map("skip_reason") @db.VarChar(100)
   createdAt DateTime  @default(now()) @map("created_at")
 
   @@unique([channel, msgId])
