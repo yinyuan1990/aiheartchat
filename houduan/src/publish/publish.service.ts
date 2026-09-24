@@ -277,7 +277,7 @@ export class PublishService implements OnModuleInit {
   // ---------- 出稿：原文 / AI 改写 ----------
 
   /** 各平台标题上限（原文模式取第一句当标题）与正文上限 */
-  private static readonly TITLE_MAX: Record<Platform, number> = { xiaohongshu: 20, douyin: 30, kuaishou: 30, zhihu: 0, shipinhao: 22 };
+  private static readonly TITLE_MAX: Record<Platform, number> = { xiaohongshu: 20, douyin: 20, kuaishou: 30, zhihu: 0, shipinhao: 22 };
   private static readonly CONTENT_MAX: Record<Platform, number> = { xiaohongshu: 1000, douyin: 1000, kuaishou: 1000, zhihu: 2000, shipinhao: 1000 };
 
   private async draft(text: string, platform: Platform, s: Settings): Promise<Draft> {
@@ -301,7 +301,7 @@ export class PublishService implements OnModuleInit {
     const TAG_POOL = '情感、心事、成长、生活感悟、随笔、故事、治愈、文字、日常、人生、亲密关系、自我成长、情绪';
     const spec: Record<Platform, string> = {
       xiaohongshu: `小红书图文笔记：title 不超过 20 个字、口语化有钩子可带 1 个 emoji；content 120~300 字，分 3~5 个短段，每段可用 emoji 开头，结尾一句引发共鸣或提问；tags 从「${TAG_POOL}」里挑 5 个。`,
-      douyin: `抖音图文：title 不超过 30 个字有悬念；content 80~200 字，短句分行；tags 从「${TAG_POOL}」里挑 4 个。`,
+      douyin: `抖音图文：title 不超过 20 个字有悬念；content 80~200 字，短句分行；tags 从「${TAG_POOL}」里挑 4 个。`,
       kuaishou: `快手图文：title 不超过 30 个字直白接地气；content 80~200 字，短句分行；tags 从「${TAG_POOL}」里挑 4 个。`,
       zhihu: `知乎「想法」（纯文本短帖）：title 留空字符串；content 150~400 字，像在知乎认真聊天的语气，有观点有细节，段落之间空一行，结尾可以抛一个问题；tags 从「${TAG_POOL}」里挑 3 个。`,
       shipinhao: `微信视频号图文动态：title 不超过 22 个字、平实不猎奇（微信用户偏成熟）；content 80~200 字，短句分行；tags 从「${TAG_POOL}」里挑 3 个。`,
@@ -321,7 +321,7 @@ export class PublishService implements OnModuleInit {
       try {
         const raw = await callModel([{ role: 'system', content: system }, { role: 'user', content: user }], 0.9);
         const j = JSON.parse(raw.replace(/^```json\s*|```$/g, '').trim());
-        const title = String(j.title ?? '').replace(/\s+/g, ' ').trim().slice(0, platform === 'xiaohongshu' ? 20 : platform === 'shipinhao' ? 22 : 30);
+        const title = String(j.title ?? '').replace(/\s+/g, ' ').trim().slice(0, PublishService.TITLE_MAX[platform] || 30);
         const content = String(j.content ?? '').trim();
         const tags = (Array.isArray(j.tags) ? j.tags : []).map((t: unknown) => String(t).replace(/^#/, '').replace(/[#\s,，]/g, '').trim()).filter(Boolean).slice(0, 5);
         if (content.length < 20) throw new Error('正文过短');
@@ -375,7 +375,8 @@ export class PublishService implements OnModuleInit {
     // 乐观锁：status 仍为 0 才领得到
     const r = await this.prisma.publishJob.updateMany({ where: { id: j.id, status: 0 }, data: { status: 1, claimedAt: new Date(), attempts: { increment: 1 } } });
     if (!r.count) return null;
-    return { id: j.id.toString(), platform: j.platform, title: j.title, content: j.content, tags: j.tags ? j.tags.split(',') : [], attempts: j.attempts + 1 };
+    const tmax = PublishService.TITLE_MAX[j.platform as Platform];
+    return { id: j.id.toString(), platform: j.platform, title: tmax ? j.title.slice(0, tmax) : j.title, content: j.content, tags: j.tags ? j.tags.split(',') : [], attempts: j.attempts + 1 };
   }
 
   async result(body: { id: string; ok: boolean; url?: string; error?: string }) {
