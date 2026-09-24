@@ -123,7 +123,12 @@ def _reply(page: Page, url: str, text: str, log=None) -> tuple[bool, str]:
 
 
 def post_video(profile: Path, video: Path, text: str, headless: bool, shot_dir: Path, log=None, reply: str = "") -> tuple[bool, str, str]:
-    """发一条带视频的帖子，reply 非空就发完再自己回复一条。返回 (ok, url, error)；失败截图到 shot_dir；回复失败只记日志，不算发布失败"""
+    return post_media(profile, [video], text, headless, shot_dir, log, reply)
+
+
+def post_media(profile: Path, files: list[Path], text: str, headless: bool, shot_dir: Path, log=None, reply: str = "") -> tuple[bool, str, str]:
+    """发一条帖子：files 是一个视频或最多 4 张图，text 可以为空（纯图）；reply 非空就发完再自己回复一条。
+    返回 (ok, url, error)；失败截图到 shot_dir；回复失败只记日志，不算发布失败"""
 
     def shot(tag: str):
         try:
@@ -145,13 +150,14 @@ def post_video(profile: Path, video: Path, text: str, headless: bool, shot_dir: 
                     return False, "", "X 登录失效（cookie expired），重新 login x"
                 return False, "", "没找到发帖输入框（看 logs 截图）"
             box.click()
-            for i, line in enumerate(text.split("\n")):
-                if i:
-                    page.keyboard.press("Shift+Enter")
-                page.keyboard.type(line, delay=15)
-            page.locator('input[data-testid="fileInput"]').first.set_input_files(str(video))
+            if text:
+                for i, line in enumerate(text.split("\n")):
+                    if i:
+                        page.keyboard.press("Shift+Enter")
+                    page.keyboard.type(line, delay=15)
+            page.locator('input[data-testid="fileInput"]').first.set_input_files([str(f) for f in files])
             btn = page.locator('[data-testid="tweetButton"]').first
-            # 视频上传 + 转码：按钮可点才算好，最多等 10 分钟
+            # 上传（视频还要转码）：按钮可点才算好，最多等 10 分钟
             ready = False
             for i in range(600):
                 page.wait_for_timeout(1000)
@@ -159,10 +165,10 @@ def post_video(profile: Path, video: Path, text: str, headless: bool, shot_dir: 
                     ready = True
                     break
                 if log and i and i % 60 == 0:
-                    log.info("X 视频还在上传 / 处理（%d 秒）", i)
+                    log.info("X 媒体还在上传 / 处理（%d 秒）", i)
             if not ready:
                 shot("notready")
-                return False, "", "视频上传 10 分钟还没好（看 logs 截图）"
+                return False, "", "媒体上传 10 分钟还没好（看 logs 截图）"
             page.wait_for_timeout(1500)
             _press(page, btn, log)
             url, sent = "", False

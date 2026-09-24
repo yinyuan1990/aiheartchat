@@ -10,11 +10,49 @@ interface Overview { settings: Settings; agents: Agent[]; counts: Record<string,
 interface Job {
   id: string; postId: string; platform: string; platformName: string; title: string; content: string; tags: string; status: number;
   scheduledAt: string; claimedAt: string | null; doneAt: string | null; attempts: number; error: string; resultUrl: string; createdAt: string; source: string;
-  format: 'note' | 'video'; media: string;
+  format: 'note' | 'video' | 'pics'; media: string;
 }
 function mediaImages(j: Job): string[] {
-  if (j.format !== 'video' || !j.media) return [];
+  if ((j.format !== 'video' && j.format !== 'pics') || !j.media) return [];
   try { return JSON.parse(j.media).images ?? []; } catch { return []; }
+}
+const FORMAT_NAME: Record<string, string> = { note: '图文', video: '视频', pics: '纯图' };
+
+interface XPicsSettings { enabled: boolean; channel: string; daily: number; min: number; max: number; fetchHour: number; lastFetch: string; lastResult: string }
+interface XPicsStatus { settings: XPicsSettings; pool: number; busy: boolean; samples: string[]; today: { id: string; status: number; scheduledAt: string; manual: boolean; resultUrl: string; error: string }[] }
+const xp = ref<XPicsStatus | null>(null);
+const xpForm = ref({ enabled: false, channel: '', daily: 5, min: 2, max: 4, fetchHour: 0 });
+async function loadXPics(fillForm = false) {
+  try {
+    xp.value = await api<XPicsStatus>('/admin/xpics');
+    const s = xp.value.settings;
+    if (fillForm) xpForm.value = { enabled: s.enabled, channel: s.channel, daily: s.daily, min: s.min, max: s.max, fetchHour: s.fetchHour };
+  } catch (e: any) { show(e.message); }
+}
+async function saveXPics() {
+  try {
+    xp.value = await api<XPicsStatus>('/admin/xpics/settings', { method: 'PUT', body: xpForm.value });
+    show('已保存');
+  } catch (e: any) { show(e.message); }
+}
+async function fetchXPics() {
+  try {
+    await api('/admin/xpics/fetch', { method: 'POST' });
+    show('开始拉取最近 24 小时的图，稍等一两分钟刷新');
+    setTimeout(() => loadXPics(), 3000);
+  } catch (e: any) { show(e.message); }
+}
+async function postXPicsNow() {
+  try {
+    const r = await api<{ id: string; images: number }>('/admin/xpics/post-now', { method: 'POST' });
+    show(`已排任务 #${r.id}（${r.images} 张），发布机一两分钟内会发`);
+    loadXPics(); loadJobs();
+  } catch (e: any) { show(e.message); }
+}
+function lastResult(s?: XPicsSettings) {
+  if (!s?.lastResult) return '还没拉过';
+  const [t, msg] = s.lastResult.split('|');
+  return `${fmt(t)} ${msg}`;
 }
 
 const ov = ref<Overview | null>(null);
@@ -87,8 +125,8 @@ function toggle(list: string[], key: string) {
   if (i >= 0) list.splice(i, 1); else list.push(key);
 }
 onMounted(() => {
-  loadOverview(true); loadJobs();
-  timer = window.setInterval(() => { loadOverview(); loadJobs(); }, 15000);
+  loadOverview(true); loadJobs(); loadXPics(true);
+  timer = window.setInterval(() => { loadOverview(); loadJobs(); loadXPics(); }, 15000);
 });
 onUnmounted(() => { if (timer) clearInterval(timer); });
 </script>
@@ -158,6 +196,39 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
     </div>
 
     <div class="card" style="margin-top: 12px">
+      <div style="font-weight: 600; margin-bottom: 6px">X 美女图（Telegram 频道 → X 纯图帖，只发 X）</div>
+      <div class="muted" style="margin-bottom: 12px">
+        每天 <b>{{ xpForm.fetchHour }} 点</b>用后台登录的 Telegram 账号拉来源频道<b>最近 24 小时</b>的图片，存到服务器 MinIO（<code>xpics/日期/</code>）进图片池；
+        按每天次数在上面的发布时段（{{ form.hourStart }}~{{ form.hourEnd }} 点）里平均排开，每次从池子取几张（同一相册的放一起），<b>不带任何文字</b>，由外网发布机发到 X。不占上面 X 的每日条数。X 一条最多 4 张图。
+      </div>
+      <div class="row" style="flex-wrap: wrap; gap: 14px; align-items: center">
+        <label class="muted" style="display: flex; align-items: center; gap: 6px"><input v-model="xpForm.enabled" type="checkbox" style="width: auto" /> <b :style="{ color: xpForm.enabled ? 'var(--accent)' : '' }">{{ xpForm.enabled ? '已开启' : '已关闭' }}</b></label>
+        <label class="muted">来源频道 t.me/<input v-model="xpForm.channel" style="width: 140px" /></label>
+        <label class="muted">每天 <input v-model.number="xpForm.daily" type="number" min="1" max="20" style="width: 50px" /> 次</label>
+        <label class="muted">每次 <input v-model.number="xpForm.min" type="number" min="1" max="4" style="width: 44px" /> ~ <input v-model.number="xpForm.max" type="number" min="1" max="4" style="width: 44px" /> 张</label>
+        <label class="muted">每天 <input v-model.number="xpForm.fetchHour" type="number" min="0" max="23" style="width: 50px" /> 点拉取</label>
+        <button class="small" @click="saveXPics">保存</button>
+        <button class="small ghost" :disabled="xp?.busy" @click="fetchXPics">{{ xp?.busy ? '拉取中…' : '立即获取' }}</button>
+        <button class="small ghost" @click="postXPicsNow">立即发一条</button>
+      </div>
+      <div class="muted" style="margin-top: 10px; font-size: 12px; line-height: 1.8">
+        图片池剩 <b>{{ xp?.pool ?? 0 }}</b> 张 · 最近拉取：{{ lastResult(xp?.settings) }}<br />
+        今天：
+        <template v-if="xp?.today.length">
+          <span v-for="t in xp.today" :key="t.id" style="margin-right: 10px">
+            {{ fmt(t.scheduledAt) }}<span v-if="t.manual">（手动）</span>
+            <span class="tag" :class="STATUS[t.status]?.cls">{{ STATUS[t.status]?.text }}</span>
+            <a v-if="t.resultUrl" :href="t.resultUrl" target="_blank" style="color: var(--accent)">查看</a>
+          </span>
+        </template>
+        <span v-else>还没排</span>
+      </div>
+      <div v-if="xp?.samples.length" style="display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap">
+        <a v-for="(u, k) in xp.samples" :key="k" :href="u" target="_blank"><img :src="u" style="width: 56px; height: 56px; object-fit: cover; border-radius: 4px" /></a>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top: 12px">
       <div style="font-weight: 600; margin-bottom: 6px">测试发布</div>
       <div class="row" style="flex-wrap: wrap; gap: 12px; align-items: center">
         <span class="muted">用最近一条树洞帖，立刻发到：</span>
@@ -186,10 +257,10 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
         <tbody>
           <template v-for="j in jobs" :key="j.id">
             <tr>
-              <td class="muted">{{ j.id }}<br /><span style="font-size: 11px">帖 #{{ j.postId }}</span></td>
-              <td>{{ j.platformName }}<br /><span class="muted" style="font-size: 11px">{{ j.format === 'video' ? '视频' : '图文' }}</span></td>
+              <td class="muted">{{ j.id }}<br /><span style="font-size: 11px">{{ j.format === 'pics' ? '美女图' : `帖 #${j.postId}` }}</span></td>
+              <td>{{ j.platformName }}<br /><span class="muted" style="font-size: 11px">{{ FORMAT_NAME[j.format] ?? j.format }}</span></td>
               <td style="max-width: 360px; cursor: pointer" @click="expanded = expanded === j.id ? null : j.id">
-                <div style="font-weight: 600">{{ j.title || '（无标题）' }}</div>
+                <div style="font-weight: 600">{{ j.title || (j.format === 'pics' ? '（纯图，无文字）' : '（无标题）') }}</div>
                 <div class="muted" style="font-size: 12px; white-space: pre-wrap" :style="expanded === j.id ? {} : { overflow: 'hidden', maxHeight: '36px' }">{{ j.content }}</div>
                 <div v-if="j.tags" class="muted" style="font-size: 11px">#{{ j.tags.split(',').join(' #') }}</div>
                 <div v-if="j.format === 'video' && !j.media && j.status === 0" class="muted" style="font-size: 11px; color: var(--accent)">等待出图（排到 6 小时内自动出，一组约 1~3 分钟）</div>

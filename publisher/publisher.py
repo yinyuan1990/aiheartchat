@@ -111,7 +111,7 @@ class Api:
         return self._unwrap(requests.post(f"{self.base}/publish/agent/heartbeat", headers=self.h, json={"host": socket.gethostname(), "accounts": accounts, "ip": ip or {}}, timeout=20))
 
     def next(self, platforms: list[str]):
-        formats = "note,video" if video_ready() else "note"
+        formats = "note,video,pics" if video_ready() else "note,pics"
         params = {"platforms": ",".join(platforms), "formats": formats, "host": socket.gethostname()}
         return self._unwrap(requests.get(f"{self.base}/publish/agent/next", headers=self.h, params=params, timeout=20))
 
@@ -323,6 +323,29 @@ def publish_video(cfg: dict, job: dict) -> tuple[bool, str, str]:
     return True, url, ""
 
 
+def publish_pics(job: dict) -> tuple[bool, str, str]:
+    """X 美女图：后台从 TG 频道拉好的 2~4 张图，纯图发 X，不带文字、不回复"""
+    if job["platform"] != "x":
+        return False, "", "纯图任务只支持 X"
+    urls = (job.get("media") or {}).get("images") or []
+    if not urls:
+        return False, "", "纯图任务没有图片"
+    work = CARDS / f"job{job['id']}-pics"
+    work.mkdir(parents=True, exist_ok=True)
+    files = []
+    for i, u in enumerate(urls[:4]):
+        f = work / f"{i + 1:02d}.jpg"
+        if not f.exists():
+            r = requests.get(u, timeout=120)
+            r.raise_for_status()
+            f.write_bytes(r.content)
+        files.append(f)
+    time.sleep(random.uniform(20, 120))
+    import x as xpost
+
+    return xpost.post_media(PROFILES / "x", files, "", headless=False, shot_dir=LOGS, log=log)
+
+
 def publish_job(cfg: dict, job: dict) -> tuple[bool, str, str]:
     p = job["platform"]
     title = job.get("title") or ""
@@ -330,6 +353,8 @@ def publish_job(cfg: dict, job: dict) -> tuple[bool, str, str]:
     tags = [t for t in (job.get("tags") or []) if t]
     if job.get("format") == "video":
         return publish_video(cfg, job)
+    if job.get("format") == "pics":
+        return publish_pics(job)
     if p == "zhihu":
         import zhihu
         ok, url, err = zhihu.post_pin(PROFILES / "zhihu", content, bool(cfg["headless"]), LOGS, title=title)

@@ -761,6 +761,28 @@ model PublishJob {
   @@map("publish_job")
 }
 
+// ---------- X 美女图（推广）：每天从一个 TG 频道拉最近一天的图片进池子，按每日次数排成 X 纯图帖（publish_job.format = pics） ----------
+
+model XPic {
+  id        Int       @id @default(autoincrement())
+  /// 来源频道用户名（不带 @）
+  channel   String    @db.VarChar(64)
+  msgId     Int       @map("msg_id")
+  /// 同一相册（groupedId）的图片同一个值，排帖时尽量同一组放一起
+  groupKey  String    @default("") @map("group_key") @db.VarChar(40)
+  /// MinIO 完整地址
+  url       String    @db.VarChar(300)
+  /// TG 消息发布时间
+  postedAt  DateTime  @map("posted_at")
+  /// 被哪个 publish_job 用掉了；null = 还在池子里
+  jobId     BigInt?   @map("job_id")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@unique([channel, msgId])
+  @@index([jobId])
+  @@map("x_pic")
+}
+
 // ---------- 频道转发（推广）：把别的公开频道的新消息转发到我们自己的推广频道（默认 @smsd2030），与 App 内容无关 ----------
 
 model TgForwardSource {

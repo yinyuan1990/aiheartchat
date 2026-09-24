@@ -298,13 +298,14 @@ export class PublishService implements OnModuleInit {
    */
   private async nextSlot(platform: Platform, s: Settings): Promise<Date | null> {
     const now = Date.now();
-    const last = await this.prisma.publishJob.findFirst({ where: { platform, status: { in: [0, 1, 2] } }, orderBy: { scheduledAt: 'desc' }, select: { scheduledAt: true } });
+    // X 美女图（format=pics）单独算次数，不占树洞帖的每日上限 / 间隔
+    const last = await this.prisma.publishJob.findFirst({ where: { platform, format: { not: 'pics' }, status: { in: [0, 1, 2] } }, orderBy: { scheduledAt: 'desc' }, select: { scheduledAt: true } });
     const minByGap = last ? last.scheduledAt.getTime() + s.gapMin * 60_000 : 0;
     for (let d = 0; d <= MAX_DAYS_AHEAD; d++) {
       const dayStart = bjDayStart(now, d);
       const winStart = dayStart + s.hourStart * 3_600_000;
       const winEnd = dayStart + s.hourEnd * 3_600_000;
-      const count = await this.prisma.publishJob.count({ where: { platform, status: { in: [0, 1, 2] }, scheduledAt: { gte: new Date(dayStart), lt: new Date(dayStart + 86_400_000) } } });
+      const count = await this.prisma.publishJob.count({ where: { platform, format: { not: 'pics' }, status: { in: [0, 1, 2] }, scheduledAt: { gte: new Date(dayStart), lt: new Date(dayStart + 86_400_000) } } });
       if (count >= s.dailyMaxes[platform]) continue;
       // 随机抖 3~25 分钟：别每条都卡在整点 / 固定间隔上（小红书按"操作习惯不像真人"给过警告）
       const jitter = (3 + Math.random() * 22) * 60_000;
@@ -442,20 +443,23 @@ export class PublishService implements OnModuleInit {
 
   /**
    * 领一条到点的任务（按 scheduledAt 最早）。platforms = 发布机本地已登录的平台；
-   * formats = 发布机支持的形式（老版本发布机不传 = 只会发图文，不给它视频任务）；视频任务要等出完图（media 非空）才下发
+   * formats = 发布机支持的形式（老版本发布机不传 = 只会发图文，不给它视频任务）；视频任务要等出完图（media 非空）才下发；
+   * pics = X 美女图纯图帖（x-pics.service），新版发布机才传
    */
   async claim(platforms: string[], formats: string[] = ['note'], host = '') {
     const agent = host ? this.agents.get(host) : undefined;
     if (agent) agent.lastSeen = new Date().toISOString();
     const list = platforms.filter((p) => (PLATFORMS as readonly string[]).includes(p));
     if (!list.length) return null;
-    const canVideo = formats.includes('video');
+    const allowed: object[] = [{ format: 'note' }];
+    if (formats.includes('video')) allowed.push({ format: 'video', media: { not: '' } });
+    if (formats.includes('pics')) allowed.push({ format: 'pics' });
     const j = await this.prisma.publishJob.findFirst({
       where: {
         status: 0,
         platform: { in: list },
         scheduledAt: { lte: new Date() },
-        OR: canVideo ? [{ format: 'note' }, { format: 'video', media: { not: '' } }] : [{ format: 'note' }],
+        OR: allowed,
       },
       orderBy: { scheduledAt: 'asc' },
     });
@@ -466,7 +470,7 @@ export class PublishService implements OnModuleInit {
     const video = j.format === 'video';
     const tmax = video && j.platform === 'shipinhao' ? SHIPINHAO_VIDEO_TITLE_MAX : PublishService.TITLE_MAX[j.platform as Platform];
     let media: unknown = null;
-    if (video) {
+    if (video || j.format === 'pics') {
       try { media = JSON.parse(j.media); } catch { media = null; }
     }
     return {
@@ -501,7 +505,7 @@ function clampDaily(v: unknown, fallback: number): number {
 }
 
 /** 北京时间 d 天后那天的 0 点（毫秒时间戳） */
-function bjDayStart(now: number, d: number): number {
+export function bjDayStart(now: number, d: number): number {
   const off = 8 * 3_600_000;
   const local = now + off;
   const day = Math.floor(local / 86_400_000) + d;

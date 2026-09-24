@@ -17,11 +17,13 @@ import { GifService } from '../gif/gif.service';
 import { HallTabsService } from '../module/hall-tabs.service';
 import { TgForwardService } from '../tgforward/tg-forward.service';
 import { PublishService } from '../publish/publish.service';
+import { XPicsService } from '../publish/x-pics.service';
 
 @Controller('admin')
 export class AdminController {
   constructor(
     private readonly publish: PublishService,
+    private readonly xpics: XPicsService,
     private readonly admin: AdminService,
     private readonly news: NewsService,
     private readonly treehole: TreeholeService,
@@ -87,6 +89,32 @@ export class AdminController {
   @UseGuards(AdminGuard)
   publishTest(@Body() body: { postId?: string; platforms?: string[] }) {
     return this.publish.testPublish(body?.postId ? BigInt(body.postId) : undefined, body?.platforms);
+  }
+
+  // ---------- X 美女图（推广：TG 频道图片 → X 纯图帖，只发 X） ----------
+
+  @Get('xpics')
+  @UseGuards(AdminGuard)
+  xpicsStatus() {
+    return this.xpics.status();
+  }
+
+  @Put('xpics/settings')
+  @UseGuards(AdminGuard)
+  xpicsSettings(@Body() body: { enabled?: boolean; channel?: string; daily?: number; min?: number; max?: number; fetchHour?: number }) {
+    return this.xpics.saveSettings(body ?? {});
+  }
+
+  @Post('xpics/fetch')
+  @UseGuards(AdminGuard)
+  xpicsFetch() {
+    return this.xpics.fetchNow();
+  }
+
+  @Post('xpics/post-now')
+  @UseGuards(AdminGuard)
+  xpicsPostNow() {
+    return this.xpics.postNow();
   }
 
   // ---------- 频道转发（推广：别人的频道 → 我们的推广频道，与 App 内容无关） ----------
