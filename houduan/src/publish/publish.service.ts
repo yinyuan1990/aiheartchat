@@ -186,14 +186,17 @@ export class PublishService implements OnModuleInit {
 
   // ---------- 后台：任务 ----------
 
-  async jobs(status?: number, platform?: string, beforeId?: bigint) {
-    const rows = await this.prisma.publishJob.findMany({
-      where: { ...(status !== undefined ? { status } : {}), ...(platform ? { platform } : {}), ...(beforeId ? { id: { lt: beforeId } } : {}) },
-      orderBy: { id: 'desc' },
-      take: 60,
-    });
+  async jobs(status?: number, platform?: string, page = 1, size = 20) {
+    const where = { ...(status !== undefined ? { status } : {}), ...(platform ? { platform } : {}) };
+    const take = Math.min(100, Math.max(1, Math.floor(size) || 20));
+    const skip = (Math.max(1, Math.floor(page) || 1) - 1) * take;
+    const [total, rows] = await Promise.all([
+      this.prisma.publishJob.count({ where }),
+      this.prisma.publishJob.findMany({ where, orderBy: { id: 'desc' }, skip, take }),
+    ]);
     const posts = await this.prisma.treeholePost.findMany({ where: { id: { in: [...new Set(rows.map((r) => r.postId))] } }, select: { id: true, content: true } });
-    return rows.map((r) => ({ ...r, platformName: PLATFORM_NAMES[r.platform as Platform] ?? r.platform, source: posts.find((p) => p.id === r.postId)?.content.slice(0, 120) ?? '' }));
+    const list = rows.map((r) => ({ ...r, platformName: PLATFORM_NAMES[r.platform as Platform] ?? r.platform, source: posts.find((p) => p.id === r.postId)?.content.slice(0, 120) ?? '' }));
+    return { total, list };
   }
 
   async retry(id: bigint) {

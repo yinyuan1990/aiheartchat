@@ -58,6 +58,9 @@ function lastResult(s?: XPicsSettings) {
 const ov = ref<Overview | null>(null);
 const form = ref<{ enabled: boolean; platforms: string[]; hourStart: number; hourEnd: number; gapMin: number; modes: Record<string, Mode>; dailyMaxes: Record<string, number>; formats: Record<string, 'note' | 'video'> }>({ enabled: false, platforms: [], hourStart: 9, hourEnd: 23, gapMin: 45, modes: {}, dailyMaxes: {}, formats: {} });
 const jobs = ref<Job[]>([]);
+const JOB_SIZE = 20;
+const jobPage = ref(1);
+const jobTotal = ref(0);
 const filterStatus = ref('');
 const filterPlatform = ref('');
 const toast = ref('');
@@ -88,8 +91,15 @@ async function loadJobs() {
   const q = new URLSearchParams();
   if (filterStatus.value !== '') q.set('status', filterStatus.value);
   if (filterPlatform.value) q.set('platform', filterPlatform.value);
-  jobs.value = await api<Job[]>(`/admin/publish/jobs?${q.toString()}`);
+  q.set('page', String(jobPage.value));
+  q.set('size', String(JOB_SIZE));
+  const r = await api<{ total: number; list: Job[] }>(`/admin/publish/jobs?${q.toString()}`);
+  jobs.value = r.list;
+  jobTotal.value = r.total;
+  // 删掉最后一页的最后一条后，页码退回有数据的那页
+  if (!r.list.length && jobPage.value > 1) { jobPage.value = Math.max(1, Math.ceil(r.total / JOB_SIZE)); await loadJobs(); }
 }
+function reloadJobs() { jobPage.value = 1; loadJobs(); }
 async function save() {
   try {
     ov.value = await api<Overview>('/admin/publish/settings', { method: 'PUT', body: form.value });
@@ -114,6 +124,7 @@ async function testPublish() {
     const r = await api<{ postId: string; jobs: { platform: string; title: string }[] }>('/admin/publish/test', { method: 'POST', body: { platforms: testPlatforms.value } });
     show(`已排 ${r.jobs.length} 条（帖子 #${r.postId}），看下面列表`);
     filterStatus.value = '';
+    jobPage.value = 1;
     await loadJobs();
   } catch (e: any) { show(e.message); } finally { testing.value = false; }
 }
@@ -250,13 +261,18 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
       <div class="row" style="gap: 12px; align-items: center; margin-bottom: 8px">
         <div style="font-weight: 600">任务</div>
         <span v-if="ov" class="muted" style="font-size: 12px">待发 {{ ov.counts[0] ?? 0 }} · 发布中 {{ ov.counts[1] ?? 0 }} · 成功 {{ ov.counts[2] ?? 0 }} · 失败 {{ ov.counts[3] ?? 0 }} · 跳过 {{ ov.counts[4] ?? 0 }}</span>
-        <select v-model="filterStatus" style="width: auto" @change="loadJobs">
+        <select v-model="filterStatus" style="width: auto" @change="reloadJobs">
           <option value="">全部状态</option><option value="0">待发</option><option value="1">发布中</option><option value="2">成功</option><option value="3">失败</option><option value="4">跳过</option>
         </select>
-        <select v-model="filterPlatform" style="width: auto" @change="loadJobs">
+        <select v-model="filterPlatform" style="width: auto" @change="reloadJobs">
           <option value="">全部平台</option><option v-for="p in ov?.platforms ?? []" :key="p.key" :value="p.key">{{ p.name }}</option>
         </select>
         <button class="small ghost" @click="loadJobs">刷新</button>
+        <span style="flex: 1" />
+        <span class="muted">{{ jobTotal }} 条</span>
+        <button class="small ghost" :disabled="jobPage <= 1" @click="jobPage--; loadJobs()">上一页</button>
+        <span class="muted">{{ jobPage }} / {{ Math.max(1, Math.ceil(jobTotal / JOB_SIZE)) }}</span>
+        <button class="small ghost" :disabled="jobPage * JOB_SIZE >= jobTotal" @click="jobPage++; loadJobs()">下一页</button>
       </div>
       <table v-if="jobs.length">
         <thead><tr><th>#</th><th>平台</th><th>标题 / 文案</th><th>状态</th><th>排期</th><th>完成</th><th>结果 / 错误</th><th>操作</th></tr></thead>

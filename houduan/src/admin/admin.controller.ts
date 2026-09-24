@@ -62,8 +62,8 @@ export class AdminController {
 
   @Get('publish/jobs')
   @UseGuards(AdminGuard)
-  publishJobs(@Query('status') status?: string, @Query('platform') platform?: string, @Query('beforeId') beforeId?: string) {
-    return this.publish.jobs(status !== undefined && status !== '' ? Number(status) : undefined, platform || undefined, beforeId ? BigInt(beforeId) : undefined);
+  publishJobs(@Query('status') status?: string, @Query('platform') platform?: string, @Query('page') page?: string, @Query('size') size?: string) {
+    return this.publish.jobs(status !== undefined && status !== '' ? Number(status) : undefined, platform || undefined, Number(page) || 1, Number(size) || 20);
   }
 
   @Post('publish/jobs/:id/retry')
