@@ -67,8 +67,48 @@ def check(profile: Path, headless: bool = False) -> tuple[bool, str]:
             ctx.close()
 
 
-def post_video(profile: Path, video: Path, text: str, headless: bool, shot_dir: Path, log=None) -> tuple[bool, str, str]:
-    """发一条带视频的帖子。返回 (ok, url, error)；失败截图到 shot_dir"""
+def _latest_status_url(page: Page) -> str:
+    """发帖成功但 toast 没给链接时：去自己主页找最新一条（跳过置顶）"""
+    prof = page.locator('[data-testid="AppTabBar_Profile_Link"]').first
+    href = prof.get_attribute("href") if prof.count() else ""
+    if not href:
+        return ""
+    page.goto(f"https://x.com{href}", wait_until="domcontentloaded", timeout=60000)
+    page.wait_for_timeout(4000)
+    for art in page.locator('article[data-testid="tweet"]').all()[:5]:
+        if art.locator('[data-testid="socialContext"]').count():
+            continue
+        a = art.locator('a[href*="/status/"]:has(time)').first
+        if a.count():
+            h = a.get_attribute("href") or ""
+            return h if h.startswith("http") else f"https://x.com{h}"
+    return ""
+
+
+def _reply(page: Page, url: str, text: str) -> tuple[bool, str]:
+    page.goto(url, wait_until="domcontentloaded", timeout=60000)
+    box = page.locator('[data-testid="tweetTextarea_0"]').first
+    box.wait_for(state="visible", timeout=30000)
+    box.click()
+    for i, line in enumerate(text.split("\n")):
+        if i:
+            page.keyboard.press("Shift+Enter")
+        page.keyboard.type(line, delay=15)
+    btn = page.locator('[data-testid="tweetButtonInline"]').first
+    for _ in range(30):
+        page.wait_for_timeout(1000)
+        if btn.count() and btn.is_enabled() and btn.get_attribute("aria-disabled") != "true":
+            break
+    else:
+        return False, "回复按钮一直不可点"
+    page.wait_for_timeout(1000)
+    btn.click()
+    page.wait_for_timeout(5000)
+    return True, ""
+
+
+def post_video(profile: Path, video: Path, text: str, headless: bool, shot_dir: Path, log=None, reply: str = "") -> tuple[bool, str, str]:
+    """发一条带视频的帖子，reply 非空就发完再自己回复一条。返回 (ok, url, error)；失败截图到 shot_dir；回复失败只记日志，不算发布失败"""
 
     def shot(tag: str):
         try:
@@ -110,7 +150,7 @@ def post_video(profile: Path, video: Path, text: str, headless: bool, shot_dir: 
                 return False, "", "视频上传 10 分钟还没好（看 logs 截图）"
             page.wait_for_timeout(1500)
             btn.click()
-            url = ""
+            url, sent = "", False
             for _ in range(60):
                 page.wait_for_timeout(1000)
                 toast = page.locator('[data-testid="toast"]').first
@@ -119,11 +159,28 @@ def post_video(profile: Path, video: Path, text: str, headless: bool, shot_dir: 
                     if link.count():
                         href = link.get_attribute("href") or ""
                         url = href if href.startswith("http") else f"https://x.com{href}"
-                    return True, url, ""
+                    sent = True
+                    break
                 if "/compose/post" not in page.url and not box.is_visible():
-                    return True, url, ""
-            shot("notsent")
-            return False, "", "点了发布但没确认成功（看 logs 截图）"
+                    sent = True
+                    break
+            if not sent:
+                shot("notsent")
+                return False, "", "点了发布但没确认成功（看 logs 截图）"
+            if reply:
+                try:
+                    page.wait_for_timeout(5000)
+                    url = url or _latest_status_url(page)
+                    ok, err = _reply(page, url, reply) if url else (False, "找不到刚发的帖子链接")
+                except Exception as e:  # noqa: BLE001
+                    ok, err = False, str(e)[:200]
+                if log:
+                    if ok:
+                        log.info("X 已在 %s 下回复推广链接", url)
+                    else:
+                        shot("noreply")
+                        log.warning("X 帖子发成功了，但回复推广链接失败：%s", err)
+            return True, url, ""
         except Exception as e:  # noqa: BLE001
             shot("exc")
             return False, "", f"X 发布异常：{str(e)[:200]}"

@@ -78,8 +78,10 @@ def load_config() -> dict:
     cfg.setdefault("video_voice_en", "en-US-AriaNeural")
     cfg.setdefault("video_voices", {})
     cfg.setdefault("slogan_en", "Love has nothing to do with money. It's about the heart.")
-    # X 每条帖子都带的代币推广行（空字符串 = 不带）
-    cfg.setdefault("x_promo", "第一个陪玩约单美女代币（USDC 链）👉 https://ccfspt.com/token/0x870B91f9aF1f73F80E42826eb5f7400c9e97D37c")
+    # X 代币联动：正文推广行 / 发完自己回复一条 / 视频片尾卡（每项一行）。空字符串 / 空列表 = 不带
+    cfg.setdefault("x_promo", "第一个陪玩美女代币（USDC 链）👉 https://ccfspt.com/token/0x870B91f9aF1f73F80E42826eb5f7400c9e97D37c")
+    cfg.setdefault("x_reply", cfg["x_promo"])
+    cfg.setdefault("x_outro", ["第一个陪玩美女代币", "USDC 链上发行", "ccfspt.com", "链接见帖子和评论区"])
     if not cfg.get("token") or "填这里" in cfg["token"]:
         print("config.json 里的 token 还没填")
         sys.exit(2)
@@ -281,7 +283,7 @@ def publish_video(cfg: dict, job: dict) -> tuple[bool, str, str]:
         narration = "\n".join(paragraphs)
         # 原文模式的标题就是第一句，别念两遍（屏幕上照样显示标题）
         speak_title = bool(title) and not narration.replace(" ", "").startswith(title.replace(" ", "")[:8])
-        slides.render(title, narration, images, out, slogan, voice=voice, speak_title=speak_title, ai_tag=ai_tag)
+        slides.render(title, narration, images, out, slogan, voice=voice, speak_title=speak_title, ai_tag=ai_tag, outro=cfg.get("x_outro") if p == "x" else None)
         if p != "x" or len(paragraphs) <= 1 or media_duration(out) <= X_MAX_SEC:
             break
         paragraphs, images = paragraphs[:-1], images[:-1]
@@ -292,7 +294,7 @@ def publish_video(cfg: dict, job: dict) -> tuple[bool, str, str]:
         import x as xpost
 
         text = "\n".join(s for s in [title, cfg.get("x_promo") or "", " ".join(f"#{t}" for t in tags[:3])] if s)
-        return xpost.post_video(PROFILES / "x", out, text, headless=False, shot_dir=LOGS, log=log)
+        return xpost.post_video(PROFILES / "x", out, text, headless=False, shot_dir=LOGS, log=log, reply=cfg.get("x_reply") or "")
     ok, err = sau_upload_video(SAU_NAME[p], cfg["account"], out, title, content[:4500] if english else content[:900], tags, headed=headed)
     return ok, "", ("" if ok else err)
 
