@@ -68,18 +68,28 @@ def check(profile: Path, headless: bool = False) -> tuple[bool, str]:
 
 
 def _press(page: Page, btn, log=None) -> None:
-    """X 的发帖按钮常被透明浮层挡住点不动：先正常点，不行按 Ctrl+Enter（发帖快捷键），再不行 JS 直接点"""
+    """X 打完字（尤其带链接出卡片后）会在 #layers 里盖一层透明全屏遮罩，鼠标点什么都被它吃掉：
+    先正常点 5 秒，不行就直接按 Ctrl+Enter（发帖快捷键；刚打完字焦点还在输入框里，键盘不受遮罩影响），按钮还在再 JS 直接点"""
     try:
-        btn.click(timeout=10000)
+        btn.click(timeout=5000)
         return
-    except Exception as e:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         if log:
-            log.info("X 发帖按钮点不动（%s），改用 Ctrl+Enter", str(e).splitlines()[-1][:120])
-    page.locator('[data-testid="tweetTextarea_0"]').first.click()
+            log.info("X 按钮被透明遮罩挡住点不动，改用 Ctrl+Enter")
     page.keyboard.press("Control+Enter")
     page.wait_for_timeout(3000)
-    if btn.count() and btn.is_visible():
-        btn.evaluate("b => b.click()")
+    try:
+        if btn.count() and btn.is_visible() and btn.get_attribute("aria-disabled") != "true":
+            btn.evaluate("b => b.click()", timeout=5000)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _focus(loc) -> None:
+    try:
+        loc.click(timeout=5000)
+    except Exception:  # noqa: BLE001
+        loc.evaluate("e => e.focus()")
 
 
 def _latest_status_url(page: Page) -> str:
@@ -104,7 +114,7 @@ def _reply(page: Page, url: str, text: str, log=None) -> tuple[bool, str]:
     page.goto(url, wait_until="domcontentloaded", timeout=60000)
     box = page.locator('[data-testid="tweetTextarea_0"]').first
     box.wait_for(state="visible", timeout=30000)
-    box.click()
+    _focus(box)
     for i, line in enumerate(text.split("\n")):
         if i:
             page.keyboard.press("Shift+Enter")
@@ -164,7 +174,7 @@ def post_media(profile: Path, files: list[Path], text: str, headless: bool, shot
                 if "/login" in page.url or "/i/flow" in page.url:
                     return False, "", "X 登录失效（cookie expired），重新 login x"
                 return False, "", "没找到发帖输入框（看 logs 截图）"
-            box.click()
+            _focus(box)
             if text:
                 for i, line in enumerate(text.split("\n")):
                     if i:
