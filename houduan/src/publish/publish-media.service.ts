@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadService } from '../upload/upload.service';
-import { callModel } from './publish.service';
+import { ENGLISH, Platform, callModel } from './publish.service';
 
 const WANX_BASE = 'https://dashscope.aliyuncs.com/api/v1';
 /** 万相 2.7 组图，0.2 元/张 */
@@ -15,9 +15,12 @@ const LOOKAHEAD_MS = 6 * 3_600_000;
 const STYLE = '电影感写实组图，竖版，35mm胶片质感，自然光影，浅景深，轻微胶片颗粒，当代中国。';
 
 export interface VideoMedia {
+  /** 旁白分段（该任务的语言，英文平台是翻译后的） */
   paragraphs: string[];
   images: string[];
   scenes: string[];
+  /** 中文原旁白分段（同帖各平台共用图时按它翻译 / 复用） */
+  zh?: string[];
 }
 
 /**
@@ -50,10 +53,22 @@ export class PublishMediaService implements OnModuleInit {
       });
       if (!job) return;
       jobId = job.id;
-      const twin = await this.prisma.publishJob.findFirst({ where: { postId: job.postId, format: 'video', media: { not: '' } }, select: { media: true } });
-      const media = twin?.media || JSON.stringify(await this.build(job.content));
-      await this.prisma.publishJob.update({ where: { id: job.id }, data: { media, error: '' } });
-      this.logger.log(`media ready for job #${job.id}${twin ? '（复用同帖另一平台的图）' : ''}`);
+      const english = ENGLISH.includes(job.platform as Platform);
+      const twin = await this.prisma.publishJob.findFirst({ where: { postId: job.postId, format: 'video', media: { not: '' }, id: { not: job.id } }, select: { media: true } });
+      let base: VideoMedia;
+      if (twin) {
+        const t = JSON.parse(twin.media) as VideoMedia;
+        base = { ...t, zh: t.zh ?? t.paragraphs };
+      } else {
+        // 英文任务的 content 是译文，切段 / 分镜都用中文原帖做
+        const source = english ? (await this.prisma.treeholePost.findUnique({ where: { id: job.postId }, select: { content: true } }))?.content ?? '' : job.content;
+        const built = await this.build(source);
+        base = { ...built, zh: built.paragraphs };
+      }
+      const zh = base.zh ?? base.paragraphs;
+      const media: VideoMedia = { images: base.images, scenes: base.scenes, zh, paragraphs: english ? await translateParagraphs(zh) : zh };
+      await this.prisma.publishJob.update({ where: { id: job.id }, data: { media: JSON.stringify(media), error: '' } });
+      this.logger.log(`media ready for job #${job.id}${twin ? '（复用同帖另一平台的图）' : ''}${english ? '（英文旁白）' : ''}`);
     } catch (e: any) {
       const msg = String(e?.message ?? e).slice(0, 300);
       this.logger.warn(`fill media job #${jobId}: ${msg}`);
@@ -146,6 +161,29 @@ async function storyboard(paragraphs: string[]): Promise<{ characters: string; s
     }
   }
   throw last instanceof Error ? last : new Error('分镜失败');
+}
+
+/** 中文旁白逐段翻成英文（段数不变，保证一段一张图还对得上） */
+async function translateParagraphs(zh: string[]): Promise<string[]> {
+  const system = [
+    `Translate each of the ${zh.length} numbered Chinese narration segments of a first-person story into natural spoken English for a voice-over.`,
+    'Translate faithfully, keep every detail, one output segment per input segment, same order.',
+    `Output JSON only: {"paragraphs": string[]} with exactly ${zh.length} items.`,
+  ].join('\n');
+  const user = zh.map((p, i) => `${i + 1}. ${p}`).join('\n');
+  let last: unknown;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const raw = await callModel([{ role: 'system', content: system }, { role: 'user', content: user }], 0.3);
+      const j = JSON.parse(raw.replace(/^```json\s*|```$/g, '').trim());
+      const out = (Array.isArray(j.paragraphs) ? j.paragraphs : []).map((s: unknown) => String(s).replace(/\s+/g, ' ').trim());
+      if (out.length !== zh.length || out.some((s: string) => !s)) throw new Error(`译文段数不对：${out.length}/${zh.length}`);
+      return out;
+    } catch (e) {
+      last = e;
+    }
+  }
+  throw last instanceof Error ? last : new Error('旁白翻译失败');
 }
 
 /** 万相组图（异步任务 + 轮询），返回图片 URL（24 小时有效） */

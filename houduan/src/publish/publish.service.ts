@@ -3,9 +3,13 @@ import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 
 /** 支持的平台（发布机按这个 key 认） */
-export const PLATFORMS = ['xiaohongshu', 'douyin', 'kuaishou', 'zhihu', 'shipinhao'] as const;
+export const PLATFORMS = ['xiaohongshu', 'douyin', 'kuaishou', 'zhihu', 'shipinhao', 'x', 'youtube'] as const;
 export type Platform = (typeof PLATFORMS)[number];
-export const PLATFORM_NAMES: Record<Platform, string> = { xiaohongshu: '小红书', douyin: '抖音', kuaishou: '快手', zhihu: '知乎', shipinhao: '视频号' };
+export const PLATFORM_NAMES: Record<Platform, string> = { xiaohongshu: '小红书', douyin: '抖音', kuaishou: '快手', zhihu: '知乎', shipinhao: '视频号', x: 'X', youtube: 'YouTube' };
+/** 外网平台：只有出口在国外的发布机领（国内发布机只领国内平台） */
+export const OVERSEAS: readonly Platform[] = ['x', 'youtube'];
+/** 发英文的平台（标题 / 正文 / 旁白都翻译成英文） */
+export const ENGLISH: readonly Platform[] = ['youtube'];
 
 /** 排期最多往后推几天，再排不进就跳过（树洞一天十几条，四个平台全发会被限流） */
 const MAX_DAYS_AHEAD = 3;
@@ -44,7 +48,9 @@ interface Settings {
 
 type Mode = 'raw' | 'ai';
 type Format = 'note' | 'video';
-const DEFAULT_FORMATS: Record<Platform, Format> = { xiaohongshu: 'note', douyin: 'note', kuaishou: 'video', zhihu: 'note', shipinhao: 'video' };
+const DEFAULT_FORMATS: Record<Platform, Format> = { xiaohongshu: 'note', douyin: 'note', kuaishou: 'video', zhihu: 'note', shipinhao: 'video', x: 'video', youtube: 'video' };
+/** 只能发一种形式的平台 */
+const FIXED_FORMAT: Partial<Record<Platform, Format>> = { zhihu: 'note', x: 'video', youtube: 'video' };
 /** 视频号视频的「短标题」上限 */
 const SHIPINHAO_VIDEO_TITLE_MAX = 16;
 
@@ -70,7 +76,8 @@ interface Draft { title: string; content: string; tags: string[] }
 export class PublishService implements OnModuleInit {
   private readonly logger = new Logger('Publish');
   private scanning = false;
-  private agent: AgentState = { lastSeen: '', host: '', accounts: {}, ip: null };
+  /** 按主机名记每台发布机（国内一台发国内平台，国外一台发 X / YouTube） */
+  private agents = new Map<string, AgentState>();
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -101,7 +108,7 @@ export class PublishService implements OnModuleInit {
     const dailyMaxes = Object.fromEntries(PLATFORMS.map((p) => [p, clampDaily(storedMax[p], dailyMax)])) as Record<Platform, number>;
     // publish_formats = "kuaishou:video,shipinhao:video"；没写到的平台用 DEFAULT_FORMATS
     const storedFmt = Object.fromEntries(get('formats').split(',').map((kv) => kv.split(':').map((x) => x.trim())));
-    const formats = Object.fromEntries(PLATFORMS.map((p) => [p, p === 'zhihu' ? 'note' : storedFmt[p] === 'video' ? 'video' : storedFmt[p] === 'note' ? 'note' : DEFAULT_FORMATS[p]])) as Record<Platform, Format>;
+    const formats = Object.fromEntries(PLATFORMS.map((p) => [p, FIXED_FORMAT[p] ?? (storedFmt[p] === 'video' ? 'video' : storedFmt[p] === 'note' ? 'note' : DEFAULT_FORMATS[p])])) as Record<Platform, Format>;
     return {
       enabled: get('enabled') === '1',
       platforms: platforms.length ? platforms : ['xiaohongshu', 'zhihu'],
@@ -149,7 +156,7 @@ export class PublishService implements OnModuleInit {
     }
     if (data.formats && typeof data.formats === 'object') {
       const m = data.formats;
-      await this.set('formats', PLATFORMS.map((p) => `${p}:${p === 'zhihu' ? 'note' : m[p] === undefined ? cur.formats[p] : m[p] === 'video' ? 'video' : 'note'}`).join(','));
+      await this.set('formats', PLATFORMS.map((p) => `${p}:${FIXED_FORMAT[p] ?? (m[p] === undefined ? cur.formats[p] : m[p] === 'video' ? 'video' : 'note')}`).join(','));
     }
     return this.overview();
   }
@@ -165,8 +172,16 @@ export class PublishService implements OnModuleInit {
     const counts = await this.prisma.publishJob.groupBy({ by: ['status'], _count: { _all: true } });
     const byStatus: Record<number, number> = {};
     for (const c of counts) byStatus[c.status] = c._count._all;
-    const online = !!this.agent.lastSeen && Date.now() - new Date(this.agent.lastSeen).getTime() < 6 * 60_000;
-    return { settings: s, agent: { ...this.agent, online }, counts: byStatus, platforms: PLATFORMS.map((p) => ({ key: p, name: PLATFORM_NAMES[p] })) };
+    const isOnline = (a: AgentState) => !!a.lastSeen && Date.now() - new Date(a.lastSeen).getTime() < 6 * 60_000;
+    // 一天没心跳的主机不再显示
+    const agents = [...this.agents.values()]
+      .filter((a) => Date.now() - new Date(a.lastSeen).getTime() < 86_400_000)
+      .sort((a, b) => b.lastSeen.localeCompare(a.lastSeen))
+      .map((a) => ({ ...a, online: isOnline(a) }));
+    return {
+      settings: s, agents, counts: byStatus,
+      platforms: PLATFORMS.map((p) => ({ key: p, name: PLATFORM_NAMES[p], overseas: OVERSEAS.includes(p), english: ENGLISH.includes(p), fixedFormat: FIXED_FORMAT[p] ?? null })),
+    };
   }
 
   // ---------- 后台：任务 ----------
@@ -302,13 +317,46 @@ export class PublishService implements OnModuleInit {
   // ---------- 出稿：原文 / AI 改写 ----------
 
   /** 各平台标题上限（原文模式取第一句当标题）与正文上限 */
-  private static readonly TITLE_MAX: Record<Platform, number> = { xiaohongshu: 20, douyin: 20, kuaishou: 30, zhihu: 0, shipinhao: 22 };
-  private static readonly CONTENT_MAX: Record<Platform, number> = { xiaohongshu: 1000, douyin: 1000, kuaishou: 1000, zhihu: 2000, shipinhao: 1000 };
+  private static readonly TITLE_MAX: Record<Platform, number> = { xiaohongshu: 20, douyin: 20, kuaishou: 30, zhihu: 0, shipinhao: 22, x: 30, youtube: 95 };
+  private static readonly CONTENT_MAX: Record<Platform, number> = { xiaohongshu: 1000, douyin: 1000, kuaishou: 1000, zhihu: 2000, shipinhao: 1000, x: 1000, youtube: 4000 };
 
   private async draft(text: string, platform: Platform, s: Settings): Promise<Draft> {
+    if (ENGLISH.includes(platform)) {
+      if (!process.env.AI_API_KEY) throw new BadRequestException(`${PLATFORM_NAMES[platform]} 要翻译成英文，但 AI_API_KEY 未配置`);
+      return this.draftEn(text, platform, s.modes[platform]);
+    }
     if (s.modes[platform] !== 'ai') return this.draftRaw(text, platform);
     if (!process.env.AI_API_KEY) throw new BadRequestException(`${PLATFORM_NAMES[platform]} 设为 AI 改写，但 AI_API_KEY 未配置`);
     return this.draftAi(text, platform);
+  }
+
+  /** 英文平台：raw = 忠实翻译（不删不改情节）；ai = 按英文短视频口吻改写。标题要有钩子 */
+  private async draftEn(text: string, platform: Platform, mode: Mode): Promise<Draft> {
+    const tmax = PublishService.TITLE_MAX[platform];
+    const system = [
+      'You turn an anonymous first-person Chinese confession into an English post for a YouTube Shorts story channel.',
+      mode === 'ai'
+        ? 'Rewrite it in natural spoken English as a gripping short story (80-250 words), keep all key facts, do not invent new events.'
+        : 'Translate it faithfully into natural spoken English. Keep every event and detail, do not summarize, soften or add anything.',
+      `title: a hooky English title, at most ${tmax} characters, no hashtags, no quotes.`,
+      'tags: 5 short English topic tags without #, e.g. relationships, storytime, confession.',
+      'Do not mention the source, apps, links or "tree hole". Output JSON only: {"title": string, "content": string, "tags": string[]}',
+    ].join('\n');
+    let lastErr: any;
+    for (let i = 0; i <= AI_RETRY; i++) {
+      try {
+        const raw = await callModel([{ role: 'system', content: system }, { role: 'user', content: text.slice(0, 2000) }], 0.5);
+        const j = JSON.parse(raw.replace(/^```json\s*|```$/g, '').trim());
+        const title = String(j.title ?? '').replace(/\s+/g, ' ').replace(/^["']|["']$/g, '').trim().slice(0, tmax);
+        const content = String(j.content ?? '').trim();
+        const tags = (Array.isArray(j.tags) ? j.tags : []).map((t: unknown) => String(t).replace(/[#\s,]/g, '').trim()).filter(Boolean).slice(0, 5);
+        if (!title || content.length < 40) throw new Error('翻译结果不完整');
+        return { title, content: content.slice(0, PublishService.CONTENT_MAX[platform]), tags };
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr ?? new Error('翻译无输出');
   }
 
   /** 原文直发：一个字不改、不过滤（操作者要求）；只做平台硬性限制——标题取第一句截到上限，正文截到上限，tags 固定三个 */
@@ -330,6 +378,8 @@ export class PublishService implements OnModuleInit {
       kuaishou: `快手图文：title 不超过 30 个字直白接地气；content 80~200 字，短句分行；tags 从「${TAG_POOL}」里挑 4 个。`,
       zhihu: `知乎「想法」（纯文本短帖）：title 留空字符串；content 150~400 字，像在知乎认真聊天的语气，有观点有细节，段落之间空一行，结尾可以抛一个问题；tags 从「${TAG_POOL}」里挑 3 个。`,
       shipinhao: `微信视频号图文动态：title 不超过 22 个字、平实不猎奇（微信用户偏成熟）；content 80~200 字，短句分行；tags 从「${TAG_POOL}」里挑 3 个。`,
+      x: `X（推特）中文帖子：title 不超过 30 个字有钩子；content 80~250 字，短句分行；tags 从「${TAG_POOL}」里挑 3 个。`,
+      youtube: '（英文平台走 draftEn，不用这条）',
     };
     const system = [
       '你是一个情感类自媒体运营，把一段匿名的个人心事改写成适合平台发布的文案（像博主自己在分享感悟）。',
@@ -372,17 +422,20 @@ export class PublishService implements OnModuleInit {
 
   async heartbeat(body: { host?: string; accounts?: Record<string, { ok: boolean; msg?: string; checkedAt?: string }>; ip?: { ok?: boolean; ip?: string; where?: string; msg?: string } }) {
     const now = new Date().toISOString();
-    this.agent.lastSeen = now;
-    this.agent.host = String(body.host ?? '').slice(0, 60);
+    const host = String(body.host ?? '').slice(0, 60) || 'unknown';
+    const agent = this.agents.get(host) ?? { lastSeen: now, host, accounts: {}, ip: null };
+    agent.lastSeen = now;
     if (body.ip && typeof body.ip === 'object' && Object.keys(body.ip).length) {
-      this.agent.ip = { ok: !!body.ip.ok, ip: String(body.ip.ip ?? '').slice(0, 60), where: String(body.ip.where ?? '').slice(0, 80), msg: String(body.ip.msg ?? '').slice(0, 160) };
+      agent.ip = { ok: !!body.ip.ok, ip: String(body.ip.ip ?? '').slice(0, 60), where: String(body.ip.where ?? '').slice(0, 80), msg: String(body.ip.msg ?? '').slice(0, 160) };
     }
     if (body.accounts) {
+      agent.accounts = {};
       for (const [k, v] of Object.entries(body.accounts)) {
         if (!(PLATFORMS as readonly string[]).includes(k)) continue;
-        this.agent.accounts[k] = { ok: !!v.ok, msg: String(v.msg ?? '').slice(0, 200), checkedAt: v.checkedAt || now };
+        agent.accounts[k] = { ok: !!v.ok, msg: String(v.msg ?? '').slice(0, 200), checkedAt: v.checkedAt || now };
       }
     }
+    this.agents.set(host, agent);
     const s = await this.settings();
     return { ok: true, platforms: s.platforms, enabled: s.enabled };
   }
@@ -391,8 +444,9 @@ export class PublishService implements OnModuleInit {
    * 领一条到点的任务（按 scheduledAt 最早）。platforms = 发布机本地已登录的平台；
    * formats = 发布机支持的形式（老版本发布机不传 = 只会发图文，不给它视频任务）；视频任务要等出完图（media 非空）才下发
    */
-  async claim(platforms: string[], formats: string[] = ['note']) {
-    this.agent.lastSeen = new Date().toISOString();
+  async claim(platforms: string[], formats: string[] = ['note'], host = '') {
+    const agent = host ? this.agents.get(host) : undefined;
+    if (agent) agent.lastSeen = new Date().toISOString();
     const list = platforms.filter((p) => (PLATFORMS as readonly string[]).includes(p));
     if (!list.length) return null;
     const canVideo = formats.includes('video');

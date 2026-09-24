@@ -30,10 +30,16 @@ CARDS = ROOT / "cards"
 LOGS = ROOT / "logs"
 PROFILES = ROOT / "profiles"
 SAU_PLATFORMS = {"xiaohongshu", "douyin", "kuaishou"}
-ALL_PLATFORMS = ["xiaohongshu", "douyin", "kuaishou", "zhihu", "shipinhao"]
-NAMES = {"xiaohongshu": "小红书", "douyin": "抖音", "kuaishou": "快手", "zhihu": "知乎", "shipinhao": "视频号"}
-# 我们的平台 key → sau 里的名字（视频号在 sau 里叫 tencent；登录 / 校验复用它，图文发布走自写 shipinhao.py）
-SAU_NAME = {"xiaohongshu": "xiaohongshu", "douyin": "douyin", "kuaishou": "kuaishou", "shipinhao": "tencent"}
+ALL_PLATFORMS = ["xiaohongshu", "douyin", "kuaishou", "zhihu", "shipinhao", "x", "youtube"]
+NAMES = {"xiaohongshu": "小红书", "douyin": "抖音", "kuaishou": "快手", "zhihu": "知乎", "shipinhao": "视频号", "x": "X", "youtube": "YouTube"}
+# 外网平台：出口在国外的发布机才领；国内平台反过来（同一套代码，一台国内一台国外各领各的）
+OVERSEAS = {"x", "youtube"}
+# 英文平台：配英文音色 / 英文标语
+ENGLISH = {"youtube"}
+# 我们的平台 key → sau 里的名字（视频号在 sau 里叫 tencent；登录 / 校验复用它，图文发布走自写 shipinhao.py；X 走自写 x.py）
+SAU_NAME = {"xiaohongshu": "xiaohongshu", "douyin": "douyin", "kuaishou": "kuaishou", "shipinhao": "tencent", "youtube": "youtube"}
+# X 免费账号视频最长 140 秒，留点余量
+X_MAX_SEC = 136
 
 LOGS.mkdir(exist_ok=True)
 log = logging.getLogger("publisher")
@@ -67,9 +73,11 @@ def load_config() -> dict:
     # 卡片底部：默认不放品牌 / App 名（小红书判「非官方渠道导流」就是冲着这个来的），只放一句标语
     cfg.setdefault("brand", "")
     cfg.setdefault("slogan", "爱情与金钱无关，和内心相连")
-    # 视频配音（edge-tts 音色，见 video/tts.py VOICES）：可按平台单独设
+    # 视频配音（edge-tts 音色，见 video/tts.py VOICES）：可按平台单独设；英文平台默认 en-US-AriaNeural
     cfg.setdefault("video_voice", "xiaoxiao")
+    cfg.setdefault("video_voice_en", "en-US-AriaNeural")
     cfg.setdefault("video_voices", {})
+    cfg.setdefault("slogan_en", "Love has nothing to do with money. It's about the heart.")
     if not cfg.get("token") or "填这里" in cfg["token"]:
         print("config.json 里的 token 还没填")
         sys.exit(2)
@@ -95,7 +103,8 @@ class Api:
 
     def next(self, platforms: list[str]):
         formats = "note,video" if video_ready() else "note"
-        return self._unwrap(requests.get(f"{self.base}/publish/agent/next", headers=self.h, params={"platforms": ",".join(platforms), "formats": formats}, timeout=20))
+        params = {"platforms": ",".join(platforms), "formats": formats, "host": socket.gethostname()}
+        return self._unwrap(requests.get(f"{self.base}/publish/agent/next", headers=self.h, params=params, timeout=20))
 
     def result(self, job_id: str, ok: bool, url: str = "", error: str = ""):
         return self._unwrap(requests.post(f"{self.base}/publish/agent/result", headers=self.h, json={"id": job_id, "ok": ok, "url": url, "error": error}, timeout=20))
@@ -171,15 +180,19 @@ def check_all(cfg: dict, periodic: bool = False) -> dict:
         if p not in ALL_PLATFORMS:
             continue
         try:
-            if periodic and p in cfg.get("no_periodic_check", []):
-                if p == "zhihu":
-                    ok, msg = (PROFILES / "zhihu").exists(), "按本地登录态，未联网核对"
+            # 外网平台定时检查也不开浏览器（X 只能有界面跑，定时弹窗太烦）
+            if periodic and (p in cfg.get("no_periodic_check", []) or p in OVERSEAS):
+                if p in ("zhihu", "x"):
+                    ok, msg = (PROFILES / p).exists(), "按本地登录态，未联网核对"
                 else:
                     ok = cookie_file(p, cfg).exists()
                     msg = "按本地 cookie 文件，未联网核对（避免被判脚本浏览）" if ok else "还没登录"
             elif p == "zhihu":
                 import zhihu
                 ok, msg = zhihu.check(PROFILES / "zhihu", headless=bool(cfg["headless"]))
+            elif p == "x":
+                import x as xpost
+                ok, msg = xpost.check(PROFILES / "x")
             else:
                 ok, msg = sau_check(SAU_NAME[p], cfg["account"])
         except Exception as e:  # noqa: BLE001
@@ -191,11 +204,13 @@ def check_all(cfg: dict, periodic: bool = False) -> dict:
 
 def sau_upload_video(platform: str, account: str, video: Path, title: str, desc: str, tags: list[str], headed: bool = False) -> tuple[bool, str]:
     # 视频号（tencent）有 --tags；快手等把话题拼在描述里
-    if tags and platform != "tencent":
+    if tags and platform not in ("tencent", "youtube"):
         desc = (desc + "\n" + " ".join(f"#{t}" for t in tags)).strip()
     args = [platform, "upload-video", "--account", account, "--file", str(video), "--title", title or desc[:16], "--desc", desc]
-    if tags and platform == "tencent":
+    if tags and platform in ("tencent", "youtube"):
         args += ["--tags", ",".join(tags)]
+    if platform == "youtube":
+        args += ["--visibility", "public"]
     code, out = sau(args, timeout=1500, headed=headed)
     return code == 0, out[-500:]
 
@@ -244,16 +259,39 @@ def publish_video(cfg: dict, job: dict) -> tuple[bool, str, str]:
             r.raise_for_status()
             f.write_bytes(r.content)
         images.append(f)
-    narration = "\n".join(paragraphs)
-    # 原文模式的标题就是第一句，别念两遍（屏幕上照样显示标题）
-    speak_title = bool(title) and not narration.replace(" ", "").startswith(title.replace(" ", "")[:8])
-    voice = (cfg.get("video_voices") or {}).get(p) or cfg.get("video_voice") or "xiaoxiao"
+    english = p in ENGLISH
+    voice = (cfg.get("video_voices") or {}).get(p) or (cfg["video_voice_en"] if english else cfg.get("video_voice")) or "xiaoxiao"
+    slogan = cfg["slogan_en"] if english else cfg["slogan"]
+    ai_tag = "AI generated" if english else "AI 生成"
+    if p == "x":
+        # X 免费账号视频上限 140 秒：先按字数粗砍，合成后超了再去掉最后一段重来
+        budget, keep = 520, 0
+        for i, s in enumerate(paragraphs):
+            budget -= len(s)
+            if budget < 0 and i:
+                break
+            keep = i + 1
+        paragraphs, images = paragraphs[:keep], images[:keep]
+    from video.common import media_duration
+
     out = CARDS / f"job{job['id']}.mp4"
-    slides.render(title, narration, images, out, cfg["slogan"], voice=voice, speak_title=speak_title)
-    log.info("任务 #%s 视频已合成 %s", job["id"], out.name)
-    headed = p in cfg.get("headed_platforms", [])
+    while True:
+        narration = "\n".join(paragraphs)
+        # 原文模式的标题就是第一句，别念两遍（屏幕上照样显示标题）
+        speak_title = bool(title) and not narration.replace(" ", "").startswith(title.replace(" ", "")[:8])
+        slides.render(title, narration, images, out, slogan, voice=voice, speak_title=speak_title, ai_tag=ai_tag)
+        if p != "x" or len(paragraphs) <= 1 or media_duration(out) <= X_MAX_SEC:
+            break
+        paragraphs, images = paragraphs[:-1], images[:-1]
+    log.info("任务 #%s 视频已合成 %s（%.0f 秒）", job["id"], out.name, media_duration(out))
+    headed = p in cfg.get("headed_platforms", []) or p in OVERSEAS
     time.sleep(random.uniform(20, 120))
-    ok, err = sau_upload_video(SAU_NAME[p], cfg["account"], out, title, content[:900], tags, headed=headed)
+    if p == "x":
+        import x as xpost
+
+        text = "\n".join(s for s in [title, " ".join(f"#{t}" for t in tags[:3])] if s)
+        return xpost.post_video(PROFILES / "x", out, text, headless=False, shot_dir=LOGS, log=log)
+    ok, err = sau_upload_video(SAU_NAME[p], cfg["account"], out, title, content[:4500] if english else content[:900], tags, headed=headed)
     return ok, "", ("" if ok else err)
 
 
@@ -295,8 +333,15 @@ def cmd_login(cfg: dict, platform: str):
         import zhihu
         ok, msg = zhihu.login(PROFILES / "zhihu")
         print(msg)
+    elif platform == "x":
+        import x as xpost
+        ok, msg = xpost.login(PROFILES / "x")
+        print(msg)
     else:
-        print(f"正在打开 {NAMES[platform]} 创作者后台，请用手机 {'微信' if platform == 'shipinhao' else NAMES[platform] + ' App'} 扫码登录…（二维码若没显示，看 vendor 目录下生成的二维码图片）")
+        if platform in OVERSEAS:
+            print(f"正在打开 {NAMES[platform]}，请在弹出的浏览器里登录账号…")
+        else:
+            print(f"正在打开 {NAMES[platform]} 创作者后台，请用手机 {'微信' if platform == 'shipinhao' else NAMES[platform] + ' App'} 扫码登录…（二维码若没显示，看 vendor 目录下生成的二维码图片）")
         code, out = sau([SAU_NAME[platform], "login", "--account", cfg["account"]], timeout=600, headed=True)
         ok = code == 0
         print(out[-800:])
@@ -310,7 +355,7 @@ def cmd_login(cfg: dict, platform: str):
 
 def cmd_check(cfg: dict):
     ip = check_ip(force=True)
-    log.info("出口 IP：%s %s → %s", ip.get("ip"), ip.get("where"), "OK" if ip["ok"] else "不在国内，会暂停发布")
+    log.info("出口 IP：%s %s → %s", ip.get("ip"), ip.get("where"), "国内，只发国内平台" if ip["ok"] else "国外，只发 X / YouTube")
     accounts = check_all(cfg)
     try:
         Api(cfg).heartbeat(accounts, ip)
@@ -326,8 +371,8 @@ def cmd_logout(cfg: dict, platform: str):
         print(f"平台只能是 {' / '.join(ALL_PLATFORMS)}")
         return 2
     import shutil
-    if platform == "zhihu":
-        shutil.rmtree(PROFILES / "zhihu", ignore_errors=True)
+    if platform in ("zhihu", "x"):
+        shutil.rmtree(PROFILES / platform, ignore_errors=True)
     else:
         f = cookie_file(platform, cfg)
         if f.exists():
@@ -369,11 +414,14 @@ def cmd_run(cfg: dict):
                 last_recheck = time.time()
             ip = check_ip()
             api.heartbeat(accounts, ip)
-            ready = [p for p, a in accounts.items() if a.get("ok")]
-            if not ip["ok"]:
-                log.warning("出口 IP 不在国内（%s %s），不领任务；关掉 VPN 或把发布机放到没有 VPN 的电脑", ip.get("ip"), ip.get("where") or ip.get("msg"))
-            elif not ready:
+            logged = [p for p, a in accounts.items() if a.get("ok")]
+            # 出口在国内只领国内平台，在国外只领 X / YouTube（国内平台用国外 IP 发会被判异常，反之外网平台用国内 IP 根本上不去）
+            ready = [p for p in logged if (p in OVERSEAS) != bool(ip["ok"])]
+            if not logged:
                 log.warning("没有任何平台处于已登录状态，等待…（python publisher.py login 平台）")
+            elif not ready:
+                log.warning("出口 %s %s：本机已登录的平台（%s）都不能从这个出口发——国内平台要国内出口（关 VPN），X / YouTube 要国外出口",
+                            ip.get("ip"), ip.get("where") or ip.get("msg"), ",".join(NAMES[p] for p in logged))
             else:
                 job = api.next(ready)
                 if job:

@@ -41,8 +41,35 @@ def paragraphs(content: str) -> list[str]:
     return [p.strip() for p in re.split(r"\n\s*\n|\n", content) if p.strip()]
 
 
+def is_latin(text: str) -> bool:
+    letters = [c for c in text if c.isalpha()]
+    return bool(letters) and sum(c.isascii() for c in letters) / len(letters) > 0.6
+
+
+def wrap_words(text: str, max_len: int) -> list[str]:
+    """英文按单词折行（每行不超过 max_len 个字符，单词不拆），返回的每行都是原文的连续子串"""
+    lines: list[str] = []
+    cur = ""
+    for w in text.split(" "):
+        if cur and len(cur) + 1 + len(w) > max_len:
+            lines.append(cur)
+            cur = w
+        else:
+            cur = f"{cur} {w}" if cur else w
+    if cur:
+        lines.append(cur)
+    return lines
+
+
 def sentences(text: str, max_len: int = 16) -> list[str]:
-    """按标点切成字幕句；太长的再按逗号 / 长度硬切"""
+    """按标点切成字幕句；太长的再按逗号 / 长度硬切。英文按句号 / 逗号切，再按单词折成 ≤24 字符的行"""
+    if is_latin(text):
+        out_en: list[str] = []
+        for s in re.findall(r"[^.!?;\n]+[.!?;]*", text):
+            s = s.strip()
+            if s:
+                out_en.extend(x.strip() for x in wrap_words(s, 24) if x.strip())
+        return out_en
     out: list[str] = []
     for s in re.findall(r"[^。！？!?；;\n]+[。！？!?；;]?", text):
         s = s.strip()

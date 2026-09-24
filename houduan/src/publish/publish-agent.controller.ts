@@ -29,9 +29,9 @@ export class PublishAgentController {
 
   /** 领一条到点的任务；platforms = 本机已登录的平台，formats = 本机支持的形式（note,video；不传只给图文），都逗号分隔。没有则回 null */
   @Get('next')
-  next(@Query('platforms') platforms?: string, @Query('formats') formats?: string) {
+  next(@Query('platforms') platforms?: string, @Query('formats') formats?: string, @Query('host') host?: string) {
     const split = (s?: string) => (s ?? '').split(',').map((x) => x.trim()).filter(Boolean);
-    return this.publish.claim(split(platforms), formats ? split(formats) : ['note']);
+    return this.publish.claim(split(platforms), formats ? split(formats) : ['note'], String(host ?? '').slice(0, 60));
   }
 
   @Post('result')

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from . import assets, tts
 from .broll import TAIL_SEC, _ass, _ass_time
-from .common import FONTS_DIR, FPS, H, W, WORK, paragraphs, run_ffmpeg
+from .common import FONTS_DIR, FPS, H, W, WORK, is_latin, paragraphs, run_ffmpeg, wrap_words
 
 XFADE = 0.8
 ZOOM = 0.10
@@ -44,7 +44,9 @@ def render(title: str, content: str, images: list[Path], out: Path, slogan: str 
         dur, char_t, _ = tts.synth(speech, voice_mp3, voice=voice)
         total = dur + TAIL_SEC
         off = len(spoken_title) + 2 if spoken_title else 0
-        (tmp / "subs.ass").write_text(_ass(title, body_text, char_t, total, off), encoding="utf-8")
+        # 英文标题按单词折行（ASS 用的 WrapStyle 2 不自动换行）
+        shown_title = "\\N".join(wrap_words(title, 20)) if title and is_latin(title) else title
+        (tmp / "subs.ass").write_text(_ass(shown_title, body_text, char_t, total, off), encoding="utf-8")
         (tmp / "overlay.ass").write_text(_overlay_ass(total, slogan, ai_tag), encoding="utf-8")
 
         # 切图时间点：图片数 = 段落数时一段一张（按配音里该段开始的时间切），否则均分

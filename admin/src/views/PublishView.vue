@@ -5,7 +5,8 @@ import { api } from '../api';
 type Mode = 'raw' | 'ai';
 interface Settings { enabled: boolean; platforms: string[]; dailyMax: number; hourStart: number; hourEnd: number; gapMin: number; token: string; lastPostId: string; modes: Record<string, Mode>; dailyMaxes: Record<string, number>; formats: Record<string, 'note' | 'video'> }
 interface Agent { online: boolean; lastSeen: string; host: string; accounts: Record<string, { ok: boolean; msg: string; checkedAt: string }>; ip: { ok: boolean; ip: string; where: string; msg: string } | null }
-interface Overview { settings: Settings; agent: Agent; counts: Record<string, number>; platforms: { key: string; name: string }[] }
+interface PlatformInfo { key: string; name: string; overseas: boolean; english: boolean; fixedFormat: 'note' | 'video' | null }
+interface Overview { settings: Settings; agents: Agent[]; counts: Record<string, number>; platforms: PlatformInfo[] }
 interface Job {
   id: string; postId: string; platform: string; platformName: string; title: string; content: string; tags: string; status: number;
   scheduledAt: string; claimedAt: string | null; doneAt: string | null; attempts: number; error: string; resultUrl: string; createdAt: string; source: string;
@@ -114,12 +115,13 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
       <div class="row" style="flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line)">
         <span class="muted">各平台：</span>
         <label v-for="p in ov?.platforms ?? []" :key="p.key" class="muted" style="display: flex; align-items: center; gap: 4px">
-          {{ p.name }}
+          {{ p.name }}<span v-if="p.overseas" style="font-size: 11px">（外网{{ p.english ? '·英文' : '·中文' }}）</span>
           <select v-model="form.modes[p.key]" style="width: auto">
-            <option value="raw">原文直发</option>
-            <option value="ai">AI 改写</option>
+            <option value="raw">{{ p.english ? '忠实翻译' : '原文直发' }}</option>
+            <option value="ai">{{ p.english ? '英文改写' : 'AI 改写' }}</option>
           </select>
-          <select v-if="p.key !== 'zhihu'" v-model="form.formats[p.key]" style="width: auto">
+          <span v-if="p.fixedFormat">{{ p.fixedFormat === 'video' ? '视频' : '图文' }}</span>
+          <select v-else v-model="form.formats[p.key]" style="width: auto">
             <option value="note">图文</option>
             <option value="video">视频</option>
           </select>
@@ -133,16 +135,17 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
     </div>
 
     <div class="card" style="margin-top: 12px">
-      <div style="font-weight: 600; margin-bottom: 6px">发布机（你本机的 publisher）</div>
-      <div v-if="ov" class="row" style="flex-wrap: wrap; gap: 14px; align-items: center; font-size: 13px">
-        <span class="tag" :class="ov.agent.online ? 'ok' : 'off'">{{ ov.agent.online ? '在线' : '离线' }}</span>
-        <span class="muted">上次心跳 {{ fmt(ov.agent.lastSeen) }}<template v-if="ov.agent.host"> · {{ ov.agent.host }}</template></span>
-        <span v-if="ov.agent.ip" :title="ov.agent.ip.msg">出口 IP <span class="tag" :class="ov.agent.ip.ok ? 'ok' : 'off'">{{ ov.agent.ip.ok ? '国内' : '国外（VPN？已停发）' }}</span> <span class="muted">{{ ov.agent.ip.ip }} {{ ov.agent.ip.where }}</span></span>
-        <template v-for="p in ov.platforms" :key="p.key">
-          <span v-if="ov.agent.accounts[p.key]" :title="ov.agent.accounts[p.key].msg">
-            {{ p.name }} <span class="tag" :class="ov.agent.accounts[p.key].ok ? 'ok' : 'off'">{{ ov.agent.accounts[p.key].ok ? '已登录' : '未登录 / 失效' }}</span>
+      <div style="font-weight: 600; margin-bottom: 6px">发布机（国内一台发国内平台，出口在国外的一台发 X / YouTube）</div>
+      <div v-if="ov && !ov.agents.length" class="muted">还没有发布机上线</div>
+      <div v-for="a in ov?.agents ?? []" :key="a.host" class="row" style="flex-wrap: wrap; gap: 14px; align-items: center; font-size: 13px; padding: 6px 0; border-bottom: 1px dashed var(--line)">
+        <b>{{ a.host }}</b>
+        <span class="tag" :class="a.online ? 'ok' : 'off'">{{ a.online ? '在线' : '离线' }}</span>
+        <span class="muted">上次心跳 {{ fmt(a.lastSeen) }}</span>
+        <span v-if="a.ip" :title="a.ip.msg">出口 <span class="tag ok">{{ a.ip.ok ? '国内 → 发国内平台' : '国外 → 发外网平台' }}</span> <span class="muted">{{ a.ip.ip }} {{ a.ip.where }}</span></span>
+        <template v-for="p in ov?.platforms ?? []" :key="p.key">
+          <span v-if="a.accounts[p.key]" :title="a.accounts[p.key].msg">
+            {{ p.name }} <span class="tag" :class="a.accounts[p.key].ok ? 'ok' : 'off'">{{ a.accounts[p.key].ok ? '已登录' : '未登录 / 失效' }}</span>
           </span>
-          <span v-else class="muted">{{ p.name }} <span class="tag off">未检查</span></span>
         </template>
       </div>
       <div class="muted" style="margin-top: 10px; font-size: 12px; line-height: 1.7">
