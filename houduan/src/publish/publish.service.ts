@@ -199,10 +199,21 @@ export class PublishService implements OnModuleInit {
     const where = { ...(status !== undefined ? { status } : {}), ...(platform ? { platform } : {}) };
     const take = Math.min(100, Math.max(1, Math.floor(size) || 20));
     const skip = (Math.max(1, Math.floor(page) || 1) - 1) * take;
-    const [total, rows] = await Promise.all([
+    // 最新在前：按「最近一次动作」的时间倒序——发完 / 失败 / 跳过看完成时间，待发看排期时间（Prisma 不能按表达式排序，先用 SQL 取这一页的 id）
+    const conds: string[] = [];
+    const params: unknown[] = [];
+    if (status !== undefined) { conds.push('status = ?'); params.push(status); }
+    if (platform) { conds.push('platform = ?'); params.push(platform); }
+    const [total, idRows] = await Promise.all([
       this.prisma.publishJob.count({ where }),
-      this.prisma.publishJob.findMany({ where, orderBy: { id: 'desc' }, skip, take }),
+      this.prisma.$queryRawUnsafe<{ id: bigint }[]>(
+        `SELECT id FROM publish_job ${conds.length ? `WHERE ${conds.join(' AND ')}` : ''} ORDER BY COALESCE(done_at, scheduled_at) DESC, id DESC LIMIT ? OFFSET ?`,
+        ...params, take, skip,
+      ),
     ]);
+    const ids = idRows.map((r) => BigInt(r.id));
+    const found = await this.prisma.publishJob.findMany({ where: { id: { in: ids } } });
+    const rows = ids.map((id) => found.find((f) => f.id === id)).filter((r): r is (typeof found)[number] => !!r);
     const posts = await this.prisma.treeholePost.findMany({ where: { id: { in: [...new Set(rows.map((r) => r.postId))] } }, select: { id: true, content: true } });
     const list = rows.map((r) => ({ ...r, platformName: PLATFORM_NAMES[r.platform as Platform] ?? r.platform, source: posts.find((p) => p.id === r.postId)?.content.slice(0, 120) ?? '' }));
     return { total, list };
