@@ -52,6 +52,8 @@ interface Settings {
 
 type Mode = 'raw' | 'light' | 'ai';
 const toMode = (v: unknown, fallback: Mode): Mode => (v === 'ai' || v === 'light' || v === 'raw' ? v : fallback);
+/** 实际出稿用的模式：英文平台没有浅处理，按忠实翻译（raw） */
+const effectiveMode = (p: Platform, m: Mode): Mode => (ENGLISH.includes(p) && m === 'light' ? 'raw' : m);
 type Format = 'note' | 'video';
 const DEFAULT_FORMATS: Record<Platform, Format> = { xiaohongshu: 'note', douyin: 'note', kuaishou: 'video', zhihu: 'note', shipinhao: 'video', x: 'video', youtube: 'video' };
 /** 只能发一种形式的平台 */
@@ -240,7 +242,7 @@ export class PublishService implements OnModuleInit {
       const draft = await this.draft(post.content, p, s);
       await this.prisma.publishJob.deleteMany({ where: { postId: post.id, platform: p } });
       const j = await this.prisma.publishJob.create({
-        data: { postId: post.id, platform: p, title: draft.title, content: draft.content, tags: draft.tags.join(','), format: s.formats[p], scheduledAt: new Date() },
+        data: { postId: post.id, platform: p, title: draft.title, content: draft.content, tags: draft.tags.join(','), format: s.formats[p], textMode: effectiveMode(p, s.modes[p]), scheduledAt: new Date() },
       });
       out.push({ platform: p, id: j.id.toString(), title: draft.title });
     }
@@ -296,7 +298,7 @@ export class PublishService implements OnModuleInit {
         await this.prisma.publishJob.create({ data: { postId: post.id, platform: p, content: text.slice(0, 500), status: 3, error: `AI 改写失败：${String(e?.message ?? e).slice(0, 200)}`, scheduledAt: new Date(), doneAt: new Date() } });
         continue;
       }
-      await this.prisma.publishJob.create({ data: { postId: post.id, platform: p, title: draft.title, content: draft.content, tags: draft.tags.join(','), format: s.formats[p], scheduledAt: when } });
+      await this.prisma.publishJob.create({ data: { postId: post.id, platform: p, title: draft.title, content: draft.content, tags: draft.tags.join(','), format: s.formats[p], textMode: effectiveMode(p, s.modes[p]), scheduledAt: when } });
       this.logger.log(`queued #${post.id} → ${p} @ ${when.toISOString()}`);
     }
   }
@@ -364,12 +366,12 @@ export class PublishService implements OnModuleInit {
     await this.prisma.publishJob.update({
       where: { id },
       data: {
-        title: draft.title, content: draft.content, tags: draft.tags.join(','),
+        title: draft.title, content: draft.content, tags: draft.tags.join(','), textMode: effectiveMode(job.platform as Platform, m),
         status: 0, error: '', claimedAt: null,
         ...(resetMedia ? { media: '' } : {}),
       },
     });
-    return { ok: true, mode: m, resetMedia };
+    return { ok: true, mode: effectiveMode(job.platform as Platform, m), resetMedia };
   }
 
   private async jobWithPost(id: bigint) {

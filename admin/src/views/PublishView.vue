@@ -10,7 +10,7 @@ interface Overview { settings: Settings; agents: Agent[]; counts: Record<string,
 interface Job {
   id: string; postId: string; platform: string; platformName: string; title: string; content: string; tags: string; status: number;
   scheduledAt: string; claimedAt: string | null; doneAt: string | null; attempts: number; error: string; resultUrl: string; createdAt: string; source: string;
-  format: 'note' | 'video' | 'pics'; media: string;
+  format: 'note' | 'video' | 'pics'; media: string; textMode: Mode | '';
 }
 function mediaImages(j: Job): string[] {
   if ((j.format !== 'video' && j.format !== 'pics') || !j.media) return [];
@@ -25,6 +25,14 @@ function modesFor(j: Job): { k: Mode; name: string }[] {
   return english
     ? [{ k: 'raw', name: '忠实翻译' }, { k: 'ai', name: '英文改写' }]
     : [{ k: 'raw', name: '原文' }, { k: 'light', name: 'AI 浅处理' }, { k: 'ai', name: 'AI 改写' }];
+}
+function canSwitch(j: Job) { return j.format !== 'pics' && j.status !== 1 && j.status !== 2; }
+function modeName(j: Job, m: Mode | '') { return modesFor(j).find((x) => x.k === m)?.name ?? ''; }
+function pickMode(j: Job, e: Event) {
+  const m = (e.target as HTMLSelectElement).value as Mode;
+  if (!m) return;
+  if (m === j.textMode && draft.value?.jobId !== j.id) return;
+  loadDraft(j, m);
 }
 async function loadDraft(j: Job, mode: Mode) {
   draft.value = { jobId: j.id, mode, loading: true, title: '', content: '', tags: [], error: '' };
@@ -322,21 +330,18 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
                   <a v-for="(u, k) in mediaImages(j)" :key="k" :href="u" target="_blank"><img :src="u" style="width: 42px; height: 75px; object-fit: cover; border-radius: 4px" /></a>
                 </div>
                 <div v-if="expanded === j.id" class="muted" style="font-size: 11px; margin-top: 6px; border-top: 1px dashed var(--line); padding-top: 4px">原文：{{ j.source }}…</div>
-                <div v-if="expanded === j.id && j.format !== 'pics' && j.status !== 1 && j.status !== 2" style="margin-top: 8px; font-size: 12px" @click.stop>
-                  <div class="row" style="gap: 6px; align-items: center; flex-wrap: wrap">
-                    <span class="muted">切换文案看看：</span>
-                    <button v-for="m in modesFor(j)" :key="m.k" class="small" :class="draft?.jobId === j.id && draft.mode === m.k ? '' : 'ghost'" @click="loadDraft(j, m.k)">{{ m.name }}</button>
-                    <span class="muted" style="font-size: 11px">（浅处理 / 改写每点一次调一次 AI）</span>
-                  </div>
-                  <div v-if="draft?.jobId === j.id" style="margin-top: 6px; padding: 8px; background: var(--bg2, rgba(127,127,127,.08)); border-radius: 6px">
-                    <div v-if="draft.loading" class="muted">出稿中…</div>
-                    <div v-else-if="draft.error" style="color: #ff6b6b">{{ draft.error }}</div>
-                    <template v-else>
-                      <div style="font-weight: 600">{{ draft.title || '（无标题）' }}</div>
-                      <div style="white-space: pre-wrap; margin-top: 4px">{{ draft.content }}</div>
-                      <div v-if="draft.tags.length" class="muted" style="font-size: 11px; margin-top: 4px">#{{ draft.tags.join(' #') }}</div>
-                      <button class="small" style="margin-top: 8px" @click="applyDraft(j)">用这版发出去{{ j.format === 'video' ? '（重新生成配图）' : '' }}</button>
-                    </template>
+                <div v-if="draft?.jobId === j.id" style="margin-top: 8px; padding: 8px; font-size: 12px; background: var(--bg2, rgba(127,127,127,.08)); border-radius: 6px; cursor: default" @click.stop>
+                  <div class="muted" style="font-size: 11px; margin-bottom: 4px">预览「{{ modeName(j, draft.mode) }}」（这就是最终发出去的文字{{ j.format === 'video' ? '，也是配图 / 配音用的文字' : '' }}）</div>
+                  <div v-if="draft.loading" class="muted">出稿中…</div>
+                  <div v-else-if="draft.error" style="color: #ff6b6b">{{ draft.error }}</div>
+                  <template v-else>
+                    <div style="font-weight: 600">{{ draft.title || '（无标题）' }}</div>
+                    <div style="white-space: pre-wrap; margin-top: 4px">{{ draft.content }}</div>
+                    <div v-if="draft.tags.length" class="muted" style="font-size: 11px; margin-top: 4px">#{{ draft.tags.join(' #') }}</div>
+                  </template>
+                  <div class="row" style="gap: 6px; margin-top: 8px">
+                    <button v-if="!draft.loading && !draft.error" class="small" @click="applyDraft(j)">用这版发出去{{ j.format === 'video' ? '（重新生成配图）' : '' }}</button>
+                    <button class="small ghost" @click="draft = null">取消</button>
                   </div>
                 </div>
               </td>
@@ -348,6 +353,10 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
                 <span v-if="j.error" style="color: #ff6b6b">{{ j.error }}</span>
               </td>
               <td>
+                <select v-if="canSwitch(j)" :value="draft?.jobId === j.id ? draft.mode : j.textMode" style="width: auto; margin-bottom: 6px" title="切换文案：选了先预览，确认后才替换" @change="pickMode(j, $event)">
+                  <option value="" disabled>文案：未记录</option>
+                  <option v-for="m in modesFor(j)" :key="m.k" :value="m.k">文案：{{ m.name }}{{ m.k === j.textMode ? '（当前）' : '' }}</option>
+                </select>
                 <div class="row">
                   <button v-if="j.status !== 1" class="small ghost" @click="retry(j)">{{ j.status === 0 ? '立刻发' : '重发' }}</button>
                   <button v-if="j.status === 0" class="small ghost" @click="skip(j)">跳过</button>
