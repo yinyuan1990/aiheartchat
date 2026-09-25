@@ -331,16 +331,58 @@ export class PublishService implements OnModuleInit {
   private static readonly TITLE_MAX: Record<Platform, number> = { xiaohongshu: 20, douyin: 20, kuaishou: 30, zhihu: 0, shipinhao: 22, x: 30, youtube: 95 };
   private static readonly CONTENT_MAX: Record<Platform, number> = { xiaohongshu: 1000, douyin: 1000, kuaishou: 1000, zhihu: 2000, shipinhao: 1000, x: 1000, youtube: 4000 };
 
-  private async draft(text: string, platform: Platform, s: Settings): Promise<Draft> {
+  private async draft(text: string, platform: Platform, s: Settings, modeOverride?: Mode): Promise<Draft> {
+    const mode = modeOverride ?? s.modes[platform];
     if (ENGLISH.includes(platform)) {
       if (!process.env.AI_API_KEY) throw new BadRequestException(`${PLATFORM_NAMES[platform]} 要翻译成英文，但 AI_API_KEY 未配置`);
       // 英文平台没有浅处理（翻译后首字母没意义），当忠实翻译
-      return this.draftEn(text, platform, s.modes[platform] === 'ai' ? 'ai' : 'raw');
+      return this.draftEn(text, platform, mode === 'ai' ? 'ai' : 'raw');
     }
-    if (s.modes[platform] === 'light') return this.draftRaw(await lightClean(text), platform);
-    if (s.modes[platform] !== 'ai') return this.draftRaw(text, platform);
+    if (mode === 'light') return this.draftRaw(await lightClean(text), platform);
+    if (mode !== 'ai') return this.draftRaw(text, platform);
     if (!process.env.AI_API_KEY) throw new BadRequestException(`${PLATFORM_NAMES[platform]} 设为 AI 改写，但 AI_API_KEY 未配置`);
     return this.draftAi(text, platform);
+  }
+
+  /** 待发任务：按指定模式（原文 / 浅处理 / AI 改写）出稿给后台预览，不落库。返回的就是最终会发出去的文字 */
+  async previewDraft(id: bigint, mode: string) {
+    const { job } = await this.jobWithPost(id);
+    const s = await this.settings();
+    const draft = await this.draft(this.postText(job.post), job.platform as Platform, s, toMode(mode, s.modes[job.platform as Platform]));
+    return { mode: toMode(mode, 'raw'), title: draft.title, content: draft.content, tags: draft.tags };
+  }
+
+  /** 待发任务：把某个模式的稿子应用为该任务的发布文案；视频任务会清掉已出的图，按新文案重新生成 */
+  async applyDraft(id: bigint, mode: string) {
+    const { job } = await this.jobWithPost(id);
+    if (job.status === 1) throw new BadRequestException('任务正在发布，稍后再改');
+    if (job.status === 2) throw new BadRequestException('任务已发布，改不了');
+    const s = await this.settings();
+    const m = toMode(mode, s.modes[job.platform as Platform]);
+    const draft = await this.draft(this.postText(job.post), job.platform as Platform, s, m);
+    const resetMedia = job.format === 'video';
+    await this.prisma.publishJob.update({
+      where: { id },
+      data: {
+        title: draft.title, content: draft.content, tags: draft.tags.join(','),
+        status: 0, error: '', claimedAt: null,
+        ...(resetMedia ? { media: '' } : {}),
+      },
+    });
+    return { ok: true, mode: m, resetMedia };
+  }
+
+  private async jobWithPost(id: bigint) {
+    const j = await this.prisma.publishJob.findUnique({ where: { id } });
+    if (!j) throw new NotFoundException('任务不存在');
+    if (j.format === 'pics') throw new BadRequestException('美女图任务没有文案');
+    const post = await this.prisma.treeholePost.findUnique({ where: { id: j.postId } });
+    if (!post) throw new NotFoundException('原帖已不在（树洞只留 3 天，过期会被清理），无法重新出稿');
+    return { job: { ...j, post } };
+  }
+
+  private postText(post: { content: string }): string {
+    return post.content.replace(/\s+\n/g, '\n').trim();
   }
 
   /** 英文平台：raw = 忠实翻译（不删不改情节）；ai = 按英文短视频口吻改写。标题要有钩子 */

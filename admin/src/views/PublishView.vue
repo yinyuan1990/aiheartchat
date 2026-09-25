@@ -18,6 +18,36 @@ function mediaImages(j: Job): string[] {
 }
 const FORMAT_NAME: Record<string, string> = { note: '图文', video: '视频', pics: '纯图' };
 
+/** 任务文案切换：原文 / AI 浅处理 / AI 改写，预览后「用这个」写回任务（视频会重新出图） */
+const draft = ref<{ jobId: string; mode: Mode; loading: boolean; title: string; content: string; tags: string[]; error: string } | null>(null);
+function modesFor(j: Job): { k: Mode; name: string }[] {
+  const english = ov.value?.platforms.find((p) => p.key === j.platform)?.english;
+  return english
+    ? [{ k: 'raw', name: '忠实翻译' }, { k: 'ai', name: '英文改写' }]
+    : [{ k: 'raw', name: '原文' }, { k: 'light', name: 'AI 浅处理' }, { k: 'ai', name: 'AI 改写' }];
+}
+async function loadDraft(j: Job, mode: Mode) {
+  draft.value = { jobId: j.id, mode, loading: true, title: '', content: '', tags: [], error: '' };
+  try {
+    const r = await api<{ title: string; content: string; tags: string[] }>(`/admin/publish/jobs/${j.id}/draft?mode=${mode}`);
+    if (draft.value?.jobId === j.id && draft.value.mode === mode) Object.assign(draft.value, { ...r, loading: false });
+  } catch (e: any) {
+    if (draft.value?.jobId === j.id) Object.assign(draft.value, { loading: false, error: e.message });
+  }
+}
+async function applyDraft(j: Job) {
+  const d = draft.value;
+  if (!d || d.jobId !== j.id || d.loading || d.error) return;
+  const hint = j.format === 'video' ? '\n视频任务：已出的配图会作废，按新文案重新生成（每张 0.2 元）。' : '';
+  if (!confirm(`把这版文案设为任务 #${j.id} 最终发出去的文字？${hint}`)) return;
+  try {
+    const r = await api<{ resetMedia: boolean }>(`/admin/publish/jobs/${j.id}/draft`, { method: 'POST', body: { mode: d.mode } });
+    show(r.resetMedia ? '已应用，配图会按新文案重新生成（排到 6 小时内自动出）' : '已应用为发布文案');
+    draft.value = null;
+    loadJobs();
+  } catch (e: any) { show(e.message); }
+}
+
 interface XPicsSettings { enabled: boolean; channel: string; daily: number; min: number; max: number; fetchHour: number; lastFetch: string; lastResult: string }
 interface XPicsStatus { settings: XPicsSettings; pool: number; unchecked: number; rejected: number; rejectedSamples: { url: string; reason: string }[]; busy: boolean; samples: string[]; today: { id: string; status: number; scheduledAt: string; manual: boolean; resultUrl: string; error: string }[] }
 const xp = ref<XPicsStatus | null>(null);
@@ -292,6 +322,23 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
                   <a v-for="(u, k) in mediaImages(j)" :key="k" :href="u" target="_blank"><img :src="u" style="width: 42px; height: 75px; object-fit: cover; border-radius: 4px" /></a>
                 </div>
                 <div v-if="expanded === j.id" class="muted" style="font-size: 11px; margin-top: 6px; border-top: 1px dashed var(--line); padding-top: 4px">原文：{{ j.source }}…</div>
+                <div v-if="expanded === j.id && j.format !== 'pics' && j.status !== 1 && j.status !== 2" style="margin-top: 8px; font-size: 12px" @click.stop>
+                  <div class="row" style="gap: 6px; align-items: center; flex-wrap: wrap">
+                    <span class="muted">切换文案看看：</span>
+                    <button v-for="m in modesFor(j)" :key="m.k" class="small" :class="draft?.jobId === j.id && draft.mode === m.k ? '' : 'ghost'" @click="loadDraft(j, m.k)">{{ m.name }}</button>
+                    <span class="muted" style="font-size: 11px">（浅处理 / 改写每点一次调一次 AI）</span>
+                  </div>
+                  <div v-if="draft?.jobId === j.id" style="margin-top: 6px; padding: 8px; background: var(--bg2, rgba(127,127,127,.08)); border-radius: 6px">
+                    <div v-if="draft.loading" class="muted">出稿中…</div>
+                    <div v-else-if="draft.error" style="color: #ff6b6b">{{ draft.error }}</div>
+                    <template v-else>
+                      <div style="font-weight: 600">{{ draft.title || '（无标题）' }}</div>
+                      <div style="white-space: pre-wrap; margin-top: 4px">{{ draft.content }}</div>
+                      <div v-if="draft.tags.length" class="muted" style="font-size: 11px; margin-top: 4px">#{{ draft.tags.join(' #') }}</div>
+                      <button class="small" style="margin-top: 8px" @click="applyDraft(j)">用这版发出去{{ j.format === 'video' ? '（重新生成配图）' : '' }}</button>
+                    </template>
+                  </div>
+                </div>
               </td>
               <td><span class="tag" :class="STATUS[j.status]?.cls">{{ STATUS[j.status]?.text }}</span><br /><span class="muted" style="font-size: 11px">第 {{ j.attempts }} 次</span></td>
               <td class="muted">{{ fmt(j.scheduledAt) }}</td>

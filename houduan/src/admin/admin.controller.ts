@@ -66,6 +66,20 @@ export class AdminController {
     return this.publish.jobs(status !== undefined && status !== '' ? Number(status) : undefined, platform || undefined, Number(page) || 1, Number(size) || 20);
   }
 
+  /** 待发任务按某个文案模式出稿预览（raw / light / ai），不落库 */
+  @Get('publish/jobs/:id/draft')
+  @UseGuards(AdminGuard)
+  publishDraftPreview(@Param('id') id: string, @Query('mode') mode: string) {
+    return this.publish.previewDraft(BigInt(id), mode ?? 'raw');
+  }
+
+  /** 把某个模式的稿子应用为任务的发布文案（视频任务重新出图） */
+  @Post('publish/jobs/:id/draft')
+  @UseGuards(AdminGuard)
+  publishDraftApply(@Param('id') id: string, @Body() body: { mode?: string }) {
+    return this.publish.applyDraft(BigInt(id), body?.mode ?? 'raw');
+  }
+
   @Post('publish/jobs/:id/retry')
   @UseGuards(AdminGuard)
   publishRetry(@Param('id') id: string) {
