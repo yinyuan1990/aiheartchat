@@ -1,0 +1,13 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Office temp files
+~$*
+
+# env
+.env
+.env.*
+!.env.example

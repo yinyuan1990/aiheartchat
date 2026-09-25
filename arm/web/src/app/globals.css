@@ -1,0 +1,381 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* shadcn's `dark:` utilities only apply inside the dark Terminal theme; the default Mono theme is light. */
+@custom-variant dark (&:is([data-theme="terminal"] *));
+
+/*
+  Two themes, white and black, switched via <html data-theme="arc|terminal">.
+  Both map onto shadcn's semantic tokens so every shadcn component picks them up.
+*/
+
+/* ---------- Theme B · Mono (default, light) ----------
+   Modelled on pons' default look: light-grey page, white nav / cards, near-black text, and every secondary tone
+   derived from that text colour at reduced alpha. No brand hue anywhere; black is the accent. */
+:root,
+[data-theme="arc"] {
+  color-scheme: light;
+  --radius: 1rem;
+
+  --background: #f4f4f4;
+  --foreground: #111111;
+  --card: #ffffff;
+  --card-foreground: #111111;
+  --popover: #ffffff;
+  --popover-foreground: #111111;
+  --primary: #111111;
+  --primary-foreground: #ffffff;
+  --secondary: #ececec;
+  --secondary-foreground: rgba(17, 17, 17, 0.72);
+  --muted: #ececec;
+  --muted-foreground: rgba(17, 17, 17, 0.55);
+  --accent: #e4e4e4;
+  --accent-foreground: #111111;
+  --destructive: #ff3b30;
+  --border: rgba(17, 17, 17, 0.1);
+  --input: rgba(17, 17, 17, 0.16);
+  --ring: #111111;
+  --chart-1: #111111;
+  --chart-2: #595959;
+  --chart-3: #8c8c8c;
+  --chart-4: #bfbfbf;
+  --chart-5: #e0e0e0;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #111111;
+  --sidebar-primary: #111111;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f0f0f0;
+  --sidebar-accent-foreground: #111111;
+  --sidebar-border: rgba(17, 17, 17, 0.1);
+  --sidebar-ring: #111111;
+
+  /* domain tokens — up/down follow the TradingView candlestick defaults so buy/sell UI matches the chart */
+  --up: #26a69a;
+  --down: #ef5350;
+  --gold: #6b6b6b;
+  --burn: #333333;
+  /* fee split donut — the one place the mono theme uses hues, because four greys cannot be told apart */
+  --split-creator: #111111;
+  --split-eco: #2f7df6;
+  --split-buyback: #a855f7;
+  --split-dev: #f5a524;
+
+  /* Latin from Inter, CJK from the self-hosted Noto Sans SC so every OS renders the same glyphs. */
+  --font-sans: "Inter Variable", "Noto Sans SC Variable", Inter, ui-sans-serif,
+    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei",
+    sans-serif;
+  --font-mono: "JetBrains Mono Variable", "Noto Sans SC Variable",
+    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
+    "Liberation Mono", "PingFang SC", "Microsoft YaHei UI", monospace;
+  --font-body: var(--font-sans);
+
+  /* pons-style soft drop shadow instead of a coloured glow */
+  --glow: inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 8px 24px rgba(17, 17, 17, 0.18);
+  --bg-decor: none;
+  --scanlines: none;
+  --shimmer: rgba(17, 17, 17, 0.08);
+  --tracking: 0;
+}
+
+/* ---------- Dark (black) ----------
+   Arm: the same monochrome language as the light theme, inverted — pure black page, near-black cards, white text
+   and white as the accent. Only up/down (candles, P&L) and the fee-split donut keep a hue. */
+[data-theme="terminal"] {
+  color-scheme: dark;
+  --radius: 1rem;
+  --shimmer: rgba(255, 255, 255, 0.08);
+
+  --background: #000000;
+  --foreground: #f2f2f2;
+  --card: #0d0d0d;
+  --card-foreground: #f2f2f2;
+  --popover: #121212;
+  --popover-foreground: #f2f2f2;
+  --primary: #f2f2f2;
+  --primary-foreground: #000000;
+  --secondary: #1a1a1a;
+  --secondary-foreground: rgba(242, 242, 242, 0.72);
+  --muted: #1a1a1a;
+  --muted-foreground: rgba(242, 242, 242, 0.55);
+  --accent: #222222;
+  --accent-foreground: #f2f2f2;
+  --destructive: #ff453a;
+  --border: rgba(255, 255, 255, 0.1);
+  --input: rgba(255, 255, 255, 0.16);
+  --ring: #f2f2f2;
+  --chart-1: #f2f2f2;
+  --chart-2: #a6a6a6;
+  --chart-3: #737373;
+  --chart-4: #404040;
+  --chart-5: #262626;
+  --sidebar: #0a0a0a;
+  --sidebar-foreground: #f2f2f2;
+  --sidebar-primary: #f2f2f2;
+  --sidebar-primary-foreground: #000000;
+  --sidebar-accent: #1a1a1a;
+  --sidebar-accent-foreground: #f2f2f2;
+  --sidebar-border: rgba(255, 255, 255, 0.1);
+  --sidebar-ring: #f2f2f2;
+
+  --up: #26a69a;
+  --down: #ef5350;
+  --gold: #a6a6a6;
+  --burn: #d9d9d9;
+  --split-creator: #f2f2f2;
+  --split-eco: #2f7df6;
+  --split-buyback: #a855f7;
+  --split-dev: #f5a524;
+
+  --font-body: var(--font-sans);
+
+  --glow: inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 8px 24px rgba(0, 0, 0, 0.6);
+  --bg-decor: none;
+  --scanlines: none;
+  --tracking: 0;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-up: var(--up);
+  --color-down: var(--down);
+  --color-gold: var(--gold);
+  --color-burn: var(--burn);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-body: var(--font-body);
+
+  --shadow-glow: var(--glow);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body {
+    height: 100%;
+  }
+  body {
+    @apply bg-background text-foreground;
+    background-image: var(--bg-decor);
+    background-attachment: fixed;
+    font-family: var(--font-body);
+    letter-spacing: var(--tracking);
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior-y: none;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background: var(--scanlines);
+    z-index: 9999;
+  }
+  ::selection {
+    background: var(--primary);
+    color: var(--primary-foreground);
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--input) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--input);
+    border-radius: 999px;
+  }
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* The brand mark keeps its blue/violet colours in both themes, with the original cyan glow. */
+.brand-logo {
+  filter: drop-shadow(0 0 10px rgba(34, 211, 238, 0.35));
+}
+
+/* Small section label. */
+@utility label {
+  font-size: 11px;
+  line-height: 1rem;
+  color: var(--muted-foreground);
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+@utility marquee {
+  display: flex;
+  width: max-content;
+  animation: marquee 60s linear infinite;
+  &:hover {
+    animation-play-state: paused;
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: -200% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
+@utility shimmer {
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--shimmer) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2.2s linear infinite;
+}
+
+@keyframes blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+@utility blink {
+  animation: blink 1s steps(1) infinite;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@utility fade-up {
+  animation: fadeUp 0.35s ease-out both;
+}
+
+/* 🔥 emoji flames (components/hot/flame.tsx): slow flicker + two embers drifting up. */
+@keyframes flame-flicker {
+  0%,
+  100% {
+    transform: scale(1) rotate(0deg);
+    filter: brightness(1);
+  }
+  30% {
+    transform: scale(1.06, 1.1) rotate(-3deg);
+    filter: brightness(1.12);
+  }
+  60% {
+    transform: scale(0.97, 1.02) rotate(2.5deg);
+    filter: brightness(0.96);
+  }
+  80% {
+    transform: scale(1.04, 1.07) rotate(-1.5deg);
+    filter: brightness(1.08);
+  }
+}
+@keyframes ember-rise {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.6);
+  }
+  15% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-0.18em, -0.9em) scale(0.2);
+  }
+}
+@utility flame-flicker {
+  animation: flame-flicker 2.8s ease-in-out infinite;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+@utility ember {
+  animation: ember-rise 3.2s ease-out infinite;
+  @media (prefers-reduced-motion: reduce) {
+    display: none;
+  }
+}

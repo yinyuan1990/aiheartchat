@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>USDC 跨链：Base → Arc（Circle CCTP）</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f4f4f4; color: #111; font: 14px/1.5 ui-sans-serif, system-ui, "Segoe UI", "Microsoft YaHei", sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: #666; margin: 0 0 20px; }
+  .card { background: #fff; border: 1px solid #e3e3e3; border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+  .card h2 { font-size: 15px; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+  .step { width: 22px; height: 22px; border-radius: 50%; background: #111; color: #fff; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+  label { color: #444; min-width: 88px; }
+  input[type=text] { flex: 1; min-width: 200px; padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; font: inherit; font-family: ui-monospace, Consolas, monospace; }
+  button { padding: 9px 16px; border: 1px solid #111; border-radius: 6px; background: #111; color: #fff; font: inherit; cursor: pointer; }
+  button.ghost { background: #fff; color: #111; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+  .kv b { color: #444; font-weight: 500; }
+  .warn { background: #fff7e0; border-color: #f0d68a; }
+  .ok { color: #157347; }
+  .err { color: #b3261e; }
+  #log { background: #0f0f0f; color: #d6d6d6; border-radius: 8px; padding: 12px; min-height: 120px; max-height: 320px; overflow: auto; font: 12px/1.6 ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-all; }
+  #log a { color: #8ab4f8; }
+  .mode label { min-width: 0; }
+  small { color: #777; }
+</style>
+</head>
+<body>
+<main>
+  <h1>USDC 跨链：Base → Arc</h1>
+  <p class="sub">走 Circle 官方 CCTP V2（烧毁 / 铸造，原生 USDC）。私钥不离开 MetaMask，本页只负责组装交易和等 Circle 签名。</p>
+  <div class="card warn">
+    <b>9.16 主网公开之前请勿使用。</b>9.9 至 9.10 实测：Circle 目前只给白名单合作方处理去往 Arc 主网的转账，普通钱包烧毁后（无论是否勾选代领）20 多个小时都不会铸造，公开签名接口也一直显示 pending。烧毁的 USDC 不会丢，但要等 Circle 对外开放后才能在第 3 步续跑领回。已烧毁的两笔（`0xb2bec1fa…`、`0xe02680a6…`）就是这种状态。
+  </div>
+
+  <div class="card">
+    <h2><span class="step">1</span> 连接钱包</h2>
+    <div class="row">
+      <button id="connect">连接 MetaMask</button>
+      <button id="refresh" class="ghost" disabled>刷新余额</button>
+      <span id="acct" style="font-family:ui-monospace,Consolas,monospace"></span>
+    </div>
+    <div class="kv" id="bal"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="step">2</span> 填写并跨链</h2>
+    <div class="row"><label>金额 (USDC)</label><input type="text" id="amount" placeholder="例如 20"></div>
+    <div class="row"><label>Arc 收款地址</label><input type="text" id="to" placeholder="留空 = 当前钱包地址；也可以填 Safe 多签地址"></div>
+    <div class="row mode"><label>模式</label>
+      <label><input type="radio" name="mode" value="standard" checked> 标准（Circle 不收费，约 3 到 5 分钟）</label>
+      <label><input type="radio" name="mode" value="fast"> 快速（约 20 秒，收 <span id="fastFee">…</span> bps）</label>
+    </div>
+    <div class="row mode"><label>到账方式</label>
+      <label><input type="checkbox" id="forward" checked> 由 Circle 代付 Arc gas 并自动铸造（约 <span id="fwdFee">…</span> USDC，从转账里扣）。<b>9.16 主网公开前必须勾选</b>：Circle 的公开签名接口目前不放出去 Arc 主网的签名，不勾的话烧毁后只能等到公开后再领。</label>
+    </div>
+    <div class="row">
+      <button id="go" disabled>开始跨链</button>
+      <small>过程：授权 → 烧毁（Base）→ 等 Circle 签名 → 铸造（Arc）。MetaMask 会弹 2 到 3 次确认。</small>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="step">3</span> 续跑（上次中断时用）</h2>
+    <div class="row"><label>烧毁交易哈希</label><input type="text" id="resume" placeholder="0x…（Base 上 depositForBurn 那笔）"><button id="goResume" class="ghost" disabled>继续领取</button></div>
+    <small>烧毁已经成功但 Arc 那头没领到时，填上一步的哈希直接从"等签名 → 铸造"继续。Circle 签名不会过期，铸造对象锁定在原收款地址。</small>
+  </div>
+
+  <div class="card">
+    <h2>日志</h2>
+    <div id="log"></div>
+  </div>
+</main>
+
+<script>
+// ---------- constants ----------
+const BASE = { name: "Base", chainId: 8453, hex: "0x2105", domain: 6, rpc: "/rpc/base", explorer: "https://basescan.org",
+  usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", addParams: { chainId: "0x2105", chainName: "Base", rpcUrls: ["https://mainnet.base.org"], nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, blockExplorerUrls: ["https://basescan.org"] } };
+const ARC = { name: "Arc", chainId: 5042, hex: "0x13b2", domain: 26, rpc: "/rpc/arc", explorer: "https://explorer.arc.io",
+  addParams: { chainId: "0x13b2", chainName: "Arc", rpcUrls: ["https://rpc.arc-scan.org"], nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 }, blockExplorerUrls: ["https://explorer.arc.io"] } };
+const TOKEN_MESSENGER = "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d";
+const MESSAGE_TRANSMITTER = "0x81D40F21F12A8F0E3252Bccb954D722d4c464B64";
+const SEL = { approve: "0x095ea7b3", balanceOf: "0x70a08231", allowance: "0xdd62ed3e", depositForBurn: "0x8e0250ee", depositForBurnWithHook: "0x779b432d", receiveMessage: "0x57ecfd28" };
+// Circle Forwarding Service hook: "cctp-forward" magic + version 0 + empty payload (32 bytes)
+const FORWARD_HOOK = "636374702d666f72776172640000000000000000000000000000000000000000";
+
+// ---------- helpers ----------
+const $ = (id) => document.getElementById(id);
+const logEl = $("log");
+function log(msg, cls) { const d = document.createElement("div"); if (cls) d.className = cls; d.innerHTML = `<span style="color:#777">${new Date().toTimeString().slice(0, 8)}</span> ${msg}`; logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight; }
+const link = (base, hash) => `<a href="${base}/tx/${hash}" target="_blank">${hash.slice(0, 10)}…${hash.slice(-6)}</a>`;
+const pad = (h) => h.replace(/^0x/, "").padStart(64, "0");
+const u = (n) => pad(BigInt(n).toString(16));
+const isAddr = (a) => /^0x[0-9a-fA-F]{40}$/.test(a);
+const fmt6 = (n) => (Number(n) / 1e6).toFixed(6).replace(/\.?0+$/, "");
+const fmt18 = (n) => (Number(n) / 1e18).toFixed(6).replace(/\.?0+$/, "");
+function parseUsdc(s) { const m = /^(\d+)(?:\.(\d{1,6}))?$/.exec(String(s).trim()); if (!m) return null; return BigInt(m[1]) * 1000000n + BigInt((m[2] || "").padEnd(6, "0")); }
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function rpc(url, method, params) {
+  const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+  const j = await r.json(); if (j.error) throw new Error(j.error.message); return j.result;
+}
+const call = (chain, to, data) => rpc(chain.rpc, "eth_call", [{ to, data }, "latest"]);
+const bal = (chain, addr) => rpc(chain.rpc, "eth_getBalance", [addr, "latest"]).then(BigInt);
+const erc20Bal = (chain, token, addr) => call(chain, token, SEL.balanceOf + pad(addr)).then(BigInt);
+
+async function waitReceipt(chain, hash) {
+  for (;;) { const r = await rpc(chain.rpc, "eth_getTransactionReceipt", [hash]); if (r) { if (r.status !== "0x1") throw new Error("交易失败（reverted）"); return r; } await sleep(2000); }
+}
+async function ensureChain(chain) {
+  const cur = await ethereum.request({ method: "eth_chainId" });
+  if (cur.toLowerCase() === chain.hex) return;
+  try { await ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: chain.hex }] }); }
+  catch (e) { if (e.code === 4902 || /Unrecognized|not added/i.test(e.message)) { await ethereum.request({ method: "wallet_addEthereumChain", params: [chain.addParams] }); } else throw e; }
+}
+async function send(chain, tx) { await ensureChain(chain); return ethereum.request({ method: "eth_sendTransaction", params: [{ from: account, ...tx }] }); }
+
+// ---------- state ----------
+let account = null, quotes = null, busy = false;
+function setBusy(b) { busy = b; $("go").disabled = b || !account; $("goResume").disabled = b || !account; $("connect").disabled = b; $("refresh").disabled = b || !account; }
+
+// ---------- actions ----------
+$("connect").onclick = async () => {
+  if (!window.ethereum) return log("没有检测到 MetaMask，请先安装浏览器插件", "err");
+  try { [account] = await ethereum.request({ method: "eth_requestAccounts" }); } catch (e) { return log("连接被拒绝：" + e.message, "err"); }
+  $("acct").textContent = account; log(`已连接 ${account}`, "ok");
+  setBusy(false); await refresh();
+};
+ethereum?.on?.("accountsChanged", (a) => { account = a[0] || null; $("acct").textContent = account || ""; setBusy(false); if (account) refresh(); });
+
+async function refresh() {
+  if (!account) return;
+  const to = $("to").value.trim() || account;
+  try {
+    const [bUsdc, bEth, aGas, aTo] = await Promise.all([erc20Bal(BASE, BASE.usdc, account), bal(BASE, account), bal(ARC, account), isAddr(to) ? bal(ARC, to) : Promise.resolve(null)]);
+    $("bal").innerHTML = `<b>Base USDC</b><span>${fmt6(bUsdc)}</span><b>Base ETH (gas)</b><span>${fmt18(bEth)}</span><b>Arc USDC (本钱包, 付 gas 用)</b><span>${fmt18(aGas)}${aGas === 0n ? ' <span class="err">= 0，Arc 领币前需要先转几分钱进来</span>' : ""}</span>` + (aTo !== null && to !== account ? `<b>Arc USDC (收款地址)</b><span>${fmt18(aTo)}</span>` : "");
+  } catch (e) { log("读取余额失败：" + e.message, "err"); }
+  if (!quotes) {
+    try {
+      quotes = await (await fetch(`/iris/v2/burn/USDC/fees/${BASE.domain}/${ARC.domain}?forward=true`)).json();
+      const f = quotes.find((q) => q.finalityThreshold === 1000); $("fastFee").textContent = f ? f.minimumFee : "?";
+      const fw = quotes[0]?.forwardFee?.high; $("fwdFee").textContent = fw ? fmt6(Math.ceil(fw * 1.2)) : "?";
+    } catch (e) { log("拿不到 Circle 报价（先按标准模式 0 费处理）：" + e.message, "err"); }
+  }
+}
+$("refresh").onclick = refresh;
+$("to").addEventListener("change", refresh);
+
+$("go").onclick = async () => {
+  const amount = parseUsdc($("amount").value);
+  if (!amount || amount <= 0n) return log("金额格式不对，最多 6 位小数", "err");
+  const to = $("to").value.trim() || account;
+  if (!isAddr(to)) return log("收款地址不是合法的 0x 地址", "err");
+  const fast = document.querySelector('input[name=mode]:checked').value === "fast";
+  const threshold = fast ? 1000 : 2000;
+  const forward = $("forward").checked;
+  if (!forward && !confirm("未勾选 Circle 代领：在 Arc 主网 9.16 公开之前，Circle 不通过公开接口放出签名，这笔烧毁后会一直停在“等签名”，要到公开后才能领。确定不勾选？")) return;
+  const q = quotes?.find((x) => x.finalityThreshold === threshold);
+  const bps = q ? q.minimumFee : 0;
+  let maxFee = bps > 0 ? (amount * BigInt(Math.ceil(bps * 100)) + 999999n) / 1000000n : 0n;
+  if (forward) {
+    const fw = q?.forwardFee?.high;
+    if (!fw) return log("拿不到 Circle 代付报价，刷新页面重试，或取消勾选自己领", "err");
+    maxFee += BigInt(Math.ceil(fw * 1.2)); // 20% headroom: Circle keeps at most maxFee, the rest is minted
+  }
+  setBusy(true);
+  try {
+    const [bUsdc, bEth] = await Promise.all([erc20Bal(BASE, BASE.usdc, account), bal(BASE, account)]);
+    if (bUsdc < amount) throw new Error(`Base USDC 不够：有 ${fmt6(bUsdc)}，要 ${fmt6(amount)}`);
+    if (bEth === 0n) throw new Error("Base 上没有 ETH 付 gas");
+    if (amount <= maxFee) throw new Error(`金额太小，不够付手续费上限 ${fmt6(maxFee)}`);
+    log(`计划：烧毁 ${fmt6(amount)} USDC（${fast ? "快速" : "标准"}${forward ? "，Circle 代领" : ""}，手续费上限 ${fmt6(maxFee)}）→ 铸到 Arc ${to}，到手 ≥ ${fmt6(amount - maxFee)}`);
+
+    const allowance = BigInt(await call(BASE, BASE.usdc, SEL.allowance + pad(account) + pad(TOKEN_MESSENGER)));
+    if (allowance < amount) {
+      log("① 授权 USDC 给 Circle TokenMessenger，请在 MetaMask 确认…");
+      const h = await send(BASE, { to: BASE.usdc, data: SEL.approve + pad(TOKEN_MESSENGER) + u(amount) });
+      log(`授权已发出 ${link(BASE.explorer, h)}，等确认…`); await waitReceipt(BASE, h); log("授权完成", "ok");
+    } else log("① 授权额度足够，跳过");
+
+    log("② 烧毁 USDC（depositForBurn），请在 MetaMask 确认…");
+    const head = u(amount) + u(ARC.domain) + pad(to) + pad(BASE.usdc) + pad("0x") + u(maxFee) + u(threshold);
+    const data = forward ? SEL.depositForBurnWithHook + head + u(256) + u(32) + FORWARD_HOOK : SEL.depositForBurn + head;
+    const burn = await send(BASE, { to: TOKEN_MESSENGER, data });
+    localStorage.setItem("cctp:lastBurn", burn); $("resume").value = burn;
+    log(`烧毁已发出 ${link(BASE.explorer, burn)}，等确认…`); await waitReceipt(BASE, burn); log("烧毁完成。哈希已填入第 3 步，中断可续跑", "ok");
+    await finish(burn, forward ? { to, before: await bal(ARC, to) } : null);
+  } catch (e) { log((e.shortMessage || e.message || String(e)), "err"); }
+  finally { setBusy(false); refresh(); }
+};
+
+$("goResume").onclick = async () => {
+  const h = $("resume").value.trim();
+  if (!/^0x[0-9a-fA-F]{64}$/.test(h)) return log("哈希格式不对", "err");
+  setBusy(true);
+  try { await finish(h); } catch (e) { log((e.shortMessage || e.message || String(e)), "err"); }
+  finally { setBusy(false); refresh(); }
+};
+
+const nonceUsed = async (nonce) => BigInt(await call(ARC, MESSAGE_TRANSMITTER, "0xfeb61724" + pad(nonce))) === 1n;
+
+async function finish(burnHash, fwd) {
+  log("③ 等 Circle 处理…（去 Arc 目前一律按标准最终性，约 25 到 35 分钟；代领的话 Circle 直接在 Arc 上铸，本页每 15 秒查一次链上是否到账）");
+  let msg;
+  for (let i = 0; ; i++) {
+    const r = await fetch(`/iris/v2/messages/${BASE.domain}?transactionHash=${burnHash}`);
+    if (r.status === 404) { if (i % 4 === 0) log("Circle 还没索引到这笔烧毁…"); await sleep(15000); continue; }
+    if (!r.ok) throw new Error(`Circle API ${r.status}: ${await r.text()}`);
+    const m = (await r.json()).messages?.[0];
+    // Arc mainnet: the public API keeps saying pending even after Circle's forwarder has minted, so the chain is the source of truth
+    if (m?.eventNonce && await nonceUsed(m.eventNonce)) {
+      localStorage.removeItem("cctp:lastBurn");
+      const now = fwd ? await bal(ARC, fwd.to) : null;
+      return log(`完成。这笔已在 Arc 上铸造${fwd ? `，${fwd.to} 余额 ${fmt18(fwd.before)} → ${fmt18(now)} USDC` : "（Circle 代领或之前领过），刷新余额看看"}`, "ok");
+    }
+    if (m?.status === "complete" && m.attestation && m.attestation !== "PENDING") { msg = m; break; }
+    if (i % 4 === 0) log(`Circle 状态：${m?.status || "pending"}${fwd ? "，链上未到账" : ""}`);
+    await sleep(15000);
+  }
+  log("签名拿到", "ok");
+  if (fwd) {
+    log("④ 已委托 Circle 代领，等它在 Arc 上铸造…");
+    for (let i = 0; i < 40; i++) {
+      await sleep(15000);
+      if (await nonceUsed(msg.eventNonce)) { localStorage.removeItem("cctp:lastBurn"); const now = await bal(ARC, fwd.to); return log(`完成。Circle 已铸到 ${fwd.to}，Arc 余额 ${fmt18(fwd.before)} → ${fmt18(now)} USDC`, "ok"); }
+      if (i % 4 === 3) log("Circle 还没铸，继续等…");
+    }
+    return log("等了 10 分钟 Circle 还没铸。可以稍后用第 3 步续跑（若本钱包在 Arc 上有 gas 会直接自己领）", "err");
+  }
+
+  const gas = await bal(ARC, account);
+  if (gas === 0n) {
+    log(`<b>停在这里：</b>当前钱包 ${account} 在 Arc 上余额为 0，付不了领币的 gas。请先往这个地址转 0.05 USDC（Arc 链），然后点第 3 步"继续领取"（哈希已填好）。`, "err");
+    return;
+  }
+  log("④ 在 Arc 上铸造（receiveMessage），MetaMask 会先要求切换到 Arc 网络，再确认交易…");
+  const m = msg.message.replace(/^0x/, ""), a = msg.attestation.replace(/^0x/, "");
+  const enc = (hex) => u(hex.length / 2) + hex.padEnd(Math.ceil(hex.length / 64) * 64, "0");
+  const mEnc = enc(m), aEnc = enc(a);
+  const data = SEL.receiveMessage + u(64) + u(64 + mEnc.length / 2) + mEnc + aEnc;
+  const h = await send(ARC, { to: MESSAGE_TRANSMITTER, data });
+  log(`铸造已发出 ${link(ARC.explorer, h)}，等确认…`); await waitReceipt(ARC, h);
+  localStorage.removeItem("cctp:lastBurn");
+  log(`完成。USDC 已到 Arc。`, "ok");
+}
+
+// restore a half-finished run
+const last = localStorage.getItem("cctp:lastBurn");
+if (last) { $("resume").value = last; log(`检测到上次未完成的烧毁 ${last.slice(0, 10)}…，连接钱包后可在第 3 步继续领取`); }
+</script>
+</body>
+</html>

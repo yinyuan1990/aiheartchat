@@ -1,0 +1,96 @@
+# /opt/arm/docker-compose.yml — isolated from the existing solanft stack.
+# Secrets come from /opt/arm/.env (PRIVATE_KEY, POSTGRES_PASSWORD); never committed.
+name: arm
+
+services:
+  web:
+    build:
+      context: ./web
+    image: arm/web:latest
+    container_name: arm-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3100:3000"
+    environment:
+      NODE_ENV: production
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  db:
+    image: postgres:16-alpine
+    container_name: arm-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: arm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-arm}
+      POSTGRES_DB: arm
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arm -d arm"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  indexer:
+    build:
+      context: ./indexer
+    image: arm/indexer:latest
+    container_name: arm-indexer
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3101:3101"
+    environment:
+      NODE_ENV: production
+      PORT: "3101"
+      RPC_URL: ${ARC_RPC_URL:-https://rpc.mainnet.arc.io}
+      # extra RPCs tried in order when RPC_URL errors (rate limit / 5xx); keyless public endpoints as fallback
+      RPC_URLS: ${RPC_URLS:-}
+      DATABASE_URL: postgres://arm:${POSTGRES_PASSWORD:-arm}@db:5432/arm
+      DEPLOYMENTS_FILE: /app/deployments.json
+      UPLOAD_DIR: /data/uploads
+      # Multi-domain redundancy (9.9): every listed domain serves the site; the first is canonical. Uploads are stored
+      # host-relative, so adding / dropping a domain is just this list (+ DNS + nginx server_name + certbot).
+      PUBLIC_DOMAINS: ${PUBLIC_DOMAINS:-arm.yyheart.com}
+      # domain used in outbound links (Telegram posts, tokenlist.json); empty = first PUBLIC_DOMAINS entry
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+      SERVER_IP: ${SERVER_IP:-45.205.17.161}
+      KEEPER_ENABLED: "true"
+      KEEPER_PRIVATE_KEY: ${PRIVATE_KEY}
+      # distribute when a token has ≥ KEEPER_FEE_THRESHOLD (6dp USDC) accrued, or every KEEPER_MAX_AGE_MS if it traded.
+      # Defaults: 0.01 USDC (testnet-friendly; mainnet .env sets 50000000) / 2 hours (9.6 boss decision, was 30 min).
+      KEEPER_INTERVAL_MS: "60000"
+      KEEPER_FEE_THRESHOLD: ${KEEPER_FEE_THRESHOLD:-10000}
+      KEEPER_MAX_AGE_MS: ${KEEPER_MAX_AGE_MS:-7200000}
+      # AI hotspot launches. Keys live in /opt/arm/.env; each source / AI path silently falls back when its
+      # key is empty (X and TikTok sources stay off, copy uses a template, logos are SVG monograms).
+      HOTSPOTS_ENABLED: ${HOTSPOTS_ENABLED:-true}
+      X_BEARER_TOKEN: ${X_BEARER_TOKEN:-}
+      APIFY_TOKEN: ${APIFY_TOKEN:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # OpenAI geo-blocks Hong Kong (where this box lives) — the working path is OpenRouter (text) + fal.ai (logos)
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      # Arm: DeepSeek's own API for radar copy (text only; logos stay on the keyless Pollinations path)
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      FAL_KEY: ${FAL_KEY:-}
+      # Telegram buy bot (9.17): bot token from @BotFather; channel = "@handle" or "-100…" id of the official channel
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHANNEL: ${TELEGRAM_CHANNEL:-}
+    volumes:
+      # mainnet since 9.16; set DEPLOYMENTS_JSON=arc-testnet.json in .env to run the stack against the testnet deployment
+      - ./contracts/deployments/${DEPLOYMENTS_JSON:-arc-mainnet.json}:/app/deployments.json:ro
+      - uploads:/data/uploads
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  pgdata:
+  uploads:
