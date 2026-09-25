@@ -88,7 +88,10 @@ const fmtNum = (n: number) => {
   return n.toFixed(n < 10 ? 2 : 0);
 };
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
-const tokenUrl = (a: string) => `${PUBLIC_BASE}/token/${a}`;
+/** promoter wallet appended as `?ref=` to every token link the bot posts (empty = plain links). Bindings are
+ *  first-touch and permanent, so visitors arriving from bot posts can no longer be claimed by other promoters. */
+const REF = /^0x[0-9a-fA-F]{40}$/.test(process.env.TELEGRAM_REF ?? "") ? process.env.TELEGRAM_REF! : "";
+const tokenUrl = (a: string) => `${PUBLIC_BASE}/token/${a}${REF ? `?ref=${REF}` : ""}`;
 const logoUrl = (logo: string | null | undefined): string | null => {
   if (!logo) return null;
   const abs = logo.startsWith("/") ? PUBLIC_BASE + logo : logo;
@@ -316,7 +319,7 @@ const HELP = () => [
   `/minbuy &lt;usd&gt; — only post buys ≥ this amount (default 0)`,
   `/list — tokens tracked in this group`,
   ``,
-  `Tokens: <a href="${PUBLIC_BASE}">${PUBLIC_BASE.replace(/^https?:\/\//, "")}</a>`,
+  `Tokens: <a href="${PUBLIC_BASE}/${REF ? `?ref=${REF}` : ""}">${PUBLIC_BASE.replace(/^https?:\/\//, "")}</a>`,
 ].join("\n");
 
 async function subscribe(chat: TgChat, address: string, by?: number): Promise<string> {

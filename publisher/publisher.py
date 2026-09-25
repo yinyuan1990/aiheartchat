@@ -80,13 +80,13 @@ def load_config() -> dict:
     cfg.setdefault("video_voices", {})
     cfg.setdefault("slogan_en", "Love has nothing to do with money. It's about the heart.")
     # X 代币联动：正文推广行 / 发完自己回复一条 / 视频片尾卡（每项一行）。空字符串 / 空列表 = 不带
-    cfg.setdefault("x_promo", "第一个陪玩美女代币（USDC 链）👉 https://ccfspt.com/token/0x870B91f9aF1f73F80E42826eb5f7400c9e97D37c")
+    cfg.setdefault("x_promo", "私密树洞 $TREEHOLE 已在 Arm 上线｜Arc 链免费发币，手续费 78% 归创作者 👉 https://arm.yyheart.com/?ref=0x6D80C00F410c448b0dc705a1D104797bA1ca160d")
     cfg.setdefault("x_reply", cfg["x_promo"])
-    cfg.setdefault("x_outro", ["第一个陪玩美女代币", "USDC 链上发行", "ccfspt.com", "链接见帖子和评论区"])
+    cfg.setdefault("x_outro", ["私密树洞 $TREEHOLE", "Arc 链 · USDC 计价", "arm.yyheart.com", "链接见帖子和评论区"])
     # YouTube 同样三处（英文）：简介第一行 / 发完自己评论一条并尝试置顶 / 视频片尾卡
-    cfg.setdefault("yt_promo", "The first e-girl companion token (USDC chain) 👉 https://ccfspt.com/token/0x870B91f9aF1f73F80E42826eb5f7400c9e97D37c")
+    cfg.setdefault("yt_promo", "Secret Tree Hole $TREEHOLE is live on Arm | Free meme launches on Arc, 78% of fees to creators 👉 https://arm.yyheart.com/?ref=0x6D80C00F410c448b0dc705a1D104797bA1ca160d")
     cfg.setdefault("yt_reply", cfg["yt_promo"])
-    cfg.setdefault("yt_outro", ["E-Girl Companion Token", "The first one, on the USDC chain", "ccfspt.com", "Link in description & comments"])
+    cfg.setdefault("yt_outro", ["Secret Tree Hole $TREEHOLE", "On Arc · priced in USDC", "arm.yyheart.com", "Link in description & comments"])
     if not cfg.get("token") or "填这里" in cfg["token"]:
         print("config.json 里的 token 还没填")
         sys.exit(2)
