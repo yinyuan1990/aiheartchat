@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadService } from '../upload/upload.service';
+import { lightClean } from '../common/light-clean';
 
 /** 从 t.me/s/频道 网页预览里解析出的一条帖子 */
 export interface TgPost {
@@ -42,7 +43,7 @@ export class TreeholeSyncService implements OnModuleInit {
     return this.prisma.treeholeSource.findMany({ orderBy: { id: 'asc' } });
   }
 
-  async saveSource(data: { id?: number; channel: string; enabled?: boolean; minViews?: number; stripLinks?: boolean; blockWords?: string }) {
+  async saveSource(data: { id?: number; channel: string; enabled?: boolean; minViews?: number; stripLinks?: boolean; textMode?: string; blockWords?: string }) {
     const channel = normalizeChannel(data.channel);
     if (!channel) throw new BadRequestException('请填写频道用户名（t.me/ 后面那段）');
     const clean = {
@@ -50,6 +51,7 @@ export class TreeholeSyncService implements OnModuleInit {
       enabled: data.enabled ?? true,
       minViews: Math.max(0, Number(data.minViews) || 0),
       stripLinks: data.stripLinks ?? true,
+      textMode: data.textMode === 'light' ? 'light' : 'raw',
       blockWords: (data.blockWords ?? '').trim().slice(0, 500),
     };
     if (data.id) return this.prisma.treeholeSource.update({ where: { id: Number(data.id) }, data: clean });
@@ -118,7 +120,7 @@ export class TreeholeSyncService implements OnModuleInit {
     return { removed: old.length };
   }
 
-  private async syncSource(src: { id: number; channel: string; minViews: number; stripLinks: boolean; blockWords: string; lastMsgId: number }, full: boolean) {
+  private async syncSource(src: { id: number; channel: string; minViews: number; stripLinks: boolean; textMode: string; blockWords: string; lastMsgId: number }, full: boolean) {
     const block = src.blockWords.split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean);
     let imported = 0, skipped = 0, maxId = src.lastMsgId;
     let error = '';
@@ -154,10 +156,11 @@ export class TreeholeSyncService implements OnModuleInit {
           if (saved) images.push(saved);
         }
         if (!text.trim() && images.length === 0) { skipped++; continue; }
+        const body = text.trim().slice(0, 3000);
         await this.prisma.treeholePost.create({
           data: {
             authorId: null, source: 2, sourceKey: key,
-            content: text.trim().slice(0, 3000),
+            content: src.textMode === 'light' ? await lightClean(body) : body,
             images: JSON.stringify(images),
             // 沿用频道里的阅读数当初始值，看起来更真实
             viewCount: p.views,

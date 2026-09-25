@@ -2,7 +2,7 @@
 import { onMounted, onUnmounted, ref } from 'vue';
 import { api } from '../api';
 
-type Mode = 'raw' | 'ai';
+type Mode = 'raw' | 'light' | 'ai';
 interface Settings { enabled: boolean; platforms: string[]; dailyMax: number; hourStart: number; hourEnd: number; gapMin: number; queueDays: number; token: string; lastPostId: string; modes: Record<string, Mode>; dailyMaxes: Record<string, number>; formats: Record<string, 'note' | 'video'> }
 interface Agent { online: boolean; lastSeen: string; host: string; accounts: Record<string, { ok: boolean; msg: string; checkedAt: string }>; ip: { ok: boolean; ip: string; where: string; msg: string } | null }
 interface PlatformInfo { key: string; name: string; overseas: boolean; english: boolean; fixedFormat: 'note' | 'video' | null }
@@ -168,6 +168,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
           {{ p.name }}<span v-if="p.overseas" style="font-size: 11px">（外网{{ p.english ? '·英文' : '·中文' }}）</span>
           <select v-model="form.modes[p.key]" style="width: auto">
             <option value="raw">{{ p.english ? '忠实翻译' : '原文直发' }}</option>
+            <option v-if="!p.english" value="light">AI 浅处理</option>
             <option value="ai">{{ p.english ? '英文改写' : 'AI 改写' }}</option>
           </select>
           <span v-if="p.fixedFormat">{{ p.fixedFormat === 'video' ? '视频' : '图文' }}</span>
@@ -178,7 +179,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
           每天 <input v-model.number="form.dailyMaxes[p.key]" type="number" min="1" max="50" style="width: 50px" /> 条
         </label>
         <div class="muted" style="font-size: 12px; width: 100%">
-          <b>原文直发</b>：一个字不改、不过滤，标题取第一句按平台截长度；<b>AI 改写</b>：按平台出标题 / 正文 / 话题，敏感词软化、去引流词。
+          <b>原文直发</b>：一个字不改、不过滤，标题取第一句按平台截长度；<b>AI 浅处理</b>：同原文直发，只把明显的性器官词换成拼音首字母（如 鸡巴→JB、阴道→YD）；<b>AI 改写</b>：按平台出标题 / 正文 / 话题，敏感词软化、去引流词。
           <b>视频</b>：文案切成 4~7 段旁白，万相 2.7 组图每段出一张剧照（0.2 元/张，同一帖子多个视频平台共用一组图），发布机合成配音字幕视频再发；任务排到 6 小时内才出图。改了点上面「保存」，只影响之后新入队的任务（含测试发布）。
         </div>
       </div>

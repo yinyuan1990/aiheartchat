@@ -512,7 +512,7 @@ export class AdminController {
 
   @Post('treehole/sources')
   @UseGuards(AdminGuard)
-  treeholeSaveSource(@Body() body: { id?: number; channel: string; enabled?: boolean; minViews?: number; stripLinks?: boolean; blockWords?: string }) {
+  treeholeSaveSource(@Body() body: { id?: number; channel: string; enabled?: boolean; minViews?: number; stripLinks?: boolean; textMode?: string; blockWords?: string }) {
     return this.treeholeSync.saveSource(body);
   }
 

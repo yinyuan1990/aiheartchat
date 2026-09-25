@@ -5,11 +5,13 @@ import { api } from '../../api';
 const emit = defineEmits<{ (e: 'toast', t: string): void }>();
 
 interface Source {
-  id: number; channel: string; enabled: boolean; minViews: number; stripLinks: boolean; blockWords: string;
+  id: number; channel: string; enabled: boolean; minViews: number; stripLinks: boolean; textMode: 'raw' | 'light'; blockWords: string;
   lastMsgId: number; lastSyncAt: string | null; lastError: string; importedCount: number;
 }
+type SrcForm = { id?: number; channel: string; enabled: boolean; minViews: number; stripLinks: boolean; textMode: 'raw' | 'light'; blockWords: string };
+const emptyForm = (): SrcForm => ({ channel: '', enabled: true, minViews: 0, stripLinks: true, textMode: 'raw', blockWords: '' });
 const sources = ref<Source[]>([]);
-const srcForm = ref<{ id?: number; channel: string; enabled: boolean; minViews: number; stripLinks: boolean; blockWords: string }>({ channel: '', enabled: true, minViews: 0, stripLinks: true, blockWords: '' });
+const srcForm = ref<SrcForm>(emptyForm());
 const preview = ref<{ channel: string; count: number; posts: { msgId: number; text: string; photos: string[]; views: number; date: string }[] } | null>(null);
 const previewing = ref(false);
 const syncing = ref<number | null>(null);
@@ -33,7 +35,7 @@ async function saveSource() {
   if (!preview.value) return emit('toast', '请先点「预览」核对频道内容，再保存');
   try {
     await api('/admin/treehole/sources', { method: 'POST', body: srcForm.value });
-    srcForm.value = { channel: '', enabled: true, minViews: 0, stripLinks: true, blockWords: '' };
+    srcForm.value = emptyForm();
     preview.value = null;
     emit('toast', '已保存，每 10 分钟自动同步一次');
     loadSources();
@@ -42,7 +44,7 @@ async function saveSource() {
   }
 }
 function editSource(s: Source) {
-  srcForm.value = { id: s.id, channel: s.channel, enabled: s.enabled, minViews: s.minViews, stripLinks: s.stripLinks, blockWords: s.blockWords };
+  srcForm.value = { id: s.id, channel: s.channel, enabled: s.enabled, minViews: s.minViews, stripLinks: s.stripLinks, textMode: s.textMode ?? 'raw', blockWords: s.blockWords };
   preview.value = null;
 }
 async function removeSource(s: Source) {
@@ -80,11 +82,17 @@ onMounted(loadSources);
       <label class="muted">频道 <input v-model="srcForm.channel" placeholder="xxx 或 https://t.me/xxx" style="width: 220px" @keydown.enter="doPreview" /></label>
       <label class="muted">阅读数 ≥ <input v-model.number="srcForm.minViews" type="number" min="0" style="width: 80px" /></label>
       <label class="muted" style="display: flex; align-items: center; gap: 6px"><input v-model="srcForm.stripLinks" type="checkbox" style="width: auto" /> 去掉含 @ / 链接的行</label>
+      <label class="muted" title="浅处理：AI 只把明显的性器官词换成拼音首字母（如 鸡巴→JB、阴道→YD），其余一个字不改；只影响之后新同步进来的帖子">正文
+        <select v-model="srcForm.textMode" style="width: auto">
+          <option value="raw">原文</option>
+          <option value="light">AI 浅处理（性器官词换拼音首字母）</option>
+        </select>
+      </label>
       <label class="muted" style="display: flex; align-items: center; gap: 6px"><input v-model="srcForm.enabled" type="checkbox" style="width: auto" /> 启用</label>
       <label class="muted">屏蔽词 <input v-model="srcForm.blockWords" placeholder="逗号分隔，含则跳过" style="width: 200px" /></label>
       <button class="small ghost" :disabled="previewing" @click="doPreview">{{ previewing ? '抓取中…' : '预览' }}</button>
       <button class="small" :disabled="!preview" @click="saveSource">{{ srcForm.id ? '保存修改' : '添加来源' }}</button>
-      <button v-if="srcForm.id" class="small ghost" @click="srcForm = { channel: '', enabled: true, minViews: 0, stripLinks: true, blockWords: '' }; preview = null">取消编辑</button>
+      <button v-if="srcForm.id" class="small ghost" @click="srcForm = emptyForm(); preview = null">取消编辑</button>
     </div>
 
     <div v-if="preview" style="margin-top: 14px">
@@ -99,11 +107,12 @@ onMounted(loadSources);
     </div>
 
     <table v-if="sources.length" style="margin-top: 14px">
-      <thead><tr><th>频道</th><th>状态</th><th>阅读≥</th><th>已导入</th><th>上次同步</th><th>错误</th><th>操作</th></tr></thead>
+      <thead><tr><th>频道</th><th>状态</th><th>正文</th><th>阅读≥</th><th>已导入</th><th>上次同步</th><th>错误</th><th>操作</th></tr></thead>
       <tbody>
         <tr v-for="s in sources" :key="s.id">
           <td><a :href="`https://t.me/s/${s.channel}`" target="_blank" style="color: var(--accent)">@{{ s.channel }}</a></td>
           <td><span class="tag" :class="s.enabled ? 'ok' : 'off'">{{ s.enabled ? '启用' : '停用' }}</span></td>
+          <td>{{ s.textMode === 'light' ? 'AI 浅处理' : '原文' }}</td>
           <td>{{ s.minViews }}</td>
           <td>{{ s.importedCount }} <span class="muted">(至 #{{ s.lastMsgId }})</span></td>
           <td class="muted">{{ s.lastSyncAt ? fmt(s.lastSyncAt) : '—' }}</td>

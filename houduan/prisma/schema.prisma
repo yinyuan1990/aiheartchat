@@ -541,6 +541,8 @@ model TreeholeSource {
   minViews      Int      @default(0) @map("min_views")
   /// 去掉含 @用户名 / t.me 链接的行（频道签名/引流）
   stripLinks    Boolean  @default(true) @map("strip_links")
+  /// 正文处理：raw = 原文；light = 浅处理（性器官词换成拼音首字母）
+  textMode      String   @default("raw") @map("text_mode") @db.VarChar(8)
   /// 含这些词的帖子跳过（逗号分隔）
   blockWords    String   @default("") @map("block_words") @db.VarChar(500)
   /// 已同步到的最大消息 id

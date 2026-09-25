@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { callModel } from '../common/ai-model';
+import { lightClean } from '../common/light-clean';
 
 /** 支持的平台（发布机按这个 key 认） */
 export const PLATFORMS = ['xiaohongshu', 'douyin', 'kuaishou', 'zhihu', 'shipinhao', 'x', 'youtube'] as const;
@@ -42,13 +44,14 @@ interface Settings {
   token: string;
   /** 只处理这个 id 之后的树洞帖（开启时定在当前最新，旧帖不发） */
   lastPostId: string;
-  /** 每个平台的文案模式：raw = 原文直发（不改写、不过滤，只按平台截长度）；ai = DeepSeek 按平台改写 + 敏感词过滤 */
+  /** 每个平台的文案模式：raw = 原文直发（不改写、不过滤，只按平台截长度）；light = 浅处理（原文只把性器官词换成拼音首字母）；ai = DeepSeek 按平台改写 + 敏感词过滤 */
   modes: Record<Platform, Mode>;
   /** 每个平台发图文还是视频（知乎只能图文） */
   formats: Record<Platform, Format>;
 }
 
-type Mode = 'raw' | 'ai';
+type Mode = 'raw' | 'light' | 'ai';
+const toMode = (v: unknown, fallback: Mode): Mode => (v === 'ai' || v === 'light' || v === 'raw' ? v : fallback);
 type Format = 'note' | 'video';
 const DEFAULT_FORMATS: Record<Platform, Format> = { xiaohongshu: 'note', douyin: 'note', kuaishou: 'video', zhihu: 'note', shipinhao: 'video', x: 'video', youtube: 'video' };
 /** 只能发一种形式的平台 */
@@ -103,7 +106,7 @@ export class PublishService implements OnModuleInit {
     // publish_modes = "xiaohongshu:ai,zhihu:raw"；没写到的平台沿用旧的全局 publish_mode，再没有就是 raw
     const fallback: Mode = get('mode') === 'ai' ? 'ai' : 'raw';
     const stored = Object.fromEntries(get('modes').split(',').map((kv) => kv.split(':').map((x) => x.trim())));
-    const modes = Object.fromEntries(PLATFORMS.map((p) => [p, stored[p] === 'ai' ? 'ai' : stored[p] === 'raw' ? 'raw' : fallback])) as Record<Platform, Mode>;
+    const modes = Object.fromEntries(PLATFORMS.map((p) => [p, toMode(stored[p], fallback)])) as Record<Platform, Mode>;
     // publish_daily_maxes = "kuaishou:1,shipinhao:1"；没写到的平台用 publish_daily_max
     const dailyMax = clampDaily(get('daily_max'), 5);
     const storedMax = Object.fromEntries(get('daily_maxes').split(',').map((kv) => kv.split(':').map((x) => x.trim())));
@@ -152,7 +155,7 @@ export class PublishService implements OnModuleInit {
     if (data.queueDays !== undefined) await this.set('queue_days', String(Math.min(7, Math.max(0, Math.floor(Number(data.queueDays)) || 0))));
     if (data.modes && typeof data.modes === 'object') {
       const m = data.modes;
-      await this.set('modes', PLATFORMS.map((p) => `${p}:${m[p] === undefined ? cur.modes[p] : m[p] === 'ai' ? 'ai' : 'raw'}`).join(','));
+      await this.set('modes', PLATFORMS.map((p) => `${p}:${toMode(m[p], cur.modes[p])}`).join(','));
     }
     if (data.dailyMaxes && typeof data.dailyMaxes === 'object') {
       const m = data.dailyMaxes;
@@ -331,8 +334,10 @@ export class PublishService implements OnModuleInit {
   private async draft(text: string, platform: Platform, s: Settings): Promise<Draft> {
     if (ENGLISH.includes(platform)) {
       if (!process.env.AI_API_KEY) throw new BadRequestException(`${PLATFORM_NAMES[platform]} 要翻译成英文，但 AI_API_KEY 未配置`);
-      return this.draftEn(text, platform, s.modes[platform]);
+      // 英文平台没有浅处理（翻译后首字母没意义），当忠实翻译
+      return this.draftEn(text, platform, s.modes[platform] === 'ai' ? 'ai' : 'raw');
     }
+    if (s.modes[platform] === 'light') return this.draftRaw(await lightClean(text), platform);
     if (s.modes[platform] !== 'ai') return this.draftRaw(text, platform);
     if (!process.env.AI_API_KEY) throw new BadRequestException(`${PLATFORM_NAMES[platform]} 设为 AI 改写，但 AI_API_KEY 未配置`);
     return this.draftAi(text, platform);
@@ -519,22 +524,4 @@ export function bjDayStart(now: number, d: number): number {
   return day * 86_400_000 - off;
 }
 
-export async function callModel(messages: { role: string; content: string }[], temperature?: number): Promise<string> {
-  const base = (process.env.AI_BASE_URL ?? 'https://api.deepseek.com/v1').replace(/\/$/, '');
-  const model = process.env.AI_MODEL ?? 'deepseek-chat';
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 90_000);
-  try {
-    const res = await fetch(`${base}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.AI_API_KEY}` },
-      body: JSON.stringify({ model, messages, max_tokens: 1200, ...(temperature != null ? { temperature } : {}), response_format: { type: 'json_object' } }),
-      signal: ctrl.signal,
-    });
-    if (!res.ok) throw new Error(`上游 ${res.status}`);
-    const data: any = await res.json();
-    return data?.choices?.[0]?.message?.content ?? '';
-  } finally {
-    clearTimeout(timer);
-  }
-}
+export { callModel };
