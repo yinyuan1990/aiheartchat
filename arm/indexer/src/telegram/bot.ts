@@ -224,6 +224,11 @@ async function send(p: Post, attempt = 0): Promise<void> {
       await sleep(((err.retryAfter ?? 5) + 1) * 1000);
       return send(p, attempt + 1);
     }
+    // network-level failure (no Bot API error code, e.g. "fetch failed" / timeout) → back off and retry
+    if (err.code === undefined && attempt < 3) {
+      await sleep([3_000, 10_000, 30_000][attempt]);
+      return send(p, attempt + 1);
+    }
     if (err.code === 403 || /chat not found|was kicked|bot was blocked|not enough rights|CHAT_WRITE_FORBIDDEN/i.test(err.message)) {
       // removed from the group / channel → stop trying
       await sql`update tg_subscriptions set active = false where chat_id = ${String(p.chatId)}`.catch(() => {});
