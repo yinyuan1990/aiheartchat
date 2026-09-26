@@ -27,3 +27,5 @@
 | 账号 | 原因 |
 |---|---|
 | @Reveaall | 影响力小（6 赞 / 288 浏览），内容是吐槽 Arc gas 贵 |
+| @KrasTod | 撸空投 / 做任务号，模板化吹捧 Arc，受众是撸毛党 |
+| [@fineboytbl_](https://x.com/fineboytbl_)（TBL） | 91 粉，2026.1 注册，自由职业设计 / 写手在找活（behance.net/fineboytbl）。不是 KOL；有预算时可找来做图 / 写线程，名字带 "rebuild arc" 说明认同 Arc |
