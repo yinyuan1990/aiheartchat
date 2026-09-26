@@ -34,3 +34,10 @@ captures/
 # ---- iOS ----
 xcuserdata/
 DerivedData/
+
+proxy-tokyo-qr.png
+
+# demo video build output
+demo-video/build/
+demo-video/*.mp4
+demo-video/endcard.png
