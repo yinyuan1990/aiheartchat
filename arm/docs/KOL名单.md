@@ -16,6 +16,12 @@
 |---|---|---|---|---|---|---|---|
 | 1 | ArcTools（@ArcToolsBa…，完整账号待补） | Arc 链工具 | "New features are on the way—we are building the Arc Chain together. @arc"（9.19，73 赞 / 21 转） | 待互动 | 9.26 发现 | 收录 Arm 发的币、互相转发 | Arc 生态活跃项目方 |
 
+## 种子用户（粉丝少但真在 Arc 上交易 meme，邀请来试用 / 发币）
+
+| # | 账号 | 粉丝 | 情况 | 状态 | 最近跟进 | 备注 |
+|---|---|---|---|---|---|---|
+| 1 | [@solanadevvv](https://x.com/solanadevvv)（BASE / Robinhood / ARC Trencher） | 225（关注 79，2021.9 注册） | 自称 Base / Arc 链 meme 打新玩家，Virtuals advisor | 待私信 | 9.26 发现 | 直接私信邀请试用、发币、提意见；关注少说明不是互粉号 |
+
 ## 放弃 / 不合适
 
 | 账号 | 原因 |
