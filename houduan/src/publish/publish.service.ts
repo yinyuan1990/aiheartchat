@@ -5,13 +5,13 @@ import { callModel } from '../common/ai-model';
 import { lightClean } from '../common/light-clean';
 
 /** 支持的平台（发布机按这个 key 认） */
-export const PLATFORMS = ['xiaohongshu', 'douyin', 'kuaishou', 'zhihu', 'shipinhao', 'x', 'youtube'] as const;
+export const PLATFORMS = ['xiaohongshu', 'douyin', 'kuaishou', 'zhihu', 'shipinhao', 'x', 'youtube', 'tiktok'] as const;
 export type Platform = (typeof PLATFORMS)[number];
-export const PLATFORM_NAMES: Record<Platform, string> = { xiaohongshu: '小红书', douyin: '抖音', kuaishou: '快手', zhihu: '知乎', shipinhao: '视频号', x: 'X', youtube: 'YouTube' };
+export const PLATFORM_NAMES: Record<Platform, string> = { xiaohongshu: '小红书', douyin: '抖音', kuaishou: '快手', zhihu: '知乎', shipinhao: '视频号', x: 'X', youtube: 'YouTube', tiktok: 'TikTok' };
 /** 外网平台：只有出口在国外的发布机领（国内发布机只领国内平台） */
-export const OVERSEAS: readonly Platform[] = ['x', 'youtube'];
+export const OVERSEAS: readonly Platform[] = ['x', 'youtube', 'tiktok'];
 /** 发英文的平台（标题 / 正文 / 旁白都翻译成英文） */
-export const ENGLISH: readonly Platform[] = ['youtube'];
+export const ENGLISH: readonly Platform[] = ['youtube', 'tiktok'];
 
 /** 排期最多往后推几天（后台可调 publish_queue_days），再排不进就跳过：每日上限小于每天新帖数的平台不会越积越多 */
 const DEFAULT_QUEUE_DAYS = 1;
@@ -55,9 +55,9 @@ const toMode = (v: unknown, fallback: Mode): Mode => (v === 'ai' || v === 'light
 /** 实际出稿用的模式：英文平台没有浅处理，按忠实翻译（raw） */
 const effectiveMode = (p: Platform, m: Mode): Mode => (ENGLISH.includes(p) && m === 'light' ? 'raw' : m);
 type Format = 'note' | 'video';
-const DEFAULT_FORMATS: Record<Platform, Format> = { xiaohongshu: 'note', douyin: 'note', kuaishou: 'video', zhihu: 'note', shipinhao: 'video', x: 'video', youtube: 'video' };
+const DEFAULT_FORMATS: Record<Platform, Format> = { xiaohongshu: 'note', douyin: 'note', kuaishou: 'video', zhihu: 'note', shipinhao: 'video', x: 'video', youtube: 'video', tiktok: 'video' };
 /** 只能发一种形式的平台 */
-const FIXED_FORMAT: Partial<Record<Platform, Format>> = { zhihu: 'note', x: 'video', youtube: 'video' };
+const FIXED_FORMAT: Partial<Record<Platform, Format>> = { zhihu: 'note', x: 'video', youtube: 'video', tiktok: 'video' };
 /** 视频号视频的「短标题」上限 */
 const SHIPINHAO_VIDEO_TITLE_MAX = 16;
 
@@ -341,8 +341,8 @@ export class PublishService implements OnModuleInit {
   // ---------- 出稿：原文 / AI 改写 ----------
 
   /** 各平台标题上限（原文模式取第一句当标题）与正文上限 */
-  private static readonly TITLE_MAX: Record<Platform, number> = { xiaohongshu: 20, douyin: 20, kuaishou: 30, zhihu: 0, shipinhao: 22, x: 30, youtube: 95 };
-  private static readonly CONTENT_MAX: Record<Platform, number> = { xiaohongshu: 1000, douyin: 1000, kuaishou: 1000, zhihu: 2000, shipinhao: 1000, x: 1000, youtube: 4000 };
+  private static readonly TITLE_MAX: Record<Platform, number> = { xiaohongshu: 20, douyin: 20, kuaishou: 30, zhihu: 0, shipinhao: 22, x: 30, youtube: 95, tiktok: 95 };
+  private static readonly CONTENT_MAX: Record<Platform, number> = { xiaohongshu: 1000, douyin: 1000, kuaishou: 1000, zhihu: 2000, shipinhao: 1000, x: 1000, youtube: 4000, tiktok: 4000 };
 
   private async draft(text: string, platform: Platform, s: Settings, modeOverride?: Mode): Promise<Draft> {
     const mode = modeOverride ?? s.modes[platform];
@@ -402,7 +402,7 @@ export class PublishService implements OnModuleInit {
   private async draftEn(text: string, platform: Platform, mode: Mode): Promise<Draft> {
     const tmax = PublishService.TITLE_MAX[platform];
     const system = [
-      'You turn an anonymous first-person Chinese confession into an English post for a YouTube Shorts story channel.',
+      `You turn an anonymous first-person Chinese confession into an English post for a ${platform === 'tiktok' ? 'TikTok' : 'YouTube Shorts'} story channel.`,
       mode === 'ai'
         ? 'Rewrite it in natural spoken English as a gripping short story (80-250 words), keep all key facts, do not invent new events.'
         : 'Translate it faithfully into natural spoken English. Keep every event and detail, do not summarize, soften or add anything.',
@@ -448,6 +448,7 @@ export class PublishService implements OnModuleInit {
       shipinhao: `微信视频号图文动态：title 不超过 22 个字、平实不猎奇（微信用户偏成熟）；content 80~200 字，短句分行；tags 从「${TAG_POOL}」里挑 3 个。`,
       x: `X（推特）中文帖子：title 不超过 30 个字有钩子；content 80~250 字，短句分行；tags 从「${TAG_POOL}」里挑 3 个。`,
       youtube: '（英文平台走 draftEn，不用这条）',
+      tiktok: '（英文平台走 draftEn，不用这条）',
     };
     const system = [
       '你是一个情感类自媒体运营，把一段匿名的个人心事改写成适合平台发布的文案（像博主自己在分享感悟）。',

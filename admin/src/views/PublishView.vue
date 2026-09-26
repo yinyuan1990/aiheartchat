@@ -224,7 +224,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
     </div>
 
     <div class="card" style="margin-top: 12px">
-      <div style="font-weight: 600; margin-bottom: 6px">发布机（国内一台发国内平台，出口在国外的一台发 X / YouTube）</div>
+      <div style="font-weight: 600; margin-bottom: 6px">发布机（国内一台发国内平台，出口在国外的一台发 X / YouTube / TikTok）</div>
       <div v-if="ov && !ov.agents.length" class="muted">还没有发布机上线</div>
       <div v-for="a in ov?.agents ?? []" :key="a.host" class="row" style="flex-wrap: wrap; gap: 14px; align-items: center; font-size: 13px; padding: 6px 0; border-bottom: 1px dashed var(--line)">
         <b>{{ a.host }}</b>

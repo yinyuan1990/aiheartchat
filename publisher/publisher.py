@@ -31,13 +31,15 @@ CARDS = ROOT / "cards"
 LOGS = ROOT / "logs"
 PROFILES = ROOT / "profiles"
 SAU_PLATFORMS = {"xiaohongshu", "douyin", "kuaishou"}
-ALL_PLATFORMS = ["xiaohongshu", "douyin", "kuaishou", "zhihu", "shipinhao", "x", "youtube"]
-NAMES = {"xiaohongshu": "小红书", "douyin": "抖音", "kuaishou": "快手", "zhihu": "知乎", "shipinhao": "视频号", "x": "X", "youtube": "YouTube"}
+ALL_PLATFORMS = ["xiaohongshu", "douyin", "kuaishou", "zhihu", "shipinhao", "x", "youtube", "tiktok"]
+NAMES = {"xiaohongshu": "小红书", "douyin": "抖音", "kuaishou": "快手", "zhihu": "知乎", "shipinhao": "视频号", "x": "X", "youtube": "YouTube", "tiktok": "TikTok"}
 # 外网平台：出口在国外的发布机才领；国内平台反过来（同一套代码，一台国内一台国外各领各的）
-OVERSEAS = {"x", "youtube"}
+OVERSEAS = {"x", "youtube", "tiktok"}
 # 英文平台：配英文音色 / 英文标语
-ENGLISH = {"youtube"}
-# 我们的平台 key → sau 里的名字（视频号在 sau 里叫 tencent；登录 / 校验复用它，图文发布走自写 shipinhao.py；X 走自写 x.py）
+ENGLISH = {"youtube", "tiktok"}
+# 自己管浏览器目录（profiles/<平台>）的平台，不走 sau cookie 文件
+PROFILE_PLATFORMS = {"zhihu", "x", "tiktok"}
+# 我们的平台 key → sau 里的名字（视频号在 sau 里叫 tencent；登录 / 校验复用它，图文发布走自写 shipinhao.py；X / TikTok 走自写 x.py / tiktok.py）
 SAU_NAME = {"xiaohongshu": "xiaohongshu", "douyin": "douyin", "kuaishou": "kuaishou", "shipinhao": "tencent", "youtube": "youtube"}
 # X 免费账号视频最长 140 秒，留点余量
 X_MAX_SEC = 136
@@ -87,6 +89,9 @@ def load_config() -> dict:
     cfg.setdefault("yt_promo", "Arm | Free meme launches on Arc, 78% of trading fees to creators forever 👉 https://arm.yyheart.com/?ref=0x6D80C00F410c448b0dc705a1D104797bA1ca160d")
     cfg.setdefault("yt_reply", cfg["yt_promo"])
     cfg.setdefault("yt_outro", ["Arm · free meme launches on Arc", "78% of fees to creators", "arm.yyheart.com", "Link in description & comments"])
+    # TikTok（英文）：文案里的链接点不了，推广行只写域名 + link in bio；主页简介放带 ref 的链接
+    cfg.setdefault("tt_promo", "Arm | Free meme launches on Arc, 78% of trading fees to creators forever 👉 arm.yyheart.com (link in bio)")
+    cfg.setdefault("tt_outro", ["Arm · free meme launches on Arc", "78% of fees to creators", "arm.yyheart.com", "Link in bio"])
     if not cfg.get("token") or "填这里" in cfg["token"]:
         print("config.json 里的 token 还没填")
         sys.exit(2)
@@ -191,7 +196,7 @@ def check_all(cfg: dict, periodic: bool = False) -> dict:
         try:
             # 外网平台定时检查也不开浏览器（X 只能有界面跑，定时弹窗太烦）
             if periodic and (p in cfg.get("no_periodic_check", []) or p in OVERSEAS):
-                if p in ("zhihu", "x"):
+                if p in PROFILE_PLATFORMS:
                     ok, msg = (PROFILES / p).exists(), "按本地登录态，未联网核对"
                 else:
                     ok = cookie_file(p, cfg).exists()
@@ -202,6 +207,9 @@ def check_all(cfg: dict, periodic: bool = False) -> dict:
             elif p == "x":
                 import x as xpost
                 ok, msg = xpost.check(PROFILES / "x")
+            elif p == "tiktok":
+                import tiktok
+                ok, msg = tiktok.check(PROFILES / "tiktok")
             else:
                 ok, msg = sau_check(SAU_NAME[p], cfg["account"])
         except Exception as e:  # noqa: BLE001
@@ -288,7 +296,7 @@ def publish_video(cfg: dict, job: dict) -> tuple[bool, str, str]:
         narration = "\n".join(paragraphs)
         # 原文模式的标题就是第一句，别念两遍（屏幕上照样显示标题）
         speak_title = bool(title) and not narration.replace(" ", "").startswith(title.replace(" ", "")[:8])
-        slides.render(title, narration, images, out, slogan, voice=voice, speak_title=speak_title, ai_tag=ai_tag, outro={"x": cfg.get("x_outro"), "youtube": cfg.get("yt_outro")}.get(p))
+        slides.render(title, narration, images, out, slogan, voice=voice, speak_title=speak_title, ai_tag=ai_tag, outro={"x": cfg.get("x_outro"), "youtube": cfg.get("yt_outro"), "tiktok": cfg.get("tt_outro")}.get(p))
         if p != "x" or len(paragraphs) <= 1 or media_duration(out) <= X_MAX_SEC:
             break
         paragraphs, images = paragraphs[:-1], images[:-1]
@@ -300,6 +308,13 @@ def publish_video(cfg: dict, job: dict) -> tuple[bool, str, str]:
 
         text = "\n".join(s for s in [title, cfg.get("x_promo") or "", " ".join(f"#{t}" for t in tags[:3])] if s)
         return xpost.post_video(PROFILES / "x", out, text, headless=False, shot_dir=LOGS, log=log, reply=cfg.get("x_reply") or "")
+    if p == "tiktok":
+        import tiktok
+
+        caption = "\n\n".join(s for s in [title, cfg.get("tt_promo") or ""] if s)
+        if tags:
+            caption += "\n" + " ".join(f"#{t}" for t in tags[:5])
+        return tiktok.post_video(PROFILES / "tiktok", out, caption, shot_dir=LOGS, log=log)
     desc = content[:4500] if english else content[:900]
     if p == "youtube" and cfg.get("yt_promo"):
         desc = cfg["yt_promo"] + "\n\n" + desc
@@ -390,6 +405,10 @@ def cmd_login(cfg: dict, platform: str):
         import x as xpost
         ok, msg = xpost.login(PROFILES / "x")
         print(msg)
+    elif platform == "tiktok":
+        import tiktok
+        ok, msg = tiktok.login(PROFILES / "tiktok")
+        print(msg)
     else:
         if platform in OVERSEAS:
             print(f"正在打开 {NAMES[platform]}，请在弹出的浏览器里登录账号…")
@@ -424,7 +443,7 @@ def cmd_logout(cfg: dict, platform: str):
         print(f"平台只能是 {' / '.join(ALL_PLATFORMS)}")
         return 2
     import shutil
-    if platform in ("zhihu", "x"):
+    if platform in PROFILE_PLATFORMS:
         shutil.rmtree(PROFILES / platform, ignore_errors=True)
     else:
         f = cookie_file(platform, cfg)
@@ -507,7 +526,7 @@ def main(argv: list[str]) -> int:
     cfg = load_config()
     if argv[1] in ("login", "logout"):
         if len(argv) < 3:
-            print(f"用法：python publisher.py {argv[1]} <xiaohongshu|douyin|kuaishou|zhihu|shipinhao>")
+            print(f"用法：python publisher.py {argv[1]} <{'|'.join(ALL_PLATFORMS)}>")
             return 2
         return cmd_login(cfg, argv[2]) if argv[1] == "login" else cmd_logout(cfg, argv[2])
     if argv[1] == "check":

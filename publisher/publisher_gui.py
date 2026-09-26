@@ -19,8 +19,8 @@ PY = ROOT / ".venv" / "Scripts" / "python.exe"
 LOG = ROOT / "logs" / "publisher.log"
 CONFIG = ROOT / "config.json"
 TASK = "PeiwanPublisher"
-ALL_PLATFORMS = [("xiaohongshu", "小红书"), ("douyin", "抖音"), ("kuaishou", "快手"), ("zhihu", "知乎"), ("shipinhao", "视频号"), ("x", "X"), ("youtube", "YouTube")]
-OVERSEAS = {"x", "youtube"}
+ALL_PLATFORMS = [("xiaohongshu", "小红书"), ("douyin", "抖音"), ("kuaishou", "快手"), ("zhihu", "知乎"), ("shipinhao", "视频号"), ("x", "X"), ("youtube", "YouTube"), ("tiktok", "TikTok")]
+OVERSEAS = {"x", "youtube", "tiktok"}
 ADMIN_URL = "https://admin.yyheart.com/"
 CREATE_NO_WINDOW = 0x08000000
 
@@ -64,7 +64,7 @@ def ip_line_ok(line: str) -> bool:
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("心之音 · 外网发布机（X / YouTube）" if IS_OVERSEAS else "心之音 · 发布机")
+        self.title(f"心之音 · 外网发布机（{' / '.join(n for _, n in PLATFORMS)}）" if IS_OVERSEAS else "心之音 · 发布机")
         self.geometry("800x600")
         self.minsize(680, 480)
         self.busy = False
@@ -101,6 +101,9 @@ class App(tk.Tk):
         if any(k == "x" for k, _ in PLATFORMS):
             ttk.Label(box, text="X 登录后要在 设置 → 隐私和安全 → 你发布的内容 里勾上「将你发布的媒体标记为可能包含敏感内容」",
                       foreground="#8e8e93").grid(row=len(PLATFORMS) + 2, column=0, columnspan=4, sticky="w", pady=(4, 0))
+        if any(k == "tiktok" for k, _ in PLATFORMS):
+            ttk.Label(box, text="TikTok 固定走 v2rayN（127.0.0.1:10808，美国住宅 IP）：登录和发布时 v2rayN 必须开着",
+                      foreground="#8e8e93").grid(row=len(PLATFORMS) + 3, column=0, columnspan=4, sticky="w", pady=(4, 0))
 
         mid = ttk.Frame(self, padding=(10, 6))
         mid.pack(fill="x")
