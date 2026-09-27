@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { RocketLaunch } from "@phosphor-icons/react";
 import { useGallery } from "@/lib/api";
 import { useApp } from "@/components/providers";
 import { Button } from "@/components/ui/button";
@@ -33,7 +35,14 @@ export default function GalleryPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{t("nav.gallery")}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{t("gallery.title")}</h1>
+        <Button variant="glow" asChild>
+          <Link href="/create">
+            <RocketLaunch weight="fill" /> {t("gallery.launch")}
+          </Link>
+        </Button>
+      </div>
       {q.isLoading ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {Array.from({ length: 10 }, (_, i) => <Skeleton key={i} className="aspect-[3/4] rounded-xl" />)}
