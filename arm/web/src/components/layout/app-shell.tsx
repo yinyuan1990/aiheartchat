@@ -212,6 +212,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <span className="flex shrink-0 items-center gap-3">
                 <SocialLinks row />
                 <Link href="/analytics" className="hover:text-foreground">{t("nav.analytics")}</Link>
+                <Link href="/blog" className="hover:text-foreground">{t("nav.blog")}</Link>
                 <Link href="/docs" className="hover:text-foreground">{t("nav.docs")} →</Link>
               </span>
             </div>

@@ -287,6 +287,7 @@ const dict = {
   "hero.hot": ["AI 雷达", "AI Radar"],
   "nav.me": ["我的", "Me"],
   "nav.docs": ["文档", "Docs"],
+  "nav.blog": ["文章", "Blog"],
 
   // common
   "common.connect": ["连接钱包", "Connect wallet"],
