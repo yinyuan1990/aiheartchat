@@ -362,10 +362,18 @@ def publish_pics(cfg: dict, job: dict) -> tuple[bool, str, str]:
     files = []
     for i, u in enumerate(urls[:4]):
         f = work / f"{i + 1:02d}.jpg"
-        if not f.exists():
-            r = requests.get(u, timeout=120)
-            r.raise_for_status()
-            f.write_bytes(r.content)
+        # 代理时不时断连，下载图多试几次
+        for attempt in range(3):
+            if f.exists():
+                break
+            try:
+                r = requests.get(u, timeout=120)
+                r.raise_for_status()
+                f.write_bytes(r.content)
+            except requests.RequestException:
+                if attempt == 2:
+                    raise
+                time.sleep(10 * (attempt + 1))
         files.append(f)
     if job["platform"] == "youtube":
         return publish_pics_youtube(cfg, job, files)
