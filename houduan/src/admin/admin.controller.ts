@@ -115,7 +115,7 @@ export class AdminController {
 
   @Put('xpics/settings')
   @UseGuards(AdminGuard)
-  xpicsSettings(@Body() body: { enabled?: boolean; channel?: string; daily?: number; min?: number; max?: number; fetchHour?: number }) {
+  xpicsSettings(@Body() body: { enabled?: boolean; channel?: string; daily?: number; ytDaily?: number; min?: number; max?: number; fetchHour?: number }) {
     return this.xpics.saveSettings(body ?? {});
   }
 

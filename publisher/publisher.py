@@ -92,6 +92,18 @@ def load_config() -> dict:
     # TikTok（英文）：文案里的链接点不了，推广行只写域名 + link in bio；主页简介放带 ref 的链接
     cfg.setdefault("tt_promo", "Arm | Free meme launches on Arc, 78% of trading fees to creators forever 👉 arm.yyheart.com (link in bio)")
     cfg.setdefault("tt_outro", ["Arm · free meme launches on Arc", "78% of fees to creators", "arm.yyheart.com", "Link in bio"])
+    # 美女图（X 纯图帖 + YouTube 图集短视频）推 $EGIRL：正文不放链接（X 带链接的帖子限流），链接放回复 / 简介 / 置顶评论
+    egirl = "https://arm.yyheart.com/token/0x5AF2192dAe1887aA4b7687ad57bd8A0f3c7b25f6?ref=0x6D80C00F410c448b0dc705a1D104797bA1ca160d"
+    cfg.setdefault("pics_text", "E-Girl Companion 💗 $EGIRL")
+    cfg.setdefault("pics_reply", f"$EGIRL · the first e-girl companion token on Arc 👉 {egirl}")
+    cfg.setdefault("pics_yt_title", "E-Girl Companion 💗 $EGIRL #shorts")
+    cfg.setdefault("pics_yt_lines", [
+        "Meet today's e-girl. Game together, chat, and never get bored again.",
+        "Your online companion is here. E-Girl Companion, the first companion token on Arc.",
+        "Looking for someone to play with tonight? Say hi to E-Girl Companion.",
+        "Online companions, on chain. E-Girl Companion lives on Arc.",
+    ])
+    cfg.setdefault("pics_yt_outro", ["E-Girl Companion", "$EGIRL on Arc", "arm.yyheart.com", "Link in description & comments"])
     if not cfg.get("token") or "填这里" in cfg["token"]:
         print("config.json 里的 token 还没填")
         sys.exit(2)
@@ -339,9 +351,9 @@ def publish_video(cfg: dict, job: dict) -> tuple[bool, str, str]:
 
 
 def publish_pics(cfg: dict, job: dict) -> tuple[bool, str, str]:
-    """X 美女图：后台从 TG 频道拉好的 2~4 张图，纯图发 X（正文不带文字），发完回复一条代币推广（x_reply）"""
-    if job["platform"] != "x":
-        return False, "", "纯图任务只支持 X"
+    """美女图：后台从 TG 频道拉好的 2~4 张图。X 发图 + 一句短文案，发完回复代币链接；YouTube 合成竖屏短视频，简介和置顶评论放链接"""
+    if job["platform"] not in ("x", "youtube"):
+        return False, "", "纯图任务只支持 X / YouTube"
     urls = (job.get("media") or {}).get("images") or []
     if not urls:
         return False, "", "纯图任务没有图片"
@@ -355,10 +367,37 @@ def publish_pics(cfg: dict, job: dict) -> tuple[bool, str, str]:
             r.raise_for_status()
             f.write_bytes(r.content)
         files.append(f)
+    if job["platform"] == "youtube":
+        return publish_pics_youtube(cfg, job, files)
     time.sleep(random.uniform(20, 120))
     import x as xpost
 
-    return xpost.post_media(PROFILES / "x", files, "", headless=False, shot_dir=LOGS, log=log, reply=cfg.get("x_reply") or "")
+    return xpost.post_media(PROFILES / "x", files, cfg.get("pics_text") or "", headless=False, shot_dir=LOGS, log=log, reply=cfg.get("pics_reply") or "")
+
+
+def publish_pics_youtube(cfg: dict, job: dict, files: list[Path]) -> tuple[bool, str, str]:
+    from video import slides
+
+    out = CARDS / f"job{job['id']}.mp4"
+    line = random.choice(cfg.get("pics_yt_lines") or ["E-Girl Companion."])
+    # 真人照片，不打「AI generated」；不念标题，屏幕上也不放标题
+    slides.render("", line, files, out, "", voice=cfg["video_voice_en"], ai_tag="", speak_title=False, outro=cfg.get("pics_yt_outro"))
+    title = cfg.get("pics_yt_title") or "E-Girl Companion"
+    desc = "\n\n".join(s for s in [cfg.get("pics_reply") or "", line] if s)
+    time.sleep(random.uniform(20, 120))
+    ok, sau_out = sau_upload_video(SAU_NAME["youtube"], cfg["account"], out, title, desc, ["egirl", "companion", "arc"], headed=True)
+    if not ok:
+        return False, "", sau_out
+    m = re.search(r"https?://(?:youtu\.be/|www\.youtube\.com/(?:watch\?v=|shorts/))[\w-]+", sau_out)
+    url = m.group(0) if m else ""
+    if cfg.get("pics_reply"):
+        import yt_comment
+
+        time.sleep(30)
+        c_ok, url, c_err = yt_comment.comment(cookie_file("youtube", cfg), url, cfg["pics_reply"], LOGS)
+        if not c_ok:
+            log.warning("YouTube 图集发成功了，但评论推广链接失败：%s", c_err)
+    return True, url, ""
 
 
 def publish_job(cfg: dict, job: dict) -> tuple[bool, str, str]:

@@ -38,6 +38,8 @@ interface XPicsSettings {
   channel: string;
   /** 每天发几次 */
   daily: number;
+  /** YouTube 每天发几条（发布机把图合成竖屏短视频），0 = 不发 */
+  ytDaily: number;
   /** 每次几张图（X 最多 4 张） */
   min: number;
   max: number;
@@ -50,7 +52,7 @@ interface XPicsSettings {
 }
 
 /**
- * X 美女图（推广，只发 X，国内平台不碰）：
+ * X 美女图（推广，只发 X 和 YouTube，国内平台不碰；YouTube 每日条数 yt_daily，发布机合成竖屏短视频）：
  * 每天 fetchHour 点用已登录的 Telegram 账号拉来源频道最近 24 小时的图片 → 存 MinIO（xpics/日期/）+ 记 x_pic 表当图片池
  * → 按「每日次数」把当天的帖子在发布时段（内容分发的时段设置）里平均排开，每条从池子里取 min~max 张（同一相册的尽量放一起）
  * → 写成 publish_job（platform=x, format=pics, 无文字），外网发布机领走后纯图发 X。
@@ -83,6 +85,7 @@ export class XPicsService implements OnModuleInit {
       enabled: get('enabled') === '1',
       channel: get('channel') || DEFAULT_CHANNEL,
       daily: clamp(get('daily'), 1, 20, 5),
+      ytDaily: clamp(get('yt_daily'), 0, 5, 0),
       min,
       max: clamp(get('max'), min, X_MAX_IMAGES, X_MAX_IMAGES),
       fetchHour: clamp(get('fetch_hour'), 0, 23, 0),
@@ -95,7 +98,7 @@ export class XPicsService implements OnModuleInit {
     await this.prisma.sysSetting.upsert({ where: { key: `xpics_${key}` }, create: { key: `xpics_${key}`, value }, update: { value } });
   }
 
-  async saveSettings(d: { enabled?: boolean; channel?: string; daily?: number; min?: number; max?: number; fetchHour?: number }) {
+  async saveSettings(d: { enabled?: boolean; channel?: string; daily?: number; ytDaily?: number; min?: number; max?: number; fetchHour?: number }) {
     const cur = await this.settings();
     if (d.channel !== undefined) {
       const ch = normalizeChannel(d.channel);
@@ -108,6 +111,7 @@ export class XPicsService implements OnModuleInit {
     }
     if (d.enabled !== undefined) await this.set('enabled', d.enabled ? '1' : '0');
     if (d.daily !== undefined) await this.set('daily', String(clamp(d.daily, 1, 20, cur.daily)));
+    if (d.ytDaily !== undefined) await this.set('yt_daily', String(clamp(d.ytDaily, 0, 5, cur.ytDaily)));
     const min = d.min !== undefined ? clamp(d.min, 1, X_MAX_IMAGES, cur.min) : cur.min;
     if (d.min !== undefined) await this.set('min', String(min));
     if (d.max !== undefined || d.min !== undefined) await this.set('max', String(clamp(d.max ?? cur.max, min, X_MAX_IMAGES, X_MAX_IMAGES)));
@@ -265,26 +269,31 @@ export class XPicsService implements OnModuleInit {
   /** 把今天没排满的次数在发布时段里平均排开（已过去的时间点不补） */
   private async plan() {
     const s = await this.settings();
+    await this.planFor('x', s.daily);
+    if (s.ytDaily > 0) await this.planFor('youtube', s.ytDaily);
+  }
+
+  private async planFor(platform: 'x' | 'youtube', daily: number) {
     const ps = await this.publish.settings();
     const now = Date.now();
     const dayStart = bjDayStart(now, 0);
+    const span = ((ps.hourEnd - ps.hourStart) * 3_600_000) / daily;
+    const slots = Array.from({ length: daily }, (_, i) => dayStart + ps.hourStart * 3_600_000 + span * (i + 0.5)).filter((t) => t > now);
+    if (!slots.length) return;
+    // 只数排在「还没过的时间点」上的任务（抖动最多提前 10 分钟），已过去的时间点不补，否则每分钟都会往剩下的点上再塞一条
     const existing = await this.prisma.publishJob.count({
-      where: { platform: 'x', format: 'pics', tags: { not: MANUAL_TAG }, status: { in: [0, 1, 2] }, scheduledAt: { gte: new Date(dayStart), lt: new Date(dayStart + 86_400_000) } },
+      where: { platform, format: 'pics', tags: { not: MANUAL_TAG }, status: { in: [0, 1, 2] }, scheduledAt: { gte: new Date(slots[0] - 11 * 60_000), lt: new Date(dayStart + 86_400_000) } },
     });
-    const need = s.daily - existing;
-    if (need <= 0) return;
-    const span = ((ps.hourEnd - ps.hourStart) * 3_600_000) / s.daily;
-    const slots = Array.from({ length: s.daily }, (_, i) => dayStart + ps.hourStart * 3_600_000 + span * (i + 0.5)).filter((t) => t > now);
-    for (const t of slots.slice(0, need)) {
+    for (const t of slots.slice(existing)) {
       // 前后抖 10 分钟，别每天都卡在同一分钟
-      const job = await this.makeJob(new Date(t + (Math.random() * 20 - 10) * 60_000), false);
+      const job = await this.makeJob(new Date(t + (Math.random() * 20 - 10) * 60_000), false, platform);
       if (!job) break;
-      this.logger.log(`planned x pics job #${job.id} @ ${new Date(t).toISOString()} (${job.count} 张)`);
+      this.logger.log(`planned ${platform} pics job #${job.id} @ ${new Date(t).toISOString()} (${job.count} 张)`);
     }
   }
 
   /** 从池子取 min~max 张（最新的相册先用，一组不够再拿下一组补）排一条任务；不够 min 张返回 null */
-  private async makeJob(when: Date, manual: boolean) {
+  private async makeJob(when: Date, manual: boolean, platform: 'x' | 'youtube' = 'x') {
     const s = await this.settings();
     const want = s.min + Math.floor(Math.random() * (s.max - s.min + 1));
     const pool = await this.prisma.xPic.findMany({ where: USABLE, orderBy: [{ postedAt: 'desc' }, { msgId: 'asc' }], take: 300 });
@@ -299,7 +308,7 @@ export class XPicsService implements OnModuleInit {
     const job = await this.prisma.publishJob.create({
       data: {
         // 没有对应的树洞帖：postId 用负的图片 id，保证 (postId, platform) 唯一
-        postId: BigInt(-picked[0].id), platform: 'x', title: '', content: '', tags: manual ? MANUAL_TAG : '',
+        postId: BigInt(-picked[0].id), platform, title: '', content: '', tags: manual ? MANUAL_TAG : '',
         format: 'pics', media: JSON.stringify({ images: picked.map((p) => p.url) }), scheduledAt: when,
       },
     });

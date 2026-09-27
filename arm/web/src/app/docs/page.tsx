@@ -27,7 +27,10 @@ const SECTIONS = [
   ["risk", "风险披露", "Risk disclosures"],
   ["integration", "集成指南", "Integration"],
   ["terms", "版本与条款", "Versioning and terms"],
+  ["egirl", "叙事：线上美女陪玩", "Narrative: e-girl companions"],
 ] as const;
+
+const EGIRL = "0x5AF2192dAe1887aA4b7687ad57bd8A0f3c7b25f6";
 
 const TOKEN_LAUNCHED_SIG =
   "TokenLaunched(address indexed token, address indexed deployer, address indexed pool, uint256 positionId, bool isToken0, uint256 restrictionsEndBlock, uint256 graduationThreshold, uint256 initialBuyUsdc, uint256 creationFeePaid)";
@@ -493,6 +496,35 @@ const creatorPayout       = lock[5];                 // may differ from the depl
               {L(" 或通过 X 私信 ", " or DM us on X: ")}
               <a href={X_URL} target="_blank" rel="noreferrer" className="text-primary hover:underline">@{X_HANDLE}</a>.
             </P>
+          </Section>
+
+          {/* ---------------------------------------------------------- egirl */}
+          <Section id="egirl" title={L("叙事：线上美女陪玩", "Narrative: e-girl companions")}>
+            <P>
+              {L(
+                "线上陪玩是一个真实存在、规模不小的消费市场：找人一起开黑打游戏、语音聊天、陪你度过无聊的晚上。它天然适合 meme 文化——有人设、有粉丝、有社区。",
+                "Online companionship is a real and sizeable market: people pay for someone to game with, voice chat with, or just keep them company on a slow night. It fits meme culture naturally: personas, fans, communities.",
+              )}
+            </P>
+            <P>
+              {L(
+                "$EGIRL（E-Girl Companion）是 Arc 上第一个以线上陪玩为主题的 meme 币，由 Arm 团队在本平台发出，和所有 Arm 代币一样：免费发射、LP 永久锁定、1% 池费的 78% 归发币人，并开放 50% 推广分佣——帮它传播的人按带来的真实成交拿分成。",
+                "$EGIRL (E-Girl Companion) is the first online-companion-themed memecoin on Arc, launched by the Arm team on this platform. Like every Arm token: free launch, LP locked forever, 78% of the 1% pool fee to the creator, and a 50% referral share: anyone who spreads it earns from the real volume they bring.",
+              )}
+            </P>
+            <KvGrid
+              rows={[
+                [L("代币", "Token"), <a key="t" href={`/token/${EGIRL}`} className="text-primary hover:underline">$EGIRL</a>],
+                [L("合约", "Contract"), <AddrLink key="a" a={EGIRL} />],
+              ]}
+            />
+            <Facts
+              items={[
+                L("$EGIRL 目前是 meme 币，不能兑换任何陪玩服务，也不代表任何公司或个人的股权、收益权。", "$EGIRL is a memecoin today. It cannot be redeemed for any companion service and represents no equity or revenue right in any company or person."),
+                L("头像使用已获本人授权。", "The avatar is used with the person's permission."),
+                L("meme 币波动极大、可能归零，只用亏得起的钱参与。", "Memecoins are extremely volatile and can go to zero. Only use money you can afford to lose."),
+              ]}
+            />
           </Section>
         </div>
       </div>
