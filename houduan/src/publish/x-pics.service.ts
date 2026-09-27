@@ -280,11 +280,13 @@ export class XPicsService implements OnModuleInit {
     const span = ((ps.hourEnd - ps.hourStart) * 3_600_000) / daily;
     const slots = Array.from({ length: daily }, (_, i) => dayStart + ps.hourStart * 3_600_000 + span * (i + 0.5)).filter((t) => t > now);
     if (!slots.length) return;
-    // 只数排在「还没过的时间点」上的任务（抖动最多提前 10 分钟），已过去的时间点不补，否则每分钟都会往剩下的点上再塞一条
-    const existing = await this.prisma.publishJob.count({
+    const jobs = await this.prisma.publishJob.findMany({
       where: { platform, format: 'pics', tags: { not: MANUAL_TAG }, status: { in: [0, 1, 2] }, scheduledAt: { gte: new Date(slots[0] - 11 * 60_000), lt: new Date(dayStart + 86_400_000) } },
+      select: { scheduledAt: true },
     });
-    for (const t of slots.slice(existing)) {
+    // 已过去的时间点不补；还没过的点，前后 11 分钟内（抖动 ±10 分钟）已经有任务就算排过了
+    const free = slots.filter((t) => !jobs.some((j) => Math.abs(j.scheduledAt.getTime() - t) <= 11 * 60_000));
+    for (const t of free) {
       // 前后抖 10 分钟，别每天都卡在同一分钟
       const job = await this.makeJob(new Date(t + (Math.random() * 20 - 10) * 60_000), false, platform);
       if (!job) break;
