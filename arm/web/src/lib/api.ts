@@ -359,7 +359,8 @@ export const useHotspots = (f: HotspotFilter) =>
     refetchInterval: 60_000,
     staleTime: 30_000,
   });
-export type GalleryPage = { items: string[]; total: number };
+export type GalleryItem = { url: string; w: number | null; h: number | null };
+export type GalleryPage = { items: GalleryItem[]; total: number };
 const GALLERY_PAGE = 60;
 export const useGallery = () =>
   useInfiniteQuery({

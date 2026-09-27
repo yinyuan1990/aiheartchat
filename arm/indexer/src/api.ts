@@ -631,9 +631,10 @@ app.get("/api/uploads/:name", async (c) => {
 app.get("/api/gallery", async (c) => {
   const limit = Math.min(Math.max(Number(c.req.query("limit")) || 60, 1), 200);
   const offset = Math.max(Number(c.req.query("offset")) || 0, 0);
-  const rows = await sql<{ url: string }[]>`select url from gallery order by pinned desc, posted_at desc, id desc limit ${limit} offset ${offset}`;
+  const rows = await sql<{ url: string; w: number | null; h: number | null }[]>`
+    select url, w, h from gallery order by pinned desc, posted_at desc, id desc limit ${limit} offset ${offset}`;
   const [{ n }] = await sql<{ n: number }[]>`select count(*)::int as n from gallery`;
-  return c.json({ items: rows.map((r) => r.url), total: n }, 200, { "cache-control": "public, max-age=300" });
+  return c.json({ items: rows, total: n }, 200, { "cache-control": "public, max-age=300" });
 });
 
 // ---------------------------------------------------------------- comments (off-chain, wallet-signed)

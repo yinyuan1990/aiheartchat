@@ -71,7 +71,24 @@ async function loadXPics(fillForm = false) {
 }
 
 /** 手动发布：自己写文字 + 选图（默认最新 1 张，最多 4 张，也可以自己传），发到 X / YouTube */
-const manual = ref({ platforms: ['x', 'youtube'] as string[], text: '', images: [] as string[], uploaded: [] as string[], touched: false, sending: false, uploading: false });
+const manual = ref({ platforms: ['x', 'youtube'] as string[], text: '', en: '', images: [] as string[], uploaded: [] as string[], touched: false, sending: false, uploading: false, translating: false });
+/** X 按加权字符数算（免费号 280）：汉字 / 全角算 2，其他算 1；另外预留 @ 账号那一行约 25 */
+const X_MENTIONS_RESERVE = 25;
+function xLength() {
+  const m = manual.value;
+  const body = m.en && m.en !== m.text ? `${m.text}\n\n${m.en}` : m.text;
+  let n = 0;
+  for (const ch of body) n += /[\u1100-\uffff]/.test(ch) ? 2 : 1;
+  return n + X_MENTIONS_RESERVE;
+}
+async function translateManual() {
+  const m = manual.value;
+  if (!m.text.trim()) return show('先写中文');
+  m.translating = true;
+  try {
+    m.en = (await api<{ en: string }>('/admin/xpics/translate', { method: 'POST', body: { text: m.text } })).en;
+  } catch (e: any) { show(e.message); } finally { m.translating = false; }
+}
 function toggleManualImage(u: string) {
   const m = manual.value;
   m.touched = true;
@@ -105,9 +122,10 @@ async function sendManual() {
   if (!confirm(`马上发到 ${m.platforms.map((p) => (p === 'x' ? 'X' : 'YouTube')).join(' + ')}？`)) return;
   m.sending = true;
   try {
-    const r = await api<{ ids: string[] }>('/admin/xpics/manual', { method: 'POST', body: { platforms: m.platforms, text: m.text, images: m.images } });
+    const r = await api<{ ids: string[] }>('/admin/xpics/manual', { method: 'POST', body: { platforms: m.platforms, text: m.text, en: m.en, images: m.images } });
     show(`已排任务 #${r.ids.join('、#')}，发布机一两分钟内会发`);
     m.text = '';
+    m.en = '';
     m.touched = false;
     loadXPics(); loadJobs();
   } catch (e: any) { show(e.message); } finally { m.sending = false; }
@@ -333,14 +351,21 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
       <div style="border-top: 1px solid var(--border, #eee); margin-top: 14px; padding-top: 12px">
         <div style="font-weight: 600; margin-bottom: 6px">手动发布</div>
         <div class="muted" style="font-size: 12px; margin-bottom: 8px">
-          自己写文字、选图，马上发。X：文字当正文（免费号 280 字符，一个汉字算 2 个），发完照样自动回复 $EGIRL 链接；YouTube：图合成竖屏短视频，文字当配音和字幕（有中文用中文配音），第一行当标题。文字留空就用默认文案。不占每日次数。
+          写中文，点「AI 翻译」出英文（可以改；没点的话发布时自动翻）。X：正文 = 中文 + 英文，末尾自动 @arc 和另外 2 个 Arc 头部账号，发完照样回复 $EGIRL 链接；YouTube：图合成竖屏短视频，英文当配音和字幕，英文第一行当标题，简介放中英双语。文字留空就用默认文案。不占每日次数。
         </div>
         <div class="row" style="gap: 14px; align-items: center; margin-bottom: 8px">
           <label v-for="p in [{ k: 'x', n: 'X' }, { k: 'youtube', n: 'YouTube' }]" :key="p.k" class="muted" style="display: flex; align-items: center; gap: 4px">
             <input type="checkbox" style="width: auto" :checked="manual.platforms.includes(p.k)" @change="toggle(manual.platforms, p.k)" /> {{ p.n }}
           </label>
         </div>
-        <textarea v-model="manual.text" rows="3" placeholder="写点文字（可留空）" style="width: 100%; box-sizing: border-box"></textarea>
+        <textarea v-model="manual.text" rows="3" placeholder="中文（可留空）" style="width: 100%; box-sizing: border-box"></textarea>
+        <div class="row" style="gap: 10px; align-items: center; margin: 6px 0">
+          <button class="small ghost" :disabled="manual.translating" @click="translateManual">{{ manual.translating ? '翻译中…' : 'AI 翻译成英文' }}</button>
+          <span class="muted" style="font-size: 12px" :style="{ color: manual.platforms.includes('x') && xLength() > 280 ? '#e5484d' : '' }">
+            X 长度约 {{ xLength() }} / 280<span v-if="manual.platforms.includes('x') && xLength() > 280">，超了发不出去，删点字</span>
+          </span>
+        </div>
+        <textarea v-model="manual.en" rows="3" placeholder="English（点上面按钮自动生成，可修改）" style="width: 100%; box-sizing: border-box"></textarea>
         <div class="muted" style="font-size: 12px; margin: 8px 0 4px">配图（点选，最多 4 张，已选 {{ manual.images.length }} 张；默认最新 1 张）：</div>
         <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center">
           <img

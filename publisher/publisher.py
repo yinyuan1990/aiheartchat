@@ -104,6 +104,9 @@ def load_config() -> dict:
         "Online companions, on chain. E-Girl Companion lives on Arc.",
     ])
     cfg.setdefault("pics_yt_outro", ["E-Girl Companion", "$EGIRL on Arc", "arm.yyheart.com", "Link in description & comments"])
+    # X 美女图 @ Arc 生态头部账号：每条固定带第一个（官方 @arc），其余随机挑 x_mentions_pick 个，天天 @ 同一批大号容易被判骚扰
+    cfg.setdefault("x_mentions", ["@arc", "@circle", "@Uniswap", "@aave"])
+    cfg.setdefault("x_mentions_pick", 2)
     if not cfg.get("token") or "填这里" in cfg["token"]:
         print("config.json 里的 token 还没填")
         sys.exit(2)
@@ -380,8 +383,13 @@ def publish_pics(cfg: dict, job: dict) -> tuple[bool, str, str]:
     time.sleep(random.uniform(20, 120))
     import x as xpost
 
-    # 后台手动发布的任务带自己写的文字，自动任务用默认文案
+    # 后台手动发布的任务带自己写的文字（中英双语），自动任务用默认文案
     text = (job.get("content") or "").strip() or cfg.get("pics_text") or ""
+    mentions = cfg.get("x_mentions") or []
+    if mentions:
+        rest = mentions[1:]
+        picked = [mentions[0], *random.sample(rest, min(len(rest), int(cfg.get("x_mentions_pick") or 0)))]
+        text = f"{text}\n\n{' '.join(picked)}" if text else " ".join(picked)
     return xpost.post_media(PROFILES / "x", files, text, headless=False, shot_dir=LOGS, log=log, reply=cfg.get("pics_reply") or "")
 
 
@@ -389,14 +397,16 @@ def publish_pics_youtube(cfg: dict, job: dict, files: list[Path]) -> tuple[bool,
     from video import slides
 
     out = CARDS / f"job{job['id']}.mp4"
-    custom = (job.get("content") or "").strip()
+    content = (job.get("content") or "").strip()
+    # 手动发布的中文文案后台已配好英文（media.en）：配音 / 字幕 / 标题用英文，简介放中英双语
+    custom = ((job.get("media") or {}).get("en") or content).strip()
     line = custom or random.choice(cfg.get("pics_yt_lines") or ["E-Girl Companion."])
     voice = (cfg.get("video_voice") or "xiaoxiao") if re.search(r"[\u4e00-\u9fff]", line) else cfg["video_voice_en"]
     # 真人照片，不打「AI generated」；不念标题，屏幕上也不放标题
     slides.render("", line, files, out, "", voice=voice, ai_tag="", speak_title=False, outro=cfg.get("pics_yt_outro"))
     # 手动发布：标题用文字第一行（YouTube 标题上限 100 字）
     title = (custom.splitlines()[0][:95] if custom else "") or cfg.get("pics_yt_title") or "E-Girl Companion"
-    desc = "\n\n".join(s for s in [cfg.get("pics_reply") or "", line] if s)
+    desc = "\n\n".join(s for s in [cfg.get("pics_reply") or "", content or line] if s)
     time.sleep(random.uniform(20, 120))
     ok, sau_out = sau_upload_video(SAU_NAME["youtube"], cfg["account"], out, title, desc, ["egirl", "companion", "arc"], headed=True)
     if not ok:

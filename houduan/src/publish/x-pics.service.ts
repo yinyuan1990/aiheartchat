@@ -5,6 +5,7 @@ import { TelegramClientService } from '../telegram/telegram.service';
 import { UploadService } from '../upload/upload.service';
 import { normalizeChannel } from '../music/music.service';
 import { PublishService, bjDayStart } from './publish.service';
+import { callModel } from '../common/ai-model';
 
 const DEFAULT_CHANNEL = 'GSSDJLR888';
 /** X 一条帖子最多 4 张图 */
@@ -146,11 +147,41 @@ export class XPicsService implements OnModuleInit {
     };
   }
 
-  /** 后台手动发布：自己写的文字 + 选的图（1~4 张），每个平台排一条马上发的任务（不占每日次数） */
-  async manualPost(d: { platforms?: string[]; text?: string; images?: string[] }) {
+  /** 手动发布的中文文案翻成英文（给海外平台发中英双语） */
+  async translate(text: string): Promise<string> {
+    const zh = String(text ?? '').trim().slice(0, 2000);
+    if (!zh) return '';
+    if (!process.env.AI_API_KEY) throw new BadRequestException('AI_API_KEY 未配置，没法翻译');
+    const system = [
+      'Translate this Chinese social media post into natural, casual English for X / YouTube Shorts viewers.',
+      'Keep the meaning and tone, keep line breaks, keep emojis, $TICKERS, #hashtags, @mentions and URLs exactly as they are.',
+      'Output JSON only: {"en": string}.',
+    ].join('\n');
+    let last: unknown;
+    for (let i = 0; i < 3; i++) {
+      try {
+        const raw = await callModel([{ role: 'system', content: system }, { role: 'user', content: zh }], 0.3);
+        const en = String(JSON.parse(raw.replace(/^```json\s*|```$/g, '').trim()).en ?? '').trim();
+        if (!en) throw new Error('译文是空的');
+        return en;
+      } catch (e) {
+        last = e;
+      }
+    }
+    throw new BadRequestException(`翻译失败：${last instanceof Error ? last.message : last}`);
+  }
+
+  /**
+   * 后台手动发布：自己写的文字 + 选的图（1~4 张），每个平台排一条马上发的任务（不占每日次数）。
+   * 文字有中文就配英文（没给 en 就自动翻），正文 = 中文 + 空行 + 英文；英文另存 media.en，YouTube 配音 / 标题用它。
+   */
+  async manualPost(d: { platforms?: string[]; text?: string; en?: string; images?: string[] }) {
     const platforms = [...new Set(d.platforms ?? [])].filter((p): p is 'x' | 'youtube' => p === 'x' || p === 'youtube');
     if (!platforms.length) throw new BadRequestException('至少选一个平台');
-    const text = String(d.text ?? '').trim().slice(0, 2000);
+    const zh = String(d.text ?? '').trim().slice(0, 2000);
+    let en = String(d.en ?? '').trim().slice(0, 2000);
+    if (zh && !en && /[\u4e00-\u9fff]/.test(zh)) en = await this.translate(zh);
+    const text = en && en !== zh ? `${zh}\n\n${en}` : zh;
     const base = (process.env.PUBLIC_RES_BASE || 'https://api.yyheart.com').replace(/\/$/, '');
     const images = (d.images ?? []).map((u) => String(u).trim()).filter(Boolean).map((u) => (u.startsWith('/') ? base + u : u));
     if (!images.length || images.length > X_MAX_IMAGES) throw new BadRequestException(`配图要 1~${X_MAX_IMAGES} 张`);
@@ -160,7 +191,7 @@ export class XPicsService implements OnModuleInit {
     const ids: string[] = [];
     for (const platform of platforms) {
       const job = await this.prisma.publishJob.create({
-        data: { postId, platform, title: '', content: text, tags: MANUAL_TAG, format: 'pics', media: JSON.stringify({ images }), scheduledAt: new Date() },
+        data: { postId, platform, title: '', content: text, tags: MANUAL_TAG, format: 'pics', media: JSON.stringify(en ? { images, en } : { images }), scheduledAt: new Date() },
       });
       ids.push(job.id.toString());
     }

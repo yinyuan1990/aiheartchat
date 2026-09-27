@@ -133,8 +133,14 @@ export class AdminController {
 
   @Post('xpics/manual')
   @UseGuards(AdminGuard)
-  xpicsManual(@Body() body: { platforms?: string[]; text?: string; images?: string[] }) {
+  xpicsManual(@Body() body: { platforms?: string[]; text?: string; en?: string; images?: string[] }) {
     return this.xpics.manualPost(body ?? {});
+  }
+
+  @Post('xpics/translate')
+  @UseGuards(AdminGuard)
+  async xpicsTranslate(@Body() body: { text?: string }) {
+    return { en: await this.xpics.translate(body?.text ?? '') };
   }
 
   // ---------- 频道转发（推广：别人的频道 → 我们的推广频道，与 App 内容无关） ----------

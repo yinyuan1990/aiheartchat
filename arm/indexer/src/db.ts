@@ -445,6 +445,9 @@ export async function migrate() {
     pinned int not null default 0,
     posted_at timestamptz not null default now()
   )`;
+  // Pixel size, so the wall can reserve each tile's box before the picture arrives (null = unknown / not an image we parse).
+  await sql`alter table gallery add column if not exists w int`;
+  await sql`alter table gallery add column if not exists h int`;
 
   // Multi-domain (9.9): uploads are referenced host-relatively so a dead domain never breaks pictures. Fold any
   // absolute "https://<old host>/api/uploads/x" left from earlier domains into "/api/uploads/x". For `tokens` this is
