@@ -8,12 +8,14 @@ export type Post = { slug: string; title: string; date: string; summary: string;
 export const POSTS: Post[] = [
   {
     slug: "arc-launchpad-only-one-live",
-    title: "Arc 主网上线十天，meme 发射台赛道只有一个真正上线了",
+    title: "Arc 上的 meme 发射台开始冒头：我们为什么这样做 Arm",
     date: "2026-09-27",
-    summary: "独立目录 builtonarc.app 收录的 9 个 Arc 发射台 / Meme 项目，没有一个被确认在主网运行。Arm 是怎么做的。",
+    summary: "Arc 主网上线十天，宣布的项目很多，真正跑起来的还不多；meme 发射台正在陆续上线。Arm 的设计思路和取舍。",
     body: `9 月 16 日，Circle 的 Arc 主网上线。这条以 USDC 作为原生 gas 的公链，一上线就有一大批 DeFi 协议宣布接入。
 
-但热闹背后有个现象值得注意。独立目录 [builtonarc.app](https://builtonarc.app) 专门核查 Arc 上每个项目的真实状态，截至 9 月 19 日，它收录的 179 个项目里只有 28 个被确认"已上线"。其中"发射台 / Meme"分类有 9 个项目，没有一个在主网上被确认上线，有的被直接标注为"只有营销，没有产品、团队和合约"。
+但"宣布"和"上线"是两回事。独立目录 [builtonarc.app](https://builtonarc.app) 专门核查 Arc 上每个项目的真实状态，截至 9 月 19 日，它收录的 179 个项目里只有 28 个被确认"已上线"。
+
+meme 发射台这条赛道也在快速变化。主网刚上线时几乎没有能用的产品，十天后，链上行情站 [GeckoTerminal](https://www.geckoterminal.com/arc/pools) 已经收录了好几个 Arc 上的发射平台。赛道开始冒头，接下来比的是谁的规则更公平、更经得起查。
 
 ## 为什么 Arc 需要 meme 发射台
 
