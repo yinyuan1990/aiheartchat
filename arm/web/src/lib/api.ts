@@ -359,6 +359,19 @@ export const useHotspots = (f: HotspotFilter) =>
     refetchInterval: 60_000,
     staleTime: 30_000,
   });
+export type GalleryPage = { items: string[]; total: number };
+const GALLERY_PAGE = 60;
+export const useGallery = () =>
+  useInfiniteQuery({
+    queryKey: ["gallery"],
+    queryFn: ({ pageParam }) => get<GalleryPage>(`/gallery?offset=${pageParam}&limit=${GALLERY_PAGE}`),
+    initialPageParam: 0,
+    getNextPageParam: (last, pages) => {
+      const n = pages.reduce((s, p) => s + p.items.length, 0);
+      return n < last.total ? n : undefined;
+    },
+    staleTime: 300_000,
+  });
 /** "N new signals" banner: how many published hotspots appeared since `after` (ISO) in this tab. */
 export const useHotspotsNew = (platform: "all" | HotspotPlatform, after: string | null) =>
   useQuery({ queryKey: ["hotspots-new", platform, after], queryFn: () => get<{ count: number }>(`/hotspots/new?after=${encodeURIComponent(after!)}${platform !== "all" ? `&platform=${platform}` : ""}`), enabled: !!after, refetchInterval: 60_000 });

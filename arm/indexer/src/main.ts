@@ -7,6 +7,7 @@ import { startKeeper } from "./keeper.js";
 import { startHotspots, startLogoPainter } from "./hotspots/service.js";
 import { startTelegram } from "./telegram/bot.js";
 import { startBuyback } from "./buyback.js";
+import { startGallery } from "./gallery.js";
 import { bus } from "./bus.js";
 import { config } from "./config.js";
 import { loadQuotePrices, refreshQuotePrices } from "./quotes.js";
@@ -40,3 +41,5 @@ if ((process.env.HOTSPOTS_ENABLED ?? "true") === "true") {
 void startTelegram();
 // Automatic buyback & burn from the keeper wallet (idles until the owner enables it in /admin)
 void startBuyback();
+// Daily gallery sync from the operator's image pool (inert without GALLERY_TOKEN)
+startGallery();

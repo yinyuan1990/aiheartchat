@@ -1,6 +1,7 @@
 import { Body, CanActivate, Controller, ExecutionContext, Get, Injectable, Post, Query, UnauthorizedException, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { PublishService } from './publish.service';
+import { XPicsService } from './x-pics.service';
 
 /** 发布机鉴权：请求头 X-Publish-Token = 后台「内容分发」页里的 token */
 @Injectable()
@@ -19,7 +20,16 @@ export class PublishAgentGuard implements CanActivate {
 @Controller('publish/agent')
 @UseGuards(PublishAgentGuard)
 export class PublishAgentController {
-  constructor(private readonly publish: PublishService) {}
+  constructor(
+    private readonly publish: PublishService,
+    private readonly xpics: XPicsService,
+  ) {}
+
+  /** 美女图集（Arm 官网每天同步）：看图检查合格的图，新的在前，最多 limit 张 */
+  @Get('gallery')
+  gallery(@Query('limit') limit?: string) {
+    return this.xpics.gallery(Number(limit) || 1000);
+  }
 
   /** 心跳 + 各平台登录状态；回启用的平台列表 */
   @Post('heartbeat')

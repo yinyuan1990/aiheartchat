@@ -436,6 +436,16 @@ export async function migrate() {
   )`;
   await sql`create index if not exists tg_subscriptions_token on tg_subscriptions (token) where active`;
 
+  // Gallery (9.27): pictures synced daily from the operator's image pool (src "pool:<id>"), plus hand-added pinned
+  // ones (pinned > 0, shown first, never trimmed). `url` is a host-relative /api/uploads path like token logos.
+  await sql`create table if not exists gallery (
+    id bigserial primary key,
+    src text not null unique,
+    url text not null,
+    pinned int not null default 0,
+    posted_at timestamptz not null default now()
+  )`;
+
   // Multi-domain (9.9): uploads are referenced host-relatively so a dead domain never breaks pictures. Fold any
   // absolute "https://<old host>/api/uploads/x" left from earlier domains into "/api/uploads/x". For `tokens` this is
   // display-only — the on-chain string cannot change — but that is exactly what the UI reads.

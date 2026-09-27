@@ -143,6 +143,17 @@ export class XPicsService implements OnModuleInit {
     };
   }
 
+  /** 合格的图（用没用过都算），新的在前 */
+  async gallery(limit: number) {
+    const rows = await this.prisma.xPic.findMany({
+      where: { checked: true, skipReason: '' },
+      orderBy: [{ postedAt: 'desc' }, { msgId: 'asc' }],
+      take: Math.min(Math.max(1, Math.floor(limit)), 1000),
+      select: { id: true, url: true, postedAt: true },
+    });
+    return rows.map((r) => ({ id: r.id, url: r.url, postedAt: r.postedAt }));
+  }
+
   // ---------- 手动 ----------
 
   /** 立即拉取（后台跑，拉完顺便把今天没排满的排上） */
