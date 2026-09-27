@@ -131,6 +131,12 @@ export class AdminController {
     return this.xpics.postNow();
   }
 
+  @Post('xpics/manual')
+  @UseGuards(AdminGuard)
+  xpicsManual(@Body() body: { platforms?: string[]; text?: string; images?: string[] }) {
+    return this.xpics.manualPost(body ?? {});
+  }
+
   // ---------- 频道转发（推广：别人的频道 → 我们的推广频道，与 App 内容无关） ----------
 
   @Get('tg-forward/status')

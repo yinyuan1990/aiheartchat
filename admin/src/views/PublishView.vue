@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue';
-import { api } from '../api';
+import { api, getToken } from '../api';
 
 type Mode = 'raw' | 'light' | 'ai';
 interface Settings { enabled: boolean; platforms: string[]; dailyMax: number; hourStart: number; hourEnd: number; gapMin: number; queueDays: number; token: string; lastPostId: string; modes: Record<string, Mode>; dailyMaxes: Record<string, number>; formats: Record<string, 'note' | 'video'> }
@@ -56,16 +56,61 @@ async function applyDraft(j: Job) {
   } catch (e: any) { show(e.message); }
 }
 
-interface XPicsSettings { enabled: boolean; channel: string; daily: number; min: number; max: number; fetchHour: number; lastFetch: string; lastResult: string }
-interface XPicsStatus { settings: XPicsSettings; pool: number; unchecked: number; rejected: number; rejectedSamples: { url: string; reason: string }[]; busy: boolean; samples: string[]; today: { id: string; status: number; scheduledAt: string; manual: boolean; resultUrl: string; error: string }[] }
+interface XPicsSettings { enabled: boolean; channel: string; daily: number; ytDaily: number; min: number; max: number; fetchHour: number; lastFetch: string; lastResult: string }
+interface XPicsStatus { settings: XPicsSettings; pool: number; unchecked: number; rejected: number; rejectedSamples: { url: string; reason: string }[]; busy: boolean; samples: string[]; recent: string[]; today: { id: string; platform: string; status: number; scheduledAt: string; manual: boolean; resultUrl: string; error: string }[] }
 const xp = ref<XPicsStatus | null>(null);
-const xpForm = ref({ enabled: false, channel: '', daily: 5, min: 2, max: 4, fetchHour: 0 });
+const xpForm = ref({ enabled: false, channel: '', daily: 5, ytDaily: 1, min: 2, max: 4, fetchHour: 0 });
 async function loadXPics(fillForm = false) {
   try {
     xp.value = await api<XPicsStatus>('/admin/xpics');
     const s = xp.value.settings;
-    if (fillForm) xpForm.value = { enabled: s.enabled, channel: s.channel, daily: s.daily, min: s.min, max: s.max, fetchHour: s.fetchHour };
+    if (fillForm) xpForm.value = { enabled: s.enabled, channel: s.channel, daily: s.daily, ytDaily: s.ytDaily, min: s.min, max: s.max, fetchHour: s.fetchHour };
+    // 手动发布默认选最新的 1 张
+    if (!manual.value.touched && xp.value.recent.length) manual.value.images = [xp.value.recent[0]];
   } catch (e: any) { show(e.message); }
+}
+
+/** 手动发布：自己写文字 + 选图（默认最新 1 张，最多 4 张，也可以自己传），发到 X / YouTube */
+const manual = ref({ platforms: ['x', 'youtube'] as string[], text: '', images: [] as string[], uploaded: [] as string[], touched: false, sending: false, uploading: false });
+function toggleManualImage(u: string) {
+  const m = manual.value;
+  m.touched = true;
+  if (m.images.includes(u)) m.images = m.images.filter((x) => x !== u);
+  else if (m.images.length >= 4) show('最多 4 张');
+  else m.images = [...m.images, u];
+}
+async function uploadManualImage(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const f = input.files?.[0];
+  input.value = '';
+  if (!f) return;
+  const m = manual.value;
+  m.uploading = true;
+  try {
+    const form = new FormData();
+    form.append('file', f);
+    const token = getToken();
+    const res = await fetch('/api/upload/admin-image', { method: 'POST', body: form, headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    const json = await res.json();
+    if (json.code !== 0) throw new Error(json.msg || '上传失败');
+    m.uploaded = [json.data.url, ...m.uploaded];
+    m.touched = true;
+    if (m.images.length < 4) m.images = [...m.images, json.data.url];
+  } catch (err: any) { show(err.message); } finally { m.uploading = false; }
+}
+async function sendManual() {
+  const m = manual.value;
+  if (!m.platforms.length) return show('至少选一个平台');
+  if (!m.images.length) return show('至少选 1 张图');
+  if (!confirm(`马上发到 ${m.platforms.map((p) => (p === 'x' ? 'X' : 'YouTube')).join(' + ')}？`)) return;
+  m.sending = true;
+  try {
+    const r = await api<{ ids: string[] }>('/admin/xpics/manual', { method: 'POST', body: { platforms: m.platforms, text: m.text, images: m.images } });
+    show(`已排任务 #${r.ids.join('、#')}，发布机一两分钟内会发`);
+    m.text = '';
+    m.touched = false;
+    loadXPics(); loadJobs();
+  } catch (e: any) { show(e.message); } finally { m.sending = false; }
 }
 async function saveXPics() {
   try {
@@ -247,7 +292,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
     </div>
 
     <div class="card" style="margin-top: 12px">
-      <div style="font-weight: 600; margin-bottom: 6px">X 美女图（Telegram 频道 → X 纯图帖，只发 X）</div>
+      <div style="font-weight: 600; margin-bottom: 6px">美女图（Telegram 频道 → X 纯图帖 + YouTube 图集短视频）</div>
       <div class="muted" style="margin-bottom: 12px">
         每天 <b>{{ xpForm.fetchHour }} 点</b>用后台登录的 Telegram 账号拉来源频道<b>最近 24 小时</b>的图片，存到服务器 MinIO（<code>xpics/日期/</code>）进图片池；
         按每天次数在上面的发布时段（{{ form.hourStart }}~{{ form.hourEnd }} 点）里平均排开，每次从池子取几张（同一相册的放一起），<b>正文不带文字</b>，由外网发布机发到 X，发完自动回复一条 USDC 代币链接。不占上面 X 的每日条数。X 一条最多 4 张图。
@@ -255,7 +300,8 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
       <div class="row" style="flex-wrap: wrap; gap: 14px; align-items: center">
         <label class="muted" style="display: flex; align-items: center; gap: 6px"><input v-model="xpForm.enabled" type="checkbox" style="width: auto" /> <b :style="{ color: xpForm.enabled ? 'var(--accent)' : '' }">{{ xpForm.enabled ? '已开启' : '已关闭' }}</b></label>
         <label class="muted">来源频道 t.me/<input v-model="xpForm.channel" style="width: 140px" /></label>
-        <label class="muted">每天 <input v-model.number="xpForm.daily" type="number" min="1" max="20" style="width: 50px" /> 次</label>
+        <label class="muted">X 每天 <input v-model.number="xpForm.daily" type="number" min="1" max="20" style="width: 50px" /> 次</label>
+        <label class="muted">YouTube 每天 <input v-model.number="xpForm.ytDaily" type="number" min="0" max="5" style="width: 50px" /> 条</label>
         <label class="muted">每次 <input v-model.number="xpForm.min" type="number" min="1" max="4" style="width: 44px" /> ~ <input v-model.number="xpForm.max" type="number" min="1" max="4" style="width: 44px" /> 张</label>
         <label class="muted">每天 <input v-model.number="xpForm.fetchHour" type="number" min="0" max="23" style="width: 50px" /> 点拉取</label>
         <button class="small" @click="saveXPics">保存</button>
@@ -267,7 +313,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
         今天：
         <template v-if="xp?.today.length">
           <span v-for="t in xp.today" :key="t.id" style="margin-right: 10px">
-            {{ fmt(t.scheduledAt) }}<span v-if="t.manual">（手动）</span>
+            {{ t.platform === 'youtube' ? 'YouTube' : 'X' }} {{ fmt(t.scheduledAt) }}<span v-if="t.manual">（手动）</span>
             <span class="tag" :class="STATUS[t.status]?.cls">{{ STATUS[t.status]?.text }}</span>
             <a v-if="t.resultUrl" :href="t.resultUrl" target="_blank" style="color: var(--accent)">查看</a>
           </span>
@@ -282,6 +328,38 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
         <a v-for="(r, k) in xp.rejectedSamples" :key="k" :href="r.url" target="_blank" :title="r.reason" style="text-align: center; font-size: 11px; color: var(--muted, #888); width: 56px">
           <img :src="r.url" style="width: 56px; height: 56px; object-fit: cover; border-radius: 4px; opacity: 0.6" /><br />{{ r.reason }}
         </a>
+      </div>
+
+      <div style="border-top: 1px solid var(--border, #eee); margin-top: 14px; padding-top: 12px">
+        <div style="font-weight: 600; margin-bottom: 6px">手动发布</div>
+        <div class="muted" style="font-size: 12px; margin-bottom: 8px">
+          自己写文字、选图，马上发。X：文字当正文（免费号 280 字符，一个汉字算 2 个），发完照样自动回复 $EGIRL 链接；YouTube：图合成竖屏短视频，文字当配音和字幕（有中文用中文配音），第一行当标题。文字留空就用默认文案。不占每日次数。
+        </div>
+        <div class="row" style="gap: 14px; align-items: center; margin-bottom: 8px">
+          <label v-for="p in [{ k: 'x', n: 'X' }, { k: 'youtube', n: 'YouTube' }]" :key="p.k" class="muted" style="display: flex; align-items: center; gap: 4px">
+            <input type="checkbox" style="width: auto" :checked="manual.platforms.includes(p.k)" @change="toggle(manual.platforms, p.k)" /> {{ p.n }}
+          </label>
+        </div>
+        <textarea v-model="manual.text" rows="3" placeholder="写点文字（可留空）" style="width: 100%; box-sizing: border-box"></textarea>
+        <div class="muted" style="font-size: 12px; margin: 8px 0 4px">配图（点选，最多 4 张，已选 {{ manual.images.length }} 张；默认最新 1 张）：</div>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center">
+          <img
+            v-for="u in [...manual.uploaded, ...(xp?.recent ?? [])]"
+            :key="u"
+            :src="u"
+            :title="manual.images.includes(u) ? `第 ${manual.images.indexOf(u) + 1} 张` : ''"
+            style="width: 64px; height: 64px; object-fit: cover; border-radius: 4px; cursor: pointer"
+            :style="{ outline: manual.images.includes(u) ? '3px solid var(--accent)' : 'none', opacity: manual.images.includes(u) ? 1 : 0.55 }"
+            @click="toggleManualImage(u)"
+          />
+          <label class="small ghost" style="display: inline-flex; align-items: center; justify-content: center; width: 64px; height: 64px; border: 1px dashed var(--border, #ccc); border-radius: 4px; cursor: pointer; font-size: 12px">
+            {{ manual.uploading ? '上传中' : '+ 上传' }}
+            <input type="file" accept="image/*" hidden @change="uploadManualImage" />
+          </label>
+        </div>
+        <div style="margin-top: 10px">
+          <button class="small" :disabled="manual.sending" @click="sendManual">{{ manual.sending ? '提交中…' : '马上发布' }}</button>
+        </div>
       </div>
     </div>
 

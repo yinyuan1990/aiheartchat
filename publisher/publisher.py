@@ -380,17 +380,22 @@ def publish_pics(cfg: dict, job: dict) -> tuple[bool, str, str]:
     time.sleep(random.uniform(20, 120))
     import x as xpost
 
-    return xpost.post_media(PROFILES / "x", files, cfg.get("pics_text") or "", headless=False, shot_dir=LOGS, log=log, reply=cfg.get("pics_reply") or "")
+    # 后台手动发布的任务带自己写的文字，自动任务用默认文案
+    text = (job.get("content") or "").strip() or cfg.get("pics_text") or ""
+    return xpost.post_media(PROFILES / "x", files, text, headless=False, shot_dir=LOGS, log=log, reply=cfg.get("pics_reply") or "")
 
 
 def publish_pics_youtube(cfg: dict, job: dict, files: list[Path]) -> tuple[bool, str, str]:
     from video import slides
 
     out = CARDS / f"job{job['id']}.mp4"
-    line = random.choice(cfg.get("pics_yt_lines") or ["E-Girl Companion."])
+    custom = (job.get("content") or "").strip()
+    line = custom or random.choice(cfg.get("pics_yt_lines") or ["E-Girl Companion."])
+    voice = (cfg.get("video_voice") or "xiaoxiao") if re.search(r"[\u4e00-\u9fff]", line) else cfg["video_voice_en"]
     # 真人照片，不打「AI generated」；不念标题，屏幕上也不放标题
-    slides.render("", line, files, out, "", voice=cfg["video_voice_en"], ai_tag="", speak_title=False, outro=cfg.get("pics_yt_outro"))
-    title = cfg.get("pics_yt_title") or "E-Girl Companion"
+    slides.render("", line, files, out, "", voice=voice, ai_tag="", speak_title=False, outro=cfg.get("pics_yt_outro"))
+    # 手动发布：标题用文字第一行（YouTube 标题上限 100 字）
+    title = (custom.splitlines()[0][:95] if custom else "") or cfg.get("pics_yt_title") or "E-Girl Companion"
     desc = "\n\n".join(s for s in [cfg.get("pics_reply") or "", line] if s)
     time.sleep(random.uniform(20, 120))
     ok, sau_out = sau_upload_video(SAU_NAME["youtube"], cfg["account"], out, title, desc, ["egirl", "companion", "arc"], headed=True)

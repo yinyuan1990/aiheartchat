@@ -123,24 +123,48 @@ export class XPicsService implements OnModuleInit {
   async status() {
     const s = await this.settings();
     const dayStart = bjDayStart(Date.now(), 0);
-    const [pool, unchecked, rejected, rejectedSamples, today, samples] = await Promise.all([
+    const [pool, unchecked, rejected, rejectedSamples, today, samples, recent] = await Promise.all([
       this.prisma.xPic.count({ where: USABLE }),
       this.prisma.xPic.count({ where: { jobId: null, checked: false } }),
       this.prisma.xPic.count({ where: { checked: true, skipReason: { not: '' } } }),
       this.prisma.xPic.findMany({ where: { checked: true, skipReason: { not: '' } }, orderBy: { id: 'desc' }, take: 8, select: { url: true, skipReason: true } }),
       this.prisma.publishJob.findMany({
-        where: { platform: 'x', format: 'pics', scheduledAt: { gte: new Date(dayStart), lt: new Date(dayStart + 86_400_000) } },
+        where: { platform: { in: ['x', 'youtube'] }, format: 'pics', scheduledAt: { gte: new Date(dayStart), lt: new Date(dayStart + 86_400_000) } },
         orderBy: { scheduledAt: 'asc' },
-        select: { id: true, status: true, scheduledAt: true, tags: true, resultUrl: true, error: true },
+        select: { id: true, platform: true, status: true, scheduledAt: true, tags: true, resultUrl: true, error: true },
       }),
       this.prisma.xPic.findMany({ where: USABLE, orderBy: { postedAt: 'desc' }, take: 12, select: { url: true } }),
+      this.gallery(24),
     ]);
     return {
       settings: s, pool, unchecked, rejected, busy: this.busy,
       rejectedSamples: rejectedSamples.map((r) => ({ url: r.url, reason: r.skipReason })),
       today: today.map((j) => ({ ...j, id: j.id.toString(), manual: j.tags === MANUAL_TAG })),
       samples: samples.map((x) => x.url),
+      /** 手动发布选图用：合格的图（用没用过都算），新的在前 */
+      recent: recent.map((x) => x.url),
     };
+  }
+
+  /** 后台手动发布：自己写的文字 + 选的图（1~4 张），每个平台排一条马上发的任务（不占每日次数） */
+  async manualPost(d: { platforms?: string[]; text?: string; images?: string[] }) {
+    const platforms = [...new Set(d.platforms ?? [])].filter((p): p is 'x' | 'youtube' => p === 'x' || p === 'youtube');
+    if (!platforms.length) throw new BadRequestException('至少选一个平台');
+    const text = String(d.text ?? '').trim().slice(0, 2000);
+    const base = (process.env.PUBLIC_RES_BASE || 'https://api.yyheart.com').replace(/\/$/, '');
+    const images = (d.images ?? []).map((u) => String(u).trim()).filter(Boolean).map((u) => (u.startsWith('/') ? base + u : u));
+    if (!images.length || images.length > X_MAX_IMAGES) throw new BadRequestException(`配图要 1~${X_MAX_IMAGES} 张`);
+    if (images.some((u) => !/^https?:\/\//.test(u))) throw new BadRequestException('图片地址不对');
+    // 不对应树洞帖也不对应池子里某张图：postId 用负的毫秒时间戳，和自动任务（负的图片 id）不会撞
+    const postId = BigInt(-Date.now());
+    const ids: string[] = [];
+    for (const platform of platforms) {
+      const job = await this.prisma.publishJob.create({
+        data: { postId, platform, title: '', content: text, tags: MANUAL_TAG, format: 'pics', media: JSON.stringify({ images }), scheduledAt: new Date() },
+      });
+      ids.push(job.id.toString());
+    }
+    return { ids };
   }
 
   /** 合格的图（用没用过都算），新的在前 */
