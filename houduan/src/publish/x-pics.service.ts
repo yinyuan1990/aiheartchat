@@ -16,6 +16,9 @@ const MAX_FETCH = 150;
 const MIN_BYTES = 15 * 1024;
 /** 手动「立即发一条」的任务打这个标记，不占每日次数 */
 const MANUAL_TAG = 'manual';
+/** 美女图发哪些平台（YouTube / TikTok 由发布机合成竖屏短视频） */
+const PICS_PLATFORMS = ['x', 'youtube', 'tiktok'] as const;
+type PicsPlatform = (typeof PICS_PLATFORMS)[number];
 /** 拉取失败后隔多久再自动重试 */
 const RETRY_MS = 30 * 60_000;
 /** 可用池 = 没用过 + 检查过 + 合格 */
@@ -41,6 +44,8 @@ interface XPicsSettings {
   daily: number;
   /** YouTube 每天发几条（发布机把图合成竖屏短视频），0 = 不发 */
   ytDaily: number;
+  /** TikTok 每天发几条（同样合成竖屏短视频），0 = 不发 */
+  ttDaily: number;
   /** 每次几张图（X 最多 4 张） */
   min: number;
   max: number;
@@ -53,7 +58,7 @@ interface XPicsSettings {
 }
 
 /**
- * X 美女图（推广，只发 X 和 YouTube，国内平台不碰；YouTube 每日条数 yt_daily，发布机合成竖屏短视频）：
+ * X 美女图（推广，只发 X / YouTube / TikTok，国内平台不碰；YouTube / TikTok 每日条数 yt_daily / tt_daily，发布机合成竖屏短视频）：
  * 每天 fetchHour 点用已登录的 Telegram 账号拉来源频道最近 24 小时的图片 → 存 MinIO（xpics/日期/）+ 记 x_pic 表当图片池
  * → 按「每日次数」把当天的帖子在发布时段（内容分发的时段设置）里平均排开，每条从池子里取 min~max 张（同一相册的尽量放一起）
  * → 写成 publish_job（platform=x, format=pics, 无文字），外网发布机领走后纯图发 X。
@@ -87,6 +92,7 @@ export class XPicsService implements OnModuleInit {
       channel: get('channel') || DEFAULT_CHANNEL,
       daily: clamp(get('daily'), 1, 20, 5),
       ytDaily: clamp(get('yt_daily'), 0, 5, 0),
+      ttDaily: clamp(get('tt_daily'), 0, 5, 0),
       min,
       max: clamp(get('max'), min, X_MAX_IMAGES, X_MAX_IMAGES),
       fetchHour: clamp(get('fetch_hour'), 0, 23, 0),
@@ -99,7 +105,7 @@ export class XPicsService implements OnModuleInit {
     await this.prisma.sysSetting.upsert({ where: { key: `xpics_${key}` }, create: { key: `xpics_${key}`, value }, update: { value } });
   }
 
-  async saveSettings(d: { enabled?: boolean; channel?: string; daily?: number; ytDaily?: number; min?: number; max?: number; fetchHour?: number }) {
+  async saveSettings(d: { enabled?: boolean; channel?: string; daily?: number; ytDaily?: number; ttDaily?: number; min?: number; max?: number; fetchHour?: number }) {
     const cur = await this.settings();
     if (d.channel !== undefined) {
       const ch = normalizeChannel(d.channel);
@@ -113,6 +119,7 @@ export class XPicsService implements OnModuleInit {
     if (d.enabled !== undefined) await this.set('enabled', d.enabled ? '1' : '0');
     if (d.daily !== undefined) await this.set('daily', String(clamp(d.daily, 1, 20, cur.daily)));
     if (d.ytDaily !== undefined) await this.set('yt_daily', String(clamp(d.ytDaily, 0, 5, cur.ytDaily)));
+    if (d.ttDaily !== undefined) await this.set('tt_daily', String(clamp(d.ttDaily, 0, 5, cur.ttDaily)));
     const min = d.min !== undefined ? clamp(d.min, 1, X_MAX_IMAGES, cur.min) : cur.min;
     if (d.min !== undefined) await this.set('min', String(min));
     if (d.max !== undefined || d.min !== undefined) await this.set('max', String(clamp(d.max ?? cur.max, min, X_MAX_IMAGES, X_MAX_IMAGES)));
@@ -130,7 +137,7 @@ export class XPicsService implements OnModuleInit {
       this.prisma.xPic.count({ where: { checked: true, skipReason: { not: '' } } }),
       this.prisma.xPic.findMany({ where: { checked: true, skipReason: { not: '' } }, orderBy: { id: 'desc' }, take: 8, select: { url: true, skipReason: true } }),
       this.prisma.publishJob.findMany({
-        where: { platform: { in: ['x', 'youtube'] }, format: 'pics', scheduledAt: { gte: new Date(dayStart), lt: new Date(dayStart + 86_400_000) } },
+        where: { platform: { in: [...PICS_PLATFORMS] }, format: 'pics', scheduledAt: { gte: new Date(dayStart), lt: new Date(dayStart + 86_400_000) } },
         orderBy: { scheduledAt: 'asc' },
         select: { id: true, platform: true, status: true, scheduledAt: true, tags: true, resultUrl: true, error: true },
       }),
@@ -176,7 +183,7 @@ export class XPicsService implements OnModuleInit {
    * 文字有中文就配英文（没给 en 就自动翻），正文 = 中文 + 空行 + 英文；英文另存 media.en，YouTube 配音 / 标题用它。
    */
   async manualPost(d: { platforms?: string[]; text?: string; en?: string; images?: string[] }) {
-    const platforms = [...new Set(d.platforms ?? [])].filter((p): p is 'x' | 'youtube' => p === 'x' || p === 'youtube');
+    const platforms = [...new Set(d.platforms ?? [])].filter((p): p is PicsPlatform => (PICS_PLATFORMS as readonly string[]).includes(p));
     if (!platforms.length) throw new BadRequestException('至少选一个平台');
     const zh = String(d.text ?? '').trim().slice(0, 2000);
     let en = String(d.en ?? '').trim().slice(0, 2000);
@@ -337,9 +344,10 @@ export class XPicsService implements OnModuleInit {
     const s = await this.settings();
     await this.planFor('x', s.daily);
     if (s.ytDaily > 0) await this.planFor('youtube', s.ytDaily);
+    if (s.ttDaily > 0) await this.planFor('tiktok', s.ttDaily);
   }
 
-  private async planFor(platform: 'x' | 'youtube', daily: number) {
+  private async planFor(platform: PicsPlatform, daily: number) {
     const ps = await this.publish.settings();
     const now = Date.now();
     const dayStart = bjDayStart(now, 0);
@@ -361,7 +369,7 @@ export class XPicsService implements OnModuleInit {
   }
 
   /** 从池子取 min~max 张（最新的相册先用，一组不够再拿下一组补）排一条任务；不够 min 张返回 null */
-  private async makeJob(when: Date, manual: boolean, platform: 'x' | 'youtube' = 'x') {
+  private async makeJob(when: Date, manual: boolean, platform: PicsPlatform = 'x') {
     const s = await this.settings();
     const want = s.min + Math.floor(Math.random() * (s.max - s.min + 1));
     const pool = await this.prisma.xPic.findMany({ where: USABLE, orderBy: [{ postedAt: 'desc' }, { msgId: 'asc' }], take: 300 });

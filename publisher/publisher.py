@@ -104,6 +104,11 @@ def load_config() -> dict:
         "Online companions, on chain. E-Girl Companion lives on Arc.",
     ])
     cfg.setdefault("pics_yt_outro", ["E-Girl Companion", "$EGIRL on Arc", "arm.yyheart.com", "Link in description & comments"])
+    # TikTok 美女图短视频：文案里的链接点不了，推广行写 link in bio；en-US 的 Multilingual 音色中英文都能念（手动发布的中英双语直接整段配音）
+    cfg.setdefault("pics_tt_promo", "$EGIRL · the first e-girl companion token on Arc 👉 arm.yyheart.com (link in bio)")
+    cfg.setdefault("pics_tt_outro", ["E-Girl Companion", "$EGIRL on Arc", "arm.yyheart.com", "Link in bio"])
+    cfg.setdefault("pics_tt_tags", "#egirl #goddess #memecoin #crypto #Arc")
+    cfg.setdefault("pics_tt_voice", "en-US-AndrewMultilingualNeural")
     # X 美女图 @ Arc 生态头部账号：每条固定带第一个（官方 @arc），其余随机挑 x_mentions_pick 个，天天 @ 同一批大号容易被判骚扰
     cfg.setdefault("x_mentions", ["@arc", "@circle", "@Uniswap", "@aave"])
     cfg.setdefault("x_mentions_pick", 2)
@@ -358,9 +363,9 @@ def publish_video(cfg: dict, job: dict) -> tuple[bool, str, str]:
 
 
 def publish_pics(cfg: dict, job: dict) -> tuple[bool, str, str]:
-    """美女图：后台从 TG 频道拉好的 2~4 张图。X 发图 + 一句短文案，发完回复代币链接；YouTube 合成竖屏短视频，简介和置顶评论放链接"""
-    if job["platform"] not in ("x", "youtube"):
-        return False, "", "纯图任务只支持 X / YouTube"
+    """美女图：后台从 TG 频道拉好的 2~4 张图。X 发图 + 一句短文案，发完回复代币链接；YouTube / TikTok 合成竖屏短视频，YouTube 简介和置顶评论放链接"""
+    if job["platform"] not in ("x", "youtube", "tiktok"):
+        return False, "", "纯图任务只支持 X / YouTube / TikTok"
     urls = (job.get("media") or {}).get("images") or []
     if not urls:
         return False, "", "纯图任务没有图片"
@@ -384,6 +389,8 @@ def publish_pics(cfg: dict, job: dict) -> tuple[bool, str, str]:
         files.append(f)
     if job["platform"] == "youtube":
         return publish_pics_youtube(cfg, job, files)
+    if job["platform"] == "tiktok":
+        return publish_pics_tiktok(cfg, job, files)
     time.sleep(random.uniform(20, 120))
     import x as xpost
 
@@ -425,6 +432,21 @@ def publish_pics_youtube(cfg: dict, job: dict, files: list[Path]) -> tuple[bool,
         if not c_ok:
             log.warning("YouTube 图集发成功了，但评论推广链接失败：%s", c_err)
     return True, url, ""
+
+
+def publish_pics_tiktok(cfg: dict, job: dict, files: list[Path]) -> tuple[bool, str, str]:
+    from video import slides
+    import tiktok
+
+    out = CARDS / f"job{job['id']}.mp4"
+    # 手动发布：content = 中文 + 空行 + 英文，整段配音 + 字幕；自动任务随机挑一句英文
+    content = (job.get("content") or "").strip()
+    line = content or random.choice(cfg.get("pics_yt_lines") or ["E-Girl Companion."])
+    slides.render("", line, files, out, "", voice=cfg["pics_tt_voice"], ai_tag="", speak_title=False, outro=cfg.get("pics_tt_outro"))
+    caption = "\n\n".join(s for s in [content or cfg.get("pics_text") or "", cfg.get("pics_tt_promo") or "", cfg.get("pics_tt_tags") or ""] if s)
+    time.sleep(random.uniform(20, 120))
+    # 真人照片，不打 AI 生成标
+    return tiktok.post_video(PROFILES / "tiktok", out, caption, shot_dir=LOGS, log=log, ai_label=False)
 
 
 def publish_job(cfg: dict, job: dict) -> tuple[bool, str, str]:

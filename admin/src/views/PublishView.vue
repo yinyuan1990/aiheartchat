@@ -56,22 +56,24 @@ async function applyDraft(j: Job) {
   } catch (e: any) { show(e.message); }
 }
 
-interface XPicsSettings { enabled: boolean; channel: string; daily: number; ytDaily: number; min: number; max: number; fetchHour: number; lastFetch: string; lastResult: string }
+interface XPicsSettings { enabled: boolean; channel: string; daily: number; ytDaily: number; ttDaily: number; min: number; max: number; fetchHour: number; lastFetch: string; lastResult: string }
 interface XPicsStatus { settings: XPicsSettings; pool: number; unchecked: number; rejected: number; rejectedSamples: { url: string; reason: string }[]; busy: boolean; samples: string[]; recent: string[]; today: { id: string; platform: string; status: number; scheduledAt: string; manual: boolean; resultUrl: string; error: string }[] }
 const xp = ref<XPicsStatus | null>(null);
-const xpForm = ref({ enabled: false, channel: '', daily: 5, ytDaily: 1, min: 2, max: 4, fetchHour: 0 });
+const xpForm = ref({ enabled: false, channel: '', daily: 5, ytDaily: 1, ttDaily: 0, min: 2, max: 4, fetchHour: 0 });
+const PICS_PLATFORMS = [{ k: 'x', n: 'X' }, { k: 'youtube', n: 'YouTube' }, { k: 'tiktok', n: 'TikTok' }];
+const picsName = (k: string) => PICS_PLATFORMS.find((p) => p.k === k)?.n ?? k;
 async function loadXPics(fillForm = false) {
   try {
     xp.value = await api<XPicsStatus>('/admin/xpics');
     const s = xp.value.settings;
-    if (fillForm) xpForm.value = { enabled: s.enabled, channel: s.channel, daily: s.daily, ytDaily: s.ytDaily, min: s.min, max: s.max, fetchHour: s.fetchHour };
+    if (fillForm) xpForm.value = { enabled: s.enabled, channel: s.channel, daily: s.daily, ytDaily: s.ytDaily, ttDaily: s.ttDaily ?? 0, min: s.min, max: s.max, fetchHour: s.fetchHour };
     // 手动发布默认选最新的 1 张
     if (!manual.value.touched && xp.value.recent.length) manual.value.images = [xp.value.recent[0]];
   } catch (e: any) { show(e.message); }
 }
 
-/** 手动发布：自己写文字 + 选图（默认最新 1 张，最多 4 张，也可以自己传），发到 X / YouTube */
-const manual = ref({ platforms: ['x', 'youtube'] as string[], text: '', en: '', images: [] as string[], uploaded: [] as string[], touched: false, sending: false, uploading: false, translating: false });
+/** 手动发布：自己写文字 + 选图（默认最新 1 张，最多 4 张，也可以自己传），发到 X / YouTube / TikTok */
+const manual = ref({ platforms: ['x', 'youtube', 'tiktok'] as string[], text: '', en: '', images: [] as string[], uploaded: [] as string[], touched: false, sending: false, uploading: false, translating: false });
 /** X 按加权字符数算（免费号 280）：汉字 / 全角算 2，其他算 1；另外预留 @ 账号那一行约 25 */
 const X_MENTIONS_RESERVE = 25;
 function xLength() {
@@ -119,7 +121,7 @@ async function sendManual() {
   const m = manual.value;
   if (!m.platforms.length) return show('至少选一个平台');
   if (!m.images.length) return show('至少选 1 张图');
-  if (!confirm(`马上发到 ${m.platforms.map((p) => (p === 'x' ? 'X' : 'YouTube')).join(' + ')}？`)) return;
+  if (!confirm(`马上发到 ${m.platforms.map(picsName).join(' + ')}？`)) return;
   m.sending = true;
   try {
     const r = await api<{ ids: string[] }>('/admin/xpics/manual', { method: 'POST', body: { platforms: m.platforms, text: m.text, en: m.en, images: m.images } });
@@ -310,7 +312,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
     </div>
 
     <div class="card" style="margin-top: 12px">
-      <div style="font-weight: 600; margin-bottom: 6px">美女图（Telegram 频道 → X 纯图帖 + YouTube 图集短视频）</div>
+      <div style="font-weight: 600; margin-bottom: 6px">美女图（Telegram 频道 → X 纯图帖 + YouTube / TikTok 图集短视频）</div>
       <div class="muted" style="margin-bottom: 12px">
         每天 <b>{{ xpForm.fetchHour }} 点</b>用后台登录的 Telegram 账号拉来源频道<b>最近 24 小时</b>的图片，存到服务器 MinIO（<code>xpics/日期/</code>）进图片池；
         按每天次数在上面的发布时段（{{ form.hourStart }}~{{ form.hourEnd }} 点）里平均排开，每次从池子取几张（同一相册的放一起），<b>正文不带文字</b>，由外网发布机发到 X，发完自动回复一条 USDC 代币链接。不占上面 X 的每日条数。X 一条最多 4 张图。
@@ -320,6 +322,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
         <label class="muted">来源频道 t.me/<input v-model="xpForm.channel" style="width: 140px" /></label>
         <label class="muted">X 每天 <input v-model.number="xpForm.daily" type="number" min="1" max="20" style="width: 50px" /> 次</label>
         <label class="muted">YouTube 每天 <input v-model.number="xpForm.ytDaily" type="number" min="0" max="5" style="width: 50px" /> 条</label>
+        <label class="muted">TikTok 每天 <input v-model.number="xpForm.ttDaily" type="number" min="0" max="5" style="width: 50px" /> 条</label>
         <label class="muted">每次 <input v-model.number="xpForm.min" type="number" min="1" max="4" style="width: 44px" /> ~ <input v-model.number="xpForm.max" type="number" min="1" max="4" style="width: 44px" /> 张</label>
         <label class="muted">每天 <input v-model.number="xpForm.fetchHour" type="number" min="0" max="23" style="width: 50px" /> 点拉取</label>
         <button class="small" @click="saveXPics">保存</button>
@@ -331,7 +334,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
         今天：
         <template v-if="xp?.today.length">
           <span v-for="t in xp.today" :key="t.id" style="margin-right: 10px">
-            {{ t.platform === 'youtube' ? 'YouTube' : 'X' }} {{ fmt(t.scheduledAt) }}<span v-if="t.manual">（手动）</span>
+            {{ picsName(t.platform) }} {{ fmt(t.scheduledAt) }}<span v-if="t.manual">（手动）</span>
             <span class="tag" :class="STATUS[t.status]?.cls">{{ STATUS[t.status]?.text }}</span>
             <a v-if="t.resultUrl" :href="t.resultUrl" target="_blank" style="color: var(--accent)">查看</a>
           </span>
@@ -351,10 +354,10 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
       <div style="border-top: 1px solid var(--border, #eee); margin-top: 14px; padding-top: 12px">
         <div style="font-weight: 600; margin-bottom: 6px">手动发布</div>
         <div class="muted" style="font-size: 12px; margin-bottom: 8px">
-          写中文，点「AI 翻译」出英文（可以改；没点的话发布时自动翻）。X：正文 = 中文 + 英文，末尾自动 @arc 和另外 2 个 Arc 头部账号，发完照样回复 $EGIRL 链接；YouTube：图合成竖屏短视频，英文当配音和字幕，英文第一行当标题，简介放中英双语。文字留空就用默认文案。不占每日次数。
+          写中文，点「AI 翻译」出英文（可以改；没点的话发布时自动翻）。X：正文 = 中文 + 英文，末尾自动 @arc 和另外 2 个 Arc 头部账号，发完照样回复 $EGIRL 链接；YouTube：图合成竖屏短视频，英文当配音和字幕，英文第一行当标题，简介放中英双语；TikTok：同样合成短视频，中英文一起配音 + 字幕，文案 = 中英双语 + $EGIRL 推广行（link in bio）+ 话题。文字留空就用默认文案。不占每日次数。
         </div>
         <div class="row" style="gap: 14px; align-items: center; margin-bottom: 8px">
-          <label v-for="p in [{ k: 'x', n: 'X' }, { k: 'youtube', n: 'YouTube' }]" :key="p.k" class="muted" style="display: flex; align-items: center; gap: 4px">
+          <label v-for="p in PICS_PLATFORMS" :key="p.k" class="muted" style="display: flex; align-items: center; gap: 4px">
             <input type="checkbox" style="width: auto" :checked="manual.platforms.includes(p.k)" @change="toggle(manual.platforms, p.k)" /> {{ p.n }}
           </label>
         </div>
