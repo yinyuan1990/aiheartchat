@@ -142,15 +142,18 @@ export class XPicsService implements OnModuleInit {
         select: { id: true, platform: true, status: true, scheduledAt: true, tags: true, resultUrl: true, error: true },
       }),
       this.prisma.xPic.findMany({ where: USABLE, orderBy: { postedAt: 'desc' }, take: 12, select: { url: true } }),
-      this.gallery(24),
+      // 没发过的排前面（新的在前），不够 24 张再拿发过的补
+      this.gallery(300).then((all) => [...all.filter((x) => !x.used), ...all.filter((x) => x.used)].slice(0, 24)),
     ]);
     return {
       settings: s, pool, unchecked, rejected, busy: this.busy,
       rejectedSamples: rejectedSamples.map((r) => ({ url: r.url, reason: r.skipReason })),
       today: today.map((j) => ({ ...j, id: j.id.toString(), manual: j.tags === MANUAL_TAG })),
       samples: samples.map((x) => x.url),
-      /** 手动发布选图用：合格的图（用没用过都算），新的在前 */
+      /** 手动发布选图用：合格的图，没发过的在前，各自新的在前 */
       recent: recent.map((x) => x.url),
+      /** recent 里已经发过（自动排过或手动发过）的 */
+      recentUsed: recent.filter((x) => x.used).map((x) => x.url),
     };
   }
 
@@ -202,6 +205,8 @@ export class XPicsService implements OnModuleInit {
       });
       ids.push(job.id.toString());
     }
+    // 用到的池子图记为已用：自动排期不再拿它重发，后台默认选图也跳过它
+    await this.prisma.xPic.updateMany({ where: { url: { in: images }, jobId: null }, data: { jobId: BigInt(ids[0]) } });
     return { ids };
   }
 
@@ -211,9 +216,9 @@ export class XPicsService implements OnModuleInit {
       where: { checked: true, skipReason: '' },
       orderBy: [{ postedAt: 'desc' }, { msgId: 'asc' }],
       take: Math.min(Math.max(1, Math.floor(limit)), 1000),
-      select: { id: true, url: true, postedAt: true },
+      select: { id: true, url: true, postedAt: true, jobId: true },
     });
-    return rows.map((r) => ({ id: r.id, url: r.url, postedAt: r.postedAt }));
+    return rows.map((r) => ({ id: r.id, url: r.url, postedAt: r.postedAt, used: r.jobId !== null }));
   }
 
   // ---------- 手动 ----------

@@ -57,7 +57,7 @@ async function applyDraft(j: Job) {
 }
 
 interface XPicsSettings { enabled: boolean; channel: string; daily: number; ytDaily: number; ttDaily: number; min: number; max: number; fetchHour: number; lastFetch: string; lastResult: string }
-interface XPicsStatus { settings: XPicsSettings; pool: number; unchecked: number; rejected: number; rejectedSamples: { url: string; reason: string }[]; busy: boolean; samples: string[]; recent: string[]; today: { id: string; platform: string; status: number; scheduledAt: string; manual: boolean; resultUrl: string; error: string }[] }
+interface XPicsStatus { settings: XPicsSettings; pool: number; unchecked: number; rejected: number; rejectedSamples: { url: string; reason: string }[]; busy: boolean; samples: string[]; recent: string[]; recentUsed?: string[]; today: { id: string; platform: string; status: number; scheduledAt: string; manual: boolean; resultUrl: string; error: string }[] }
 const xp = ref<XPicsStatus | null>(null);
 const xpForm = ref({ enabled: false, channel: '', daily: 5, ytDaily: 1, ttDaily: 0, min: 2, max: 4, fetchHour: 0 });
 const PICS_PLATFORMS = [{ k: 'x', n: 'X' }, { k: 'youtube', n: 'YouTube' }, { k: 'tiktok', n: 'TikTok' }];
@@ -67,8 +67,11 @@ async function loadXPics(fillForm = false) {
     xp.value = await api<XPicsStatus>('/admin/xpics');
     const s = xp.value.settings;
     if (fillForm) xpForm.value = { enabled: s.enabled, channel: s.channel, daily: s.daily, ytDaily: s.ytDaily, ttDaily: s.ttDaily ?? 0, min: s.min, max: s.max, fetchHour: s.fetchHour };
-    // 手动发布默认选最新的 1 张
-    if (!manual.value.touched && xp.value.recent.length) manual.value.images = [xp.value.recent[0]];
+    // 手动发布默认选最新的 1 张还没发过的（都发过了就选最新的）
+    if (!manual.value.touched && xp.value.recent.length) {
+      const used = new Set(xp.value.recentUsed ?? []);
+      manual.value.images = [xp.value.recent.find((u) => !used.has(u)) ?? xp.value.recent[0]];
+    }
   } catch (e: any) { show(e.message); }
 }
 
@@ -369,17 +372,18 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
           </span>
         </div>
         <textarea v-model="manual.en" rows="3" placeholder="English（点上面按钮自动生成，可修改）" style="width: 100%; box-sizing: border-box"></textarea>
-        <div class="muted" style="font-size: 12px; margin: 8px 0 4px">配图（点选，最多 4 张，已选 {{ manual.images.length }} 张；默认最新 1 张）：</div>
+        <div class="muted" style="font-size: 12px; margin: 8px 0 4px">配图（点选，最多 4 张，已选 {{ manual.images.length }} 张；默认最新 1 张没发过的，没发过的排前面）：</div>
         <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center">
-          <img
-            v-for="u in [...manual.uploaded, ...(xp?.recent ?? [])]"
-            :key="u"
-            :src="u"
-            :title="manual.images.includes(u) ? `第 ${manual.images.indexOf(u) + 1} 张` : ''"
-            style="width: 64px; height: 64px; object-fit: cover; border-radius: 4px; cursor: pointer"
-            :style="{ outline: manual.images.includes(u) ? '3px solid var(--accent)' : 'none', opacity: manual.images.includes(u) ? 1 : 0.55 }"
-            @click="toggleManualImage(u)"
-          />
+          <div v-for="u in [...manual.uploaded, ...(xp?.recent ?? [])]" :key="u" style="position: relative; width: 64px; height: 64px">
+            <img
+              :src="u"
+              :title="manual.images.includes(u) ? `第 ${manual.images.indexOf(u) + 1} 张` : ''"
+              style="width: 64px; height: 64px; object-fit: cover; border-radius: 4px; cursor: pointer"
+              :style="{ outline: manual.images.includes(u) ? '3px solid var(--accent)' : 'none', opacity: manual.images.includes(u) ? 1 : 0.55 }"
+              @click="toggleManualImage(u)"
+            />
+            <span v-if="xp?.recentUsed?.includes(u)" style="position: absolute; left: 2px; bottom: 2px; background: rgba(0, 0, 0, 0.65); color: #fff; font-size: 10px; padding: 0 4px; border-radius: 3px; pointer-events: none">已发</span>
+          </div>
           <label class="small ghost" style="display: inline-flex; align-items: center; justify-content: center; width: 64px; height: 64px; border: 1px dashed var(--border, #ccc); border-radius: 4px; cursor: pointer; font-size: 12px">
             {{ manual.uploading ? '上传中' : '+ 上传' }}
             <input type="file" accept="image/*" hidden @change="uploadManualImage" />
