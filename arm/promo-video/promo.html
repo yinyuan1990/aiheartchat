@@ -1,0 +1,365 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0 }
+html, body { width: 1080px; height: 1920px; overflow: hidden; background: #04050c; font-family: "Microsoft YaHei", "Segoe UI", sans-serif; color: #fff }
+.bg { position: absolute; inset: 0; overflow: hidden }
+.blob { position: absolute; border-radius: 50%; filter: blur(110px); opacity: .5 }
+.b1 { width: 900px; height: 900px; background: #ff2d7a; left: -320px; top: -220px; animation: drift1 14s ease-in-out infinite alternate }
+.b2 { width: 1000px; height: 1000px; background: #2f6bff; right: -420px; bottom: 120px; animation: drift2 17s ease-in-out infinite alternate }
+.b3 { width: 620px; height: 620px; background: #8b5cf6; left: 220px; top: 900px; animation: drift1 11s ease-in-out infinite alternate-reverse }
+@keyframes drift1 { to { transform: translate(300px, 420px) scale(1.2) } }
+@keyframes drift2 { to { transform: translate(-300px, -520px) scale(.85) } }
+.grid { position: absolute; left: -50%; width: 200%; height: 1000px; bottom: -160px; transform: perspective(600px) rotateX(62deg); transform-origin: 50% 0;
+  background-image: linear-gradient(rgba(120,160,255,.28) 2px, transparent 2px), linear-gradient(90deg, rgba(120,160,255,.28) 2px, transparent 2px);
+  background-size: 90px 90px; animation: gridmove 1.6s linear infinite;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 45%); mask-image: linear-gradient(to bottom, transparent, #000 45%) }
+@keyframes gridmove { to { background-position: 0 90px } }
+.pt { position: absolute; width: 6px; height: 6px; border-radius: 50%; background: #fff; box-shadow: 0 0 12px #fff; animation: floatup linear infinite }
+@keyframes floatup { from { transform: translateY(0); opacity: 0 } 15% { opacity: .9 } 85% { opacity: .9 } to { transform: translateY(-900px); opacity: 0 } }
+
+.scene { position: absolute; inset: 0; display: none }
+.center { position: absolute; left: 0; right: 0; text-align: center }
+.rise { animation: rise .9s cubic-bezier(.2,.8,.2,1) both; animation-delay: var(--d, 0s) }
+.pop { animation: pop .8s cubic-bezier(.2,.8,.2,1) both; animation-delay: var(--d, 0s) }
+@keyframes rise { from { opacity: 0; transform: translateY(80px) } to { opacity: 1; transform: none } }
+@keyframes pop { 0% { opacity: 0; transform: scale(.4) } 60% { opacity: 1; transform: scale(1.08) } 100% { opacity: 1; transform: scale(1) } }
+.grad { background: linear-gradient(90deg, #ff5fa2, #ffd36e 50%, #6fa8ff); -webkit-background-clip: text; background-clip: text; color: transparent }
+.en { font-family: "Segoe UI", sans-serif; letter-spacing: 6px; color: rgba(255,255,255,.62); font-weight: 600 }
+.phase { position: absolute; left: 0; right: 0; text-align: center; font-family: "Segoe UI"; font-weight: 800; letter-spacing: 14px; font-size: 40px; color: #ff5fa2 }
+
+.glitch { display: inline-block; text-shadow: 7px 0 #ff2d7a, -7px 0 #2f6bff; animation: pop .8s cubic-bezier(.2,.8,.2,1) both, jitter .1s steps(2) .8s 10 }
+@keyframes jitter { 0% { transform: translate(4px, -3px) } 50% { transform: translate(-4px, 3px) } 100% { transform: none } }
+
+.cards { position: absolute; top: 560px; left: 80px; right: 80px; display: flex; flex-direction: column; gap: 46px }
+.card { position: relative; overflow: hidden; display: flex; align-items: center; gap: 46px; padding: 46px 56px; border-radius: 36px; background: rgba(255,255,255,.06); border: 2px solid rgba(255,255,255,.14); box-shadow: 0 20px 60px rgba(0,0,0,.45) }
+.card::after { content: ""; position: absolute; top: 0; bottom: 0; width: 180px; left: -260px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.18), transparent); transform: skewX(-20deg); animation: sheen 3s ease-in-out infinite; animation-delay: inherit }
+@keyframes sheen { 0%, 40% { left: -260px } 70%, 100% { left: 1100px } }
+.card .big { font-size: 140px; font-weight: 900; width: 170px; text-align: center; font-family: "Segoe UI"; line-height: 1 }
+.card .t { font-size: 60px; font-weight: 800 }
+.card .s { font-size: 32px; color: rgba(255,255,255,.6); margin-top: 8px; font-family: "Segoe UI" }
+
+.node { position: absolute; width: 310px; height: 176px; margin-left: -155px; margin-top: -88px; border-radius: 30px; background: rgba(10,13,32,.92); border: 3px solid rgba(255,255,255,.2);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; transition: none }
+.node .nt { font-size: 44px; font-weight: 800 }
+.node .ns { font-size: 24px; color: rgba(255,255,255,.55); font-family: "Segoe UI"; margin-top: 6px; letter-spacing: 1px }
+.draw { stroke-dashoffset: 2074; animation: draw 2.2s cubic-bezier(.4,0,.2,1) forwards; animation-delay: var(--d, 0s) }
+@keyframes draw { to { stroke-dashoffset: 0 } }
+.fee { position: absolute; left: 80px; right: 80px; top: 1400px }
+.bar { display: flex; height: 64px; border-radius: 18px; overflow: hidden; background: rgba(255,255,255,.08) }
+.seg { height: 100%; transform-origin: left; animation: grow 1.2s cubic-bezier(.2,.8,.2,1) both; animation-delay: var(--d, 0s) }
+@keyframes grow { from { transform: scaleX(0) } to { transform: scaleX(1) } }
+.legend { display: flex; justify-content: space-between; margin-top: 18px; font-size: 30px }
+.legend b { font-family: "Segoe UI"; font-size: 40px; display: block }
+.legend span { color: rgba(255,255,255,.62) }
+
+.bignum { font-size: 330px; font-weight: 900; font-family: "Segoe UI"; color: transparent; -webkit-text-stroke: 4px rgba(255,255,255,.55); line-height: 1 }
+.disc { position: absolute; border-radius: 50%; display: flex; align-items: center; justify-content: center; overflow: hidden }
+.fd { position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: #ffd36e; box-shadow: 0 0 14px #ffd36e }
+
+.counter { font-family: "Segoe UI"; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums }
+.live { display: inline-block; background: #ff2d4d; color: #fff; border-radius: 12px; padding: 4px 18px; font-family: "Segoe UI"; font-weight: 800; font-size: 44px; animation: blink 1s steps(2) infinite }
+@keyframes blink { 50% { opacity: .55 } }
+#wallwrap { position: absolute; left: 0; right: 0; top: 760px; bottom: 90px; overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 85%, transparent); mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 85%, transparent) }
+#wall { position: absolute; left: 0; top: 0; transform-origin: 0 0 }
+.tile { position: absolute; width: 112px; height: 148px; border-radius: 14px; overflow: hidden; border: 2px solid rgba(255,255,255,.18) }
+.tile svg { position: absolute; left: 16px; top: 18px; width: 80px; height: 80px }
+.tile .lv { position: absolute; left: 6px; top: 6px; background: #ff2d4d; font: 800 13px "Segoe UI"; padding: 1px 6px; border-radius: 4px }
+.tile .tk { position: absolute; left: 0; right: 0; bottom: 8px; text-align: center; font: 800 17px "Segoe UI" }
+.tile.hero { border: 4px solid #ff5fa2; box-shadow: 0 0 40px #ff5fa2 }
+.tile.hero img { width: 100%; height: 100%; object-fit: cover }
+
+.ticker { position: absolute; left: 0; right: 0; height: 96px; background: #e0102f; overflow: hidden; display: flex; align-items: center; box-shadow: 0 0 60px rgba(255,20,60,.7) }
+.ticker .tx { white-space: nowrap; font: 900 50px "Segoe UI", "Microsoft YaHei"; letter-spacing: 4px; animation: marquee 6s linear infinite }
+.ticker.rev .tx { animation-direction: reverse }
+@keyframes marquee { from { transform: translateX(0) } to { transform: translateX(-1800px) } }
+.goal { display: inline-block; border: 4px solid #ffd36e; color: #ffd36e; border-radius: 60px; padding: 10px 44px; font-size: 52px; font-weight: 900; letter-spacing: 6px }
+#flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none }
+
+#brand { position: absolute; left: 50px; top: 60px; display: none; align-items: center; gap: 14px; font: 800 38px "Segoe UI"; opacity: .85 }
+#brand img { width: 58px }
+#sub { position: absolute; left: 60px; right: 60px; bottom: 120px; text-align: center }
+#sub span { display: inline-block; background: rgba(0,0,0,.55); border-radius: 18px; padding: 12px 30px; font-size: 46px; font-weight: 700; color: #ffe27a; text-shadow: 0 2px 6px #000 }
+#sweep { position: absolute; top: -200px; bottom: -200px; width: 260px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.22), transparent); transform: skewX(-18deg); opacity: 0; pointer-events: none }
+</style>
+</head>
+<body>
+<div class="bg" id="bg">
+  <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+  <div class="grid"></div>
+</div>
+
+<section class="scene" id="s0">
+  <div class="center" style="top:620px">
+    <div class="glitch" style="font-size:205px;font-weight:900;letter-spacing:10px">史无前例</div>
+    <div class="rise en" style="--d:.5s;font-size:46px;margin-top:34px">UNPRECEDENTED</div>
+    <div class="rise" style="--d:1s;font-size:54px;margin-top:80px;color:#d6ddff">一场链上实验，正在 <b class="grad">Arc 主网</b> 发生</div>
+  </div>
+</section>
+
+<section class="scene" id="s1">
+  <div class="center" style="top:470px">
+    <img class="pop" src="../web/public/brand/mark.png" style="width:360px;filter:drop-shadow(0 0 60px rgba(120,160,255,.85))">
+    <div class="rise" style="--d:.4s;font-size:180px;font-weight:900;font-family:'Segoe UI';letter-spacing:8px;line-height:1.1">Arm</div>
+    <div class="rise" style="--d:.8s;font-size:60px;font-weight:800;margin-top:10px">Arc 主网 · Meme 发射台</div>
+    <div class="rise en" style="--d:1.1s;font-size:34px;margin-top:22px">MEME LAUNCHPAD ON ARC</div>
+    <div class="rise" style="--d:1.7s;font-size:38px;margin-top:70px;color:#a9b8e8">Arc：Circle 推出的 USDC 原生公链</div>
+  </div>
+</section>
+
+<section class="scene" id="s2">
+  <div class="center rise" style="top:290px;font-size:78px;font-weight:900">发币，<span class="grad">从未如此简单</span></div>
+  <div class="center en rise" style="--d:.2s;top:410px;font-size:32px">LAUNCH IN ONE CLICK</div>
+  <div class="cards">
+    <div class="card rise" data-at="一键发币"><div class="big grad">0</div><div><div class="t">零成本发币</div><div class="s">Free to launch</div></div></div>
+    <div class="card rise" data-at="自动建池"><div class="big grad">∞</div><div><div class="t">LP 永久锁定</div><div class="s">Liquidity locked forever</div></div></div>
+    <div class="card rise" data-at="全部用"><div class="big grad">$</div><div><div class="t">USDC 计价</div><div class="s">Priced in USDC · on-chain</div></div></div>
+  </div>
+</section>
+
+<section class="scene" id="s3">
+  <div class="center rise" style="top:170px;font-size:88px;font-weight:900">商业<span class="grad">闭环</span></div>
+  <div class="center en rise" style="--d:.2s;top:295px;font-size:32px">THE FLYWHEEL</div>
+  <svg width="1080" height="1000" style="position:absolute;top:360px;left:0">
+    <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff5fa2"/><stop offset=".5" stop-color="#ffd36e"/><stop offset="1" stop-color="#6fa8ff"/></linearGradient></defs>
+    <circle cx="540" cy="500" r="330" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="20"/>
+    <circle class="draw" data-at="主播免费" cx="540" cy="500" r="330" fill="none" stroke="url(#lg)" stroke-width="10" stroke-linecap="round" stroke-dasharray="2074" transform="rotate(-90 540 500)"/>
+    <circle id="dot" cx="540" cy="170" r="22" fill="#fff" style="filter:drop-shadow(0 0 18px #fff)"/>
+  </svg>
+  <div class="center rise" data-at="每笔交易" style="top:780px"><div style="font-size:36px;color:rgba(255,255,255,.7)">每笔交易</div><div class="grad" style="font-size:120px;font-weight:900;font-family:'Segoe UI';line-height:1.1">1%</div><div style="font-size:36px;color:rgba(255,255,255,.7)">池费</div></div>
+  <div class="node pop" data-at="主播免费" style="left:540px;top:530px"><div class="nt">主播发币</div><div class="ns">Streamer launches</div></div>
+  <div class="node pop" data-at="粉丝买入" style="left:870px;top:860px"><div class="nt">粉丝交易</div><div class="ns">Fans trade</div></div>
+  <div class="node pop" data-at="百分之七十八" style="left:540px;top:1190px"><div class="nt"><span class="grad">78%</span> 归主播</div><div class="ns">Fees to creator</div></div>
+  <div class="node pop" data-at="主播开播" style="left:210px;top:860px"><div class="nt">开播·分佣</div><div class="ns">Stream &amp; refer</div></div>
+  <div class="fee rise" data-at="百分之七十八">
+    <div class="bar">
+      <div class="seg" data-at="百分之七十八" style="width:78%;background:linear-gradient(90deg,#ff5fa2,#ffd36e)"></div>
+      <div class="seg" data-at="百分之七十八" style="width:16%;background:#6fa8ff"></div>
+      <div class="seg" data-at="百分之七十八" style="width:5%;background:#8b5cf6"></div>
+      <div class="seg" data-at="百分之七十八" style="width:1%;background:#fff"></div>
+    </div>
+    <div class="legend"><div><b class="grad">78%</b><span>主播 Creator</span></div><div><b>16%</b><span>储备 Reserve</span></div><div><b>5%</b><span>回购 Buyback</span></div><div><b>1%</b><span>团队 Team</span></div></div>
+  </div>
+</section>
+
+<section class="scene" id="s5">
+  <div class="phase rise" style="top:200px">PHASE 01</div>
+  <div class="center pop" style="top:270px"><div class="bignum">01</div></div>
+  <div class="center rise" style="--d:.4s;top:620px;font-size:100px;font-weight:900">KOL <span class="grad">入驻</span></div>
+  <div class="center en rise" style="--d:.6s;top:750px;font-size:32px">KOLS BRING THEIR COMMUNITIES</div>
+  <div id="kol" style="position:absolute;left:0;top:840px;width:1080px;height:720px"></div>
+  <div class="center rise" data-at="一个" style="top:1560px;font-size:62px;font-weight:800">1 个 KOL = <span class="grad">1 个社区</span></div>
+</section>
+
+<section class="scene" id="s6">
+  <div id="wallwrap"><div id="wall"></div></div>
+  <div class="phase rise" style="top:170px">PHASE 02</div>
+  <div class="center" style="top:240px"><span id="cnt6" class="counter grad" style="font-size:230px">0</span></div>
+  <div class="center rise" style="--d:.6s;top:480px;font-size:78px;font-weight:900">位主播 · 同时发币</div>
+  <div class="center rise" data-at="同时开播" style="top:590px;font-size:60px;font-weight:800"><span class="live">● LIVE</span> 同时在线直播</div>
+  <div class="center en rise" style="--d:1s;top:690px;font-size:28px">1,000 STREAMERS · 1,000 TOKENS · LIVE TOGETHER</div>
+</section>
+
+<section class="scene" id="s7" style="background:radial-gradient(circle at 50% 48%, rgba(255,30,60,.38), transparent 62%)">
+  <div class="ticker" style="top:170px"><div class="tx">BREAKING NEWS · 特大新闻 · BREAKING NEWS · 特大新闻 · BREAKING NEWS · 特大新闻 · BREAKING NEWS · 特大新闻 · BREAKING NEWS · 特大新闻 ·</div></div>
+  <div class="center pop" style="--d:.3s;top:400px"><span class="goal">目标 · GOAL</span></div>
+  <div class="center rise" style="--d:.5s;top:540px;font-size:64px;font-weight:800">链上累计成交额</div>
+  <div class="center" style="top:690px"><div id="cnt7" class="counter" style="font-size:112px">$0</div></div>
+  <div class="center pop" data-at="一百亿" style="top:880px"><div class="grad" style="font-size:300px;font-weight:900;line-height:1.1">100 亿</div></div>
+  <div class="center en rise" data-at="一百亿" style="top:1240px;font-size:34px">$10 BILLION · ON-CHAIN VOLUME · GOAL</div>
+  <div class="center rise" data-at="特大新闻" style="top:1350px;font-size:68px;font-weight:900">整个行业的 <span style="color:#ff3b5c">特大新闻</span></div>
+  <div class="ticker rev" style="top:1520px"><div class="tx">特大新闻 · BREAKING NEWS · 特大新闻 · BREAKING NEWS · 特大新闻 · BREAKING NEWS · 特大新闻 · BREAKING NEWS · 特大新闻 · BREAKING NEWS ·</div></div>
+</section>
+
+<section class="scene" id="s8">
+  <div class="center" style="top:300px">
+    <img class="pop" src="../web/public/brand/mark.png" style="width:260px;filter:drop-shadow(0 0 60px rgba(120,160,255,.85))">
+    <div class="rise" style="--d:.4s;font-size:96px;font-weight:900;margin-top:40px">为你的心中女神</div>
+    <div class="rise grad" style="--d:.7s;font-size:170px;font-weight:900;line-height:1.2">发射一枚</div>
+    <div class="rise en" style="--d:1s;font-size:34px;margin-top:10px">LAUNCH ONE FOR YOUR GODDESS</div>
+    <div class="rise" style="--d:1.4s;margin-top:70px;display:inline-flex;align-items:center;gap:26px;background:rgba(255,255,255,.07);border:2px solid rgba(255,95,162,.6);border-radius:90px;padding:18px 44px 18px 18px">
+      <img src="../1.jpg" style="width:110px;height:110px;border-radius:50%;object-fit:cover;object-position:50% 20%">
+      <div style="text-align:left"><div style="font:900 52px 'Segoe UI'">$EGIRL</div><div style="font-size:30px;color:rgba(255,255,255,.65)">E-Girl Companion · 线上陪玩代币</div></div>
+    </div>
+    <div class="rise" style="--d:1.8s;margin-top:60px;font:800 64px 'Segoe UI';letter-spacing:2px">arm.yyheart.com</div>
+  </div>
+  <div class="center rise" style="--d:2.2s;top:1560px;font-size:26px;color:rgba(255,255,255,.5);line-height:1.6">路线图为规划目标，不代表承诺，不构成投资建议<br>Roadmap goals, not promises. Not financial advice.</div>
+</section>
+
+<div id="brand"><img src="../web/public/brand/mark.png">Arm</div>
+<div id="sub"><span></span></div>
+<div id="sweep"></div>
+<div id="flash"></div>
+
+<script src="out/timeline.js"></script>
+<script>
+const TL = window.TL;
+const $ = (id) => document.getElementById(id);
+const clamp = (x) => Math.max(0, Math.min(1, x));
+const ease = (x) => 1 - Math.pow(1 - clamp(x), 3);
+const easeIO = (x) => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2 };
+const PERSON = '<svg viewBox="0 0 100 100"><circle cx="50" cy="36" r="19" fill="rgba(255,255,255,.88)"/><path d="M14 96c4-24 19-34 36-34s32 10 36 34z" fill="rgba(255,255,255,.88)"/></svg>';
+const MIC = '<svg viewBox="0 0 100 100" width="96" height="96"><rect x="36" y="14" width="28" height="46" rx="14" fill="#fff"/><path d="M26 46c0 14 10 24 24 24s24-10 24-24" stroke="#fff" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M50 70v14M36 86h28" stroke="#fff" stroke-width="7" stroke-linecap="round"/></svg>';
+
+// 背景粒子
+let seed = 7;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+for (let i = 0; i < 46; i++) {
+  const p = document.createElement('div');
+  p.className = 'pt';
+  p.style.left = rnd() * 1080 + 'px';
+  p.style.top = 900 + rnd() * 1100 + 'px';
+  p.style.animationDuration = 5 + rnd() * 7 + 's';
+  p.style.animationDelay = -rnd() * 10 + 's';
+  const s = 3 + rnd() * 6; p.style.width = p.style.height = s + 'px';
+  $('bg').appendChild(p);
+}
+
+// 关键词对时：data-at 的元素在配音念到这个词时出场
+for (const sc of TL.scenes) {
+  $(sc.id).querySelectorAll('[data-at]').forEach((n) => {
+    const i = sc.text.indexOf(n.dataset.at);
+    const d = i >= 0 ? sc.vo + sc.ct[i] - 0.15 : 0;
+    n.style.setProperty('--d', d.toFixed(2) + 's');
+    n.dataset.t = d;
+  });
+}
+const at = (sc, word) => { const i = sc.text.indexOf(word); return i >= 0 ? sc.vo + sc.ct[i] : 0 };
+
+// 第一期：KOL + 粉丝流
+const kol = $('kol');
+const kc = document.createElement('div');
+kc.className = 'disc';
+Object.assign(kc.style, { width: '210px', height: '210px', left: '435px', top: '255px', background: 'linear-gradient(135deg,#ff5fa2,#8b5cf6)', boxShadow: '0 0 80px #ff5fa2' });
+kc.innerHTML = MIC;
+kol.appendChild(kc);
+const avatars = [], dots = [];
+for (let k = 0; k < 6; k++) {
+  const a = document.createElement('div');
+  a.className = 'disc';
+  const h = [330, 280, 210, 20, 190, 300][k];
+  Object.assign(a.style, { width: '130px', height: '130px', background: `linear-gradient(135deg,hsl(${h},80%,60%),hsl(${h + 40},70%,30%))`, border: '3px solid rgba(255,255,255,.5)' });
+  a.innerHTML = PERSON.replace('<svg', '<svg width="92" height="92"');
+  kol.appendChild(a); avatars.push(a);
+}
+for (let i = 0; i < 90; i++) { const d = document.createElement('div'); d.className = 'fd'; kol.appendChild(d); dots.push({ el: d, a: rnd() * Math.PI * 2, k: i % 6, off: rnd() * 2.2 }); }
+
+// 第二期：主播墙
+const COLS = 13, ROWS = 15, TW = 124, TH = 160, HERO = 7 * COLS + 6;
+const NAMES = ['LUNA', 'MIA', 'YUKI', 'NANA', 'KIKI', 'ZOE', 'AVA', 'LILY', 'MOMO', 'SUKI', 'RIN', 'EVA', 'IVY', 'CICI', 'AMY', 'NOVA', 'ROSE', 'MEI', 'JOY', 'SORA'];
+const wall = $('wall');
+const tiles = [];
+for (let i = 0; i < COLS * ROWS; i++) {
+  const t = document.createElement('div');
+  t.className = 'tile' + (i === HERO ? ' hero' : '');
+  t.style.left = (i % COLS) * TW + 'px';
+  t.style.top = Math.floor(i / COLS) * TH + 'px';
+  if (i === HERO) t.innerHTML = '<img src="../1.jpg"><div class="lv">LIVE</div><div class="tk" style="text-shadow:0 1px 4px #000">$EGIRL</div>';
+  else {
+    const h = 250 + rnd() * 140;
+    t.style.background = `linear-gradient(160deg,hsl(${h % 360},75%,52%),hsl(${(h + 50) % 360},70%,22%))`;
+    let y = 20, pts = [];
+    for (let k = 0; k <= 8; k++) { y = Math.max(3, Math.min(27, y + (rnd() - 0.38) * 10)); pts.push(`${6 + k * 12.5},${y.toFixed(1)}`); }
+    const spark = `<svg viewBox="0 0 112 30" style="position:absolute;left:0;top:96px;width:112px;height:30px"><polyline points="${pts.join(' ')}" fill="none" stroke="#5dffa8" stroke-width="3" stroke-linejoin="round"/></svg>`;
+    t.innerHTML = PERSON + spark + '<div class="lv">LIVE</div><div class="tk">$' + NAMES[Math.floor(rnd() * NAMES.length)] + (i % 7 ? '' : Math.floor(rnd() * 90 + 10)) + '</div>';
+  }
+  wall.appendChild(t);
+  tiles.push({ el: t, rank: i === HERO ? -1 : rnd() });
+}
+tiles.slice().sort((a, b) => a.rank - b.rank).forEach((t, r) => (t.order = r));
+
+const hooks = {
+  s3(lt, sc) {
+    const T = ['主播免费', '粉丝买入', '百分之七十八', '主播开播'].map((w) => at(sc, w));
+    const A = [-90, 0, 90, 180];
+    let ang;
+    if (lt < T[0]) ang = -90;
+    else if (lt >= T[3]) { const u = lt - T[3]; ang = 180 + 90 * u + 60 * u * u; }
+    else { let i = 0; while (lt >= T[i + 1]) i++; ang = A[i] + (A[i + 1] - A[i]) * easeIO((lt - T[i]) / Math.min(0.9, T[i + 1] - T[i])); }
+    const r = ang * Math.PI / 180;
+    $('dot').setAttribute('cx', 540 + 330 * Math.cos(r));
+    $('dot').setAttribute('cy', 500 + 330 * Math.sin(r));
+    $('dot').style.opacity = lt < T[0] ? 0 : 1;
+    document.querySelectorAll('#s3 .node').forEach((n, i) => {
+      let diff = Math.abs((((ang - A[i]) % 360) + 540) % 360 - 180);
+      const on = lt >= T[i] && diff < 25;
+      n.style.borderColor = on ? '#ff5fa2' : 'rgba(255,255,255,.2)';
+      n.style.boxShadow = on ? '0 0 50px rgba(255,95,162,.8)' : 'none';
+    });
+  },
+  s5(lt) {
+    const cx = 540, cy = 360, app = ease((lt - 0.8) / 1.2);
+    avatars.forEach((a, k) => {
+      const ang = (k * 60 + lt * 14) * Math.PI / 180, R = 270 * app;
+      a.style.left = cx + R * Math.cos(ang) - 65 + 'px';
+      a.style.top = cy + R * Math.sin(ang) - 65 + 'px';
+      a.style.opacity = app;
+      a.style.transform = `scale(${0.4 + 0.6 * app})`;
+    });
+    dots.forEach((d) => {
+      const tt = lt - 1.6 - d.off;
+      if (tt < 0) { d.el.style.opacity = 0; return; }
+      const p = (tt % 2.2) / 2.2;
+      const ang = (d.k * 60 + lt * 14) * Math.PI / 180;
+      const tx = cx + 270 * Math.cos(ang), ty = cy + 270 * Math.sin(ang);
+      const sx = cx + 620 * Math.cos(d.a), sy = cy + 620 * Math.sin(d.a);
+      const e = ease(p);
+      d.el.style.left = sx + (tx - sx) * e + 'px';
+      d.el.style.top = sy + (ty - sy) * e + 'px';
+      d.el.style.opacity = Math.sin(Math.PI * p);
+    });
+  },
+  s6(lt) {
+    const z = ease(lt / 6);
+    const s = 3.0 + (0.64 - 3.0) * z;
+    const fx = (HERO % COLS) * TW + 56, fy = Math.floor(HERO / COLS) * TH + 74;
+    const ww = $('wallwrap');
+    wall.style.transform = `translate(${ww.clientWidth / 2}px,${ww.clientHeight / 2}px) scale(${s}) translate(${-fx}px,${-fy}px)`;
+    const n = Math.round(1000 * easeIO((lt - 0.6) / 5));
+    $('cnt6').textContent = n.toLocaleString('en-US');
+    const lit = (n / 1000) * tiles.length;
+    tiles.forEach((t) => (t.el.style.opacity = t.order < lit || t.rank < 0 ? 1 : 0.1));
+  },
+  s7(lt, sc) {
+    const ty = at(sc, '一百亿');
+    const v = 1e10 * Math.pow(clamp((lt - 0.8) / (ty - 0.8)), 3);
+    $('cnt7').textContent = '$' + Math.round(v).toLocaleString('en-US');
+    const f = lt > ty ? Math.max(0, 1 - (lt - ty) / 0.45) : 0;
+    $('flash').style.opacity = f * 0.85;
+    const sh = lt > ty && lt < ty + 0.5 ? 14 * (1 - (lt - ty) / 0.5) : 0;
+    $('s7').style.translate = `${sh * Math.sin(lt * 90)}px ${sh * Math.cos(lt * 70)}px`;
+  },
+};
+
+function seek(t) {
+  document.querySelectorAll('.bg').forEach((b) => b.getAnimations({ subtree: true }).forEach((a) => { a.pause(); a.currentTime = t * 1000 }));
+  let cur = null;
+  for (const sc of TL.scenes) {
+    const el = $(sc.id), lt = t - sc.start;
+    const on = lt >= 0 && lt < sc.dur;
+    el.style.display = on ? 'block' : 'none';
+    if (!on) continue;
+    cur = sc;
+    el.getAnimations({ subtree: true }).forEach((a) => { a.pause(); a.currentTime = lt * 1000 });
+    const fin = clamp(lt / 0.35), fout = sc.last ? 1 : clamp((sc.dur - lt) / 0.35);
+    el.style.opacity = Math.min(fin, fout);
+    el.style.transform = `scale(${1 + 0.05 * (1 - ease(lt / 0.7))})`;
+    if (hooks[sc.id]) hooks[sc.id](lt, sc);
+    const sw = lt / 0.7;
+    $('sweep').style.opacity = sw < 1 && sc.start > 0 ? 1 : 0;
+    $('sweep').style.left = -400 + 1700 * sw + 'px';
+  }
+  $('brand').style.display = cur && !['s0', 's1', 's8'].includes(cur.id) ? 'flex' : 'none';
+  if (!cur || cur.id !== 's7') $('flash').style.opacity = 0;
+  const sub = TL.subs.find((s) => t >= s.t0 && t < s.t1);
+  $('sub').firstElementChild.textContent = sub ? sub.text : '';
+  $('sub').style.display = sub ? 'block' : 'none';
+}
+window.seek = seek;
+seek(0);
+</script>
+</body>
+</html>
