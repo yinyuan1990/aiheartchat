@@ -77,7 +77,11 @@ def wrap_cjk(text: str, max_len: int) -> list[str]:
 
 
 def sentences(text: str, max_len: int = 16) -> list[str]:
-    """按标点切成字幕句；太长的再按逗号 / 长度硬切。英文按句号 / 逗号切，再按单词折成 ≤24 字符的行"""
+    """按标点切成字幕句；太长的再按逗号 / 长度硬切。英文按句号 / 逗号切，再按单词折成 ≤24 字符的行。
+    中英混排（双语文案）按行分别判断，否则整段被当成英文，中文行没有空格折不了"""
+    lines = [s for s in text.split("\n") if s.strip()]
+    if len(lines) > 1 and len({is_latin(s) for s in lines}) > 1:
+        return [x for s in lines for x in sentences(s, max_len)]
     if is_latin(text):
         out_en: list[str] = []
         for s in re.findall(r"[^.!?;\n]+[.!?;]*", text):

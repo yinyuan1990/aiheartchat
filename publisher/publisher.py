@@ -211,7 +211,11 @@ def check_all(cfg: dict, periodic: bool = False) -> dict:
         try:
             # 外网平台定时检查也不开浏览器（X 只能有界面跑，定时弹窗太烦）
             if periodic and (p in cfg.get("no_periodic_check", []) or p in OVERSEAS):
-                if p in PROFILE_PLATFORMS:
+                if p == "tiktok":
+                    # 只读本地 cookie 里的 sessionid、不开 TikTok 页面；光看目录在不在会把掉线的登录态报成 OK
+                    import tiktok
+                    ok, msg = tiktok.check(PROFILES / "tiktok")
+                elif p in PROFILE_PLATFORMS:
                     ok, msg = (PROFILES / p).exists(), "按本地登录态，未联网核对"
                 else:
                     ok = cookie_file(p, cfg).exists()
