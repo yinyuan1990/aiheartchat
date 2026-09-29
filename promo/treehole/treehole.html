@@ -24,8 +24,10 @@ html, body { width: 1080px; height: 1920px; overflow: hidden; background: transp
 </head>
 <body>
 <div class="vig"></div>
+<canvas id="wave" width="1080" height="640" style="position:absolute;left:0;top:1130px"></canvas>
 <div id="root"></div>
 <script src="out/timeline.js"></script>
+<script src="out/spectrum.js"></script>
 <script>
 const TL = window.TL;
 const clamp = (x) => Math.max(0, Math.min(1, x));
@@ -48,7 +50,49 @@ for (const sc of TL.scenes) {
   root.appendChild(el);
 }
 
+// 音乐律动波浪线：SPEC.bands[帧] = 8 个频段能量（0~1，低频在前），由 make.py 从最终混音分析出来
+const cv = document.getElementById('wave'), g = cv.getContext('2d');
+const LINES = [
+  { bands: [0, 1], amp: 270, freq: 0.0062, speed: 0.9, phase: 0.0, w: 4.5, a: 0.85 },
+  { bands: [1, 2], amp: 225, freq: 0.0081, speed: 1.2, phase: 1.3, w: 3.6, a: 0.72 },
+  { bands: [2, 3, 4], amp: 190, freq: 0.0104, speed: 1.6, phase: 2.6, w: 3.0, a: 0.62 },
+  { bands: [4, 5], amp: 150, freq: 0.0133, speed: 2.1, phase: 3.9, w: 2.4, a: 0.52 },
+  { bands: [5, 6, 7], amp: 120, freq: 0.0170, speed: 2.7, phase: 5.2, w: 2.0, a: 0.44 },
+];
+function drawWave(t) {
+  g.clearRect(0, 0, cv.width, cv.height);
+  const f = Math.min(SPEC.bands.length - 1, Math.max(0, Math.round(t * SPEC.fps)));
+  const e = SPEC.bands[f];
+  const vis = Math.min(clamp(t / 1.2), clamp((TL.total - t) / 1.8));
+  if (vis <= 0) return;
+  const cy = cv.height / 2, W = cv.width;
+  const grad = g.createLinearGradient(0, 0, W, 0);
+  grad.addColorStop(0, 'rgba(255,214,150,0)');
+  grad.addColorStop(0.2, 'rgba(255,214,150,1)');
+  grad.addColorStop(0.55, 'rgba(255,170,190,1)');
+  grad.addColorStop(0.8, 'rgba(200,180,255,1)');
+  grad.addColorStop(1, 'rgba(200,180,255,0)');
+  g.strokeStyle = grad;
+  g.shadowColor = 'rgba(255,200,170,0.9)';
+  for (const L of LINES) {
+    const lvl = L.bands.reduce((s, b) => s + e[b], 0) / L.bands.length;
+    const A = L.amp * (0.1 + 0.9 * lvl * lvl + 0.15 * lvl);
+    g.globalAlpha = L.a * vis;
+    g.lineWidth = L.w * (0.8 + 0.6 * lvl);
+    g.shadowBlur = 16 + 30 * lvl;
+    g.beginPath();
+    for (let x = 0; x <= W; x += 6) {
+      const env = Math.pow(Math.sin(Math.PI * x / W), 2);
+      const y = cy + A * env * Math.sin(x * L.freq + t * L.speed + L.phase) * (0.65 + 0.35 * Math.sin(x * L.freq * 0.37 - t * L.speed * 0.55));
+      x ? g.lineTo(x, y) : g.moveTo(x, y);
+    }
+    g.stroke();
+  }
+  g.globalAlpha = 1;
+}
+
 function seek(t) {
+  drawWave(t);
   for (const sc of TL.scenes) {
     const el = document.getElementById(sc.id), lt = t - sc.start;
     const on = lt >= 0 && lt < sc.dur;

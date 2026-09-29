@@ -116,29 +116,65 @@ def render(tl: dict, bg: Path | None, preview: list[float] | None = None) -> Pat
     return silent
 
 
-def mix(tl: dict, silent: Path) -> Path:
+def mix_audio(tl: dict) -> Path:
+    """配音按场景对齐 + 钢琴 BGM → out/audio.m4a（先混好，波浪线要按它来动）"""
     total = tl["total"]
-    ins, parts = ["-i", str(silent), "-stream_loop", "-1", "-i", str(BGM)], []
+    ins, parts = ["-stream_loop", "-1", "-i", str(BGM)], []
     for k, s in enumerate(tl["scenes"]):
         ins += ["-i", str(OUT / f"vo-{s['id']}.mp3")]
         ms = int((s["start"] + s["vo"]) * 1000)
-        parts.append(f"[{k + 2}:a]adelay={ms}|{ms}[v{k}]")
+        parts.append(f"[{k + 1}:a]adelay={ms}|{ms}[v{k}]")
     n = len(tl["scenes"])
-    fc = ";".join(parts) + ";" + "".join(f"[v{k}]" for k in range(n)) + f"amix=inputs={n}:normalize=0:dropout_transition=0[vo];" \
-         f"[1:a]volume=0.22,afade=t=in:d=1.5,afade=t=out:st={total - 3:.2f}:d=3[bg];[vo][bg]amix=inputs=2:normalize=0:duration=first,loudnorm=I=-14:TP=-1.5:LRA=11[a]"
+    fc = ";".join(parts) + ";" + "".join(f"[v{k}]" for k in range(n)) + f"amix=inputs={n}:normalize=0:dropout_transition=0,apad[vo];" \
+         f"[0:a]volume=0.22,afade=t=in:d=1.5,afade=t=out:st={total - 3:.2f}:d=3[bg];[vo][bg]amix=inputs=2:normalize=0:duration=shortest,loudnorm=I=-14:TP=-1.5:LRA=11[a]"
+    out = OUT / "audio.m4a"
+    run_ffmpeg([*ins, "-filter_complex", fc, "-map", "[a]", "-c:a", "aac", "-b:a", "192k", "-t", f"{total:.3f}", str(out)])
+    return out
+
+
+def spectrum(audio: Path, total: float) -> None:
+    """每帧 8 个频段（60Hz~8kHz 对数分布）的能量，归一化到 0~1，快起慢落 → out/spectrum.js"""
+    import numpy as np
+
+    sr = 22050
+    raw = subprocess.run([ffmpeg(), "-hide_banner", "-loglevel", "error", "-i", str(audio), "-f", "s16le", "-ac", "1", "-ar", str(sr), "-"], capture_output=True, check=True).stdout
+    pcm = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768
+    n, win = int(total * FPS), 2048
+    edges = np.geomspace(60, 8000, 9)
+    freqs = np.fft.rfftfreq(win, 1 / sr)
+    idx = [(freqs >= edges[i]) & (freqs < edges[i + 1]) for i in range(8)]
+    hann = np.hanning(win)
+    pad = np.concatenate([np.zeros(win // 2, np.float32), pcm, np.zeros(win, np.float32)])
+    db = np.zeros((n, 8), np.float32)
+    for i in range(n):
+        c = int(i / FPS * sr)
+        mag = np.abs(np.fft.rfft(pad[c:c + win] * hann))
+        db[i] = [20 * np.log10(mag[m].mean() + 1e-6) for m in idx]
+    lo, hi = np.percentile(db, 10, axis=0), np.percentile(db, 97, axis=0)
+    lvl = np.clip((db - lo) / np.maximum(hi - lo, 1e-3), 0, 1)
+    out, prev = [], np.zeros(8, np.float32)
+    for v in lvl:
+        prev = np.where(v > prev, prev + (v - prev) * 0.6, prev + (v - prev) * 0.12)
+        out.append([round(float(x), 3) for x in prev])
+    (OUT / "spectrum.js").write_text("window.SPEC = " + json.dumps({"fps": FPS, "bands": out}) + ";\n", encoding="utf-8")
+
+
+def mux(silent: Path, audio: Path, total: float) -> Path:
     out = OUT / "treehole-promo.mp4"
-    run_ffmpeg([*ins, "-filter_complex", fc, "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-t", f"{total:.3f}", "-movflags", "+faststart", str(out)])
+    run_ffmpeg(["-i", str(silent), "-i", str(audio), "-map", "0:v", "-map", "1:a", "-c", "copy", "-t", f"{total:.3f}", "-movflags", "+faststart", str(out)])
     return out
 
 
 if __name__ == "__main__":
     tl = build_timeline()
     print("total", tl["total"], [(s["id"], s["dur"]) for s in tl["scenes"]])
+    audio = mix_audio(tl)
+    spectrum(audio, tl["total"])
     if "--preview" in sys.argv:
         render(tl, None, [s["start"] + s["dur"] * 0.8 for s in tl["scenes"]])
         print("preview done")
     else:
         bg = background(tl)
         silent = render(tl, bg)
-        out = mix(tl, silent)
+        out = mux(silent, audio, tl["total"])
         print("done", out, media_duration(out))
