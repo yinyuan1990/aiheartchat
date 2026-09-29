@@ -90,7 +90,7 @@ export class XPicsService implements OnModuleInit {
     return {
       enabled: get('enabled') === '1',
       channel: get('channel') || DEFAULT_CHANNEL,
-      daily: clamp(get('daily'), 1, 20, 5),
+      daily: clamp(get('daily'), 0, 20, 5),
       ytDaily: clamp(get('yt_daily'), 0, 5, 0),
       ttDaily: clamp(get('tt_daily'), 0, 5, 0),
       min,
@@ -117,7 +117,7 @@ export class XPicsService implements OnModuleInit {
       }
     }
     if (d.enabled !== undefined) await this.set('enabled', d.enabled ? '1' : '0');
-    if (d.daily !== undefined) await this.set('daily', String(clamp(d.daily, 1, 20, cur.daily)));
+    if (d.daily !== undefined) await this.set('daily', String(clamp(d.daily, 0, 20, cur.daily)));
     if (d.ytDaily !== undefined) await this.set('yt_daily', String(clamp(d.ytDaily, 0, 5, cur.ytDaily)));
     if (d.ttDaily !== undefined) await this.set('tt_daily', String(clamp(d.ttDaily, 0, 5, cur.ttDaily)));
     const min = d.min !== undefined ? clamp(d.min, 1, X_MAX_IMAGES, cur.min) : cur.min;
@@ -347,7 +347,7 @@ export class XPicsService implements OnModuleInit {
   /** 把今天没排满的次数在发布时段里平均排开（已过去的时间点不补） */
   private async plan() {
     const s = await this.settings();
-    await this.planFor('x', s.daily);
+    if (s.daily > 0) await this.planFor('x', s.daily);
     if (s.ytDaily > 0) await this.planFor('youtube', s.ytDaily);
     if (s.ttDaily > 0) await this.planFor('tiktok', s.ttDaily);
   }

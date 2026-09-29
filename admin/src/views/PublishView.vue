@@ -76,7 +76,7 @@ async function loadXPics(fillForm = false) {
 }
 
 /** 手动发布：自己写文字 + 选图（默认最新 1 张，最多 4 张，也可以自己传），发到 X / YouTube / TikTok */
-const manual = ref({ platforms: ['x', 'youtube', 'tiktok'] as string[], text: '', en: '', images: [] as string[], uploaded: [] as string[], touched: false, sending: false, uploading: false, translating: false });
+const manual = ref({ platforms: ['youtube', 'tiktok'] as string[], text: '', en: '', images: [] as string[], uploaded: [] as string[], touched: false, sending: false, uploading: false, translating: false });
 /** X 按加权字符数算（免费号 280）：汉字 / 全角算 2，其他算 1；另外预留 @ 账号那一行约 25 */
 const X_MENTIONS_RESERVE = 25;
 function xLength() {
@@ -323,7 +323,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
       <div class="row" style="flex-wrap: wrap; gap: 14px; align-items: center">
         <label class="muted" style="display: flex; align-items: center; gap: 6px"><input v-model="xpForm.enabled" type="checkbox" style="width: auto" /> <b :style="{ color: xpForm.enabled ? 'var(--accent)' : '' }">{{ xpForm.enabled ? '已开启' : '已关闭' }}</b></label>
         <label class="muted">来源频道 t.me/<input v-model="xpForm.channel" style="width: 140px" /></label>
-        <label class="muted">X 每天 <input v-model.number="xpForm.daily" type="number" min="1" max="20" style="width: 50px" /> 次</label>
+        <label class="muted">X 每天 <input v-model.number="xpForm.daily" type="number" min="0" max="20" style="width: 50px" /> 次</label>
         <label class="muted">YouTube 每天 <input v-model.number="xpForm.ytDaily" type="number" min="0" max="5" style="width: 50px" /> 条</label>
         <label class="muted">TikTok 每天 <input v-model.number="xpForm.ttDaily" type="number" min="0" max="5" style="width: 50px" /> 条</label>
         <label class="muted">每次 <input v-model.number="xpForm.min" type="number" min="1" max="4" style="width: 44px" /> ~ <input v-model.number="xpForm.max" type="number" min="1" max="4" style="width: 44px" /> 张</label>
