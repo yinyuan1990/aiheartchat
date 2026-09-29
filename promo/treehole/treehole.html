@@ -1,0 +1,88 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0 }
+html, body { width: 1080px; height: 1920px; overflow: hidden; background: transparent; font-family: "Microsoft YaHei", sans-serif; color: #fff }
+.vig { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 35%, rgba(0,0,0,.55) 100%) }
+.scene { position: absolute; inset: 0; display: none }
+.big { position: absolute; left: 80px; right: 80px; text-align: center; font-family: KaiTi, STKaiti, serif; font-size: 78px; line-height: 1.6; text-shadow: 0 4px 24px rgba(0,0,0,.9) }
+.card { position: absolute; left: 100px; right: 100px; top: 440px; padding: 70px 72px 90px; background: #f5eee0; color: #3a2f24; border-radius: 8px;
+  box-shadow: 0 40px 90px rgba(0,0,0,.65); transform-origin: 50% 0 }
+.card::before { content: ""; position: absolute; left: 50%; top: -26px; width: 180px; height: 52px; margin-left: -90px; background: rgba(255,240,200,.55); transform: rotate(-3deg) }
+.card .hd { font-size: 30px; color: #9a8a76; letter-spacing: 2px; margin-bottom: 36px }
+.card .tx { font-family: KaiTi, STKaiti, serif; font-size: 60px; line-height: 100px; min-height: 500px; white-space: pre-wrap;
+  background-image: repeating-linear-gradient(transparent 0 97px, rgba(90,60,30,.12) 97px 100px) }
+.cur { display: inline-block; width: 4px; height: 58px; background: #3a2f24; vertical-align: -10px; margin-left: 4px }
+.ring { position: absolute; left: 540px; top: 900px; width: 520px; height: 520px; margin: -260px 0 0 -260px; border-radius: 50%;
+  border: 3px solid rgba(255,236,190,.7); box-shadow: 0 0 80px rgba(255,220,160,.55), inset 0 0 80px rgba(255,220,160,.35) }
+.title { position: absolute; left: 0; right: 0; top: 820px; text-align: center; font-family: KaiTi, STKaiti, serif; font-size: 150px; letter-spacing: 16px;
+  text-shadow: 0 0 40px rgba(255,220,160,.9), 0 4px 20px #000 }
+.sub { position: absolute; left: 0; right: 0; text-align: center; font-size: 40px; letter-spacing: 8px; color: rgba(255,245,225,.85); text-shadow: 0 2px 10px #000 }
+</style>
+</head>
+<body>
+<div class="vig"></div>
+<div id="root"></div>
+<script src="out/timeline.js"></script>
+<script>
+const TL = window.TL;
+const clamp = (x) => Math.max(0, Math.min(1, x));
+const ease = (x) => 1 - Math.pow(1 - clamp(x), 3);
+const root = document.getElementById('root');
+
+for (const sc of TL.scenes) {
+  const el = document.createElement('section');
+  el.className = 'scene';
+  el.id = sc.id;
+  if (sc.kind === 'note') {
+    el.innerHTML = `<div class="card" style="--r:${sc.rot}deg"><div class="hd">${sc.header}</div><div class="tx"></div></div>`;
+  } else if (sc.kind === 'title') {
+    el.innerHTML = `<div class="big" style="top:420px;font-size:70px">${sc.text}</div><div class="ring"></div><div class="title">私密树洞</div><div class="sub" style="top:1230px">匿名 · 不评判 · 只倾听</div>`;
+  } else if (sc.kind === 'end') {
+    el.innerHTML = `<div class="big" style="top:760px">${sc.text}</div><div class="sub" style="top:1060px;font-size:38px;letter-spacing:4px">${sc.slogan}</div>`;
+  } else {
+    el.innerHTML = `<div class="big" style="top:${sc.top || 780}px">${sc.lines.join('<br>')}</div>`;
+  }
+  root.appendChild(el);
+}
+
+function seek(t) {
+  for (const sc of TL.scenes) {
+    const el = document.getElementById(sc.id), lt = t - sc.start;
+    const on = lt >= 0 && lt < sc.dur;
+    el.style.display = on ? 'block' : 'none';
+    if (!on) continue;
+    const fin = clamp(lt / 0.5), fout = sc.last ? clamp((sc.dur - lt) / 1.2) : clamp((sc.dur - lt) / 0.5);
+    el.style.opacity = Math.min(fin, fout);
+    const vt = lt - sc.vo;
+    if (sc.kind === 'note') {
+      const card = el.querySelector('.card');
+      card.style.transform = `translateY(${90 * (1 - ease(lt / 0.8))}px) rotate(${sc.rot}deg)`;
+      let n = 0;
+      while (n < sc.ct.length && sc.ct[n] <= vt) n++;
+      const blink = Math.floor(t * 2.2) % 2 === 0 || n < sc.text.length;
+      el.querySelector('.tx').innerHTML = sc.text.slice(0, n) + (blink ? '<span class="cur"></span>' : '<span class="cur" style="opacity:0"></span>');
+    } else if (sc.kind === 'title') {
+      const a = ease((lt - 0.2) / 0.9), b = ease((vt - 0.3) / 1.2);
+      el.querySelector('.big').style.opacity = a;
+      const ring = el.querySelector('.ring');
+      ring.style.opacity = b;
+      ring.style.transform = `scale(${0.7 + 0.3 * b + 0.03 * Math.sin(lt * 2.4)})`;
+      el.querySelector('.title').style.opacity = ease((vt - 0.6) / 1.0);
+      el.querySelector('.title').style.letterSpacing = 16 + 24 * (1 - ease((vt - 0.6) / 1.4)) + 'px';
+      el.querySelector('.sub').style.opacity = ease((vt - 1.6) / 0.8);
+    } else {
+      const big = el.querySelector('.big');
+      big.style.transform = `translateY(${40 * (1 - ease(lt / 1.0))}px)`;
+      const sub = el.querySelector('.sub');
+      if (sub) sub.style.opacity = ease((vt - 1.2) / 1.0);
+    }
+  }
+}
+window.seek = seek;
+seek(0);
+</script>
+</body>
+</html>
