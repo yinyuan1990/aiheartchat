@@ -133,6 +133,59 @@ fun GiftIcon(tint: Color, size: Dp = 20.dp) {
     }
 }
 
+/** 相机图标（实心，叠在取景画面上用） */
+@Composable
+fun CameraIcon(tint: Color, size: Dp = 24.dp) {
+    Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        val body = androidx.compose.ui.graphics.Path().apply {
+            addRoundRect(androidx.compose.ui.geometry.RoundRect(w * 0.08f, w * 0.28f, w * 0.92f, w * 0.84f, CornerRadius(w * 0.12f)))
+            moveTo(w * 0.34f, w * 0.3f); lineTo(w * 0.4f, w * 0.16f); lineTo(w * 0.6f, w * 0.16f); lineTo(w * 0.66f, w * 0.3f); close()
+        }
+        drawPath(body, tint)
+        drawCircle(Color.Black.copy(alpha = 0.35f), w * 0.17f, Offset(w * 0.5f, w * 0.56f))
+        drawCircle(tint, w * 0.11f, Offset(w * 0.5f, w * 0.56f))
+    }
+}
+
+/** 关闭 × 图标 */
+@Composable
+fun XMarkIcon(tint: Color, size: Dp = 16.dp) {
+    Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        val sw = w * 0.12f
+        drawLine(tint, Offset(w * 0.2f, w * 0.2f), Offset(w * 0.8f, w * 0.8f), strokeWidth = sw, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+        drawLine(tint, Offset(w * 0.8f, w * 0.2f), Offset(w * 0.2f, w * 0.8f), strokeWidth = sw, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+    }
+}
+
+/** 向下箭头（下拉菜单提示） */
+@Composable
+fun ChevronDownIcon(tint: Color, size: Dp = 12.dp) {
+    Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        val path = androidx.compose.ui.graphics.Path().apply {
+            moveTo(w * 0.18f, w * 0.36f); lineTo(w * 0.5f, w * 0.68f); lineTo(w * 0.82f, w * 0.36f)
+        }
+        drawPath(path, tint, style = Stroke(w * 0.16f, cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+    }
+}
+
+/** 向上箭头（发送） */
+@Composable
+fun ArrowUpIcon(tint: Color, size: Dp = 20.dp) {
+    Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        val sw = w * 0.12f
+        val cap = androidx.compose.ui.graphics.StrokeCap.Round
+        drawLine(tint, Offset(w * 0.5f, w * 0.18f), Offset(w * 0.5f, w * 0.84f), strokeWidth = sw, cap = cap)
+        val head = androidx.compose.ui.graphics.Path().apply {
+            moveTo(w * 0.22f, w * 0.44f); lineTo(w * 0.5f, w * 0.16f); lineTo(w * 0.78f, w * 0.44f)
+        }
+        drawPath(head, tint, style = Stroke(sw, cap = cap, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+    }
+}
+
 /** 图片图标 */
 @Composable
 fun ImageIcon(tint: Color, size: Dp = 20.dp) {

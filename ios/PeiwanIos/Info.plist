@@ -14,7 +14,9 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSCameraUsageDescription</key>
-	<string>视频通话与扫描二维码需要使用摄像头</string>
+	<string>视频通话、扫描二维码与聊天拍照需要使用摄像头</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>在聊天中选择照片发送需要访问相册</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>保存收款码图片需要访问相册</string>
 	<key>NSMicrophoneUsageDescription</key>

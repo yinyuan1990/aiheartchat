@@ -8,6 +8,7 @@ import { parseSticker, StickerPayload } from '../stickers';
 import { dropLastGrapheme } from '../emojis';
 import { EmojiPanel } from '../components/EmojiPanel';
 import { StickerView } from '../components/StickerView';
+import { AttachSheet, AttachAction } from '../components/AttachSheet';
 
 interface MsgItem {
   id: string;
@@ -476,13 +477,12 @@ export function ChatRoomPage() {
   const [showDownload, setShowDownload] = useState(false);
   const [showGift, setShowGift] = useState(false);
   const [showGroupInfo, setShowGroupInfo] = useState(false);
-  const [showPanel, setShowPanel] = useState(false);
+  const [showAttach, setShowAttach] = useState(false);
   const [showSticker, setShowSticker] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const [fullImage, setFullImage] = useState<string | null>(null);
   const [toast, setToast] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
 
   const showToast = (msg: string) => {
@@ -562,16 +562,26 @@ export function ChatRoomPage() {
     sendRaw('sticker', JSON.stringify(p));
   };
 
-  const sendMedia = async (files: FileList | null) => {
-    const file = files?.[0];
-    if (!file) return;
-    try {
-      const isVideo = file.type.startsWith('video');
-      const url = await uploadFile(isVideo ? 'video' : 'image', file);
-      sendRaw(isVideo ? 'video' : 'image', url);
-    } catch (e: any) {
-      alert(e.message);
+  /** 「+」弹框选的图 / 视频：按顺序逐个上传发送，说明文字最后单独发一条 */
+  const sendMedia = async (files: File[], caption: string) => {
+    let failed = 0;
+    for (const file of files) {
+      try {
+        const isVideo = file.type.startsWith('video');
+        const url = await uploadFile(isVideo ? 'video' : 'image', file);
+        sendRaw(isVideo ? 'video' : 'image', url);
+      } catch {
+        failed++;
+      }
     }
+    if (caption.trim()) sendRaw('text', caption.trim());
+    if (failed) showToast(`${failed} 个文件发送失败`);
+  };
+
+  const handleAttach = (a: AttachAction) => {
+    if (a === 'gift') setShowGift(true);
+    else if (a === 'location') sendLocation();
+    else setShowDownload(true);
   };
 
   const sendLocation = () => {
@@ -614,7 +624,7 @@ export function ChatRoomPage() {
         )}
       </div>
 
-      <div className="page page-pad" onClick={() => { setShowPanel(false); setShowSticker(false); }}>
+      <div className="page page-pad" onClick={() => setShowSticker(false)}>
         {messages.map((m, i) => {
           // 微信式时间分隔条：与上一条间隔超 5 分钟显示
           const prev = i > 0 ? new Date(messages[i - 1].createdAt).getTime() : 0;
@@ -644,16 +654,16 @@ export function ChatRoomPage() {
             value={input}
             placeholder="发消息"
             onChange={(e) => setInput(e.target.value)}
-            onFocus={() => { setShowPanel(false); setShowSticker(false); }}
+            onFocus={() => setShowSticker(false)}
             onKeyDown={(e) => e.key === 'Enter' && send()}
           />
           <span
             style={{ width: 40, height: 40, borderRadius: 20, flexShrink: 0, background: showSticker ? '#ffe1e7' : 'var(--bg-input)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: showSticker ? 'var(--accent)' : 'var(--text-2)', fontSize: 22 }}
-            onClick={() => { setShowSticker((v) => !v); setShowPanel(false); }}
+            onClick={() => setShowSticker((v) => !v)}
           >☺</span>
           <span
             style={{ width: 40, height: 40, borderRadius: 20, flexShrink: 0, background: 'var(--bg-input)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-2)', fontSize: 20 }}
-            onClick={() => { setShowPanel((v) => !v); setShowSticker(false); }}
+            onClick={() => { setShowAttach(true); setShowSticker(false); }}
           >+</span>
           {input.trim() && (
             <button className="btn-sm" style={{ height: 40, borderRadius: 20, flexShrink: 0 }} onClick={send}>发送</button>
@@ -667,27 +677,17 @@ export function ChatRoomPage() {
             onKeyboard={() => { setShowSticker(false); inputRef.current?.focus(); }}
           />
         )}
-        {showPanel && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, padding: '12px 12px 20px' }}>
-            {([
-              ['▦', '相册', () => { setShowPanel(false); fileRef.current?.click(); }],
-              ['◎', '位置', () => { setShowPanel(false); sendLocation(); }],
-              ...(state.convType === 1 ? [
-                ['✆', '语音通话', () => { setShowPanel(false); setShowDownload(true); }],
-                ...(me?.gender === 1 ? [['▣', '视频通话', () => { setShowPanel(false); setShowDownload(true); }]] : []),
-                ['❀', '礼物', () => { setShowPanel(false); setShowGift(true); }],
-              ] : []),
-            ] as [string, string, () => void][]).map(([icon, label, act]) => (
-              <div key={label} style={{ textAlign: 'center', cursor: 'pointer' }} onClick={act}>
-                <div style={{ width: 56, height: 56, margin: '0 auto', borderRadius: 14, background: 'var(--bg-input)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>{icon}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 6 }}>{label}</div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
-      <input ref={fileRef} type="file" accept="image/*,video/*" hidden onChange={(e) => sendMedia(e.target.files)} />
+      {showAttach && (
+        <AttachSheet
+          isSingle={state.convType === 1}
+          canVideoCall={me?.gender === 1}
+          onClose={() => setShowAttach(false)}
+          onSend={sendMedia}
+          onAction={handleAttach}
+        />
+      )}
       {toast && (
         <div style={{ position: 'fixed', top: 60, left: '50%', transform: 'translateX(-50%)', zIndex: 200, background: 'rgba(0,0,0,0.8)', color: '#fff', fontSize: 14, padding: '10px 18px', borderRadius: 20, whiteSpace: 'nowrap' }}>
           {toast}

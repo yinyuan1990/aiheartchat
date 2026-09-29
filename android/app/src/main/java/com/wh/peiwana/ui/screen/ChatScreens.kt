@@ -283,7 +283,7 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
     var fullImage by remember { mutableStateOf<String?>(null) }
     var recording by remember { mutableStateOf(false) }
     var voiceMode by remember { mutableStateOf(false) }
-    var showPanel by remember { mutableStateOf(false) }
+    var showAttach by remember { mutableStateOf(false) }
     var showSticker by remember { mutableStateOf(false) }
     val inputFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     val listState = rememberLazyListState()
@@ -352,14 +352,19 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
             appendLocal("location", "{\"name\":\"$name\"}")
         }
     }
-    val pickImg = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) scope.launch {
+    // 「+」弹框选的图 / 拍的照：按顺序逐张上传发送，说明文字最后单独发一条
+    fun sendImages(uris: List<Uri>, caption: String) = scope.launch {
+        var failed = 0
+        for (uri in uris) {
             runCatching {
                 val b = ctx.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
                 val url = Api.upload("image", b, "img.jpg", "image/jpeg")
                 WsClient.send(convType, targetId, "image", url); appendLocal("image", url)
-            }
+            }.onFailure { failed++ }
         }
+        val text = caption.trim()
+        if (text.isNotEmpty()) { WsClient.send(convType, targetId, "text", text); appendLocal("text", text) }
+        if (failed > 0) android.widget.Toast.makeText(ctx, "$failed 张图片发送失败", android.widget.Toast.LENGTH_SHORT).show()
     }
 
     fun startRec() {
@@ -446,7 +451,7 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
                 dismissButton = { Text("取消", color = TextSub, modifier = Modifier.noRippleClick { showClearConfirm = false }.padding(8.dp)) },
             )
         }
-        LazyColumn(state = listState, modifier = Modifier.weight(1f).padding(horizontal = 12.dp).noRippleClick { showPanel = false; showSticker = false; focus.clearFocus(); keyboard?.hide() }) {
+        LazyColumn(state = listState, modifier = Modifier.weight(1f).padding(horizontal = 12.dp).noRippleClick { showSticker = false; focus.clearFocus(); keyboard?.hide() }) {
             itemsIndexed(messages, key = { _, m -> m.id }) { idx, m ->
                 // 微信式时间分隔条：与上一条间隔超 5 分钟显示
                 if (shouldShowTime(messages, idx)) {
@@ -461,7 +466,7 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
         Column(modifier = Modifier.background(Bg2).imePadding().navigationBarsPadding()) {
             Row(modifier = Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.Bottom) {
                 Box(
-                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(20.dp)).background(Bg3).noRippleClick { voiceMode = !voiceMode; showPanel = false; showSticker = false; focus.clearFocus(); keyboard?.hide() },
+                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(20.dp)).background(Bg3).noRippleClick { voiceMode = !voiceMode; showSticker = false; focus.clearFocus(); keyboard?.hide() },
                     contentAlignment = Alignment.Center,
                 ) { if (voiceMode) KeyboardIcon(TextSub, 20.dp) else WaveformIcon(TextSub, 18.dp) } // 与 iOS 一致：waveform / keyboard
                 Spacer(Modifier.width(8.dp))
@@ -491,18 +496,18 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
                             textStyle = androidx.compose.ui.text.TextStyle(color = TextMain, fontSize = 15.sp),
                             cursorBrush = androidx.compose.ui.graphics.SolidColor(Accent),
                             maxLines = 4,
-                            modifier = Modifier.fillMaxWidth().focusRequester(inputFocus).onFocusChanged { if (it.isFocused) { showPanel = false; showSticker = false } },
+                            modifier = Modifier.fillMaxWidth().focusRequester(inputFocus).onFocusChanged { if (it.isFocused) showSticker = false },
                         )
                     }
                 }
                 Spacer(Modifier.width(8.dp))
                 // 表情按钮：面板顶替键盘（Telegram 式，点贴纸即发送）
                 Box(
-                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(20.dp)).background(if (showSticker) BubbleMine else Bg3).noRippleClick { focus.clearFocus(); keyboard?.hide(); voiceMode = false; showPanel = false; showSticker = !showSticker },
+                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(20.dp)).background(if (showSticker) BubbleMine else Bg3).noRippleClick { focus.clearFocus(); keyboard?.hide(); voiceMode = false; showSticker = !showSticker },
                     contentAlignment = Alignment.Center,
                 ) { SmileIcon(if (showSticker) Accent else TextSub, 22.dp) }
                 Spacer(Modifier.width(8.dp))
-                Box(modifier = Modifier.size(40.dp).clip(RoundedCornerShape(20.dp)).background(Bg3).noRippleClick { focus.clearFocus(); keyboard?.hide(); voiceMode = false; showSticker = false; showPanel = !showPanel }, contentAlignment = Alignment.Center) { PlusIcon(TextSub, 22.dp) }
+                Box(modifier = Modifier.size(40.dp).clip(RoundedCornerShape(20.dp)).background(Bg3).noRippleClick { focus.clearFocus(); keyboard?.hide(); showSticker = false; showAttach = true }, contentAlignment = Alignment.Center) { PlusIcon(TextSub, 22.dp) }
                 if (input.isNotBlank() && !voiceMode) {
                     Spacer(Modifier.width(8.dp))
                     Box(modifier = Modifier.height(40.dp).clip(RoundedCornerShape(20.dp)).background(Accent).noRippleClick {
@@ -523,37 +528,26 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
                     onKeyboard = { showSticker = false; inputFocus.requestFocus(); keyboard?.show() },
                 )
             }
-            // + 号功能面板（九宫格）
-            if (showPanel) {
-                val actions = buildList {
-                    add(Triple<String, @Composable (Color) -> Unit, () -> Unit>("相册", { ImageIcon(it, 26.dp) }, { showPanel = false; pickImg.launch("image/*") }))
-                    add(Triple<String, @Composable (Color) -> Unit, () -> Unit>("位置", { PinIcon(it, 24.dp) }, { showPanel = false; locPerm.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }))
-                    if (convType == 1) {
-                        add(Triple<String, @Composable (Color) -> Unit, () -> Unit>("语音通话", { MicIcon(it, 26.dp) }, { showPanel = false; onCall(1) }))
-                        // 视频通话仅男方可发起（女方只能接听）
-                        if (com.wh.peiwana.net.Session.gender == 1) {
-                            add(Triple<String, @Composable (Color) -> Unit, () -> Unit>("视频通话", { VideoIcon(it, 26.dp) }, { showPanel = false; onCall(2) }))
-                        }
-                        add(Triple<String, @Composable (Color) -> Unit, () -> Unit>("礼物", { GiftIcon(it, 26.dp) }, { showPanel = false; showGift = true }))
-                    }
-                }
-                Column(modifier = Modifier.fillMaxWidth().padding(12.dp, 12.dp, 12.dp, 20.dp)) {
-                    actions.chunked(4).forEach { rowItems ->
-                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                            rowItems.forEach { (label, icon, act) ->
-                                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f).noRippleClick(act)) {
-                                    Box(modifier = Modifier.size(56.dp).clip(RoundedCornerShape(14.dp)).background(Bg3), contentAlignment = Alignment.Center) { icon(TextMain) }
-                                    Text(label, color = TextSub, fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
-                                }
-                            }
-                            repeat(4 - rowItems.size) { Spacer(Modifier.weight(1f)) }
-                        }
-                    }
-                }
-            }
         }
     }
 
+    if (showAttach) {
+        AttachSheet(
+            isSingle = convType == 1,
+            // 视频通话仅男方可发起（女方只能接听）
+            canVideoCall = com.wh.peiwana.net.Session.gender == 1,
+            onDismiss = { showAttach = false },
+            onSend = { uris, caption -> sendImages(uris, caption) },
+            onAction = { a ->
+                when (a) {
+                    AttachAction.Gift -> { showGift = true }
+                    AttachAction.Location -> locPerm.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                    AttachAction.VoiceCall -> onCall(1)
+                    AttachAction.VideoCall -> onCall(2)
+                }
+            },
+        )
+    }
     if (showGift) GiftSheet(targetId) { showGift = false }
     fullImage?.let { u ->
         androidx.compose.ui.window.Dialog(onDismissRequest = { fullImage = null }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {

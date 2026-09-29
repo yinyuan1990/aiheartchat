@@ -1,4 +1,5 @@
 import SwiftUI
+import Photos
 import PhotosUI
 import AVFoundation
 import Combine
@@ -427,7 +428,7 @@ struct ChatRoomView: View {
     @State private var input = ""
     @State private var voiceMode = false
     @State private var recording = false
-    @State private var showPanel = false
+    @State private var showAttach = false
     @State private var showSticker = false
     @State private var showGift = false
     @State private var fullImage: String?
@@ -461,7 +462,7 @@ struct ChatRoomView: View {
                     }
                     .padding(.horizontal, 12).padding(.vertical, 8)
                 }
-                .onTapGesture { showPanel = false; showSticker = false; inputFocused = false }
+                .onTapGesture { showSticker = false; inputFocused = false }
                 // 进入聊天默认停在最底部（最新消息）；defaultScrollAnchor 是 iOS 17 API，改用 scrollTo
                 .onAppear {
                     if let last = messages.last {
@@ -473,8 +474,7 @@ struct ChatRoomView: View {
                 }
                 .onChange(of: inputFocused) { focused in
                     if focused {
-                        // 键盘弹出时收起 + 面板 / 表情面板，避免两者叠加把内容顶飞
-                        showPanel = false
+                        // 键盘弹出时收起表情面板，避免两者叠加把内容顶飞
                         showSticker = false
                         if let last = messages.last {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -544,6 +544,18 @@ struct ChatRoomView: View {
             }
             Button("取消", role: .cancel) {}
         }
+        .sheet(isPresented: $showAttach) {
+            AttachSheet(
+                isSingle: convType == 1,
+                canVideoCall: state.user?.gender == 1,
+                onClose: { showAttach = false },
+                onSendAssets: sendAttachAssets,
+                onSendDatas: sendAttachDatas,
+                onAction: handleAttach
+            )
+            .attachSheetDetents()
+            .compatSheetBackground(Theme.bg)
+        }
         .sheet(isPresented: $showGift) {
             GiftSheetView(toUserId: targetId)
                 .compatDetents(height: 420)
@@ -602,7 +614,7 @@ struct ChatRoomView: View {
         VStack(spacing: 0) {
             HStack(alignment: .bottom, spacing: 8) {
                 Button {
-                    voiceMode.toggle(); showPanel = false; showSticker = false; inputFocused = false
+                    voiceMode.toggle(); showSticker = false; inputFocused = false
                 } label: {
                     Image(systemName: voiceMode ? "keyboard" : "waveform")
                         .font(.system(size: 17)).foregroundStyle(Theme.textSub)
@@ -639,7 +651,7 @@ struct ChatRoomView: View {
 
                 // 表情按钮：面板顶替键盘（Telegram 式，点贴纸即发送）
                 Button {
-                    inputFocused = false; voiceMode = false; showPanel = false; showSticker.toggle()
+                    inputFocused = false; voiceMode = false; showSticker.toggle()
                 } label: {
                     Image(systemName: "face.smiling")
                         .font(.system(size: 19)).foregroundStyle(showSticker ? Theme.accent : Theme.textSub)
@@ -649,7 +661,7 @@ struct ChatRoomView: View {
                 .buttonStyle(.plain)
 
                 Button {
-                    inputFocused = false; voiceMode = false; showSticker = false; showPanel.toggle()
+                    inputFocused = false; showSticker = false; showAttach = true
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 18)).foregroundStyle(Theme.textSub)
@@ -682,62 +694,55 @@ struct ChatRoomView: View {
                     onKeyboard: { showSticker = false; inputFocused = true }
                 )
             }
-            if showPanel { panelGrid }
         }
         .background(Theme.bg2)
     }
 
-    private var panelGrid: some View {
-        let actions: [(String, String, () -> Void)] = {
-            var a: [(String, String, () -> Void)] = [
-                ("photo", "相册", { showPanel = false }),
-                ("mappin.and.ellipse", "位置", { showPanel = false; sendLocation() }),
-            ]
-            if convType == 1 {
-                let peerAvatar = messages.first(where: { $0.senderId == targetId })?.senderAvatar ?? ""
-                a.append(("phone", "语音通话", { showPanel = false; startCallWithPermissions(calleeId: targetId, type: 1, name: title, avatar: peerAvatar) }))
-                // 视频通话仅男方可发起（女方只能接听）
-                if state.user?.gender == 1 {
-                    a.append(("video", "视频通话", { showPanel = false; startCallWithPermissions(calleeId: targetId, type: 2, name: title, avatar: peerAvatar) }))
-                }
-                a.append(("gift", "礼物", { showPanel = false; showGift = true }))
-            }
-            return a
-        }()
-        let cols = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
-        return LazyVGrid(columns: cols, spacing: 14) {
-            ForEach(Array(actions.enumerated()), id: \.offset) { _, item in
-                if item.1 == "相册" {
-                    CompatPhotoPicker(kind: .images, onPicked: { datas in
-                        showPanel = false
-                        guard let data = datas.first else { return }
-                        Task {
-                            if let url = try? await Api.upload("image", data: data, filename: "img.jpg", mime: "image/jpeg") {
-                                sendMsg("image", url)
-                            }
-                        }
-                    }) {
-                        panelCell(icon: item.0, label: item.1)
-                    }
-                } else {
-                    Button { item.2() } label: {
-                        panelCell(icon: item.0, label: item.1)
-                    }
-                    .buttonStyle(.plain)
-                }
+    private func handleAttach(_ action: AttachAction) {
+        showAttach = false
+        let peerAvatar = messages.first(where: { $0.senderId == targetId })?.senderAvatar ?? ""
+        // 等弹框收起再弹礼物 / 通话页，两个 sheet 同时切换会丢一个
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            switch action {
+            case .gift: showGift = true
+            case .location: sendLocation()
+            case .voiceCall: startCallWithPermissions(calleeId: targetId, type: 1, name: title, avatar: peerAvatar)
+            // 视频通话仅男方可发起（女方只能接听），弹框里已按性别隐藏入口
+            case .videoCall: startCallWithPermissions(calleeId: targetId, type: 2, name: title, avatar: peerAvatar)
             }
         }
-        .padding(EdgeInsets(top: 12, leading: 12, bottom: 20, trailing: 12))
     }
 
-    private func panelCell(icon: String, label: String) -> some View {
-        VStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.system(size: 22)).foregroundStyle(Theme.text)
-                .frame(width: 56, height: 56)
-                .background(RoundedRectangle(cornerRadius: 14).fill(Theme.bg3))
-            Text(label).font(.system(size: 11)).foregroundStyle(Theme.textSub)
+    /// 相册多选：按选择顺序逐张上传发送，说明文字最后单独发一条
+    private func sendAttachAssets(_ assets: [PHAsset], caption: String) {
+        showAttach = false
+        Task {
+            var datas: [Data] = []
+            for a in assets {
+                if let d = await AttachMedia.jpegData(a) { datas.append(d) }
+            }
+            await uploadAndSend(datas, caption: caption, expected: assets.count)
         }
+    }
+
+    private func sendAttachDatas(_ datas: [Data], caption: String) {
+        showAttach = false
+        Task { await uploadAndSend(datas, caption: caption, expected: datas.count) }
+    }
+
+    @MainActor
+    private func uploadAndSend(_ datas: [Data], caption: String, expected: Int) async {
+        var failed = expected - datas.count
+        for data in datas {
+            if let url = try? await Api.upload("image", data: data, filename: "img.jpg", mime: "image/jpeg") {
+                sendMsg("image", url)
+            } else {
+                failed += 1
+            }
+        }
+        let text = caption.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.isEmpty { sendMsg("text", text) }
+        if failed > 0 { toastMsg = "\(failed) 张图片发送失败" }
     }
 
     private func shouldShowTime(_ idx: Int) -> Bool {
