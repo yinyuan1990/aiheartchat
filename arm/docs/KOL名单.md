@@ -20,7 +20,7 @@
 
 | # | 账号 | 粉丝 | 情况 | 状态 | 最近跟进 | 备注 |
 |---|---|---|---|---|---|---|
-| 1 | [@solanadevvv](https://x.com/solanadevvv)（BASE / Robinhood / ARC Trencher） | 225（关注 79，2021.9 注册） | 自称 Base / Arc 链 meme 打新玩家，Virtuals advisor | 待私信 | 9.26 发现 | 直接私信邀请试用、发币、提意见；关注少说明不是互粉号 |
+| 1 | [@WhyAlwaysMeOnRH](https://x.com/WhyAlwaysMeOnRH)（BASE / Robinhood / ARC Trencher；原记的 @solanadevvv 不存在） | 229（9.29 查） | 自称 Base / Arc 链 meme 打新玩家，Virtuals advisor | 待私信 | 9.26 发现 | 直接私信邀请试用、发币、提意见；关注少说明不是互粉号 |
 
 ## 放弃 / 不合适
 

@@ -357,7 +357,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
       <div style="border-top: 1px solid var(--border, #eee); margin-top: 14px; padding-top: 12px">
         <div style="font-weight: 600; margin-bottom: 6px">手动发布</div>
         <div class="muted" style="font-size: 12px; margin-bottom: 8px">
-          写中文，点「AI 翻译」出英文（可以改；没点的话发布时自动翻）。X：正文 = 中文 + 英文，末尾自动 @arc 和另外 2 个 Arc 头部账号，发完照样回复 $EGIRL 链接；YouTube：图合成竖屏短视频，英文当配音和字幕，英文第一行当标题，简介放中英双语；TikTok：同样合成短视频，中英文一起配音 + 字幕，文案 = 中英双语 + $EGIRL 推广行（link in bio）+ 话题。文字留空就用默认文案。不占每日次数。
+          写中文，点「AI 翻译」出英文（可以改；没点的话发布时自动翻）。X：正文 = 中文 + 英文，末尾自动 @ 1 个 Arc 圈的中小号（不 @ 大号），发完照样回复 $EGIRL 链接；YouTube：图合成竖屏短视频，英文当配音和字幕，英文第一行当标题，简介放中英双语；TikTok：同样合成短视频，中英文一起配音 + 字幕，文案 = 中英双语 + $EGIRL 推广行（link in bio）+ 话题。文字留空就用默认文案。不占每日次数。
         </div>
         <div class="row" style="gap: 14px; align-items: center; margin-bottom: 8px">
           <label v-for="p in PICS_PLATFORMS" :key="p.k" class="muted" style="display: flex; align-items: center; gap: 4px">

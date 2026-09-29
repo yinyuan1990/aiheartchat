@@ -109,9 +109,11 @@ def load_config() -> dict:
     cfg.setdefault("pics_tt_outro", ["E-Girl Companion", "$EGIRL on Arc", "arm.yyheart.com", "Link in bio"])
     cfg.setdefault("pics_tt_tags", "#egirl #goddess #memecoin #crypto #Arc")
     cfg.setdefault("pics_tt_voice", "en-US-AndrewMultilingualNeural")
-    # X 美女图 @ Arc 生态头部账号：每条固定带第一个（官方 @arc），其余随机挑 x_mentions_pick 个，天天 @ 同一批大号容易被判骚扰
-    cfg.setdefault("x_mentions", ["@arc", "@circle", "@Uniswap", "@aave"])
-    cfg.setdefault("x_mentions_pick", 2)
+    # X 美女图 @ 谁：x_mentions_fixed 每条都带，再从 x_mentions 随机挑 x_mentions_pick 个。
+    # 不 @ 大号（1 粉新号天天 @ 大号 = 垃圾号特征，对方静音 / 举报在算法里扣分很重），只 @ Arc 圈的中小号，每条 1 个
+    cfg.setdefault("x_mentions_fixed", [])
+    cfg.setdefault("x_mentions", ["@WhyAlwaysMeOnRH", "@AtnsXBT", "@FabiusDefi"])
+    cfg.setdefault("x_mentions_pick", 1)
     if not cfg.get("token") or "填这里" in cfg["token"]:
         print("config.json 里的 token 还没填")
         sys.exit(2)
@@ -396,10 +398,9 @@ def publish_pics(cfg: dict, job: dict) -> tuple[bool, str, str]:
 
     # 后台手动发布的任务带自己写的文字（中英双语），自动任务用默认文案
     text = (job.get("content") or "").strip() or cfg.get("pics_text") or ""
-    mentions = cfg.get("x_mentions") or []
-    if mentions:
-        rest = mentions[1:]
-        picked = [mentions[0], *random.sample(rest, min(len(rest), int(cfg.get("x_mentions_pick") or 0)))]
+    pool = cfg.get("x_mentions") or []
+    picked = [*(cfg.get("x_mentions_fixed") or []), *random.sample(pool, min(len(pool), int(cfg.get("x_mentions_pick") or 0)))]
+    if picked:
         text = f"{text}\n\n{' '.join(picked)}" if text else " ".join(picked)
     return xpost.post_media(PROFILES / "x", files, text, headless=False, shot_dir=LOGS, log=log, reply=cfg.get("pics_reply") or "")
 
