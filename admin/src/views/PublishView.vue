@@ -76,7 +76,7 @@ async function loadXPics(fillForm = false) {
 }
 
 /** 手动发布：自己写文字 + 选图（默认最新 1 张，最多 4 张，也可以自己传），发到 X / YouTube / TikTok */
-const manual = ref({ platforms: ['youtube', 'tiktok'] as string[], text: '', en: '', images: [] as string[], uploaded: [] as string[], touched: false, sending: false, uploading: false, translating: false });
+const manual = ref({ platforms: ['youtube'] as string[], text: '', en: '', images: [] as string[], uploaded: [] as string[], touched: false, sending: false, uploading: false, translating: false });
 /** X 按加权字符数算（免费号 280）：汉字 / 全角算 2，其他算 1；另外预留 @ 账号那一行约 25 */
 const X_MENTIONS_RESERVE = 25;
 function xLength() {
