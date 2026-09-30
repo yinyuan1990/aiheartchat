@@ -117,30 +117,32 @@ def _cn_date(now: datetime) -> str:
     return f"{ms}月{ds}日"
 
 
-def _paragraphs(content: str) -> list[str]:
-    """按行拆段；一段太长按句子再拆"""
+def _paragraphs(content: str, english: bool = False) -> list[str]:
+    """按行拆段；一段太长按句子再拆（英文一个字母一个字符，上限翻倍，句号也算句尾）"""
+    limit = MAX_PARA * 2 if english else MAX_PARA
+    sent = r"[^.!?;]+[.!?;]*\s*" if english else r"[^。！？!?；;]+[。！？!?；;]?"
     out: list[str] = []
     for p in (s.strip() for s in re.split(r"\n\s*\n|\n", content)):
         if not p:
             continue
-        if len(p) <= MAX_PARA:
+        if len(p) <= limit:
             out.append(p)
             continue
         cur = ""
-        for piece in re.findall(r"[^。！？!?；;]+[。！？!?；;]?", p):
-            if len(cur) + len(piece) > MAX_PARA and cur:
+        for piece in re.findall(sent, p):
+            if len(cur) + len(piece) > limit and cur:
                 out.append(cur)
                 cur = piece
             else:
                 cur += piece
         if cur:
-            out.append(cur)
+            out.append(cur.strip())
     return out or [content.strip()]
 
 
-def _font_for(paras: list[str]) -> tuple[int, int]:
+def _font_for(paras: list[str], english: bool = False) -> tuple[int, int]:
     """字号 / 段距：字少行少就放大一点，好看；行多就用标准字号"""
-    n = sum(len(p) for p in paras)
+    n = sum(len(p) for p in paras) // (2 if english else 1)
     lines = len(paras)
     if n <= 90 and lines <= 5:
         return 46, 30
@@ -149,16 +151,21 @@ def _font_for(paras: list[str]) -> tuple[int, int]:
     return 36, 22
 
 
-def _doc(paras: list[str], title: str, fs: int, pm: int, slogan: str, page_tag: str, style: str, first: bool, serial: str = "") -> str:
+def _doc(paras: list[str], title: str, fs: int, pm: int, slogan: str, page_tag: str, style: str, first: bool, serial: str = "", english: bool = False) -> str:
     st = STYLES[style]
     body = "".join(f"<p>{html.escape(p)}</p>" for p in paras)
     now = datetime.now()
-    meta = st["meta"].format(date_cn=_cn_date(now), date_num=f"{now.month:02d}.{now.day:02d}", serial=serial or f"{now.timetuple().tm_yday:03d}") if first else ""
+    date_cn = now.strftime("%b %d").upper() if english else _cn_date(now)
+    meta = st["meta"].format(date_cn=date_cn, date_num=f"{now.month:02d}.{now.day:02d}", serial=serial or f"{now.timetuple().tm_yday:03d}") if first else ""
     title_html = f'<div class="title">{html.escape(title)}</div>' if title else ""
     head = (title_html + meta) if st.get("meta_after_title") else (meta + title_html)
     # 字号缩放：fs 是基准 36，各样式按比例缩
     scale = fs / 36
     css = st["css"] + f"\n.body{{font-size:{int(38 * scale)}px;line-height:{int(78 * scale)}px}}\n.body p{{margin:0 0 {pm - 22}px}}" if fs != 36 else st["css"]
+    if english:
+        # 宋体的英文字母是等宽的；break-all 会把英文单词从中间切开；中文标语的字距放英文会溢出
+        css = css.replace(SERIF, 'Georgia,"Times New Roman",serif')
+        css += "\n.body{word-break:normal;overflow-wrap:break-word;letter-spacing:0}\n.title{letter-spacing:0}\n.slogan{font-size:24px;letter-spacing:1px}"
     return TEMPLATE.format(
         w=W, h=H, top=st.get("top", CARD_TOP), cw=W - 144,
         head=head, body=body, slogan=html.escape(slogan), page=page_tag, style_css=css, deco=st["deco"],
@@ -173,13 +180,13 @@ def pick_style(name: str = "") -> str:
     return random.choice(keys)
 
 
-def render_cards(out_dir: Path, name: str, title: str, content: str, brand: str, slogan: str, headless: bool = True, style: str = "random") -> list[Path]:
-    """brand 参数保留兼容（不印品牌）；style = letter | magazine | cream | random（默认随机，同一任务各页一致）"""
+def render_cards(out_dir: Path, name: str, title: str, content: str, brand: str, slogan: str, headless: bool = True, style: str = "random", english: bool = False) -> list[Path]:
+    """brand 参数保留兼容（不印品牌）；style = letter | magazine | cream | random（默认随机，同一任务各页一致）；english = 英文排版（TikTok）"""
     if style not in STYLES:
         style = pick_style(name)
     serial = "".join(ch for ch in name if ch.isdigit())[-3:].rjust(3, "0") if any(ch.isdigit() for ch in name) else ""
     out_dir.mkdir(parents=True, exist_ok=True)
-    remaining = _paragraphs(content)
+    remaining = _paragraphs(content, english)
     paths: list[Path] = []
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=headless)
@@ -189,7 +196,7 @@ def render_cards(out_dir: Path, name: str, title: str, content: str, brand: str,
         pages: list[list[str]] = []
         while remaining and len(pages) < MAX_CARDS:
             first = not pages
-            page.set_content(_doc(remaining, title if first else "", 36, 22, slogan, "", style, first, serial), wait_until="load")
+            page.set_content(_doc(remaining, title if first else "", 36, 22, slogan, "", style, first, serial, english), wait_until="load")
             bottoms: list[float] = page.evaluate(
                 "Array.from(document.querySelectorAll('.body p')).map(e => e.getBoundingClientRect().bottom)"
             )
@@ -204,11 +211,11 @@ def render_cards(out_dir: Path, name: str, title: str, content: str, brand: str,
 
         # 第二遍：逐张出图；字少的放大字号，放不下再缩
         for i, paras in enumerate(pages):
-            fs, pm = _font_for(paras)
+            fs, pm = _font_for(paras, english)
             show_title = title if i == 0 else ""
             page_tag = f'<div class="page">{i + 1} / {len(pages)}</div>' if len(pages) > 1 else ""
             for _ in range(6):
-                page.set_content(_doc(paras, show_title, fs, pm, slogan, page_tag, style, i == 0, serial), wait_until="load")
+                page.set_content(_doc(paras, show_title, fs, pm, slogan, page_tag, style, i == 0, serial, english), wait_until="load")
                 bottom = page.evaluate("document.querySelector('.wrap').getBoundingClientRect().bottom")
                 if bottom <= LIMIT or fs <= 24:
                     break

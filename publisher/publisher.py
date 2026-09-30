@@ -464,6 +464,15 @@ def publish_job(cfg: dict, job: dict) -> tuple[bool, str, str]:
         ok, url, err = zhihu.post_pin(PROFILES / "zhihu", content, bool(cfg["headless"]), LOGS, title=title)
         return ok, url, err
     import card
+    if p == "tiktok":
+        # 树洞帖的英文文字卡片 → TikTok 图片帖；标题进标题框，描述 = 正文 + 推广行 + 话题
+        import tiktok
+        images = card.render_cards(CARDS, f"job{job['id']}", title, content, cfg["brand"], cfg["slogan_en"], headless=True, style=cfg.get("card_style", "random"), english=True)
+        caption = "\n\n".join(s for s in [content, cfg.get("tt_promo") or ""] if s)
+        if tags:
+            caption += "\n" + " ".join(f"#{t}" for t in tags[:5])
+        time.sleep(random.uniform(20, 120))
+        return tiktok.post_photos(PROFILES / "tiktok", images, title, caption, shot_dir=LOGS, log=log)
     images = card.render_cards(CARDS, f"job{job['id']}", title, content, cfg["brand"], cfg["slogan"], headless=True, style=cfg.get("card_style", "random"))
     # 小红书用有界面浏览器发（headed_platforms）：无头浏览器的指纹是它判「脚本工具」的主要依据之一；发布前再随机等一会，别每次都是领到任务立刻动手
     headed = p in cfg.get("headed_platforms", [])

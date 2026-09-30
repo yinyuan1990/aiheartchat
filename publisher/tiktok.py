@@ -1,4 +1,4 @@
-"""TikTok 视频适配器：sau 的 tk_uploader 登录要靠调试器手点「继续」、发布有死循环，这里照 x.py 自写（patchright 持久化 profiles/tiktok）。
+"""TikTok 视频 / 图片帖适配器：sau 的 tk_uploader 登录要靠调试器手点「继续」、发布有死循环，这里照 x.py 自写（patchright 持久化 profiles/tiktok）。
 
 TikTok 对 IP 最敏感：注册 / 登录 / 发布必须一直是同一个住宅 IP，所以浏览器固定走本机 v2rayN（PROXY，出口 IPRoyal 美国静态住宅 IP）；
 v2rayN 没开就直接失败，不会用别的出口去发。发布用有界面浏览器（和 X 一样，无头指纹容易被判脚本）。
@@ -6,6 +6,7 @@ v2rayN 没开就直接失败，不会用别的出口去发。发布用有界面�
 """
 from __future__ import annotations
 
+import re
 import time
 from pathlib import Path
 
@@ -16,6 +17,7 @@ LOGIN = "https://www.tiktok.com/login?lang=en"
 UPLOAD = "https://www.tiktok.com/tiktokstudio/upload?lang=en"
 CONTENT = "https://www.tiktok.com/tiktokstudio/content?lang=en"
 CAPTION_MAX = 4000
+TITLE_MAX = 90
 
 
 def _context(p, profile: Path, headless: bool) -> BrowserContext:
@@ -124,15 +126,21 @@ def _type_caption(page: Page, caption: str) -> None:
             page.wait_for_timeout(500)
 
 
-def _latest_url(page: Page) -> str:
+def _latest_url(page: Page, since: float) -> str:
+    """作品管理页里发布时间不早于 since 的最新作品链接（作品 ID 右移 32 位是创建时间的 Unix 秒）；
+    不能直接拿第一个链接：第一行可能是置顶的旧作品。找不到返回空"""
     try:
         page.goto(CONTENT, wait_until="domcontentloaded", timeout=60000)
-        link = page.locator('a[href*="/video/"]').first
-        link.wait_for(state="attached", timeout=30000)
-        href = link.get_attribute("href") or ""
-        return href if href.startswith("http") else f"https://www.tiktok.com{href}"
+        page.locator('a[href*="/video/"], a[href*="/photo/"]').first.wait_for(state="attached", timeout=30000)
+        hrefs = page.eval_on_selector_all('a[href*="/video/"], a[href*="/photo/"]', "els => els.map(e => e.getAttribute('href'))")
     except Exception:
         return ""
+    best, best_id = "", 0
+    for h in hrefs:
+        m = re.search(r"/(?:video|photo)/(\d{15,})", h or "")
+        if m and (int(m.group(1)) >> 32) >= since - 120 and int(m.group(1)) > best_id:
+            best, best_id = h, int(m.group(1))
+    return "" if not best else best if best.startswith("http") else f"https://www.tiktok.com{best}"
 
 
 def post_video(profile: Path, video: Path, caption: str, shot_dir: Path, log=None, ai_label: bool = True) -> tuple[bool, str, str]:
@@ -168,44 +176,97 @@ def post_video(profile: Path, video: Path, caption: str, shot_dir: Path, log=Non
             _dismiss(page)
             if ai_label:
                 _mark_ai(page, log)
-            btn = page.locator('button[data-e2e="post_video_button"]').first
-            if not btn.count():
-                btn = page.get_by_role("button", name="Post", exact=True).first
-            ready = False
-            for i in range(600):
-                page.wait_for_timeout(1000)
-                try:
-                    if btn.is_visible() and btn.is_enabled() and btn.get_attribute("aria-disabled") != "true" and btn.get_attribute("data-disabled") != "true":
-                        ready = True
-                        break
-                except Exception:
-                    pass
-                if log and i and i % 60 == 0:
-                    log.info("TikTok 视频还在上传 / 处理（%d 秒）", i)
-            if not ready:
-                shot("notready")
-                return False, "", "视频上传 10 分钟还没好（看 logs 截图）"
-            page.wait_for_timeout(2000)
-            btn.scroll_into_view_if_needed()
-            btn.click(timeout=15000)
-            sent = False
-            for _ in range(90):
-                page.wait_for_timeout(1000)
-                # 内容检查没跑完会弹「Continue to post?」
-                for name in ("Post now", "Post anyway", "Continue"):
-                    b = page.get_by_role("button", name=name, exact=True)
-                    if b.count() and b.first.is_visible():
-                        b.first.click(timeout=5000)
-                if "/tiktokstudio/content" in page.url or page.get_by_text("Your video has been uploaded").count() or page.get_by_text("Video published").count():
-                    sent = True
-                    break
-            if not sent:
-                shot("notsent")
-                return False, "", "点了发布但没确认成功（看 logs 截图）"
-            page.wait_for_timeout(5000)
-            return True, _latest_url(page), ""
+            return _submit(page, shot, log, "视频")
         except Exception as e:  # noqa: BLE001
             shot("error")
             return False, "", f"TikTok 发布异常：{str(e)[:200]}"
         finally:
             ctx.close()
+
+
+def post_photos(profile: Path, images: list[Path], title: str, caption: str, shot_dir: Path, log=None) -> tuple[bool, str, str]:
+    """发一条图片帖（上传页的 Photos 标签，最多 35 张）：title 进标题框（上限 90），caption 进描述框；文字卡片不是 AI 生成，不打 AI 标"""
+
+    def shot(tag: str):
+        try:
+            page.screenshot(path=str(shot_dir / f"tiktok-photo-{tag}-{int(time.time())}.png"))
+        except Exception:
+            pass
+
+    with sync_playwright() as p:
+        ctx = _context(p, profile, headless=False)
+        page = ctx.new_page()
+        try:
+            try:
+                page.goto(UPLOAD, wait_until="domcontentloaded", timeout=90000)
+            except Exception as e:  # noqa: BLE001
+                return False, "", f"打不开 TikTok（v2rayN 开着吗？代理 {PROXY}）：{str(e)[:120]}"
+            page.wait_for_timeout(5000)
+            if "/login" in page.url or not _session(ctx):
+                shot("login")
+                return False, "", "TikTok 登录失效（cookie expired），重新 login tiktok"
+            _dismiss(page)
+            tab = page.get_by_text("Photos", exact=True).first
+            try:
+                tab.wait_for(state="visible", timeout=60000)
+                tab.click(timeout=10000)
+            except Exception:
+                shot("notab")
+                return False, "", "上传页没找到 Photos 标签（看 logs 截图）"
+            inp = page.locator('input[type="file"][accept*="image"]').first
+            try:
+                inp.wait_for(state="attached", timeout=30000)
+            except Exception:
+                shot("noinput")
+                return False, "", "没找到图片上传入口（看 logs 截图）"
+            inp.set_input_files([str(f) for f in images[:35]])
+            box = page.get_by_placeholder("Add a catchy title").first
+            box.wait_for(state="visible", timeout=120000)
+            if title:
+                box.click()
+                box.fill(title[:TITLE_MAX])
+            _type_caption(page, caption[:CAPTION_MAX])
+            _dismiss(page)
+            return _submit(page, shot, log, "图片")
+        except Exception as e:  # noqa: BLE001
+            shot("error")
+            return False, "", f"TikTok 图片帖发布异常：{str(e)[:200]}"
+        finally:
+            ctx.close()
+
+
+def _submit(page: Page, shot, log, kind: str) -> tuple[bool, str, str]:
+    """等 Post 按钮可点 → 点发布 → 处理确认弹窗 → 等跳到作品管理页"""
+    btn = page.locator('button[data-e2e="post_video_button"]').first
+    if not btn.count():
+        btn = page.get_by_role("button", name="Post", exact=True).first
+    ready = False
+    for i in range(600):
+        page.wait_for_timeout(1000)
+        try:
+            if btn.is_visible() and btn.is_enabled() and btn.get_attribute("aria-disabled") != "true" and btn.get_attribute("data-disabled") != "true":
+                ready = True
+                break
+        except Exception:
+            pass
+        if log and i and i % 60 == 0:
+            log.info("TikTok %s还在上传 / 处理（%d 秒）", kind, i)
+    if not ready:
+        shot("notready")
+        return False, "", f"{kind}上传 10 分钟还没好（看 logs 截图）"
+    page.wait_for_timeout(2000)
+    btn.scroll_into_view_if_needed()
+    posted_at = time.time()
+    btn.click(timeout=15000)
+    for _ in range(90):
+        page.wait_for_timeout(1000)
+        # 内容检查没跑完会弹「Continue to post?」
+        for name in ("Post now", "Post anyway", "Continue"):
+            b = page.get_by_role("button", name=name, exact=True)
+            if b.count() and b.first.is_visible():
+                b.first.click(timeout=5000)
+        if "/tiktokstudio/content" in page.url or page.get_by_text("Your video has been uploaded").count() or page.get_by_text("Video published").count() or page.get_by_text("Post published").count():
+            page.wait_for_timeout(5000)
+            return True, _latest_url(page, posted_at), ""
+    shot("notsent")
+    return False, "", "点了发布但没确认成功（看 logs 截图）"

@@ -55,9 +55,9 @@ const toMode = (v: unknown, fallback: Mode): Mode => (v === 'ai' || v === 'light
 /** 实际出稿用的模式：英文平台没有浅处理，按忠实翻译（raw） */
 const effectiveMode = (p: Platform, m: Mode): Mode => (ENGLISH.includes(p) && m === 'light' ? 'raw' : m);
 type Format = 'note' | 'video';
-const DEFAULT_FORMATS: Record<Platform, Format> = { xiaohongshu: 'note', douyin: 'note', kuaishou: 'video', zhihu: 'note', shipinhao: 'video', x: 'video', youtube: 'video', tiktok: 'video' };
-/** 只能发一种形式的平台 */
-const FIXED_FORMAT: Partial<Record<Platform, Format>> = { zhihu: 'note', x: 'video', youtube: 'video', tiktok: 'video' };
+const DEFAULT_FORMATS: Record<Platform, Format> = { xiaohongshu: 'note', douyin: 'note', kuaishou: 'video', zhihu: 'note', shipinhao: 'video', x: 'video', youtube: 'video', tiktok: 'note' };
+/** 只能发一种形式的平台（TikTok 图文 = 英文文字卡片的图片帖） */
+const FIXED_FORMAT: Partial<Record<Platform, Format>> = { zhihu: 'note', x: 'video', youtube: 'video' };
 /** 视频号视频的「短标题」上限 */
 const SHIPINHAO_VIDEO_TITLE_MAX = 16;
 
@@ -341,7 +341,7 @@ export class PublishService implements OnModuleInit {
   // ---------- 出稿：原文 / AI 改写 ----------
 
   /** 各平台标题上限（原文模式取第一句当标题）与正文上限 */
-  private static readonly TITLE_MAX: Record<Platform, number> = { xiaohongshu: 20, douyin: 20, kuaishou: 30, zhihu: 0, shipinhao: 22, x: 30, youtube: 95, tiktok: 95 };
+  private static readonly TITLE_MAX: Record<Platform, number> = { xiaohongshu: 20, douyin: 20, kuaishou: 30, zhihu: 0, shipinhao: 22, x: 30, youtube: 95, tiktok: 90 };
   private static readonly CONTENT_MAX: Record<Platform, number> = { xiaohongshu: 1000, douyin: 1000, kuaishou: 1000, zhihu: 2000, shipinhao: 1000, x: 1000, youtube: 4000, tiktok: 4000 };
 
   private async draft(text: string, platform: Platform, s: Settings, modeOverride?: Mode): Promise<Draft> {
