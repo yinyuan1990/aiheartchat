@@ -4,193 +4,138 @@
 <meta charset="utf-8">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0 }
-html, body { width: 1080px; height: 1920px; overflow: hidden; background: #05060b; font-family: "Microsoft YaHei", "Segoe UI", sans-serif; color: #fff }
+html, body { width: 1080px; height: 1920px; overflow: hidden; background: #050506; font-family: "Microsoft YaHei", "Segoe UI", sans-serif; color: #fff }
 .bg { position: absolute; inset: 0; overflow: hidden }
-.blob { position: absolute; border-radius: 50%; filter: blur(120px); opacity: .38 }
-.b1 { width: 900px; height: 900px; background: #f7931a; left: -380px; top: -260px; animation: drift1 15s ease-in-out infinite alternate }
-.b2 { width: 1000px; height: 1000px; background: #2f5bff; right: -460px; bottom: 60px; animation: drift2 18s ease-in-out infinite alternate }
-@keyframes drift1 { to { transform: translate(300px, 460px) scale(1.2) } }
-@keyframes drift2 { to { transform: translate(-280px, -520px) scale(.85) } }
-.noise { position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px); background-size: 60px 60px }
-.pt { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: #ffd9a0; box-shadow: 0 0 10px #ffb347; animation: floatup linear infinite }
-@keyframes floatup { from { transform: translateY(0); opacity: 0 } 15% { opacity: .8 } 85% { opacity: .8 } to { transform: translateY(-900px); opacity: 0 } }
+.blob { position: absolute; border-radius: 50%; filter: blur(130px); opacity: .32 }
+.b1 { width: 1000px; height: 1000px; background: #e0102f; left: -420px; top: -300px; animation: drift1 14s ease-in-out infinite alternate }
+.b2 { width: 900px; height: 900px; background: #5a0a18; right: -380px; bottom: 80px; animation: drift2 17s ease-in-out infinite alternate }
+@keyframes drift1 { to { transform: translate(320px, 520px) scale(1.15) } }
+@keyframes drift2 { to { transform: translate(-260px, -560px) scale(.9) } }
+.scan { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(255,255,255,.025) 0 2px, transparent 2px 6px) }
+.vig { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 45%, transparent 45%, rgba(0,0,0,.75)) }
 
-#yr { position: absolute; left: 0; right: 0; top: 96px; text-align: center; font: 900 190px "Segoe UI"; letter-spacing: 6px; line-height: 1; font-variant-numeric: tabular-nums;
-  background: linear-gradient(180deg, #fff, #ffc46b); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 0 30px rgba(247,147,26,.35)) }
-#era { position: absolute; left: 0; right: 0; top: 312px; text-align: center }
-#era span { display: inline-block; border: 3px solid #f7931a; color: #ffc46b; border-radius: 60px; padding: 6px 38px; font-size: 46px; font-weight: 900; letter-spacing: 6px; background: rgba(247,147,26,.08) }
-#chart { position: absolute; left: 0; top: 420px; width: 1080px; height: 720px }
-#chart text { font-family: "Segoe UI", "Microsoft YaHei"; }
-
+#stage { position: absolute; inset: 0 }
 .scene { position: absolute; inset: 0; display: none }
 .center { position: absolute; left: 0; right: 0; text-align: center }
-.rise { animation: rise .8s cubic-bezier(.2,.8,.2,1) both; animation-delay: var(--d, 0s) }
-.pop { animation: pop .7s cubic-bezier(.2,.8,.2,1) both; animation-delay: var(--d, 0s) }
-@keyframes rise { from { opacity: 0; transform: translateY(70px) } to { opacity: 1; transform: none } }
+.rise { animation: rise .6s cubic-bezier(.2,.8,.2,1) both; animation-delay: var(--d, 0s) }
+.pop { animation: pop .55s cubic-bezier(.2,.8,.2,1) both; animation-delay: var(--d, 0s) }
+.slam { animation: slam .45s cubic-bezier(.2,.9,.3,1.2) both; animation-delay: var(--d, 0s) }
+@keyframes rise { from { opacity: 0; transform: translateY(60px) } to { opacity: 1; transform: none } }
 @keyframes pop { 0% { opacity: 0; transform: scale(.4) } 60% { opacity: 1; transform: scale(1.08) } 100% { opacity: 1; transform: scale(1) } }
-.gold { background: linear-gradient(90deg, #ffe08a, #f7931a); -webkit-background-clip: text; background-clip: text; color: transparent }
-.en { font-family: "Segoe UI", sans-serif; letter-spacing: 6px; color: rgba(255,255,255,.6); font-weight: 600 }
-.red { color: #ff4d5e } .green { color: #3ddc97 }
+@keyframes slam { 0% { opacity: 0; transform: scale(2.6) } 100% { opacity: 1; transform: scale(1) } }
+.red { color: #ff2d3d } .gold { color: #ffc46b } .dim { color: rgba(255,255,255,.5) }
+.glow { text-shadow: 0 0 50px rgba(255,45,61,.75) }
+.huge { font-weight: 900; line-height: 1.05 }
+.num { font-family: "Segoe UI", "Microsoft YaHei"; font-weight: 900; font-variant-numeric: tabular-nums; line-height: 1 }
+.src { font-size: 26px; color: rgba(255,255,255,.4); letter-spacing: 1px }
+.tag { display: inline-block; border: 3px solid #ff2d3d; color: #ff2d3d; border-radius: 12px; padding: 4px 22px; font: 900 40px "Segoe UI", "Microsoft YaHei"; letter-spacing: 4px }
 
-.rows { position: absolute; left: 70px; right: 70px; top: 1175px; display: flex; flex-direction: column; gap: 26px }
-.row { display: flex; align-items: center; gap: 30px; padding: 26px 40px; border-radius: 28px; background: rgba(255,255,255,.06); border: 2px solid rgba(255,255,255,.13); box-shadow: 0 16px 50px rgba(0,0,0,.45) }
-.row .k { font: 900 58px "Segoe UI", "Microsoft YaHei"; white-space: nowrap }
-.row .v { font-size: 30px; color: rgba(255,255,255,.62); line-height: 1.35 }
-.row.hot { border-color: rgba(247,147,26,.7); box-shadow: 0 0 40px rgba(247,147,26,.35) }
-.row.bad { border-color: rgba(255,77,94,.6); box-shadow: 0 0 40px rgba(255,77,94,.3) }
+.q { display: flex; justify-content: center; gap: 18px; margin-top: 30px }
+.qi { width: 170px; padding: 26px 0; border-radius: 22px; background: rgba(255,255,255,.07); border: 2px solid rgba(255,255,255,.16); font-size: 38px; font-weight: 900; text-align: center }
+.qi small { display: block; font-size: 24px; font-weight: 600; color: rgba(255,255,255,.5); margin-top: 6px }
+.qi.me { background: rgba(255,196,107,.16); border-color: #ffc46b; color: #ffc46b; box-shadow: 0 0 40px rgba(255,196,107,.4) }
+.qi.last { background: rgba(255,45,61,.18); border-color: #ff2d3d; color: #ff2d3d; box-shadow: 0 0 40px rgba(255,45,61,.5) }
 
-.stats { position: absolute; left: 60px; right: 60px; top: 1180px; display: flex; gap: 24px }
-.stat { flex: 1; padding: 30px 10px; border-radius: 28px; background: rgba(255,255,255,.06); border: 2px solid rgba(255,255,255,.14); text-align: center }
-.stat b { display: block; font: 900 66px "Segoe UI", "Microsoft YaHei"; line-height: 1.1 }
-.stat span { font-size: 28px; color: rgba(255,255,255,.6) }
+.lad { position: absolute; left: 70px; right: 70px; top: 470px; display: flex; flex-direction: column; gap: 30px }
+.lr { padding: 30px 40px; border-radius: 28px; background: rgba(255,255,255,.06); border: 2px solid rgba(255,255,255,.14) }
+.lr .h { display: flex; justify-content: space-between; align-items: baseline }
+.lr .who { font-size: 58px; font-weight: 900 }
+.lr .px { font-size: 36px; font-weight: 800; color: rgba(255,255,255,.7) }
+.lr .bar { height: 26px; margin-top: 20px; border-radius: 13px; background: rgba(255,255,255,.08); overflow: hidden }
+.lr .bar i { display: block; height: 100%; border-radius: 13px; background: linear-gradient(90deg, #3ddc97, #ffc46b); transform-origin: left; animation: grow .9s cubic-bezier(.2,.8,.2,1) both; animation-delay: var(--d, 0s) }
+.lr.me { border-color: #ff2d3d; background: rgba(255,45,61,.12); box-shadow: 0 0 50px rgba(255,45,61,.45) }
+.lr.me .who, .lr.me .px { color: #ff2d3d }
+.lr.me .bar i { background: linear-gradient(90deg, #ffc46b, #ff2d3d) }
+@keyframes grow { from { transform: scaleX(0) } to { transform: scaleX(1) } }
 
-.cards { position: absolute; top: 540px; left: 70px; right: 70px; display: flex; flex-direction: column; gap: 34px }
-.card { display: flex; align-items: center; gap: 40px; padding: 38px 48px; border-radius: 34px; background: rgba(255,255,255,.06); border: 2px solid rgba(255,255,255,.14); box-shadow: 0 20px 60px rgba(0,0,0,.45) }
-.card .n { font: 900 96px "Segoe UI"; width: 140px; text-align: center; line-height: 1; color: transparent; -webkit-text-stroke: 3px #f7931a }
-.card .t { font-size: 58px; font-weight: 900 }
-.card .s { font-size: 30px; color: rgba(255,255,255,.6); margin-top: 8px }
+#dots { position: absolute; left: 90px; top: 640px; width: 900px; height: 562px }
+#dots i { position: absolute; width: 16px; height: 16px; border-radius: 50% }
 
-.chk { display: inline-flex; align-items: center; gap: 16px; margin: 0 14px; padding: 18px 34px; border-radius: 60px; background: rgba(61,220,151,.1); border: 3px solid rgba(61,220,151,.7); font-size: 50px; font-weight: 900 }
-.chk i { font-style: normal; color: #3ddc97 }
-.strike { position: relative; display: inline-block; color: rgba(255,255,255,.45) }
-.strike::after { content: ""; position: absolute; left: -12%; right: -12%; top: 52%; height: 16px; background: #ff4d5e; border-radius: 8px; transform-origin: left; animation: grow .5s cubic-bezier(.2,.8,.2,1) both; animation-delay: var(--d, 0s) }
-@keyframes grow { from { transform: scaleX(0) rotate(-8deg) } to { transform: scaleX(1) rotate(-8deg) } }
-.yc { display: inline-block; margin: 12px; padding: 14px 34px; border-radius: 22px; background: rgba(255,255,255,.07); border: 2px solid rgba(255,255,255,.2); font: 900 56px "Segoe UI" }
-
-#sub { position: absolute; left: 60px; right: 60px; bottom: 110px; text-align: center }
-#sub span { display: inline-block; background: rgba(0,0,0,.6); border-radius: 18px; padding: 12px 30px; font-size: 46px; font-weight: 700; color: #ffe27a; text-shadow: 0 2px 6px #000 }
-#flash { position: absolute; inset: 0; opacity: 0; pointer-events: none }
+.opt { display: inline-block; margin: 0 16px; padding: 22px 50px; border-radius: 26px; font-size: 60px; font-weight: 900; border: 3px solid rgba(255,255,255,.3); background: rgba(255,255,255,.06) }
+#sub { position: absolute; left: 50px; right: 50px; bottom: 150px; text-align: center }
+#sub span { display: inline-block; background: rgba(0,0,0,.72); border-radius: 18px; padding: 14px 34px; font-size: 54px; font-weight: 900; color: #fff; text-shadow: 0 2px 6px #000; border-bottom: 5px solid #ff2d3d }
+#flash { position: absolute; inset: 0; opacity: 0; pointer-events: none; background: radial-gradient(circle at 50% 50%, rgba(255,30,50,.1), rgba(255,30,50,.7)) }
 </style>
 </head>
 <body>
-<div class="bg" id="bg"><div class="blob b1"></div><div class="blob b2"></div><div class="noise"></div></div>
+<div class="bg" id="bg"><div class="blob b1"></div><div class="blob b2"></div><div class="scan"></div><div class="vig"></div></div>
 
-<div id="yr"></div>
-<div id="era"><span></span></div>
-<svg id="chart" viewBox="0 0 1080 720">
-  <defs>
-    <linearGradient id="fillg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f7931a" stop-opacity=".45"/><stop offset="1" stop-color="#f7931a" stop-opacity="0"/></linearGradient>
-    <linearGradient id="lineg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ffe08a"/><stop offset="1" stop-color="#f7931a"/></linearGradient>
-    <filter id="glow"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-  </defs>
-  <g id="grid"></g>
-  <path id="area" fill="url(#fillg)"/>
-  <path id="line" fill="none" stroke="url(#lineg)" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" filter="url(#glow)"/>
-  <g id="pins"></g>
-  <g id="head"><circle r="30" fill="rgba(247,147,26,.25)"/><circle r="13" fill="#fff"/></g>
-  <g id="plab"><rect rx="16" height="64" y="-32" fill="rgba(0,0,0,.72)" stroke="#f7931a" stroke-width="2"/><text y="14" font-size="40" font-weight="900" fill="#fff"></text></g>
-</svg>
-
+<div id="stage">
 <section class="scene" id="s0">
-  <div class="center" style="top:520px">
-    <div class="pop" style="font-size:210px;font-weight:900;letter-spacing:14px;text-shadow:0 10px 60px rgba(0,0,0,.8)">币圈简史</div>
-    <div class="rise en" style="--d:.4s;font-size:44px;margin-top:24px">A BRIEF HISTORY OF CRYPTO</div>
-    <div class="rise gold" style="--d:.8s;font:900 120px 'Segoe UI';margin-top:70px">2008 — 2026</div>
-    <div class="rise" data-at="三万亿" style="font-size:60px;font-weight:800;margin-top:60px">一张白皮书 → <span class="gold">$3 万亿</span></div>
-  </div>
+  <div class="center rise" style="top:420px"><span class="tag">2026</span></div>
+  <div class="center slam huge" style="--d:.2s;top:560px;font-size:210px">散户进场</div>
+  <div class="center slam huge red glow" data-at="送钱" style="top:830px;font-size:300px">= 送钱</div>
 </section>
 
 <section class="scene" id="s1">
-  <div class="rows">
-    <div class="row rise" data-at="中本聪"><div class="k">白皮书</div><div class="v">2008.10.31 · 中本聪<br>Bitcoin: A Peer-to-Peer Electronic Cash System</div></div>
-    <div class="row hot rise" data-at="一万个"><div class="k">10,000 BTC <span class="gold">= 2 块披萨</span></div></div>
-    <div class="row rise" data-at="披萨"><div class="v">2010.05.22 · 按今天的价格，约 <b class="gold" style="font-size:40px">8.4 亿美元</b></div></div>
+  <div class="center rise" style="top:330px"><div class="num gold" style="font-size:120px">2017</div>
+    <div class="q"><div class="qi me">你<small>第一排</small></div><div class="qi">机构<small>还没来</small></div><div class="qi">机器人<small>还没有</small></div></div>
+    <div style="font-size:50px;font-weight:900;margin-top:34px" class="gold">早进，就能赚</div>
+  </div>
+  <div class="center rise" data-at="今天" style="top:1010px"><div class="num red" style="font-size:120px">2026</div>
+    <div class="q" style="gap:12px"><div class="qi" style="width:156px">项目方</div><div class="qi" style="width:156px">机构</div><div class="qi" style="width:156px">机器人</div><div class="qi" style="width:156px">KOL</div><div class="qi last pop" data-at="最后一个" style="width:156px">你</div></div>
+    <div class="rise red" data-at="最后一个" style="font-size:50px;font-weight:900;margin-top:34px">你，排在最后一个</div>
   </div>
 </section>
 
 <section class="scene" id="s2">
-  <div class="rows">
-    <div class="row hot rise" data-at="1000"><div class="k gold">$1,000</div><div class="v">2013.11<br>比特币首次破千</div></div>
-    <div class="row bad rise" data-at="门头沟"><div class="k red">Mt.Gox 倒闭</div><div class="v">2014.02<br>当时全球最大交易所</div></div>
-    <div class="row bad rise" data-at="85万"><div class="k">85 万 BTC</div><div class="v">不翼而飞</div></div>
+  <div class="center rise huge" style="top:230px;font-size:96px">一个新币的<span class="red">上车顺序</span></div>
+  <div class="lad">
+    <div class="lr rise" data-at="项目方"><div class="h"><div class="who">① 项目方 / VC</div><div class="px">成本 ≈ 0</div></div><div class="bar"><i style="width:3%"></i></div></div>
+    <div class="lr rise" data-at="机器人"><div class="h"><div class="who">② 狙击机器人</div><div class="px">开盘第 1 秒</div></div><div class="bar"><i style="width:10%"></i></div></div>
+    <div class="lr rise" data-at="KOL"><div class="h"><div class="who">③ KOL</div><div class="px">提前埋伏</div></div><div class="bar"><i style="width:32%"></i></div></div>
+    <div class="lr me rise" data-at="等你"><div class="h"><div class="who">④ 你</div><div class="px">已涨 10 倍</div></div><div class="bar"><i style="width:100%"></i></div></div>
   </div>
+  <div class="center rise dim" data-at="项目方" style="top:1500px;font-size:32px">条越长 = 买入价越高</div>
 </section>
 
 <section class="scene" id="s3">
-  <div class="rows">
-    <div class="row rise" data-at="ICO"><div class="k">ICO 狂潮</div><div class="v">一份白皮书<br>募资上亿</div></div>
-    <div class="row hot rise" data-at="2万"><div class="k gold">$19,783</div><div class="v">2017.12<br>当时的历史高点</div></div>
-    <div class="row hot rise" data-at="黄金年代"><div class="k">散户的 <span class="gold">黄金年代</span></div></div>
-  </div>
+  <div class="center rise huge" style="top:600px;font-size:130px">你买的</div>
+  <div class="center slam huge red glow" data-at="都是" style="top:800px;font-size:160px">是他们的</div>
+  <div class="center slam huge red glow" data-at="卖单" style="top:1000px;font-size:220px">卖单</div>
 </section>
 
 <section class="scene" id="s4">
-  <div class="center pop" data-at="跌掉" style="top:1150px"><div class="red" style="font:900 230px 'Segoe UI';line-height:1;text-shadow:0 0 60px rgba(255,77,94,.6)">-84%</div></div>
-  <div class="center rise" data-at="跌掉" style="top:1400px;font:700 40px 'Segoe UI';color:rgba(255,255,255,.7)">$19,783 → $3,200 · 2018.12</div>
-  <div class="center rise" data-at="归零" style="top:1490px;font-size:56px;font-weight:900">无数项目 <span class="red">归零</span></div>
+  <div class="center rise" style="top:300px;font-size:58px;font-weight:900">pump.fun 上发了 <span class="gold">700 多万</span>个币</div>
+  <div class="center" style="top:520px"><span id="c4" class="num red glow" style="font-size:330px">0%</span></div>
+  <div class="center slam huge" data-at="废纸" style="top:960px;font-size:120px">变成<span class="red">废纸</span></div>
+  <div class="center src rise" style="--d:1s;top:1170px">来源：Solidus Labs 2025 报告（流动性跌破 $1,000）</div>
 </section>
 
 <section class="scene" id="s5">
-  <div class="rows">
-    <div class="row rise" data-at="DeFi"><div class="k">DeFi Summer</div><div class="v">2020<br>链上借贷、挖矿</div></div>
-    <div class="row rise" data-at="NFT"><div class="k">NFT · Meme</div><div class="v">2021<br>全面出圈</div></div>
-    <div class="row hot rise" data-at="6万9"><div class="k gold">$69,000</div><div class="v">2021.11<br>新的历史高点</div></div>
-  </div>
+  <div class="center rise" style="top:250px;font-size:58px;font-weight:900"><span class="gold">1355 万</span>个钱包里</div>
+  <div class="center rise" data-at="一万美元" style="top:350px;font-size:58px;font-weight:900">赚到 <span class="gold">$10,000</span> 以上的</div>
+  <div class="center" style="top:440px"><span id="c5" class="num gold" style="font-size:170px;opacity:0">只有 0.4%</span></div>
+  <div id="dots"></div>
+  <div class="center rise dim" data-at="0.4" style="top:1230px;font-size:34px">1000 个点，只有 <b class="gold">4</b> 个亮</div>
+  <div class="center src rise" style="--d:1s;top:1300px">来源：Dune 链上数据（2025.01）</div>
 </section>
 
 <section class="scene" id="s6">
-  <div class="rows">
-    <div class="row bad rise" data-at="Luna"><div class="k red">Luna / UST</div><div class="v">2022.05<br>几天归零</div></div>
-    <div class="row bad rise" data-at="FTX"><div class="k red">FTX 暴雷</div><div class="v">2022.11<br>第二大交易所一夜破产</div></div>
-    <div class="row rise" data-at="信任"><div class="k">信任 <span class="red">跌到冰点</span></div></div>
-  </div>
+  <div class="center rise huge" style="top:230px;font-size:86px">亏了想翻本？</div>
+  <div class="center slam huge red" data-at="杠杆" style="top:350px;font-size:120px">上杠杆</div>
+  <div class="center rise" data-at="2025年" style="top:560px"><span class="tag">2025.10.10</span></div>
+  <div class="center" style="top:680px"><div id="c6" class="num red glow" style="font-size:210px">$0</div><div class="rise" data-at="190亿" style="font-size:44px;font-weight:800;margin-top:14px">一天爆仓</div></div>
+  <div class="center pop" data-at="160万" style="top:1030px"><span class="num" style="font-size:120px">160 万</span><span style="font-size:52px;font-weight:900"> 人被清算</span></div>
+  <div class="center pop" data-at="32亿" style="top:1200px"><span style="font-size:52px;font-weight:900">其中 </span><span class="num red" style="font-size:120px">$32 亿</span></div>
+  <div class="center rise" data-at="一分钟" style="top:1340px;font-size:60px;font-weight:900">在 <span class="red">1 分钟</span> 内蒸发</div>
+  <div class="center src rise" style="--d:1s;top:1450px">来源：CoinGlass</div>
 </section>
 
 <section class="scene" id="s7">
-  <div class="rows">
-    <div class="row hot rise" data-at="现货"><div class="k">现货 ETF 获批</div><div class="v">2024.01<br>比特币进入股票账户</div></div>
-    <div class="row rise" data-at="华尔街"><div class="k">华尔街入场</div><div class="v">贝莱德、富达<br>成为最大买家之一</div></div>
-    <div class="row hot rise" data-at="12万6"><div class="k gold">$126,000</div><div class="v">2025.10<br>历史最高点</div></div>
-  </div>
+  <div class="center rise huge dim" style="top:520px;font-size:96px">不是你不够聪明</div>
+  <div class="center rise huge" data-at="这张牌桌" style="top:720px;font-size:96px">这张牌桌上</div>
+  <div class="center slam huge red glow" data-at="被收割" style="top:900px;font-size:150px">你就是</div>
+  <div class="center slam huge red glow" data-at="被收割" style="--d2:.2s;top:1080px;font-size:150px">被收割的</div>
 </section>
 
 <section class="scene" id="s8">
-  <div class="stats">
-    <div class="stat rise" data-at="8万4"><b class="gold">$84K</b><span>比特币 · 今天</span></div>
-    <div class="stat rise" data-at="570亿"><b>$577 亿</b><span>ETF 累计净流入</span></div>
-    <div class="stat rise" data-at="机构"><b class="green">机构</b><span>真正的买家</span></div>
-  </div>
-  <div class="center rise" data-at="机构" style="top:1440px;font-size:40px;color:rgba(255,255,255,.72)">总市值约 <b class="gold">$2.9 万亿</b> · BTC 市占 57%</div>
+  <div class="center slam huge red glow" data-at="别赌" style="top:330px;font-size:300px">别赌</div>
+  <div class="center" style="top:760px"><span class="opt pop" data-at="不上桌">不上桌</span><span class="opt pop" data-at="造桌子" style="border-color:#ffc46b;color:#ffc46b">去造桌子</span></div>
+  <div class="center pop" data-at="评论区" style="top:1030px"><span style="display:inline-block;background:#ff2d3d;border-radius:60px;padding:18px 60px;font-size:64px;font-weight:900">评论区：你亏了多少？</span></div>
+  <div class="center rise src" style="--d:2s;top:1260px;line-height:1.7">数据：Solidus Labs · Dune · CoinGlass<br>仅为风险提示，不构成投资建议</div>
 </section>
-
-<section class="scene" id="s9">
-  <div class="center rise" style="top:250px;font-size:86px;font-weight:900">为什么没有 <span class="gold">17 年</span></div>
-  <div class="center rise" style="--d:.2s;top:370px;font-size:86px;font-weight:900">好挣了？</div>
-  <div class="cards">
-    <div class="card rise" data-at="信息差"><div class="n">01</div><div><div class="t">信息差没了</div><div class="s">几亿人盯盘，机会几分钟被抹平</div></div></div>
-    <div class="card rise" data-at="机器人"><div class="n">02</div><div><div class="t">机器人抢跑</div><div class="s">一发射，狙击机器人先上车</div></div></div>
-    <div class="card rise" data-at="VC币"><div class="n">03</div><div><div class="t">VC 币上所即顶</div><div class="s">高估值、低流通、持续解锁</div></div></div>
-    <div class="card rise" data-at="资金"><div class="n">04</div><div><div class="t">拼资金·信息·速度</div><div class="s">规则天然偏向大户</div></div></div>
-  </div>
-</section>
-
-<section class="scene" id="s10">
-  <div class="center rise" style="top:300px;font-size:100px;font-weight:900">这扇门</div>
-  <div class="center rise" style="--d:.3s;top:430px;font-size:100px;font-weight:900">从来<span class="gold">没有关上</span></div>
-  <div class="center rise en" data-at="不需要" style="top:600px;font-size:36px">PERMISSIONLESS · 无需任何人批准</div>
-  <div class="center" style="top:700px">
-    <span class="chk pop" data-at="发币"><i>✓</i>发币</span><span class="chk pop" data-at="建站"><i>✓</i>建站</span><span class="chk pop" data-at="收款"><i>✓</i>收款</span>
-  </div>
-  <div class="center rise" data-at="机会" style="top:960px;font-size:56px;font-weight:800;color:rgba(255,255,255,.75)">机会</div>
-  <div class="center" style="top:1060px;font-size:260px;font-weight:900;line-height:1.1">
-    <span class="rise" data-at="从炒" style="display:inline-block"><span class="strike" data-at="变成了做">炒</span></span>
-    <span class="rise" data-at="变成了做" style="display:inline-block;font-size:150px;color:rgba(255,255,255,.5);vertical-align:middle">→</span>
-    <span class="pop gold" data-at="变成了做" style="display:inline-block">做</span>
-  </div>
-</section>
-
-<section class="scene" id="s11">
-  <div class="center rise" style="top:250px;font:900 90px 'Segoe UI'"><span class="gold">17</span> 年</div>
-  <div class="center rise" data-at="自由之地" style="top:390px;font-size:64px;font-weight:900">自由之地 <span style="color:rgba(255,255,255,.45)">→</span> <span class="gold">成熟市场</span></div>
-  <div class="center rise" data-at="你是" style="top:640px;font-size:104px;font-weight:900">你是哪一年</div>
-  <div class="center rise" data-at="你是" style="top:780px;font-size:104px;font-weight:900">入圈的？</div>
-  <div class="center" style="top:960px;padding:0 60px">
-    <span class="yc pop" data-at="入圈">2013</span><span class="yc pop" data-at="入圈">2017</span><span class="yc pop" data-at="入圈">2021</span><br>
-    <span class="yc pop" data-at="入圈">2024</span><span class="yc pop" data-at="入圈" style="border-color:#f7931a;color:#ffc46b">2026</span>
-  </div>
-  <div class="center pop" data-at="评论区" style="top:1300px"><span style="display:inline-block;background:#f7931a;color:#111;border-radius:60px;padding:16px 60px;font-size:60px;font-weight:900">评论区聊聊</span></div>
-  <div class="center rise" style="--d:2s;top:1500px;font-size:26px;color:rgba(255,255,255,.45);line-height:1.6">行业回顾，不构成投资建议 · 数据截至 2026.09</div>
-</section>
+</div>
 
 <div id="sub"><span></span></div>
 <div id="flash"></div>
@@ -201,122 +146,55 @@ const TL = window.TL;
 const $ = (id) => document.getElementById(id);
 const clamp = (x) => Math.max(0, Math.min(1, x));
 const ease = (x) => 1 - Math.pow(1 - clamp(x), 3);
-const easeIO = (x) => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2 };
-const NS = 'http://www.w3.org/2000/svg';
-
-let seed = 11;
-const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-for (let i = 0; i < 40; i++) {
-  const p = document.createElement('div');
-  p.className = 'pt';
-  p.style.left = rnd() * 1080 + 'px';
-  p.style.top = 900 + rnd() * 1100 + 'px';
-  p.style.animationDuration = 6 + rnd() * 7 + 's';
-  p.style.animationDelay = -rnd() * 10 + 's';
-  const s = 3 + rnd() * 5; p.style.width = p.style.height = s + 'px';
-  $('bg').appendChild(p);
-}
-
-// 比特币价格关键点（年份小数, 美元），中间按对数插值再叠一点抖动
-const KP = [[2010.0,.003],[2010.39,.004],[2010.55,.06],[2010.9,.3],[2011.1,.9],[2011.44,31],[2011.6,14],[2011.88,2.5],[2012.3,5],[2012.66,12],[2012.95,13],[2013.27,230],[2013.3,70],[2013.6,95],[2013.92,1150],[2014.15,550],[2014.5,600],[2014.95,320],[2015.04,180],[2015.5,250],[2015.85,420],[2016.3,420],[2016.5,700],[2016.9,780],[2017.0,1000],[2017.4,2500],[2017.65,4700],[2017.72,3000],[2017.96,19783],[2018.1,7000],[2018.35,9500],[2018.5,6200],[2018.87,6300],[2018.96,3200],[2019.2,4000],[2019.49,13000],[2019.9,6600],[2020.2,5000],[2020.5,9200],[2020.8,13000],[2020.99,29000],[2021.28,64000],[2021.55,30000],[2021.86,69000],[2022.1,38000],[2022.3,39000],[2022.4,29000],[2022.47,19000],[2022.6,23000],[2022.86,15500],[2022.99,16500],[2023.25,28000],[2023.5,30000],[2023.7,26500],[2023.99,43000],[2024.2,73000],[2024.6,55000],[2024.86,90000],[2024.96,106000],[2025.28,76000],[2025.54,120000],[2025.77,126000],[2025.9,90000],[2026.02,93000],[2026.3,78000],[2026.6,75000],[2026.73,87000],[2026.75,84000]];
-const X0 = 2010, X1 = 2027, L0 = -3, L1 = 5.6;
-const PX = (y) => 120 + (y - X0) / (X1 - X0) * 900;
-const PY = (lp) => 640 - (lp - L0) / (L1 - L0) * 590;
-const S = [];
-for (let k = 0; k < KP.length - 1; k++) {
-  const [y0, p0] = KP[k], [y1, p1] = KP[k + 1];
-  const n = Math.max(2, Math.round((y1 - y0) / 0.01));
-  for (let j = 0; j < n; j++) {
-    const u = j / n, y = y0 + (y1 - y0) * u;
-    const edge = Math.sin(Math.PI * u);
-    const jit = edge * (0.06 * Math.sin(y * 91.7) + 0.04 * Math.sin(y * 213.1) + 0.03 * Math.sin(y * 517.3));
-    S.push([y, Math.log10(p0) + (Math.log10(p1) - Math.log10(p0)) * u + jit]);
-  }
-}
-S.push([KP[KP.length - 1][0], Math.log10(KP[KP.length - 1][1])]);
-
-const grid = $('grid');
-const gl = (x1, y1, x2, y2, c) => { const l = document.createElementNS(NS, 'line'); Object.entries({ x1, y1, x2, y2, stroke: c, 'stroke-width': 2 }).forEach(([k, v]) => l.setAttribute(k, v)); grid.appendChild(l) };
-const gt = (x, y, s, a, c) => { const t = document.createElementNS(NS, 'text'); t.setAttribute('x', x); t.setAttribute('y', y); t.setAttribute('font-size', 26); t.setAttribute('fill', c || 'rgba(255,255,255,.45)'); t.setAttribute('text-anchor', a); t.textContent = s; grid.appendChild(t) };
-[[-2, '$0.01'], [0, '$1'], [2, '$100'], [4, '$10K'], [5, '$100K']].forEach(([lp, s]) => { gl(120, PY(lp), 1030, PY(lp), 'rgba(255,255,255,.08)'); gt(108, PY(lp) + 9, s, 'end') });
-for (let y = 2010; y <= 2026; y += 2) { gl(PX(y), 50, PX(y), 640, 'rgba(255,255,255,.05)'); gt(PX(y), 690, y, 'middle') }
-
-// 曲线上的事件标注：[年份, 文字, 标签在点上方(-1)/下方(1), 标签离点多远]
-const PINS = [[2010.39, '披萨日', 1, 78], [2013.92, '首次破千', -1, 78], [2014.15, '门头沟', 1, 78], [2017.96, 'ICO 顶', -1, 78], [2018.96, '-84%', 1, 78], [2021.86, '$69K', -1, 78], [2022.4, 'Luna', 1, 78], [2022.86, 'FTX', 1, 150], [2024.03, 'ETF', 1, 78], [2025.77, '$126K', 1, 110]];
-const lpAt = (y) => { let i = 0; while (i < S.length - 1 && S[i + 1][0] <= y) i++; return S[i][1] };
-const pins = PINS.map(([y, s, dir, off]) => {
-  const g = document.createElementNS(NS, 'g');
-  const x = PX(y), yy = PY(lpAt(y)), ly = yy + dir * off;
-  const bad = /门头沟|-84|Luna|FTX/.test(s);
-  const col = bad ? '#ff4d5e' : '#ffc46b';
-  g.innerHTML = `<line x1="${x}" y1="${yy}" x2="${x}" y2="${ly - dir * 24}" stroke="${col}" stroke-width="3" stroke-dasharray="6 6"/><circle cx="${x}" cy="${yy}" r="10" fill="${col}"/>` +
-    `<text x="${x}" y="${ly + 10}" font-size="32" font-weight="900" fill="${col}" text-anchor="middle" style="paint-order:stroke;stroke:#05060b;stroke-width:8px">${s}</text>`;
-  g.style.transformOrigin = `${x}px ${yy}px`;
-  $('pins').appendChild(g);
-  return { y, g };
-});
-
-// 每个场景曲线画到哪：起点年份 →（念到某词时到某年）→ 配音结束时的年份
-const SYNC = {
-  s1: { era: '创世', from: 2008.8, keys: [['2010年', 2010.0], ['披萨', 2010.39]], to: 2011.2 },
-  s2: { era: '萌芽', from: 2011.2, keys: [['2013年', 2013.0], ['1000', 2013.92], ['门头沟', 2014.15]], to: 2015.1 },
-  s3: { era: 'ICO 狂潮', from: 2015.1, keys: [['2017年', 2017.0], ['2万', 2017.96]], to: 2017.99 },
-  s4: { era: '熊市', from: 2017.99, keys: [['跌掉', 2018.5], ['归零', 2018.96]], to: 2019.1 },
-  s5: { era: 'DeFi · NFT', from: 2019.1, keys: [['2020年', 2020.3], ['2021年', 2021.0], ['6万9', 2021.86]], to: 2021.9 },
-  s6: { era: '暴雷之年', from: 2021.9, keys: [['Luna', 2022.4], ['FTX', 2022.86]], to: 2023.0 },
-  s7: { era: '华尔街入场', from: 2023.0, keys: [['2024年', 2024.0], ['2025年', 2025.0], ['12万6', 2025.77]], to: 2025.8 },
-  s8: { era: '机构时代', from: 2025.8, keys: [['8万4', 2026.75]], to: 2026.75 },
-};
 const at = (sc, word) => { const i = sc.text.indexOf(word); return i >= 0 ? sc.vo + sc.ct[i] : null };
+
 for (const sc of TL.scenes) {
   $(sc.id).querySelectorAll('[data-at]').forEach((n) => {
     const w = at(sc, n.dataset.at);
-    n.style.setProperty('--d', ((w ?? 0) - 0.15).toFixed(2) + 's');
+    n.style.setProperty('--d', ((w ?? 0) - 0.12).toFixed(2) + 's');
+    n.querySelectorAll('.bar i').forEach((b) => b.style.setProperty('--d', ((w ?? 0) + 0.2).toFixed(2) + 's'));
   });
-  const sy = SYNC[sc.id];
-  if (sy) {
-    sy.pts = [[0, sy.from]];
-    for (const [w, y] of sy.keys) { const tt = at(sc, w); if (tt !== null && tt > sy.pts[sy.pts.length - 1][0]) sy.pts.push([tt, y]) }
-    sy.pts.push([Math.max(sc.vo + sc.voDur, sy.pts[sy.pts.length - 1][0] + 0.1), sy.to]);
-  }
 }
-const yearAt = (sy, lt) => {
-  const p = sy.pts;
-  if (lt <= p[0][0]) return p[0][1];
-  for (let i = 0; i < p.length - 1; i++) if (lt < p[i + 1][0]) return p[i][1] + (p[i + 1][1] - p[i][1]) * easeIO((lt - p[i][0]) / (p[i + 1][0] - p[i][0]));
-  return p[p.length - 1][1];
-};
-const fmt = (lp) => {
-  const v = Math.pow(10, lp);
-  if (v < 1) return '$' + v.toFixed(v < .1 ? 3 : 2);
-  if (v < 100) return '$' + v.toFixed(1);
-  return '$' + Math.round(v).toLocaleString('en-US');
-};
 
-function drawChart(Y, pinOn) {
-  let d = '', last = null;
-  for (const [y, lp] of S) { if (y > Y) break; d += (d ? 'L' : 'M') + PX(y).toFixed(1) + ' ' + PY(lp).toFixed(1); last = [y, lp] }
-  $('line').setAttribute('d', d);
-  $('area').setAttribute('d', last ? d + `L${PX(last[0]).toFixed(1)} 640L${PX(2010)} 640Z` : '');
-  const show = !!last;
-  $('head').style.display = $('plab').style.display = show ? '' : 'none';
-  if (show) {
-    const hx = PX(last[0]), hy = PY(last[1]);
-    $('head').setAttribute('transform', `translate(${hx},${hy})`);
-    const tx = $('plab').querySelector('text'), rc = $('plab').querySelector('rect');
-    tx.textContent = fmt(last[1]);
-    const w = tx.textContent.length * 23 + 36;
-    const lx = Math.min(1060 - w, Math.max(20, hx - w / 2)), ly = Math.max(40, hy - 70);
-    rc.setAttribute('width', w); rc.setAttribute('x', 0); tx.setAttribute('x', 18);
-    $('plab').setAttribute('transform', `translate(${lx},${ly})`);
-  }
-  pins.forEach((p) => {
-    const age = Y - p.y;
-    const on = pinOn && age >= 0;
-    p.g.style.display = on ? '' : 'none';
-    if (on) { const k = ease(age / 0.12); p.g.style.transform = `scale(${0.3 + 0.7 * k})`; p.g.style.opacity = k }
-  });
+// 1000 个点，只有 4 个亮
+const dots = [];
+let seed = 5;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const LIT = new Set([137, 402, 618, 871]);
+for (let i = 0; i < 1000; i++) {
+  const d = document.createElement('i');
+  d.style.left = (i % 40) * 22.5 + 'px';
+  d.style.top = Math.floor(i / 40) * 22.5 + 'px';
+  $('dots').appendChild(d);
+  dots.push({ el: d, lit: LIT.has(i), r: rnd() });
 }
+
+// 念到这些词时红闪 + 震屏
+const HITS = { s0: ['送钱'], s3: ['卖单'], s4: ['98.6'], s6: ['190亿', '32亿'], s7: ['被收割'], s8: ['别赌'] };
+
+const hooks = {
+  s4(lt, sc) {
+    const t0 = at(sc, '98.6');
+    const v = 98.6 * ease((lt - t0 + 0.9) / 0.9);
+    $('c4').textContent = v.toFixed(1) + '%';
+  },
+  s5(lt, sc) {
+    const t0 = at(sc, '1355万') ?? 0.4, t1 = at(sc, '0.4');
+    dots.forEach((d) => {
+      const on = lt > t0 + d.r * 1.2;
+      const kill = lt > t1;
+      d.el.style.background = !on ? 'transparent' : d.lit && kill ? '#ffc46b' : kill ? 'rgba(255,45,61,.35)' : 'rgba(255,255,255,.35)';
+      d.el.style.boxShadow = d.lit && kill ? '0 0 22px 6px #ffc46b' : 'none';
+      d.el.style.transform = d.lit && kill ? 'scale(1.6)' : 'none';
+    });
+    $('c5').style.opacity = clamp((lt - t1 + 0.1) / 0.3);
+  },
+  s6(lt, sc) {
+    const t0 = at(sc, '2025年'), t1 = at(sc, '190亿');
+    const v = 190 * Math.pow(clamp((lt - t0) / (t1 - t0)), 2.2);
+    $('c6').textContent = '$' + Math.round(v) + ' 亿';
+  },
+};
 
 function seek(t) {
   $('bg').getAnimations({ subtree: true }).forEach((a) => { a.pause(); a.currentTime = t * 1000 });
@@ -328,34 +206,18 @@ function seek(t) {
     if (!on) continue;
     cur = sc; curLt = lt;
     el.getAnimations({ subtree: true }).forEach((a) => { a.pause(); a.currentTime = lt * 1000 });
-    const fin = clamp(lt / 0.3), fout = sc.last ? 1 : clamp((sc.dur - lt) / 0.3);
+    const fin = clamp(lt / 0.18), fout = sc.last ? 1 : clamp((sc.dur - lt) / 0.18);
     el.style.opacity = Math.min(fin, fout);
+    if (hooks[sc.id]) hooks[sc.id](lt, sc);
   }
-  const sy = cur && SYNC[cur.id];
-  let chartOp = 0;
-  if (cur && cur.id === 's0') {
-    drawChart(2010 + 16.75 * easeIO(curLt / 3.2), false);
-    chartOp = 0.22 * clamp((cur.dur - curLt) / 0.3);
-    $('head').style.display = $('plab').style.display = 'none';
-  } else if (sy) {
-    const Y = yearAt(sy, curLt);
-    drawChart(Y, true);
-    chartOp = cur.id === 's1' ? clamp(curLt / 0.4) : 1;
-    $('yr').textContent = Math.floor(Math.max(2008, Y));
-    $('era').firstElementChild.textContent = sy.era;
-  } else if (cur && cur.id === 's9') {
-    chartOp = clamp(1 - curLt / 0.4);
-  }
-  $('chart').style.opacity = chartOp;
-  const topOp = sy ? (cur.id === 's1' ? clamp(curLt / 0.4) : 1) : (cur && cur.id === 's9' ? clamp(1 - curLt / 0.4) : 0);
-  $('yr').style.opacity = $('era').style.opacity = topOp;
-  // 崩盘 / 暴雷时红闪一下
   let fl = 0;
-  if (cur && (cur.id === 's4' || cur.id === 's6' || cur.id === 's2')) {
-    for (const w of ['跌掉', 'Luna', 'FTX', '门头沟']) { const tt = at(cur, w); if (tt !== null && curLt > tt && curLt < tt + 0.5) fl = Math.max(fl, 1 - (curLt - tt) / 0.5) }
+  if (cur) for (const w of HITS[cur.id] || []) {
+    const tt = at(cur, w);
+    if (tt !== null && curLt > tt && curLt < tt + 0.5) fl = Math.max(fl, 1 - (curLt - tt) / 0.5);
   }
-  $('flash').style.background = 'radial-gradient(circle at 50% 50%, rgba(255,40,60,.0), rgba(255,40,60,.55))';
-  $('flash').style.opacity = fl;
+  $('flash').style.opacity = fl * 0.9;
+  const sh = 22 * fl;
+  $('stage').style.translate = `${sh * Math.sin(t * 97)}px ${sh * Math.cos(t * 71)}px`;
   const sub = TL.subs.find((s) => t >= s.t0 && t < s.t1);
   $('sub').firstElementChild.textContent = sub ? sub.text : '';
   $('sub').style.display = sub ? 'block' : 'none';

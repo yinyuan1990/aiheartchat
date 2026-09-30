@@ -1,8 +1,8 @@
-"""币圈简史短片（竖屏 1080x1920）：比特币对数价格曲线随年份推进 + 各时代卡片 + 新闻男声配音 + 鼓点 BGM。
+"""「为什么如今散户进币圈就是送钱」短片（竖屏 1080x1920，约 60 秒）：黑红风格大字 + 硬数据 + 念到关键词红闪震屏 + 男声配音 + 鼓点 BGM。
 
 history.html 写画面，这里配音 → 算时间轴 → 逐帧截图 → 合成。
 用发布机的虚拟环境跑：
-  ..\\..\\publisher\\.venv\\Scripts\\python.exe make.py            # 出 out/crypto-history.mp4
+  ..\\..\\publisher\\.venv\\Scripts\\python.exe make.py            # 出 out/retail-dies.mp4
   ..\\..\\publisher\\.venv\\Scripts\\python.exe make.py --preview  # 只截关键帧到 out/prev-*.jpg
   ..\\..\\publisher\\.venv\\Scripts\\python.exe make.py --mix      # 只重新混音
 配乐沿用 arm/promo-video/out/bgm.mp3（Mixkit「Epical Drums 01」，免版权），out/ 不进 git。
@@ -26,32 +26,29 @@ from video.common import ffmpeg, media_duration, run_ffmpeg  # noqa: E402
 
 OUT = HERE / "out"
 FPS = 30
-VOICE = "zh-CN-YunyangNeural"
-RATE = "+10%"
-VO_OFF = 0.45
+VOICE = "zh-CN-YunjianNeural"
+RATE = "+15%"
+VO_OFF = 0.3
 BGM_SRC = ROOT / "arm" / "promo-video" / "out" / "bgm.mp3"
-# (场景 id, 配音, 配音后留多久)；价格 / 时间点截至 2026-09-30
+# (场景 id, 配音, 配音后留多久)；数据：Solidus Labs 2025 报告、Dune 2025.01、CoinGlass 2025.10.10
 SCENES = [
-    ("s0", "从一张白皮书，到三万亿美元。币圈这十七年，到底发生了什么？", 0.8),
-    ("s1", "2008年，中本聪发布比特币白皮书。2010年，有人用一万个比特币，换了两块披萨。", 0.8),
-    ("s2", "2013年，比特币第一次突破1000美元。第二年，门头沟交易所倒闭，85万个比特币不翼而飞。", 0.8),
-    ("s3", "2017年，ICO狂潮。一份白皮书就能募资上亿，比特币逼近2万美元。那是散户的黄金年代，懂的人少，早进就能赚。", 0.9),
-    ("s4", "2018年，泡沫破裂。比特币跌掉八成，无数项目归零。", 0.8),
-    ("s5", "2020年，DeFi之夏。2021年，NFT和Meme币全面出圈，比特币突破6万9千美元。", 0.8),
-    ("s6", "2022年，Luna几天归零，FTX一夜暴雷，行业信任跌到冰点。", 0.8),
-    ("s7", "2024年，比特币现货ETF获批，华尔街正式入场。2025年，比特币最高冲到12万6千美元。", 0.8),
-    ("s8", "而今天，比特币在8万4千美元附近徘徊。ETF累计净流入超过570亿美元，真正在买的，是机构。", 0.9),
-    ("s9", "为什么没有17年好挣了？信息差没了；一发射就有机器人抢跑；VC币上所就是顶；拼的是资金、信息和速度。", 1.0),
-    ("s10", "但这扇门从来没有关上。不需要谁批准，就能发币、建站、收款。机会，从炒，变成了做。", 1.2),
-    ("s11", "十七年，从自由之地，到成熟市场。你是哪一年入圈的？评论区聊聊。", 3.5),
+    ("s0", "2026年，散户冲进币圈，就是去送钱。", 0.5),
+    ("s1", "2017年，你站在第一排。今天，你排在最后一个。", 0.5),
+    ("s2", "一个新币上线，项目方和VC拿的是零成本筹码；机器人开盘第一秒就抢完；KOL提前埋伏，喊单就是出货。等你看到，已经涨了十倍。", 0.5),
+    ("s3", "你买进的每一个币，都是他们的卖单。", 0.7),
+    ("s4", "pump.fun上发了700多万个币，98.6%，最后变成废纸。", 0.6),
+    ("s5", "1355万个钱包里，赚到一万美元以上的，只有0.4%。", 0.8),
+    ("s6", "亏了想翻本？那就上杠杆。2025年10月10日，一天爆仓190亿美元，160万人被清算，其中32亿，在一分钟内蒸发。", 0.7),
+    ("s7", "不是你不够聪明。是这张牌桌上，你本来就是被收割的那一方。", 0.8),
+    ("s8", "所以，别赌。要么不上桌，要么去造桌子。评论区说说，你亏了多少？", 3.0),
 ]
-SUB_MAX = 15
+SUB_MAX = 14
 
 
 def chunks(text: str) -> list[tuple[int, int]]:
-    """按标点切字幕，返回 (起, 止) 下标；标点不显示"""
+    """按中文标点切字幕，返回 (起, 止) 下标；标点不显示（不按英文句点切，免得切断 98.6% / pump.fun）"""
     out, start = [], 0
-    for m in re.finditer(r"[，。：、！？；,.]", text):
+    for m in re.finditer(r"[，。：、！？；]", text):
         seg = (start, m.start())
         if seg[1] > seg[0]:
             out.append(seg)
@@ -143,7 +140,7 @@ def mix(tl: dict, silent: Path) -> Path:
     vo = "".join(f"[v{k}]" for k in range(n))
     fc = ";".join(parts) + f";{vo}amix=inputs={n}:normalize=0:dropout_transition=0,apad[vo];" \
          f"[1:a]volume=0.26,afade=t=in:d=0.5,afade=t=out:st={total - 3:.2f}:d=3[bg];[vo][bg]amix=inputs=2:normalize=0:duration=shortest,loudnorm=I=-14:TP=-1.5:LRA=11[a]"
-    out = OUT / "crypto-history.mp4"
+    out = OUT / "retail-dies.mp4"
     run_ffmpeg([*ins, "-filter_complex", fc, "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-t", f"{total:.3f}", "-movflags", "+faststart", str(out)])
     return out
 
