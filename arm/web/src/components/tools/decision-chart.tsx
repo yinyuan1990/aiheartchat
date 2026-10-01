@@ -73,14 +73,14 @@ export function DecisionChart({ bars, live, marks, lines, className }: {
     const m = markersRef.current;
     if (!m) return;
     const offset = -new Date().getTimezoneOffset() * 60;
-    const up = cssVar("--up"), down = cssVar("--down"), muted = cssVar("--muted-foreground");
+    const up = cssVar("--up"), down = cssVar("--down"), muted = "rgba(148, 163, 184, 0.75)";
     const list: SeriesMarker<Time>[] = marks
       .filter((d) => bars.length && d.time >= bars[0].time)
       .map((d) => ({
         time: (Math.floor(d.time / 300) * 300 + offset) as Time,
         position: (d.kind === "short" ? "aboveBar" : "belowBar") as "aboveBar" | "belowBar",
         shape: (d.kind === "long" ? "arrowUp" : d.kind === "short" ? "arrowDown" : d.kind === "close" ? "square" : "circle") as "arrowUp" | "arrowDown" | "square" | "circle",
-        color: d.kind === "long" ? up : d.kind === "short" ? down : d.kind === "close" ? cssVar("--primary") : `${muted}88`,
+        color: d.kind === "long" ? up : d.kind === "short" ? down : d.kind === "close" ? cssVar("--primary") : muted,
         size: d.kind === "wait" || d.kind === "hold" ? 0.6 : 1.4,
         text: d.text,
       }))
