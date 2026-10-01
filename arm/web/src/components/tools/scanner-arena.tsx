@@ -8,8 +8,9 @@ import { useScanner, type RadarItem, type ScanBot, type ScanBotId, type ScanStat
 import { signedPct } from "@/app/card/card-format";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { Sparkline, useNow } from "./ai-arena";
+import { useNow } from "./ai-arena";
 import { QuickBuy } from "./quick-buy";
+import { DrawSparkline, RadarScope, ScanTicker, useCountUp } from "./scanner-motion";
 
 type Ready = Extract<ScanState, { status: "ready" }>;
 
@@ -26,11 +27,12 @@ function ago(ms: number, zh: boolean) {
   return zh ? `${Math.floor(s / 3600)} 小时` : `${Math.floor(s / 3600)}h`;
 }
 
-function Stat({ label, value, sub, className }: { label: string; value: string; sub?: string; className?: string }) {
+function Stat({ label, value, suffix = "", sub, className }: { label: string; value: number; suffix?: string; sub?: string; className?: string }) {
+  const v = useCountUp(value);
   return (
     <div className="rounded-lg bg-muted/40 px-2.5 py-2">
       <div className="text-[10px] text-muted-foreground">{label}</div>
-      <div className={cn("font-mono text-base font-bold tabular-nums", className)}>{value}</div>
+      <div className={cn("font-mono text-base font-bold tabular-nums", className)}>{Math.round(v)}{suffix}</div>
       {sub && <div className="text-[10px] text-muted-foreground">{sub}</div>}
     </div>
   );
@@ -41,6 +43,8 @@ function BotRow({ bot, rank, rules, smartWallets, open, onToggle }: {
 }) {
   const { t, locale } = useApp();
   const zh = locale === "zh";
+  const pnl = useCountUp(bot.pnl, 1600);
+  const roi = useCountUp(bot.roi, 1600);
   const rule = t(`scan.rule.${bot.id}`)
     .replace("{buyers}", String(rules.filter.buyers)).replace("{vol}", String(rules.filter.volume))
     .replace("{top3}", String(Math.round(rules.filter.top3 * 100))).replace("{n}", String(smartWallets));
@@ -58,11 +62,11 @@ function BotRow({ bot, rank, rules, smartWallets, open, onToggle }: {
             <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{rule}</p>
           </div>
           <div className="shrink-0 text-right">
-            <div className={cn("font-mono text-lg font-bold tabular-nums", tone(bot.pnl))}>{signedU(bot.pnl)}</div>
-            <div className={cn("text-[11px] tabular-nums", tone(bot.roi))}>{signedPct(bot.roi)}</div>
+            <div className={cn("font-mono text-lg font-bold tabular-nums", tone(bot.pnl))}>{signedU(pnl)}</div>
+            <div className={cn("text-[11px] tabular-nums", tone(bot.roi))}>{signedPct(roi)}</div>
           </div>
         </div>
-        <Sparkline points={bot.curve} up={bot.pnl >= 0} />
+        <DrawSparkline points={bot.curve} up={bot.pnl >= 0} />
         <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground tabular-nums">
           <span>{t("scan.trades").replace("{n}", bot.trades.toLocaleString("en-US"))}</span>
           <span>{t("scan.win")} {bot.trades ? Math.round((bot.wins / bot.trades) * 100) : 0}%</span>
@@ -93,14 +97,16 @@ function BotRow({ bot, rank, rules, smartWallets, open, onToggle }: {
   );
 }
 
-function RadarRow({ r, now }: { r: RadarItem; now: number }) {
+function RadarRow({ r, now, delay }: { r: RadarItem; now: number; delay: number }) {
   const { t, locale } = useApp();
   const zh = locale === "zh";
   const [buying, setBuying] = useState(false);
+  const [enterDelay] = useState(delay);
   const fresh = now - r.bornAt < 600_000;
   const verdictCls = r.verdict === "buy" ? "bg-up/15 text-up" : r.verdict === "skip" ? "bg-muted text-muted-foreground" : "bg-primary/15 text-primary";
   return (
-    <div className={cn("space-y-1.5 rounded-lg border px-3 py-2", r.dead && "opacity-60")}>
+    <div style={{ animationDelay: `${enterDelay}ms` }} className="fade-up">
+    <div className={cn("space-y-1.5 rounded-lg border px-3 py-2", fresh && "border-up/40 bg-up/5", r.dead && "opacity-60")}>
       <div className="flex items-center justify-between gap-2">
         <span className="flex min-w-0 items-center gap-1.5">
           {fresh && (
@@ -144,6 +150,7 @@ function RadarRow({ r, now }: { r: RadarItem; now: number }) {
       </div>
       {buying && <QuickBuy item={r} open={buying} onClose={() => setBuying(false)} />}
     </div>
+    </div>
   );
 }
 
@@ -175,11 +182,17 @@ export function ScannerArena() {
             </span>
           </h2>
           <p className="leading-relaxed text-muted-foreground">{fill(t("scan.body"))}</p>
-          <div className="grid grid-cols-4 gap-1.5">
-            <Stat label={t("scan.scanned")} value={String(stats.scanned)} />
-            <Stat label={t("scan.passed")} value={String(stats.passed)} className="text-up" />
-            <Stat label={t("scan.deadRate")} value={`${Math.round(deadRate * 100)}%`} sub={`${stats.skippedDead}/${stats.skipped}`} className="text-down" />
-            <Stat label={t("scan.alive")} value={String(stats.alive)} />
+          <div className="flex items-center gap-3">
+            <RadarScope items={radar} className="w-28 shrink-0 sm:w-36" />
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <ScanTicker items={radar} />
+              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                <Stat label={t("scan.scanned")} value={stats.scanned} />
+                <Stat label={t("scan.passed")} value={stats.passed} className="text-up" />
+                <Stat label={t("scan.deadRate")} value={Math.round(deadRate * 100)} suffix="%" sub={`${stats.skippedDead}/${stats.skipped}`} className="text-down" />
+                <Stat label={t("scan.alive")} value={stats.alive} />
+              </div>
+            </div>
           </div>
           <p className="text-[11px] leading-relaxed text-muted-foreground">{fill(t("scan.paper"))}</p>
         </CardContent>
@@ -208,7 +221,7 @@ export function ScannerArena() {
             <p className="text-xs text-muted-foreground">{t("scan.empty")}</p>
           ) : (
             <div className="max-h-[36rem] space-y-1.5 overflow-y-auto pr-0.5">
-              {rows.map((r) => <RadarRow key={r.pool} r={r} now={now} />)}
+              {rows.map((r, i) => <RadarRow key={r.pool} r={r} now={now} delay={Math.min(i, 12) * 60} />)}
             </div>
           )}
         </CardContent>

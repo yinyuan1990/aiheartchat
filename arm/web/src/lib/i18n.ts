@@ -138,6 +138,8 @@ const dict = {
   "scan.onlyBusy": ["只看有人买的", "Only coins with buyers"],
   "scan.empty": ["24 小时内没有符合条件的新币", "No matching new coins in the last 24h"],
   "scan.age": ["{t} 前", "{t} ago"],
+  "scan.ticker": ["发现新池 {sym} · {n} 人买 · {v}", "new pool {sym} · {n} buyers · {v}"],
+  "scan.sweep": ["扫描 Arc 主网", "Scanning Arc mainnet"],
   "scan.buyers": ["{n} 人买", "{n} buyers"],
   "scan.vol": ["成交 {v}", "Vol {v}"],
   "scan.since": ["体检后", "Since check"],

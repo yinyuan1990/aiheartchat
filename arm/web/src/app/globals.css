@@ -334,6 +334,22 @@
   animation: fadeUp 0.35s ease-out both;
 }
 
+/* Scanner arena: charts wipe in left to right. */
+@keyframes reveal-x {
+  from {
+    clip-path: inset(-10% 100% -10% 0);
+  }
+  to {
+    clip-path: inset(-10% 0 -10% 0);
+  }
+}
+@utility reveal-x {
+  animation: reveal-x 1.6s ease-out both;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
 /* 🔥 emoji flames (components/hot/flame.tsx): slow flicker + two embers drifting up. */
 @keyframes flame-flicker {
   0%,
