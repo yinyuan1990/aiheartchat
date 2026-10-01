@@ -24,9 +24,10 @@ import { ArcSwap } from "@/components/tools/arc-swap";
 import { HolderMap } from "@/components/tools/holder-map";
 import { PnlCard } from "@/components/tools/pnl-card";
 import { GmgnTool } from "@/components/tools/gmgn-tool";
+import { AiTrade } from "@/components/tools/ai-trade";
 
-type Tool = "swap" | "bridge" | "holders" | "card" | "gmgn";
-const TOOLS: Tool[] = ["swap", "bridge", "holders", "card", "gmgn"];
+type Tool = "swap" | "bridge" | "holders" | "card" | "gmgn" | "ai";
+const TOOLS: Tool[] = ["swap", "bridge", "holders", "card", "gmgn", "ai"];
 const noSubscribe = () => () => {};
 
 type Step = "switch" | "approve" | "send";
@@ -110,7 +111,7 @@ export default function ToolsPage() {
   const [picked, setTool] = useState<Tool | null>(null);
   const tab = query.get("tab") as Tool | null;
   const tool: Tool = picked ?? (tab && TOOLS.includes(tab) ? tab : "swap");
-  const subtitle = { swap: t("swap.subtitle"), bridge: t("tools.subtitle"), holders: t("holders.subtitle"), card: t("card.subtitle"), gmgn: t("gmgn.subtitle") }[tool];
+  const subtitle = { swap: t("swap.subtitle"), bridge: t("tools.subtitle"), holders: t("holders.subtitle"), card: t("card.subtitle"), gmgn: t("gmgn.subtitle"), ai: t("nofx.subtitle") }[tool];
   return (
     <div className="mx-auto max-w-lg space-y-4">
       <div className="sticky top-[var(--shell-top,0px)] z-20 -mx-3 -mt-4 bg-background/90 px-3 pt-3 pb-2 backdrop-blur md:mx-0 md:px-0">
@@ -121,12 +122,13 @@ export default function ToolsPage() {
             <TabsTrigger value="holders">{t("tools.tab.holders")}</TabsTrigger>
             <TabsTrigger value="card">{t("tools.tab.card")}</TabsTrigger>
             <TabsTrigger value="gmgn">{t("tools.tab.gmgn")}</TabsTrigger>
+            <TabsTrigger value="ai">{t("tools.tab.ai")}</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
       <h1 className="sr-only">{t("tools.page")}</h1>
       <p className="px-1 text-sm text-muted-foreground">{subtitle}</p>
-      {tool === "swap" ? <ArcSwap /> : tool === "bridge" ? <Bridge /> : tool === "holders" ? <HolderMap initial={query.get("token") ?? ""} /> : tool === "card" ? <PnlCard initial={query.get("wallet") ?? ""} /> : <GmgnTool />}
+      {tool === "swap" ? <ArcSwap /> : tool === "bridge" ? <Bridge /> : tool === "holders" ? <HolderMap initial={query.get("token") ?? ""} /> : tool === "card" ? <PnlCard initial={query.get("wallet") ?? ""} /> : tool === "gmgn" ? <GmgnTool /> : <AiTrade />}
     </div>
   );
 }
