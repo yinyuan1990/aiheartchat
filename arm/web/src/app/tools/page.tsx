@@ -21,8 +21,10 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { errMsg } from "@/components/shared";
 import { ArcSwap } from "@/components/tools/arc-swap";
+import { HolderMap } from "@/components/tools/holder-map";
 
-type Tool = "swap" | "bridge";
+type Tool = "swap" | "bridge" | "holders";
+const TOOLS: Tool[] = ["swap", "bridge", "holders"];
 
 type Step = "switch" | "approve" | "send";
 
@@ -97,23 +99,29 @@ function PendingCard({ p }: { p: Pending }) {
 
 export default function ToolsPage() {
   const { t } = useApp();
-  // `?tab=bridge` deep-links the cross-chain tool; default is the on-chain swap (9.18)
-  const [tool, setTool] = useState<Tool>(() => (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("tab") === "bridge" ? "bridge" : "swap"));
+  // `?tab=bridge|holders` deep-links a tool (`&token=` prefills the holder map); default is the on-chain swap (9.18)
+  const [query] = useState(() => (typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null));
+  const [tool, setTool] = useState<Tool>(() => {
+    const tab = query?.get("tab") as Tool | null;
+    return tab && TOOLS.includes(tab) ? tab : "swap";
+  });
+  const subtitle = tool === "swap" ? t("swap.subtitle") : tool === "bridge" ? t("tools.subtitle") : t("holders.subtitle");
   return (
     <div className="mx-auto max-w-lg space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-xl font-semibold"><ArrowLeftRight className="size-5 text-primary" /> {t("tools.page")}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{tool === "swap" ? t("swap.subtitle") : t("tools.subtitle")}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
         </div>
         <Tabs value={tool} onValueChange={(v) => setTool(v as Tool)}>
           <TabsList>
             <TabsTrigger value="swap">{t("tools.tab.swap")}</TabsTrigger>
             <TabsTrigger value="bridge">{t("tools.tab.bridge")}</TabsTrigger>
+            <TabsTrigger value="holders">{t("tools.tab.holders")}</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
-      {tool === "swap" ? <ArcSwap /> : <Bridge />}
+      {tool === "swap" ? <ArcSwap /> : tool === "bridge" ? <Bridge /> : <HolderMap initial={query?.get("token") ?? ""} />}
     </div>
   );
 }

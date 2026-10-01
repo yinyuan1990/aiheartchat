@@ -161,3 +161,5 @@ export const lockerAbi = parseAbi([
 
 export const txUrl = (hash: string) => `${EXPLORER}/tx/${hash}`;
 export const addrUrl = (a: string) => `${EXPLORER}/address/${a}`;
+/** Bubblemaps holder map (Arc since 9.16). Its CSP frame-ancestors only allows its partners, so open it, don't iframe it. */
+export const bubblemapsUrl = (token: string) => `https://v2.bubblemaps.io/map?address=${token.toLowerCase()}&chain=arc`;
