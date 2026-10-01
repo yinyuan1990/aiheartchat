@@ -324,12 +324,7 @@ function TikTokMode({ onExit, onGreet, startId }: { onExit: () => void; onGreet:
         if (e.deltaY < -30) go(-1);
       }}
     >
-      {/* 播完自动切下一条，最后一条播完回到第一条；只有一条时循环 */}
-      <video
-        key={m.id} src={m.videoUrl} poster={m.coverUrl || undefined} autoPlay playsInline controls={false}
-        loop={items.length === 1}
-        onEnded={() => setIndex((i) => (i + 1) % items.length)}
-      />
+      <video key={m.id} src={m.videoUrl} poster={m.coverUrl || undefined} autoPlay loop playsInline controls={false} />
       <div style={{ position: 'absolute', top: 14, left: 16, color: '#fff', cursor: 'pointer' }} onClick={onExit}>‹ 返回</div>
       <div className="side">
         <div className="avatar" style={{ width: 44, height: 44, border: '1px solid #fff' }}>

@@ -25,11 +25,7 @@ struct TikTokView: View {
                     TabView(selection: $currentId) {
                         ForEach(items) { m in
                             // 只播当前停留页，避免懒加载预创建的页面提前出声
-                            TikTokPage(m: m, playing: currentId == m.id, loop: items.count == 1) {
-                                // 播完自动切下一条，最后一条播完回到第一条
-                                guard currentId == m.id, let i = items.firstIndex(where: { $0.id == m.id }) else { return }
-                                withAnimation { currentId = items[(i + 1) % items.count].id }
-                            }
+                            TikTokPage(m: m, playing: currentId == m.id)
                                 .frame(width: geo.size.width, height: geo.size.height)
                                 .rotationEffect(.degrees(-90))
                                 .frame(width: geo.size.height, height: geo.size.width)
@@ -63,12 +59,10 @@ struct TikTokView: View {
     }
 }
 
-/// 单页：视频播放（播完回调 onEnded，只有一条时循环）+ 作者信息 + 点赞
+/// 单页：视频循环播放 + 作者信息 + 点赞
 private struct TikTokPage: View {
     let m: Moment
     let playing: Bool
-    let loop: Bool
-    let onEnded: () -> Void
     @EnvironmentObject private var appState: AppState
     @State private var player: AVQueuePlayer?
     @State private var looper: AVPlayerLooper?
@@ -173,10 +167,6 @@ private struct TikTokPage: View {
         .onDisappear {
             player?.pause()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime)) { n in
-            guard !loop, playing, let item = n.object as? AVPlayerItem, item === player?.currentItem else { return }
-            onEnded()
-        }
     }
 
     private func ensurePlayer() {
@@ -186,14 +176,8 @@ private struct TikTokPage: View {
             let p = AVQueuePlayer()
             p.automaticallyWaitsToMinimizeStalling = false
             p.isMuted = false
-            if loop {
-                // AVPlayerLooper：系统级无缝循环（比播完 seek 回零更顺滑）
-                looper = AVPlayerLooper(player: p, templateItem: item)
-            } else {
-                // 播完停在末帧不出队，翻回来时 seek 回零即可重播
-                p.actionAtItemEnd = .pause
-                p.insert(item, after: nil)
-            }
+            // AVPlayerLooper：系统级无缝循环（比播完 seek 回零更顺滑）
+            looper = AVPlayerLooper(player: p, templateItem: item)
             player = p
         }
     }
