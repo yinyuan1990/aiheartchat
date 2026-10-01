@@ -168,3 +168,4 @@ const GMGN_REF = process.env.NEXT_PUBLIC_GMGN_REF ?? "vckWkKRq";
 const gmgn = (kind: "token" | "address", a: string) => `https://gmgn.ai/arc/${kind}/${GMGN_REF ? `${GMGN_REF}_` : ""}${a.toLowerCase()}`;
 export const gmgnTokenUrl = (token: string) => gmgn("token", token);
 export const gmgnWalletUrl = (wallet: string) => gmgn("address", wallet);
+export const gmgnHomeUrl = `https://gmgn.ai/?chain=arc${GMGN_REF ? `&ref=${GMGN_REF}` : ""}`;

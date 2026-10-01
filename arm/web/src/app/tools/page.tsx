@@ -23,9 +23,10 @@ import { errMsg } from "@/components/shared";
 import { ArcSwap } from "@/components/tools/arc-swap";
 import { HolderMap } from "@/components/tools/holder-map";
 import { PnlCard } from "@/components/tools/pnl-card";
+import { GmgnTool } from "@/components/tools/gmgn-tool";
 
-type Tool = "swap" | "bridge" | "holders" | "card";
-const TOOLS: Tool[] = ["swap", "bridge", "holders", "card"];
+type Tool = "swap" | "bridge" | "holders" | "card" | "gmgn";
+const TOOLS: Tool[] = ["swap", "bridge", "holders", "card", "gmgn"];
 const noSubscribe = () => () => {};
 
 type Step = "switch" | "approve" | "send";
@@ -109,7 +110,7 @@ export default function ToolsPage() {
   const [picked, setTool] = useState<Tool | null>(null);
   const tab = query.get("tab") as Tool | null;
   const tool: Tool = picked ?? (tab && TOOLS.includes(tab) ? tab : "swap");
-  const subtitle = { swap: t("swap.subtitle"), bridge: t("tools.subtitle"), holders: t("holders.subtitle"), card: t("card.subtitle") }[tool];
+  const subtitle = { swap: t("swap.subtitle"), bridge: t("tools.subtitle"), holders: t("holders.subtitle"), card: t("card.subtitle"), gmgn: t("gmgn.subtitle") }[tool];
   return (
     <div className="mx-auto max-w-lg space-y-4">
       <div className="space-y-3">
@@ -123,10 +124,11 @@ export default function ToolsPage() {
             <TabsTrigger value="bridge">{t("tools.tab.bridge")}</TabsTrigger>
             <TabsTrigger value="holders">{t("tools.tab.holders")}</TabsTrigger>
             <TabsTrigger value="card">{t("tools.tab.card")}</TabsTrigger>
+            <TabsTrigger value="gmgn">{t("tools.tab.gmgn")}</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
-      {tool === "swap" ? <ArcSwap /> : tool === "bridge" ? <Bridge /> : tool === "holders" ? <HolderMap initial={query.get("token") ?? ""} /> : <PnlCard initial={query.get("wallet") ?? ""} />}
+      {tool === "swap" ? <ArcSwap /> : tool === "bridge" ? <Bridge /> : tool === "holders" ? <HolderMap initial={query.get("token") ?? ""} /> : tool === "card" ? <PnlCard initial={query.get("wallet") ?? ""} /> : <GmgnTool />}
     </div>
   );
 }
