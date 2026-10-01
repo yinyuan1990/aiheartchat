@@ -8,6 +8,7 @@ import { startHotspots, startLogoPainter } from "./hotspots/service.js";
 import { startTelegram } from "./telegram/bot.js";
 import { startBuyback } from "./buyback.js";
 import { startGallery } from "./gallery.js";
+import { startDexSync } from "./dex.js";
 import { bus } from "./bus.js";
 import { config } from "./config.js";
 import { loadQuotePrices, refreshQuotePrices } from "./quotes.js";
@@ -43,3 +44,5 @@ void startTelegram();
 void startBuyback();
 // Daily gallery sync from the operator's image pool (inert without GALLERY_TOKEN)
 startGallery();
+// Chain-wide USDC-pair swap tape for the wallet trading card
+void startDexSync();

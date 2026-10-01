@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { ArrowDown, ArrowLeftRight, CheckCircle2, ExternalLink, Loader2, ShieldCheck, Wallet, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -22,9 +22,11 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { errMsg } from "@/components/shared";
 import { ArcSwap } from "@/components/tools/arc-swap";
 import { HolderMap } from "@/components/tools/holder-map";
+import { PnlCard } from "@/components/tools/pnl-card";
 
-type Tool = "swap" | "bridge" | "holders";
-const TOOLS: Tool[] = ["swap", "bridge", "holders"];
+type Tool = "swap" | "bridge" | "holders" | "card";
+const TOOLS: Tool[] = ["swap", "bridge", "holders", "card"];
+const noSubscribe = () => () => {};
 
 type Step = "switch" | "approve" | "send";
 
@@ -99,29 +101,32 @@ function PendingCard({ p }: { p: Pending }) {
 
 export default function ToolsPage() {
   const { t } = useApp();
-  // `?tab=bridge|holders` deep-links a tool (`&token=` prefills the holder map); default is the on-chain swap (9.18)
-  const [query] = useState(() => (typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null));
-  const [tool, setTool] = useState<Tool>(() => {
-    const tab = query?.get("tab") as Tool | null;
-    return tab && TOOLS.includes(tab) ? tab : "swap";
-  });
-  const subtitle = tool === "swap" ? t("swap.subtitle") : tool === "bridge" ? t("tools.subtitle") : t("holders.subtitle");
+  // `?tab=bridge|holders|card` deep-links a tool (`&token=` / `&wallet=` prefill); default is the on-chain swap (9.18).
+  // Hydrate with the server snapshot ("") first: reading location during the first render mismatches the SSR text,
+  // and React then re-renders the whole root, wiping <html data-theme> back to the light default.
+  const search = useSyncExternalStore(noSubscribe, () => window.location.search, () => "");
+  const query = useMemo(() => new URLSearchParams(search), [search]);
+  const [picked, setTool] = useState<Tool | null>(null);
+  const tab = query.get("tab") as Tool | null;
+  const tool: Tool = picked ?? (tab && TOOLS.includes(tab) ? tab : "swap");
+  const subtitle = { swap: t("swap.subtitle"), bridge: t("tools.subtitle"), holders: t("holders.subtitle"), card: t("card.subtitle") }[tool];
   return (
     <div className="mx-auto max-w-lg space-y-4">
-      <div className="flex items-start justify-between gap-3">
+      <div className="space-y-3">
         <div>
           <h1 className="flex items-center gap-2 text-xl font-semibold"><ArrowLeftRight className="size-5 text-primary" /> {t("tools.page")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
         </div>
         <Tabs value={tool} onValueChange={(v) => setTool(v as Tool)}>
-          <TabsList>
+          <TabsList className="w-full">
             <TabsTrigger value="swap">{t("tools.tab.swap")}</TabsTrigger>
             <TabsTrigger value="bridge">{t("tools.tab.bridge")}</TabsTrigger>
             <TabsTrigger value="holders">{t("tools.tab.holders")}</TabsTrigger>
+            <TabsTrigger value="card">{t("tools.tab.card")}</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
-      {tool === "swap" ? <ArcSwap /> : tool === "bridge" ? <Bridge /> : <HolderMap initial={query?.get("token") ?? ""} />}
+      {tool === "swap" ? <ArcSwap /> : tool === "bridge" ? <Bridge /> : tool === "holders" ? <HolderMap initial={query.get("token") ?? ""} /> : <PnlCard initial={query.get("wallet") ?? ""} />}
     </div>
   );
 }

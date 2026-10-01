@@ -449,6 +449,33 @@ export async function migrate() {
   await sql`alter table gallery add column if not exists w int`;
   await sql`alter table gallery add column if not exists h int`;
 
+  // Chain-wide DEX tape (10.1, dex.ts): every USDC-paired Uniswap V3/V2 pool on Arc and its swaps by recipient.
+  // usdc = false rows are non-USDC pairs remembered only so they are not re-read.
+  await sql`create table if not exists dex_pools (
+    address text primary key,
+    token text not null,
+    token_is0 boolean not null,
+    symbol text not null default '',
+    decimals int not null default 18,
+    factory text not null default '',
+    usdc boolean not null,
+    last_px double precision,
+    last_block bigint
+  )`;
+  await sql`create table if not exists dex_swaps (
+    block bigint not null,
+    log_index int not null,
+    tx text not null,
+    pool text not null,
+    trader text not null,
+    side smallint not null,
+    qty numeric not null,
+    usdc numeric not null,
+    primary key (block, log_index)
+  )`;
+  await sql`create index if not exists dex_swaps_trader on dex_swaps (trader)`;
+  await sql`create index if not exists dex_swaps_pool on dex_swaps (pool, block)`;
+
   // Multi-domain (9.9): uploads are referenced host-relatively so a dead domain never breaks pictures. Fold any
   // absolute "https://<old host>/api/uploads/x" left from earlier domains into "/api/uploads/x". For `tokens` this is
   // display-only — the on-chain string cannot change — but that is exactly what the UI reads.

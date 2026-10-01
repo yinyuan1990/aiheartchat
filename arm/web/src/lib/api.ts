@@ -282,6 +282,26 @@ export const usd = (raw?: string | null) => (raw ? Number(raw) / 1e6 : 0);
 /** token raw (18dp) string → whole tokens. */
 export const tok = (raw?: string | null) => (raw ? Number(raw) / 1e18 : 0);
 
+// ---------- wallet trading card (10.1) ----------
+export type CardToken = { address: string; symbol: string; spent: number; received: number; holding: number; pnl: number; pct: number; buys: number; sells: number; rank: number | null };
+export type Persona = "newbie" | "printer" | "sniper" | "bagholder" | "flipper" | "diamond" | "hunter" | "degen";
+export type CardView = {
+  address: string; updatedAt: string; tokens: number; trades: number; buys: number; sells: number;
+  spent: number; received: number; holding: number; pnl: number; pct: number;
+  wins: number; losses: number; winRate: number; avgHoldSec: number | null; firstTradeAt: string | null;
+  best: CardToken | null; worst: CardToken | null; top: CardToken[]; persona: Persona;
+};
+export type CardState = { status: "ready"; card: CardView } | { status: "syncing"; progress: number } | { status: "error"; error: "contract" };
+export const fetchCard = (wallet: string) => get<CardState>(`/card/${wallet}`);
+export const useCard = (wallet?: string) =>
+  useQuery({
+    queryKey: ["card", wallet],
+    queryFn: () => fetchCard(wallet!),
+    enabled: !!wallet,
+    staleTime: 60_000,
+    refetchInterval: (q) => (q.state.data?.status === "syncing" ? 5_000 : false),
+  });
+
 export const useStats = () => useQuery({ queryKey: ["stats"], queryFn: () => get<Stats>("/stats"), refetchInterval: 10_000 });
 
 // ---------- Arm promoter referrals ----------
