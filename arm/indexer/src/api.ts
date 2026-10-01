@@ -15,6 +15,7 @@ import { buybackStatus, runBuyback } from "./buyback.js";
 import { quoteAssets, stockSet } from "./config.js";
 import { hasStock, quotePrice, quoteToUsdc } from "./quotes.js";
 import { walletCard } from "./wallet-card.js";
+import { aiArena } from "./ai-arena.js";
 
 export const app = new Hono();
 // paged list endpoints report the full row count in X-Total-Count; expose it so the browser can read it
@@ -519,6 +520,9 @@ app.get("/api/wallet/:address", async (c) => {
 
 // Trading card (10.1): PnL across every USDC-paired Arc token ("syncing" until the DEX tape backfill catches up).
 app.get("/api/card/:address", async (c) => c.json(await walletCard(addr(c.req.param("address")))));
+
+// AI live-trading arena (10.1): our NOFX bots on Hyperliquid, read-only.
+app.get("/api/ai-arena", async (c) => c.json(await aiArena()));
 
 // ---------------------------------------------------------------- logo upload
 

@@ -302,6 +302,18 @@ export const useCard = (wallet?: string) =>
     refetchInterval: (q) => (q.state.data?.status === "syncing" ? 5_000 : false),
   });
 
+/** AI live-trading arena: our own NOFX bots on Hyperliquid (indexer proxies NOFX, read-only, 60s cache). */
+export type ArenaTrader = {
+  id: string; name: string; model: string; exchange: string; running: boolean; equity: number; pnl: number; pnlPct: number;
+  curve: [number, number][];
+  positions: { symbol: string; side: string; size: number; entry: number; mark: number; upnl: number; leverage: number }[];
+  trades: { symbol: string; side: string; entry: number; exit: number; pnl: number; pnlPct: number; exitTime: number; hold: string }[];
+  decisions: { time: string; cycle: number; actions: { action: string; symbol: string; leverage: number; confidence: number; reasoning: string }[]; thought: string }[];
+};
+export type ArenaState = { enabled: boolean; updatedAt: number; traders: ArenaTrader[] };
+export const useAiArena = () =>
+  useQuery({ queryKey: ["ai-arena"], queryFn: () => get<ArenaState>("/ai-arena"), refetchInterval: 60_000, retry: 1 });
+
 export const useStats = () => useQuery({ queryKey: ["stats"], queryFn: () => get<Stats>("/stats"), refetchInterval: 10_000 });
 
 // ---------- Arm promoter referrals ----------

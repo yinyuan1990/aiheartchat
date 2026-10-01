@@ -1,0 +1,26 @@
+# NOFX for the Arm "AI Perps" arena. Localhost-only, resource-capped.
+# Images are built on the server from upstream dev@638d404 + no-builder-fee.patch (AGPL-3.0, see ops/nofx/).
+services:
+  nofx:
+    image: arm/nofx-backend:nobuilder
+    container_name: nofx-trading
+    restart: unless-stopped
+    stop_grace_period: 30s
+    ports: ["127.0.0.1:8280:8080"]
+    volumes: ["./data:/app/data"]
+    env_file: [.env]
+    environment: [TZ=Asia/Shanghai, AI_MAX_TOKENS=8000]
+    mem_limit: 1g
+    cpus: 1.5
+    networks: [nofx]
+  nofx-frontend:
+    image: arm/nofx-frontend:nobuilder
+    container_name: nofx-frontend
+    restart: unless-stopped
+    ports: ["127.0.0.1:3200:80"]
+    mem_limit: 256m
+    cpus: 0.5
+    depends_on: [nofx]
+    networks: [nofx]
+networks:
+  nofx: {}

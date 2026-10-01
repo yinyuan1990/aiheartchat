@@ -6,6 +6,7 @@ import { useApp } from "@/components/providers";
 import { EXCHANGES, NOFX_DOCKER, NOFX_REPO } from "@/lib/partners";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { AiArena } from "./ai-arena";
 
 export function AiTrade() {
   const { t } = useApp();
@@ -16,6 +17,7 @@ export function AiTrade() {
 
   return (
     <div className="space-y-4">
+      <AiArena />
       <Card>
         <CardContent className="space-y-4 p-4 text-sm">
           <section className="space-y-1.5">

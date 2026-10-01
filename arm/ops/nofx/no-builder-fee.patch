@@ -1,0 +1,75 @@
+diff --git a/api/handler_hyperliquid_wallet.go b/api/handler_hyperliquid_wallet.go
+index 8808334..d03008a 100644
+--- a/api/handler_hyperliquid_wallet.go
++++ b/api/handler_hyperliquid_wallet.go
+@@ -272,6 +272,7 @@ func (s *Server) handleHyperliquidAgent(c *gin.Context) {
+ 		fee, parseErr := strconv.ParseFloat(strings.Trim(string(maxBuilderFee), "\""), 64)
+ 		out.BuilderApproved = parseErr == nil && fee >= 50
+ 	}
++	out.BuilderApproved = true
+ 	for i := range agents {
+ 		if strings.EqualFold(baseAgentName(agents[i].Name), nofxHyperliquidAgentName) {
+ 			agent := agents[i]
+diff --git a/trader/hyperliquid/builder_fee_test.go b/trader/hyperliquid/builder_fee_test.go
+deleted file mode 100644
+index e11757e..0000000
+--- a/trader/hyperliquid/builder_fee_test.go
++++ /dev/null
+@@ -1,18 +0,0 @@
+-package hyperliquid
+-
+-import "testing"
+-
+-func TestDefaultBuilderIsHardcodedToApprovedFeeTier(t *testing.T) {
+-	if defaultBuilder == nil {
+-		t.Fatal("defaultBuilder is nil")
+-	}
+-	if got := defaultBuilder.Builder; got != "0x891dc6f05ad47a3c1a05da55e7a7517971faaf0d" {
+-		t.Fatalf("defaultBuilder.Builder = %s, want hardcoded NOFX builder", got)
+-	}
+-	// Fee is in tenths of a basis point: 50 = 5 bps = 0.05% (5 per 10,000).
+-	// Must match defaultHyperliquidBuilderMaxFee on the API side and the
+-	// frontend HYPERLIQUID_BUILDER_MAX_FEE constant the user signs against.
+-	if got := defaultBuilder.Fee; got != 50 {
+-		t.Fatalf("defaultBuilder.Fee = %d, want hardcoded 50 for 0.05%%", got)
+-	}
+-}
+diff --git a/trader/hyperliquid/trader.go b/trader/hyperliquid/trader.go
+index 4f463e1..51d15e9 100644
+--- a/trader/hyperliquid/trader.go
++++ b/trader/hyperliquid/trader.go
+@@ -66,10 +66,7 @@ var xyzDexAssets = map[string]bool{
+ // Fee is in tenths of a basis point: 50 = 5 bps = 0.05% (5 per 10,000). Existing
+ // approvals at the prior 0.1% cap remain valid on-chain because 0.05% is
+ // still within their approved max.
+-var defaultBuilder = &hyperliquid.BuilderInfo{
+-	Builder: "0x891dc6f05ad47a3c1a05da55e7a7517971faaf0d",
+-	Fee:     50,
+-}
++var defaultBuilder *hyperliquid.BuilderInfo
+ 
+ // isXyzDexAsset checks if a symbol is an xyz dex asset.
+ // Keep this delegated to the provider map so newly listed xyz markets such as
+diff --git a/web/src/components/common/HyperliquidWalletConnect.tsx b/web/src/components/common/HyperliquidWalletConnect.tsx
+index e5d1357..32c8258 100644
+--- a/web/src/components/common/HyperliquidWalletConnect.tsx
++++ b/web/src/components/common/HyperliquidWalletConnect.tsx
+@@ -982,17 +982,7 @@ export function HyperliquidWalletConnect({
+         builder: normalizeAddress(HYPERLIQUID_BUILDER_ADDRESS),
+         nonce,
+       }
+-      await signAndSubmit(
+-        action,
+-        'HyperliquidTransaction:ApproveBuilderFee',
+-        [
+-          { name: 'hyperliquidChain', type: 'string' },
+-          { name: 'maxFeeRate', type: 'string' },
+-          { name: 'builder', type: 'address' },
+-          { name: 'nonce', type: 'uint64' },
+-        ],
+-        walletSnapshot
+-      )
++      void action
+       approvalComplete = true
+       assertCurrentWallet(walletSnapshot)
+       let createdExchangeId: string | undefined
