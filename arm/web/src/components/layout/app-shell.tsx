@@ -79,6 +79,14 @@ function isActive(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname.startsWith(href);
 }
 
+/** Exposes the sticky top bar's live height (ticker / banners change it) as --shell-top, so pages can stick below it. */
+function publishHeight(el: HTMLElement | null) {
+  if (!el) return;
+  const ro = new ResizeObserver(() => document.documentElement.style.setProperty("--shell-top", `${el.offsetHeight}px`));
+  ro.observe(el);
+  return () => ro.disconnect();
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { t, theme, setTheme, locale, setLocale, connected, address, wrongChain: wrongAppChain, toggleConnect } = useApp();
@@ -177,7 +185,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <div className="flex min-w-0 flex-1 flex-col">
           {/* Top bar */}
-          <header className="sticky top-0 z-30 border-b bg-sidebar/85 backdrop-blur">
+          <header ref={publishHeight} className="sticky top-0 z-30 border-b bg-sidebar/85 backdrop-blur">
             <div className="flex h-14 items-center gap-2 px-3 md:gap-3 md:px-6">
               <MobileNav pathname={pathname} />
               <div className="lg:hidden">

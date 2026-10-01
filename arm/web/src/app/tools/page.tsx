@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { ArrowDown, ArrowLeftRight, CheckCircle2, ExternalLink, Loader2, ShieldCheck, Wallet, XCircle } from "lucide-react";
+import { ArrowDown, CheckCircle2, ExternalLink, Loader2, ShieldCheck, Wallet, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAccount } from "wagmi";
@@ -113,11 +113,7 @@ export default function ToolsPage() {
   const subtitle = { swap: t("swap.subtitle"), bridge: t("tools.subtitle"), holders: t("holders.subtitle"), card: t("card.subtitle"), gmgn: t("gmgn.subtitle") }[tool];
   return (
     <div className="mx-auto max-w-lg space-y-4">
-      <div className="space-y-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-xl font-semibold"><ArrowLeftRight className="size-5 text-primary" /> {t("tools.page")}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
-        </div>
+      <div className="sticky top-[var(--shell-top,0px)] z-20 -mx-3 -mt-4 bg-background/90 px-3 pt-3 pb-2 backdrop-blur md:mx-0 md:px-0">
         <Tabs value={tool} onValueChange={(v) => setTool(v as Tool)}>
           <TabsList className="w-full">
             <TabsTrigger value="swap">{t("tools.tab.swap")}</TabsTrigger>
@@ -128,6 +124,8 @@ export default function ToolsPage() {
           </TabsList>
         </Tabs>
       </div>
+      <h1 className="sr-only">{t("tools.page")}</h1>
+      <p className="px-1 text-sm text-muted-foreground">{subtitle}</p>
       {tool === "swap" ? <ArcSwap /> : tool === "bridge" ? <Bridge /> : tool === "holders" ? <HolderMap initial={query.get("token") ?? ""} /> : tool === "card" ? <PnlCard initial={query.get("wallet") ?? ""} /> : <GmgnTool />}
     </div>
   );
