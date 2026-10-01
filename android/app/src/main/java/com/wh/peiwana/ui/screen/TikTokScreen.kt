@@ -41,11 +41,17 @@ fun TikTokScreen(onExit: () -> Unit) {
         } else {
             val startPage = items.indexOfFirst { it.id == PlazaCache.tiktokStartId }.let { if (it >= 0) it else 0 }
             val pagerState = rememberPagerState(initialPage = startPage, pageCount = { items.size })
+            val pagerScope = rememberCoroutineScope()
             VerticalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
                 TikTokPage(
                     m = items[page],
                     // 停稳后才播放：滑动过程中所有页面静音，避免声画不同步
                     playing = pagerState.settledPage == page && !pagerState.isScrollInProgress,
+                    loop = items.size == 1,
+                    // 播完自动切下一条，最后一条播完回到第一条
+                    onEnded = {
+                        if (pagerState.settledPage == page) pagerScope.launch { pagerState.animateScrollToPage((page + 1) % items.size) }
+                    },
                     onVideoCall = { m -> m.user?.let { startCall(it.id, it.nickname, it.avatar, 2) } },
                 )
             }
@@ -61,7 +67,7 @@ fun TikTokScreen(onExit: () -> Unit) {
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
-private fun TikTokPage(m: Moment, playing: Boolean, onVideoCall: (Moment) -> Unit) {
+private fun TikTokPage(m: Moment, playing: Boolean, loop: Boolean, onEnded: () -> Unit, onVideoCall: (Moment) -> Unit) {
     val ctx = LocalContext.current
     var liked by remember { mutableStateOf(m.liked) }
     var likeCount by remember { mutableIntStateOf(m.likeCount) }
@@ -70,11 +76,22 @@ private fun TikTokPage(m: Moment, playing: Boolean, onVideoCall: (Moment) -> Uni
     val player = remember {
         androidx.media3.exoplayer.ExoPlayer.Builder(ctx).build().apply {
             setMediaItem(androidx.media3.common.MediaItem.fromUri(Api.fullUrl(m.videoUrl)))
-            repeatMode = androidx.media3.common.Player.REPEAT_MODE_ONE
             prepare()
         }
     }
-    DisposableEffect(Unit) { onDispose { player.release() } }
+    LaunchedEffect(loop) {
+        player.repeatMode = if (loop) androidx.media3.common.Player.REPEAT_MODE_ONE else androidx.media3.common.Player.REPEAT_MODE_OFF
+    }
+    val endedCb by rememberUpdatedState(onEnded)
+    DisposableEffect(Unit) {
+        val listener = object : androidx.media3.common.Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == androidx.media3.common.Player.STATE_ENDED) endedCb()
+            }
+        }
+        player.addListener(listener)
+        onDispose { player.removeListener(listener); player.release() }
+    }
     LaunchedEffect(playing) {
         if (playing) { player.seekTo(0); player.play() } else player.pause()
     }
