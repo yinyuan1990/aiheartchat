@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ArrowDown, CheckCircle2, ExternalLink, Loader2, ShieldCheck, Wallet, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -111,18 +111,24 @@ export default function ToolsPage() {
   const [picked, setTool] = useState<Tool | null>(null);
   const tab = query.get("tab") as Tool | null;
   const tool: Tool = picked ?? (tab && TOOLS.includes(tab) ? tab : "swap");
+  const tabsRef = useRef<HTMLDivElement>(null);
+  // center the active tab inside the scrollable strip only (scrollIntoView would also shift the page sideways)
+  useEffect(() => {
+    const list = tabsRef.current;
+    const el = list?.querySelector<HTMLElement>(`[data-state="active"]`);
+    if (!list || !el) return;
+    const a = el.getBoundingClientRect(), b = list.getBoundingClientRect();
+    list.scrollTo({ left: list.scrollLeft + a.left - b.left - (b.width - a.width) / 2, behavior: "smooth" });
+  }, [tool]);
   const subtitle = { swap: t("swap.subtitle"), bridge: t("tools.subtitle"), holders: t("holders.subtitle"), card: t("card.subtitle"), gmgn: t("gmgn.subtitle"), ai: t("nofx.subtitle") }[tool];
   return (
     <div className="mx-auto max-w-lg space-y-4">
       <div className="sticky top-[var(--shell-top,0px)] z-20 -mx-3 -mt-4 bg-background/90 px-3 pt-3 pb-2 backdrop-blur md:mx-0 md:px-0">
         <Tabs value={tool} onValueChange={(v) => setTool(v as Tool)}>
-          <TabsList className="w-full">
-            <TabsTrigger value="swap">{t("tools.tab.swap")}</TabsTrigger>
-            <TabsTrigger value="bridge">{t("tools.tab.bridge")}</TabsTrigger>
-            <TabsTrigger value="holders">{t("tools.tab.holders")}</TabsTrigger>
-            <TabsTrigger value="card">{t("tools.tab.card")}</TabsTrigger>
-            <TabsTrigger value="gmgn">{t("tools.tab.gmgn")}</TabsTrigger>
-            <TabsTrigger value="ai">{t("tools.tab.ai")}</TabsTrigger>
+          <TabsList ref={tabsRef} className="w-full justify-start overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {TOOLS.map((k) => (
+              <TabsTrigger key={k} value={k} className="flex-none px-3 sm:flex-1">{t(`tools.tab.${k}`)}</TabsTrigger>
+            ))}
           </TabsList>
         </Tabs>
       </div>
