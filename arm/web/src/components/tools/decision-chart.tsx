@@ -15,6 +15,20 @@ function cssVar(name: string) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
+const BAR_SEC = 300;
+
+/** Paints the live price onto the forming bar, opening a new one once the 5m bucket rolls over. */
+function tick(s: ISeriesApi<"Candlestick">, lastRef: { current: Bar | null }, live: number, offset: number) {
+  const last = lastRef.current;
+  if (!last || !live) return;
+  const bucket = Math.floor((Date.now() / 1000) / BAR_SEC) * BAR_SEC + offset;
+  const bar = bucket > last.time
+    ? { time: bucket, open: last.close, high: Math.max(last.close, live), low: Math.min(last.close, live), close: live }
+    : { ...last, close: live, high: Math.max(last.high, live), low: Math.min(last.low, live) };
+  lastRef.current = bar;
+  s.update({ ...bar, time: bar.time as Time });
+}
+
 /** 5m candles with the AI's decision of every cycle pinned to its bar, plus entry / stop / target lines. */
 export function DecisionChart({ bars, live, marks, lines, className }: {
   bars: Bar[]; live: number; marks: DecisionMark[]; lines: PriceMark[]; className?: string;
@@ -52,21 +66,22 @@ export function DecisionChart({ bars, live, marks, lines, className }: {
     };
   }, [theme]);
 
+  const liveRef = useRef(live);
+  useEffect(() => { liveRef.current = live; }, [live]);
+
   useEffect(() => {
     const s = seriesRef.current;
     if (!s || !bars.length) return;
     const offset = -new Date().getTimezoneOffset() * 60;
     s.setData(bars.map((b) => ({ ...b, time: (b.time + offset) as Time })));
     lastRef.current = { ...bars[bars.length - 1], time: bars[bars.length - 1].time + offset };
+    tick(s, lastRef, liveRef.current, offset);
     chartRef.current?.timeScale().scrollToRealTime();
   }, [bars, theme]);
 
   useEffect(() => {
-    const s = seriesRef.current, last = lastRef.current;
-    if (!s || !last || !live) return;
-    const bar = { ...last, close: live, high: Math.max(last.high, live), low: Math.min(last.low, live) };
-    lastRef.current = bar;
-    s.update({ ...bar, time: bar.time as Time });
+    const s = seriesRef.current;
+    if (s) tick(s, lastRef, live, -new Date().getTimezoneOffset() * 60);
   }, [live]);
 
   useEffect(() => {

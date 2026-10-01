@@ -176,8 +176,8 @@ export async function aiArena(): Promise<ArenaState> {
 
 export type ArenaMarket = { updatedAt: number; coins: { coin: string; mid: number; candles: [number, number, number, number, number, number][] }[] };
 
-const MIDS_TTL = 3_000;
-const CANDLES_TTL = 60_000;
+const MIDS_TTL = 1_500;
+const CANDLES_TTL = 10_000;
 let mids: { at: number; data: Record<string, number> } = { at: 0, data: {} };
 const candles = new Map<string, { at: number; data: ArenaMarket["coins"][number]["candles"] }>();
 let marketInflight: Promise<ArenaMarket> | null = null;

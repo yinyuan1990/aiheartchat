@@ -325,7 +325,7 @@ const arenaDue = (s?: ArenaState) =>
 export const useAiArena = () =>
   useQuery({ queryKey: ["ai-arena"], queryFn: () => get<ArenaState>("/ai-arena"), refetchInterval: (q) => (arenaDue(q.state.data) ? 10_000 : 30_000), retry: 1 });
 export const useAiMarket = () =>
-  useQuery({ queryKey: ["ai-arena-market"], queryFn: () => get<ArenaMarket>("/ai-arena/market"), refetchInterval: 3_000, retry: 1 });
+  useQuery({ queryKey: ["ai-arena-market"], queryFn: () => get<ArenaMarket>("/ai-arena/market"), refetchInterval: 2_000, retry: 1 });
 
 export const useStats = () => useQuery({ queryKey: ["stats"], queryFn: () => get<Stats>("/stats"), refetchInterval: 10_000 });
 
