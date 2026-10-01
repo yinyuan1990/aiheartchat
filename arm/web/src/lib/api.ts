@@ -327,6 +327,33 @@ export const useAiArena = () =>
 export const useAiMarket = () =>
   useQuery({ queryKey: ["ai-arena-market"], queryFn: () => get<ArenaMarket>("/ai-arena/market"), refetchInterval: 2_000, retry: 1 });
 
+// ---------- chain-scanner arena (indexer/src/scanner.ts) ----------
+export type ScanBotId = "sniper" | "filter" | "smart" | "random";
+export type ScanReason = "thin" | "lowVol" | "bundle" | "devSold" | "whales" | "smart" | "pass";
+export type ScanTrade = {
+  pool: string; token: string; symbol: string; entryAt: number; exitAt: number | null;
+  entryPx: number; exitPx: number; x: number; pnl: number; exit: "tp" | "sl" | "time" | "open";
+};
+export type ScanBot = {
+  id: ScanBotId; trades: number; open: number; wins: number; pnl: number; roi: number; equity: number;
+  best: number; curve: [number, number][]; recent: ScanTrade[];
+};
+export type RadarItem = {
+  pool: string; token: string; symbol: string; bornAt: number; buyers: number; swaps: number; volume: number;
+  price: number; signalPx: number; peakX: number; nowX: number; score: number | null;
+  verdict: "pending" | "buy" | "skip"; reasons: ScanReason[]; smart: number; bots: ScanBotId[]; dead: boolean;
+};
+export type ScanState =
+  | { status: "syncing"; progress: number }
+  | {
+      status: "ready"; updatedAt: number;
+      rules: { stake: number; start: number; cost: number; tp: number; sl: number; holdHours: number; days: number; filter: { buyers: number; volume: number; bundle: number; top3: number } };
+      stats: { scanned: number; passed: number; skipped: number; skippedDead: number; alive: number; smartWallets: number };
+      bots: ScanBot[]; radar: RadarItem[];
+    };
+export const useScanner = () =>
+  useQuery({ queryKey: ["scanner"], queryFn: () => get<ScanState>("/scanner"), refetchInterval: 15_000, retry: 1 });
+
 export const useStats = () => useQuery({ queryKey: ["stats"], queryFn: () => get<Stats>("/stats"), refetchInterval: 10_000 });
 
 // ---------- Arm promoter referrals ----------

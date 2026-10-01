@@ -27,9 +27,9 @@ const clock = {
   getServer: () => 0,
 };
 /** Wall clock that ticks every second, 0 on the server (keeps SSR and hydration identical). */
-const useNow = () => useSyncExternalStore(clock.subscribe, clock.get, clock.getServer);
+export const useNow = () => useSyncExternalStore(clock.subscribe, clock.get, clock.getServer);
 
-function Sparkline({ points, up }: { points: [number, number][]; up: boolean }) {
+export function Sparkline({ points, up }: { points: [number, number][]; up: boolean }) {
   if (points.length < 2) return <div className="h-10" />;
   const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
   const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
