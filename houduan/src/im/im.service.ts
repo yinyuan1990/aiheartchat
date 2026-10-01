@@ -256,6 +256,135 @@ export class ImService {
   }
 
   /**
+   * 消息页搜索：
+   * messages = 我所在会话里文字消息的内容匹配（密文只能逐条解密后比对，只扫最近 SEARCH_SCAN 条）；
+   * users = 按昵称 / 短号找异性用户（全局搜索，性别隔离同「遇见」）。
+   * 会话名匹配由客户端在本地会话列表里做。
+   */
+  async search(userId: bigint, raw: string) {
+    const q = (raw ?? '').trim().slice(0, 50);
+    if (!q) return { messages: [], users: [] };
+    const needle = q.toLowerCase();
+    const me = await this.prisma.user.findUnique({ where: { id: userId }, select: { gender: true } });
+    if (!me) return { messages: [], users: [] };
+
+    const memberships = await this.prisma.groupMember.findMany({ where: { userId }, select: { groupId: true } });
+    const groupIds = memberships.map((m) => m.groupId);
+    const convs = await this.prisma.conversation.findMany({
+      where: {
+        OR: [
+          { userAId: userId },
+          { userBId: userId },
+          ...(groupIds.length ? [{ groupId: { in: groupIds } }] : []),
+        ],
+      },
+      select: { id: true, type: true, groupId: true, userAId: true, userBId: true, wrappedKey: true },
+    });
+    const groups = groupIds.length
+      ? await this.prisma.chatGroup.findMany({ where: { id: { in: groupIds }, status: 0 } })
+      : [];
+    const groupMap = new Map(groups.map((g) => [g.id.toString(), g]));
+    const convMap = new Map(
+      convs.filter((c) => c.type === 1 || (c.groupId && groupMap.has(c.groupId.toString()))).map((c) => [c.id.toString(), c]),
+    );
+
+    const SEARCH_SCAN = 5000;
+    const MAX_HITS = 60;
+    const rows = convMap.size
+      ? await this.prisma.message.findMany({
+          where: { conversationId: { in: [...convMap.values()].map((c) => c.id) }, type: 'text' },
+          orderBy: { id: 'desc' },
+          take: SEARCH_SCAN,
+          select: { id: true, conversationId: true, senderId: true, cipherContent: true, createdAt: true },
+        })
+      : [];
+    const keys = new Map<string, Buffer>();
+    const hits: { row: (typeof rows)[number]; content: string; idx: number }[] = [];
+    for (const row of rows) {
+      const cid = row.conversationId.toString();
+      let key = keys.get(cid);
+      if (!key) {
+        key = this.crypto.unwrapKey(convMap.get(cid)!.wrappedKey);
+        keys.set(cid, key);
+      }
+      let content: string;
+      try {
+        content = this.crypto.decrypt(key, row.cipherContent);
+      } catch {
+        continue;
+      }
+      const idx = content.toLowerCase().indexOf(needle);
+      if (idx < 0) continue;
+      hits.push({ row, content, idx });
+      if (hits.length >= MAX_HITS) break;
+    }
+
+    // 发送者 + 单聊对方 + 群主（群没头像时回退群主头像）一次查完
+    const userIds = new Set<string>();
+    for (const h of hits) {
+      userIds.add(h.row.senderId.toString());
+      const c = convMap.get(h.row.conversationId.toString())!;
+      if (c.type === 1) userIds.add((c.userAId === userId ? c.userBId! : c.userAId!).toString());
+    }
+    for (const g of groups) if (!g.avatar) userIds.add(g.ownerId.toString());
+    const people = userIds.size
+      ? await this.prisma.user.findMany({
+          where: { id: { in: [...userIds].map(BigInt) } },
+          select: { id: true, nickname: true, avatar: true },
+        })
+      : [];
+    const personMap = new Map(people.map((p) => [p.id.toString(), p]));
+
+    const messages = hits.map(({ row, content, idx }) => {
+      const c = convMap.get(row.conversationId.toString())!;
+      let title = '';
+      let avatar = '';
+      let targetId = '';
+      if (c.type === 1) {
+        const peerId = (c.userAId === userId ? c.userBId! : c.userAId!).toString();
+        const peer = personMap.get(peerId);
+        title = peer?.nickname ?? '';
+        avatar = peer?.avatar ?? '';
+        targetId = peerId;
+      } else {
+        const g = groupMap.get(c.groupId!.toString())!;
+        title = g.name;
+        avatar = g.avatar || personMap.get(g.ownerId.toString())?.avatar || '';
+        targetId = g.id.toString();
+      }
+      const start = Math.max(0, idx - 16);
+      const snippet = (start > 0 ? '…' : '') + content.slice(start, start + 120).replace(/\s+/g, ' ');
+      const sender = personMap.get(row.senderId.toString());
+      return {
+        id: row.id.toString(),
+        conversationId: c.id.toString(),
+        convType: c.type,
+        targetId,
+        title,
+        avatar,
+        senderId: row.senderId.toString(),
+        senderNickname: row.senderId === userId ? '我' : sender?.nickname ?? '',
+        content: snippet,
+        createdAt: row.createdAt,
+      };
+    });
+
+    const users = await this.prisma.user.findMany({
+      where: {
+        gender: me.gender === 1 ? 2 : 1,
+        status: 0,
+        id: { not: userId },
+        OR: [{ nickname: { contains: q } }, { shortId: q }],
+      },
+      orderBy: [{ ratingAvg: 'desc' }, { id: 'desc' }],
+      take: 20,
+      select: { id: true, nickname: true, avatar: true, gender: true, age: true, cityName: true },
+    });
+
+    return { messages, users };
+  }
+
+  /**
    * 清空聊天记录：
    * 单聊 = 双向物理删除全部消息，并实时推送双方在线端同步清空；
    * 群聊 = 物理删除本人发送的全部消息，并实时推送所有群成员刷新消息列表。

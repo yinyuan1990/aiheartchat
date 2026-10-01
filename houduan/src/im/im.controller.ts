@@ -20,6 +20,12 @@ export class ImController {
     return this.im.listConversations(userId);
   }
 
+  /** 消息页搜索：消息内容 + 全局用户（会话名客户端本地匹配） */
+  @Get('search')
+  search(@CurrentUser() userId: bigint, @Query('q') q?: string) {
+    return this.im.search(userId, q ?? '');
+  }
+
   @Get('messages')
   messages(
     @CurrentUser() userId: bigint,

@@ -14,6 +14,11 @@ export class NotifyController {
     return this.notify.list(userId, kind, beforeId ? BigInt(beforeId) : undefined);
   }
 
+  @Get('summary')
+  summary(@CurrentUser() userId: bigint) {
+    return this.notify.summary(userId);
+  }
+
   @Get('unread')
   unread(@CurrentUser() userId: bigint) {
     return this.notify.unreadCounts(userId);

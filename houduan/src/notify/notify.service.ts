@@ -55,6 +55,21 @@ export class NotifyService {
     return list;
   }
 
+  /** 消息页把评论 / 接单当成两个系统会话：每类的未读数 + 最新一条 */
+  async summary(userId: bigint) {
+    const unread = await this.unreadCounts(userId);
+    const result: Record<string, { unread: number; last: { title: string; body: string; createdAt: Date } | null }> = {};
+    for (const kind of ['comment', 'task']) {
+      const last = await this.prisma.notification.findFirst({
+        where: { userId, kind },
+        orderBy: { id: 'desc' },
+        select: { title: true, body: true, createdAt: true },
+      });
+      result[kind] = { unread: unread[kind] ?? 0, last };
+    }
+    return result;
+  }
+
   async unreadCounts(userId: bigint) {
     const rows = await this.prisma.notification.groupBy({
       by: ['kind'],

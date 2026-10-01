@@ -109,8 +109,8 @@ fun MainScreen(
             Pane(active = tab == 2) {
                 MessagesScreen(
                     onOpenChat = onOpenChat,
-                    onOpenMoment = { onNav("moment/$it") },
-                    onOpenTask = { onNav("task/$it") },
+                    onOpenNotices = { onNav("notices/$it") },
+                    onOpenUser = { onNav("u/$it") },
                     onCreateGroup = { onNav("create-group") },
                     onOpenAi = { onNav("aichat") },
                     onOpenNews = { onNav("music") },

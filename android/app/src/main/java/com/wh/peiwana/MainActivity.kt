@@ -278,6 +278,14 @@ fun AppRoot() {
                     initialCode = entry.arguments?.getString("code")?.takeIf { it.isNotBlank() },
                 )
             }
+            page("notices/{kind}", listOf(navArgument("kind") { type = NavType.StringType })) { entry ->
+                NoticesScreen(
+                    kind = entry.arguments!!.getString("kind")!!,
+                    onBack = { nav.popBackStack() },
+                    onOpenMoment = { nav.navigate("moment/$it") },
+                    onOpenTask = { nav.navigate("task/$it") },
+                )
+            }
             page("moment/{id}", listOf(navArgument("id") { type = NavType.StringType })) { entry ->
                 MomentDetailScreen(entry.arguments!!.getString("id")!!, onBack = { nav.popBackStack() }, onOpenChat = ::openChatWithUser)
             }

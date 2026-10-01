@@ -7,7 +7,7 @@ import { EnterPage } from './pages/Enter';
 import { RegisterPage } from './pages/Register';
 import { PlazaPage } from './pages/Plaza';
 import { HallPage } from './pages/Hall';
-import { ChatListPage } from './pages/ChatList';
+import { ChatListPage, NoticesPage } from './pages/ChatList';
 import { ChatRoomPage } from './pages/ChatRoom';
 import { AiChatPage } from './pages/AiChat';
 import { NewsDetailPage, NewsListPage } from './pages/NewsDetail';
@@ -176,6 +176,7 @@ export function App() {
         <Route path="/publish" element={<PublishPage />} />
         <Route path="/chatroom/:id" element={<ChatRoomPage />} />
         <Route path="/ai-chat" element={<AiChatPage />} />
+        <Route path="/notices/:kind" element={<NoticesPage />} />
         <Route path="/treehole/publish" element={<TreeholePublishPage />} />
         <Route path="/treehole/:id" element={<TreeholeDetailPage />} />
         <Route path="/news" element={<NewsListPage />} />

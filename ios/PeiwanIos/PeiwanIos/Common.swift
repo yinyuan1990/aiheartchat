@@ -218,6 +218,8 @@ enum Route: Hashable {
     case treehole(String)
     /// 私密树洞匿名发布
     case treeholePublish
+    /// 评论 / 接单通知列表：kind = comment | task
+    case notices(String)
 }
 
 @ViewBuilder
@@ -249,6 +251,7 @@ func routeView(_ route: Route) -> some View {
     case .music: MusicView()
     case .treehole(let id): TreeholeDetailView(postId: id)
     case .treeholePublish: TreeholePublishView()
+    case .notices(let kind): NoticesView(kind: kind)
     }
 }
 
@@ -278,6 +281,34 @@ extension View {
             self
         }
     }
+}
+
+/// 代码触发的 push：route 置非 nil 即跳转，返回后自动置回 nil
+private struct RoutePushModifier: ViewModifier {
+    @Binding var route: Route?
+    /// 返回动画期间 route 已是 nil，目的页继续用上一次的，避免白屏一闪
+    @State private var last: Route?
+
+    func body(content: Content) -> some View {
+        let active = Binding(get: { route != nil }, set: { if !$0 { route = nil } })
+        if #available(iOS 16.0, *) {
+            content
+                .navigationDestination(isPresented: active) { destination }
+                .onChange(of: route) { if let r = $0 { last = r } }
+        } else {
+            content
+                .background(NavigationLink(isActive: active) { destination } label: { EmptyView() }.hidden())
+                .onChange(of: route) { if let r = $0 { last = r } }
+        }
+    }
+
+    @ViewBuilder private var destination: some View {
+        if let r = route ?? last { routeView(r).modifier(HideTabBarModifier()) }
+    }
+}
+
+extension View {
+    func routePush(_ route: Binding<Route?>) -> some View { modifier(RoutePushModifier(route: route)) }
 }
 
 /// 路由跳转链接：iOS16 走值路由（navigationDestination），iOS15 直接挂目的页

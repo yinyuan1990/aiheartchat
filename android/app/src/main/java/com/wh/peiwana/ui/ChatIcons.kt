@@ -199,3 +199,26 @@ fun ImageIcon(tint: Color, size: Dp = 20.dp) {
         drawPath(path, tint, style = Stroke(w * 0.07f))
     }
 }
+
+/** 实心对话气泡（消息页「评论通知」） */
+@Composable
+fun BubbleIcon(tint: Color, size: Dp = 26.dp) {
+    Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        drawOval(tint, topLeft = Offset(w * 0.08f, w * 0.14f), size = Size(w * 0.84f, w * 0.64f))
+        val tail = androidx.compose.ui.graphics.Path().apply {
+            moveTo(w * 0.26f, w * 0.62f); lineTo(w * 0.18f, w * 0.9f); lineTo(w * 0.46f, w * 0.74f); close()
+        }
+        drawPath(tail, tint)
+    }
+}
+
+/** 实心公文包（消息页「接单通知」） */
+@Composable
+fun BriefcaseIcon(tint: Color, size: Dp = 24.dp) {
+    Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        drawRoundRect(tint, topLeft = Offset(w * 0.36f, w * 0.14f), size = Size(w * 0.28f, w * 0.2f), cornerRadius = CornerRadius(w * 0.05f), style = Stroke(w * 0.08f))
+        drawRoundRect(tint, topLeft = Offset(w * 0.08f, w * 0.3f), size = Size(w * 0.84f, w * 0.56f), cornerRadius = CornerRadius(w * 0.1f))
+    }
+}

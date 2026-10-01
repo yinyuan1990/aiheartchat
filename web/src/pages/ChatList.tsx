@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { ReactNode, useEffect, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { openNativeChat } from '../bridge';
 import { api, uploadFile } from '../api';
 import { wsManager } from '../ws';
 import { MusicSheet, NowPlayingBar } from './Music';
+import { ChatSearch, SearchExtra } from '../components/ChatSearch';
 
 interface ConversationItem {
   id: string;
@@ -25,7 +26,32 @@ interface NotificationItem {
   createdAt: string;
 }
 
-type Tab = 'single' | 'group' | 'comment' | 'task';
+type NoticeKind = 'comment' | 'task';
+
+interface NoticeSummary {
+  unread: number;
+  last: { title: string; body: string; createdAt: string } | null;
+}
+
+const NOTICE_META: Record<NoticeKind, { title: string; grad: string; icon: ReactNode }> = {
+  comment: {
+    title: '评论通知',
+    grad: 'linear-gradient(135deg, #ff9a3c, #fe2c55)',
+    icon: <svg width={26} height={26} viewBox="0 0 24 24" fill="#fff"><path d="M12 3C6.5 3 2 6.6 2 11c0 2.4 1.3 4.6 3.4 6.1L4.6 21l4.3-2.3c1 .2 2 .3 3.1.3 5.5 0 10-3.6 10-8s-4.5-8-10-8z" /></svg>,
+  },
+  task: {
+    title: '接单通知',
+    grad: 'linear-gradient(135deg, #2fb5ff, #4c6fff)',
+    icon: <svg width={24} height={24} viewBox="0 0 24 24" fill="#fff"><path d="M9 3h6a2 2 0 0 1 2 2v1h3a2 2 0 0 1 2 2v4H2V8a2 2 0 0 1 2-2h3V5a2 2 0 0 1 2-2zm0 3h6V5H9v1zM2 14h8v1a2 2 0 0 0 4 0v-1h8v5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-5z" /></svg>,
+  },
+};
+
+const AI_ICON = <div className="cl-icon" style={{ background: 'var(--accent-grad)', fontSize: 17, fontWeight: 800, letterSpacing: 1 }}>AI</div>;
+const MUSIC_ICON = (
+  <div className="cl-icon" style={{ background: 'linear-gradient(135deg, #7b5cff, #fe2c55)' }}>
+    <svg width={26} height={26} viewBox="0 0 24 24" fill="#fff"><path d="M9 3v10.55A4 4 0 1 0 11 17V7h5a3 3 0 0 0 3-3V3H9z" /></svg>
+  </div>
+);
 
 function previewText(msg?: ConversationItem['lastMsg']): string {
   if (!msg) return '';
@@ -248,95 +274,86 @@ export function JoinGroupSheet({ onClose, onJoined, initialCode }: { onClose: ()
 
 export function ChatListPage() {
   const nav = useNavigate();
-  const [tab, setTab] = useState<Tab>('single');
   const [convs, setConvs] = useState<ConversationItem[]>([]);
-  const [notices, setNotices] = useState<NotificationItem[]>([]);
-  const [unread, setUnread] = useState<Record<string, number>>({});
+  const [summary, setSummary] = useState<Record<NoticeKind, NoticeSummary> | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showJoin, setShowJoin] = useState(false);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [showMusic, setShowMusic] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
 
   const loadConvs = () => api<ConversationItem[]>('/im/conversations').then(setConvs).catch(() => {});
-  const loadUnread = () => api<Record<string, number>>('/notifications/unread').then(setUnread).catch(() => {});
-  const loadNotices = (kind: string) => api<NotificationItem[]>(`/notifications?kind=${kind}`).then((list) => {
-    setNotices(list);
-    loadUnread();
-  }).catch(() => {});
+  const loadSummary = () => api<Record<NoticeKind, NoticeSummary>>('/notifications/summary').then(setSummary).catch(() => {});
 
   useEffect(() => {
     loadConvs();
-    loadUnread();
+    loadSummary();
     wsManager.connect();
     return wsManager.on((frame) => {
-      if (frame.op === 'msg') loadConvs();
-      if (frame.op === 'notify') loadUnread();
+      if (frame.op === 'msg' || frame.op === 'conv_cleared' || frame.op === 'conv_refresh') loadConvs();
+      if (frame.op === 'notify') loadSummary();
     });
   }, []);
 
-  useEffect(() => {
-    if (tab === 'comment' || tab === 'task') loadNotices(tab);
-  }, [tab]);
+  const openConv = (c: { id: string; type: number; targetId: string; title: string }) => {
+    const title = c.type === 2 ? `${c.title}（群）` : c.title;
+    if (openNativeChat(c.id, c.type, c.targetId, title)) return;
+    nav(`/chatroom/${c.id}`, { state: { title, convType: c.type, targetId: c.targetId } });
+  };
 
-  const singleUnread = convs.filter((c) => c.type === 1).reduce((s, c) => s + c.unread, 0);
-  const groupUnread = convs.filter((c) => c.type === 2).reduce((s, c) => s + c.unread, 0);
+  // 会话 + 评论 / 接单两个系统会话混排，最新的在上；AI 助手、音乐固定置顶
+  type Entry = { at: string } & ({ kind: 'conv'; conv: ConversationItem } | { kind: 'notice'; key: NoticeKind; s: NoticeSummary });
+  const entries: Entry[] = [
+    ...convs.map((conv): Entry => ({ kind: 'conv', conv, at: conv.lastMsgAt })),
+    ...(['comment', 'task'] as NoticeKind[])
+      .filter((k) => summary?.[k]?.last)
+      .map((k): Entry => ({ kind: 'notice', key: k, s: summary![k], at: summary![k].last!.createdAt })),
+  ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 
-  const tabs: { key: Tab; label: string; badge: number }[] = [
-    { key: 'single', label: '私聊', badge: singleUnread },
-    { key: 'group', label: '群聊', badge: groupUnread },
-    { key: 'comment', label: '评论', badge: unread.comment ?? 0 },
-    { key: 'task', label: '接单', badge: unread.task ?? 0 },
+  const searchExtras: SearchExtra[] = [
+    { key: 'ai', title: 'AI 助手', subtitle: '有问必答，随便问', icon: AI_ICON, onOpen: () => nav('/ai-chat') },
+    { key: 'music', title: '音乐', subtitle: 'DJ 热曲 · 情感音乐，边聊边听', icon: MUSIC_ICON, onOpen: () => { setShowSearch(false); setShowMusic(true); } },
+    ...(['comment', 'task'] as NoticeKind[]).filter((k) => summary?.[k]?.last).map((k) => ({
+      key: k,
+      title: NOTICE_META[k].title,
+      subtitle: summary![k].last!.title,
+      unread: summary![k].unread,
+      icon: <div className="cl-icon" style={{ width: 44, height: 44, background: NOTICE_META[k].grad }}>{NOTICE_META[k].icon}</div>,
+      onOpen: () => nav(`/notices/${k}`),
+    })),
   ];
 
-  const shownConvs = convs.filter((c) => (tab === 'single' ? c.type === 1 : c.type === 2));
+  const pinIcon = (
+    <span className="cl-pin">
+      <svg width={13} height={13} viewBox="0 0 24 24" fill="currentColor"><path d="M16 3l5 5-3 1-4 4 1 5-2 2-4-4-5 5-1-1 5-5-4-4 2-2 5 1 4-4z" /></svg>
+    </span>
+  );
+
+  const fixedRow = (icon: ReactNode, title: string, sub: string, tag: string, onClick: () => void) => (
+    <div className="cl-row" onClick={onClick}>
+      {icon}
+      <div className="cl-row-main">
+        <div className="cl-row-top">
+          <span className="cl-row-title ellipsis">{title}</span>
+          <span style={{ fontSize: 10, color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 4, padding: '1px 5px' }}>{tag}</span>
+        </div>
+        <div className="cl-row-sub">
+          <span className="ellipsis">{sub}</span>
+          {pinIcon}
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <>
       {/* 播放中：顶部固定「正在播放」栏，点中间打开播放弹层 */}
       <NowPlayingBar onOpen={() => setShowMusic(true)} />
-      {/* 头部：胶囊分类 + 建群按钮 */}
-      <div className="row" style={{ padding: '14px 16px 12px', gap: 8 }}>
-        {tabs.map((t) => (
-          <span
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            style={{
-              position: 'relative',
-              padding: '7px 16px',
-              borderRadius: 17,
-              fontSize: 14,
-              cursor: 'pointer',
-              background: tab === t.key ? 'var(--accent-grad)' : 'var(--bg-input)',
-              color: tab === t.key ? '#fff' : 'var(--text-2)',
-              fontWeight: tab === t.key ? 600 : 400,
-              transition: 'background 0.15s',
-            }}
-          >
-            {t.label}
-            {t.badge > 0 && (
-              <span style={{
-                position: 'absolute', top: -4, right: -4,
-                background: 'var(--accent)', color: '#fff', fontSize: 9,
-                borderRadius: 8, padding: '1px 5px', fontWeight: 600,
-                border: '2px solid var(--bg)',
-              }}>
-                {t.badge > 99 ? '99+' : t.badge}
-              </span>
-            )}
-          </span>
-        ))}
-        <span className="grow" />
+      {/* 头部：标题 + 建群按钮 */}
+      <div className="cl-head">
+        <span className="cl-title">消息</span>
         <span style={{ position: 'relative', flexShrink: 0 }}>
-          <span
-            onClick={() => setShowPlusMenu((v) => !v)}
-            title="群聊"
-            style={{
-              width: 34, height: 34, borderRadius: 17,
-              background: 'var(--bg-input)', color: 'var(--text)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 18, cursor: 'pointer',
-            }}
-          >+</span>
+          <span className="cl-plus" onClick={() => setShowPlusMenu((v) => !v)} title="群聊">+</span>
           {showPlusMenu && (
             <>
               <div style={{ position: 'fixed', inset: 0, zIndex: 30 }} onClick={() => setShowPlusMenu(false)} />
@@ -353,102 +370,70 @@ export function ChatListPage() {
         </span>
       </div>
 
-      {/* 会话列表（私聊/群聊） */}
-      {(tab === 'single' || tab === 'group') && (
-        <>
-          {/* AI 助手置顶入口（免费问答） */}
-          {tab === 'single' && (
-            <div className="row" style={{ padding: '10px 16px', cursor: 'pointer' }} onClick={() => nav('/ai-chat')}>
-              <div style={{
-                width: 48, height: 48, borderRadius: 24, flexShrink: 0,
-                background: 'var(--accent-grad)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: '#fff', fontSize: 15, fontWeight: 800, letterSpacing: 1,
-              }}>AI</div>
-              <div className="grow" style={{ borderBottom: '1px solid var(--line)', paddingBottom: 10 }}>
-                <div className="row">
-                  <span className="grow" style={{ fontSize: 15 }}>AI 助手</span>
-                  <span style={{ fontSize: 10, color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 4, padding: '1px 5px' }}>免费</span>
-                </div>
-                <div className="muted ellipsis" style={{ marginTop: 3 }}>有问必答，随便问</div>
-              </div>
-            </div>
-          )}
-          {/* 音乐频道置顶入口（Telegram 频道同步，最多保留 100 首） */}
-          {tab === 'single' && (
-            <div className="row" style={{ padding: '10px 16px', cursor: 'pointer' }} onClick={() => setShowMusic(true)}>
-              <div style={{
-                width: 48, height: 48, borderRadius: 24, flexShrink: 0,
-                background: 'linear-gradient(135deg, #7b5cff, #fe2c55)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <svg width={24} height={24} viewBox="0 0 24 24" fill="#fff"><path d="M9 3v10.55A4 4 0 1 0 11 17V7h5a3 3 0 0 0 3-3V3H9z" /></svg>
-              </div>
-              <div className="grow" style={{ borderBottom: '1px solid var(--line)', paddingBottom: 10 }}>
-                <div className="row">
-                  <span className="grow" style={{ fontSize: 15 }}>音乐</span>
-                  <span style={{ fontSize: 10, color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 4, padding: '1px 5px' }}>每日上新</span>
-                </div>
-                <div className="muted ellipsis" style={{ marginTop: 3 }}>DJ 热曲 · 情感音乐，边聊边听</div>
-              </div>
-            </div>
-          )}
-          {shownConvs.length === 0 && (
-            <div className="empty">{tab === 'single' ? '暂无私聊\n去广场或大厅找人打招呼吧' : '暂无群聊\n点右上角发起群聊'}</div>
-          )}
-          {shownConvs.map((c) => {
-            const title = c.type === 1 ? c.peer?.nickname : c.group?.name;
-            const avatar = c.type === 1 ? c.peer?.avatar : c.group?.avatar;
-            const targetId = c.type === 1 ? c.peer?.id : c.group?.id;
-            return (
-              <div
-                key={c.id}
-                className="row"
-                style={{ padding: '10px 16px', cursor: 'pointer' }}
-                onClick={() => {
-                  if (openNativeChat(c.id, c.type, targetId ?? '', title ?? '')) return;
-                  nav(`/chatroom/${c.id}`, { state: { title, convType: c.type, targetId } });
-                }}
-              >
-                <div className="avatar" style={{ width: 48, height: 48 }}>
-                  {avatar && <img src={avatar} alt="" />}
-                </div>
-                <div className="grow" style={{ borderBottom: '1px solid var(--line)', paddingBottom: 10 }}>
-                  <div className="row">
-                    <span className="grow ellipsis" style={{ fontSize: 15 }}>{title}</span>
-                    <span className="small">{timeText(c.lastMsgAt)}</span>
-                  </div>
-                  <div className="row" style={{ marginTop: 3 }}>
-                    <span className="muted grow ellipsis">{previewText(c.lastMsg)}</span>
-                    {c.unread > 0 && (
-                      <span style={{ background: 'var(--accent)', color: '#fff', borderRadius: 9, fontSize: 10, padding: '1px 6px', fontWeight: 600 }}>{c.unread}</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </>
-      )}
+      {/* 搜索：点了弹全屏搜索框 */}
+      <div className="cl-search" onClick={() => setShowSearch(true)}>
+        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+        搜索
+      </div>
 
-      {/* 通知列表（评论/接单） */}
-      {(tab === 'comment' || tab === 'task') && (
-        <>
-          {notices.length === 0 && (
-            <div className="empty">{tab === 'comment' ? '暂无评论消息' : '暂无接单消息'}</div>
-          )}
-          {notices.map((n) => (
-            <div
-              key={n.id}
-              style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)', cursor: 'pointer' }}
-              onClick={() => nav(tab === 'comment' ? `/moment/${n.refId}` : `/task/${n.refId}`)}
-            >
-              <div className="row">
-                <span className="grow" style={{ fontSize: 15, fontWeight: n.isRead ? 400 : 600 }}>{n.title}</span>
-                <span className="small">{timeText(n.createdAt)}</span>
+      {/* AI 助手 / 音乐固定置顶，其余按最新消息时间排 */}
+      {fixedRow(AI_ICON, 'AI 助手', '有问必答，随便问', '免费', () => nav('/ai-chat'))}
+      {fixedRow(MUSIC_ICON, '音乐', 'DJ 热曲 · 情感音乐，边聊边听', '每日上新', () => setShowMusic(true))}
+
+      {entries.map((e) => {
+        if (e.kind === 'notice') {
+          const meta = NOTICE_META[e.key];
+          return (
+            <div key={`n-${e.key}`} className="cl-row" onClick={() => nav(`/notices/${e.key}`)}>
+              <div className="cl-icon" style={{ background: meta.grad }}>{meta.icon}</div>
+              <div className="cl-row-main">
+                <div className="cl-row-top">
+                  <span className="cl-row-title ellipsis">{meta.title}</span>
+                  <span className="small">{timeText(e.at)}</span>
+                </div>
+                <div className="cl-row-sub">
+                  <span className="ellipsis">{e.s.last?.title}</span>
+                  {e.s.unread > 0 && <span className="cs-badge">{e.s.unread > 99 ? '99+' : e.s.unread}</span>}
+                </div>
               </div>
-              {n.body && <div className="muted ellipsis" style={{ marginTop: 3 }}>{n.body}</div>}
             </div>
-          ))}
-        </>
+          );
+        }
+        const c = e.conv;
+        const title = (c.type === 1 ? c.peer?.nickname : c.group?.name) ?? '';
+        const avatar = c.type === 1 ? c.peer?.avatar : c.group?.avatar;
+        const targetId = (c.type === 1 ? c.peer?.id : c.group?.id) ?? '';
+        return (
+          <div key={c.id} className="cl-row" onClick={() => openConv({ id: c.id, type: c.type, targetId, title })}>
+            <div className="avatar" style={{ width: 54, height: 54 }}>
+              {avatar && <img src={avatar} alt="" />}
+            </div>
+            <div className="cl-row-main">
+              <div className="cl-row-top">
+                <span className="cl-row-title ellipsis">
+                  {title}
+                  {c.type === 2 && <span className="cs-tag">群</span>}
+                </span>
+                <span className="small">{timeText(c.lastMsgAt)}</span>
+              </div>
+              <div className="cl-row-sub">
+                <span className="ellipsis">{previewText(c.lastMsg)}</span>
+                {c.unread > 0 && <span className="cs-badge">{c.unread > 99 ? '99+' : c.unread}</span>}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+      {entries.length === 0 && <div className="empty">暂无消息{'\n'}去广场或大厅找人打招呼吧</div>}
+
+      {showSearch && (
+        <ChatSearch
+          convs={convs}
+          extras={searchExtras}
+          onClose={() => setShowSearch(false)}
+          onOpenConv={(c) => { setShowSearch(false); openConv(c); }}
+          onOpenUser={(id) => { setShowSearch(false); nav(`/u/${id}`); }}
+        />
       )}
 
       {showCreate && (
@@ -475,5 +460,43 @@ export function ChatListPage() {
         />
       )}
     </>
+  );
+}
+
+/** 评论 / 接单通知列表（消息页里的系统会话点进来），拉取即已读 */
+export function NoticesPage() {
+  const nav = useNavigate();
+  const kind: NoticeKind = useParams().kind === 'task' ? 'task' : 'comment';
+  const [list, setList] = useState<NotificationItem[] | null>(null);
+
+  useEffect(() => {
+    api<NotificationItem[]>(`/notifications?kind=${kind}`).then(setList).catch(() => setList([]));
+  }, [kind]);
+
+  return (
+    <div className="app">
+      <div className="navbar">
+        <span className="back" onClick={() => nav(-1)}>‹ 返回</span>
+        <span className="title">{NOTICE_META[kind].title}</span>
+        <span style={{ width: 40 }} />
+      </div>
+      <div className="page no-scrollbar">
+        {list === null && <div className="empty">加载中…</div>}
+        {list?.length === 0 && <div className="empty">{kind === 'comment' ? '暂无评论消息' : '暂无接单消息'}</div>}
+        {(list ?? []).map((n) => (
+          <div
+            key={n.id}
+            style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)', cursor: 'pointer' }}
+            onClick={() => nav(kind === 'comment' ? `/moment/${n.refId}` : `/task/${n.refId}`)}
+          >
+            <div className="row">
+              <span className="grow" style={{ fontSize: 15, fontWeight: n.isRead ? 400 : 600 }}>{n.title}</span>
+              <span className="small">{timeText(n.createdAt)}</span>
+            </div>
+            {n.body && <div className="muted ellipsis" style={{ marginTop: 3 }}>{n.body}</div>}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

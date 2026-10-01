@@ -115,7 +115,7 @@ fun shouldShowTime(messages: List<MsgItem>, idx: Int): Boolean {
     return java.time.Duration.between(prev, cur).seconds > 300
 }
 
-private fun preview(msg: LastMsg?): String = when {
+internal fun preview(msg: LastMsg?): String = when {
     msg == null -> ""
     msg.type == "text" -> msg.content.take(30)
     msg.type == "image" -> "[图片]"
@@ -128,49 +128,133 @@ private fun preview(msg: LastMsg?): String = when {
     else -> ""
 }
 
-/** 消息主页：四分类 私聊/群聊/评论/接单 */
+/** 通知列表页标记已读后 +1，常驻的消息页据此刷新评论 / 接单的未读数 */
+object NoticeRefresh {
+    val tick = kotlinx.coroutines.flow.MutableStateFlow(0)
+}
+
+private sealed interface MsgEntry { val at: String; val key: String }
+private data class ConvEntry(val c: ConversationItem) : MsgEntry {
+    override val at get() = c.lastMsgAt
+    override val key get() = "c-${c.id}"
+}
+private data class NoticeEntry(val kind: String, val s: NoticeSummary) : MsgEntry {
+    override val at get() = s.last?.createdAt ?: ""
+    override val key get() = "n-$kind"
+}
+
+private fun noticeTitle(kind: String) = if (kind == "task") "接单通知" else "评论通知"
+
+/** 评论 / 接单系统会话的圆形图标 */
 @Composable
-fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, convType: Int, targetId: String, title: String) -> Unit, onOpenMoment: (String) -> Unit, onOpenTask: (String) -> Unit, onCreateGroup: () -> Unit, onOpenAi: () -> Unit, onOpenNews: () -> Unit = {}, onJoinGroup: () -> Unit = {}) {
-    var tab by remember { mutableStateOf("single") }
+private fun NoticeIcon(kind: String, sizeDp: Int) {
+    val colors = if (kind == "task") listOf(Color(0xFF2FB5FF), Color(0xFF4C6FFF)) else listOf(Color(0xFFFF9A3C), Accent)
+    Box(
+        Modifier.size(sizeDp.dp).clip(RoundedCornerShape(50)).background(androidx.compose.ui.graphics.Brush.linearGradient(colors)),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (kind == "task") BriefcaseIcon(Color.White, (sizeDp * 0.46f).dp) else BubbleIcon(Color.White, (sizeDp * 0.5f).dp)
+    }
+}
+
+@Composable
+private fun AiIcon(sizeDp: Int) {
+    Box(
+        Modifier.size(sizeDp.dp).clip(RoundedCornerShape(50)).background(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Accent, Accent2))),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text("AI", color = Color.White, fontSize = (sizeDp * 0.31f).sp, fontWeight = FontWeight.ExtraBold)
+    }
+}
+
+@Composable
+private fun MusicEntryIcon(sizeDp: Int) {
+    Box(
+        Modifier.size(sizeDp.dp).clip(RoundedCornerShape(50)).background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF7B5CFF), Accent))),
+        contentAlignment = Alignment.Center,
+    ) {
+        NoteIcon(Color.White, (sizeDp * 0.48f).dp)
+    }
+}
+
+/** 消息列表一行：左图标 54 + 标题 / 时间 + 预览 / 角标，分隔线和文字对齐 */
+@Composable
+private fun MsgListRow(onClick: () -> Unit, leading: @Composable () -> Unit, title: @Composable RowScope.() -> Unit, end: String, sub: String, badge: @Composable () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.padding(vertical = 9.dp)) { leading() }
+        Column(Modifier.weight(1f).padding(start = 12.dp)) {
+            Column(Modifier.padding(end = 16.dp, top = 9.dp, bottom = 9.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, content = title)
+                    if (end.isNotEmpty()) Text(end, color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(start = 8.dp))
+                }
+                Row(Modifier.padding(top = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(sub, color = TextSub, fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    badge()
+                }
+            }
+            Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
+        }
+    }
+}
+
+/** 消息主页：标题 + 搜索 + 合并列表（AI 助手 / 音乐置顶，会话与评论 / 接单通知按最新时间排） */
+@Composable
+fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, convType: Int, targetId: String, title: String) -> Unit, onOpenNotices: (String) -> Unit, onOpenUser: (String) -> Unit, onCreateGroup: () -> Unit, onOpenAi: () -> Unit, onOpenNews: () -> Unit = {}, onJoinGroup: () -> Unit = {}) {
     var convs by remember { mutableStateOf<List<ConversationItem>>(emptyList()) }
-    var notices by remember { mutableStateOf<List<NotificationItem>>(emptyList()) }
-    var unread by remember { mutableStateOf(UnreadCounts()) }
+    var summary by remember { mutableStateOf(NoticeSummaryResp()) }
+    var showSearch by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    fun loadConvs() { scope.launch { convs = runCatching { Api.getList<ConversationItem>("/im/conversations") }.getOrDefault(emptyList()) } }
-    fun loadUnread() { scope.launch { unread = runCatching { Api.getObj<UnreadCounts>("/notifications/unread") }.getOrDefault(UnreadCounts()) } }
-    fun loadNotices(kind: String) { scope.launch { notices = runCatching { Api.getList<NotificationItem>("/notifications?kind=$kind") }.getOrDefault(emptyList()); loadUnread() } }
+    fun loadConvs() { scope.launch { convs = runCatching { Api.getList<ConversationItem>("/im/conversations") }.getOrDefault(convs) } }
+    fun loadSummary() { scope.launch { summary = runCatching { Api.getObj<NoticeSummaryResp>("/notifications/summary") }.getOrDefault(summary) } }
 
-    LaunchedEffect(Unit) { loadConvs(); loadUnread() }
-    LaunchedEffect(tab) { if (tab == "comment" || tab == "task") loadNotices(tab) }
+    val noticeTick by NoticeRefresh.tick.collectAsState()
+    LaunchedEffect(Unit) { loadConvs() }
+    LaunchedEffect(noticeTick) { loadSummary() }
     DisposableEffect(Unit) {
         val remove = WsClient.addListener { frame ->
             when (frame["op"]?.jsonPrimitive?.content) {
                 // conv_refresh：入群/退群等成员变动（扫码入群后新群立即出现在列表）
                 "msg", "conv_cleared", "conv_refresh" -> loadConvs()
-                "notify" -> loadUnread()
+                "notify" -> loadSummary()
             }
         }
         onDispose { remove() }
     }
 
-    val singleUnread = convs.filter { it.type == 1 }.sumOf { it.unread }
-    val groupUnread = convs.filter { it.type == 2 }.sumOf { it.unread }
-    val tabs = listOf(
-        Triple("single", "私聊", singleUnread), Triple("group", "群聊", groupUnread),
-        Triple("comment", "评论", unread.comment), Triple("task", "接单", unread.task),
-    )
+    val entries: List<MsgEntry> = remember(convs, summary) {
+        val list = convs.map { ConvEntry(it) } +
+            listOf("comment" to summary.comment, "task" to summary.task).filter { it.second.last != null }.map { NoticeEntry(it.first, it.second) }
+        list.sortedByDescending { parseIso(it.at) ?: java.time.Instant.EPOCH }
+    }
 
-    // 音乐播放弹层（顶部「正在播放」栏 / 私聊 tab 入口打开）
+    // 音乐播放弹层（顶部「正在播放」栏 / 置顶入口打开）
     var showMusic by remember { mutableStateOf(false) }
     if (showMusic) MusicSheet(onDismiss = { showMusic = false })
+
+    if (showSearch) {
+        val extras = buildList {
+            add(SearchExtra("ai", "AI 助手", "有问必答，随便问", icon = { AiIcon(it) }, onOpen = { showSearch = false; onOpenAi() }))
+            add(SearchExtra("music", "音乐", "DJ 热曲 · 情感音乐，边聊边听", icon = { MusicEntryIcon(it) }, onOpen = { showSearch = false; showMusic = true }))
+            listOf("comment" to summary.comment, "task" to summary.task).filter { it.second.last != null }.forEach { (k, s) ->
+                add(SearchExtra(k, noticeTitle(k), s.last?.title ?: "", s.unread, icon = { NoticeIcon(k, it) }, onOpen = { showSearch = false; onOpenNotices(k) }))
+            }
+        }
+        ChatSearchDialog(
+            convs = convs,
+            extras = extras,
+            onDismiss = { showSearch = false },
+            onOpenChat = { id, type, target, title -> showSearch = false; onOpenChat(id, type, target, title) },
+            onOpenUser = { showSearch = false; onOpenUser(it) },
+        )
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         // 播放中：固定在消息页最上面
         NowPlayingBar(onOpen = { showMusic = true })
-        Row(modifier = Modifier.fillMaxWidth().padding(16.dp, 14.dp, 16.dp, 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            tabs.forEach { (k, label, badge) -> PillTab(label, tab == k, badge) { tab = k } }
-            Spacer(Modifier.weight(1f))
+        Row(modifier = Modifier.fillMaxWidth().padding(16.dp, 12.dp, 16.dp, 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("消息", color = TextMain, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Box {
                 var showPlusMenu by remember { mutableStateOf(false) }
                 Box(modifier = Modifier.size(34.dp).clip(RoundedCornerShape(17.dp)).background(Bg3).clickable { showPlusMenu = true }, contentAlignment = Alignment.Center) { Text("+", color = TextMain, fontSize = 18.sp) }
@@ -181,84 +265,96 @@ fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, c
             }
         }
 
-        if (tab == "single" || tab == "group") {
-            // AI 助手置顶入口（免费问答）
-            if (tab == "single") {
-                Column(Modifier.fillMaxWidth().clickable(onClick = onOpenAi)) {
-                    Row(Modifier.fillMaxWidth().padding(16.dp, 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            Modifier.size(48.dp).clip(RoundedCornerShape(24.dp))
-                                .background(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Accent, Accent2))),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text("AI", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
-                        }
-                        Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                            Text("AI 助手", color = TextMain, fontSize = 15.sp)
-                            Text("有问必答，随便问", color = TextSub, fontSize = 13.sp, maxLines = 1)
-                        }
-                        Text(
-                            "免费", color = Accent, fontSize = 10.sp,
-                            modifier = Modifier.clip(RoundedCornerShape(4.dp))
-                                .background(Accent.copy(alpha = 0.12f))
-                                .padding(horizontal = 5.dp, vertical = 2.dp),
-                        )
-                    }
-                    Box(modifier = Modifier.fillMaxWidth().padding(start = 76.dp).height(1.dp).background(Line))
-                }
-                // 音乐频道置顶入口（Telegram 频道同步，最多保留 100 首）：弹出播放弹层
-                Column(Modifier.fillMaxWidth().clickable(onClick = { showMusic = true })) {
-                    Row(Modifier.fillMaxWidth().padding(16.dp, 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            Modifier.size(48.dp).clip(RoundedCornerShape(24.dp))
-                                .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF7B5CFF), Accent))),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            NoteIcon(Color.White, 24.dp)
-                        }
-                        Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                            Text("音乐", color = TextMain, fontSize = 15.sp)
-                            Text("DJ 热曲 · 情感音乐，边聊边听", color = TextSub, fontSize = 13.sp, maxLines = 1)
-                        }
-                        Text(
-                            "每日上新", color = Accent, fontSize = 10.sp,
-                            modifier = Modifier.clip(RoundedCornerShape(4.dp))
-                                .background(Accent.copy(alpha = 0.12f))
-                                .padding(horizontal = 5.dp, vertical = 2.dp),
-                        )
-                    }
-                    Box(modifier = Modifier.fillMaxWidth().padding(start = 76.dp).height(1.dp).background(Line))
-                }
+        // 搜索胶囊：点了弹全屏搜索框
+        Row(
+            Modifier.padding(start = 16.dp, end = 16.dp, bottom = 6.dp).fillMaxWidth().height(36.dp)
+                .clip(RoundedCornerShape(18.dp)).background(Bg3).clickable { showSearch = true },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            com.wh.peiwana.ui.sticker.SearchIcon(TextSub, 16.dp)
+            Text("搜索", color = TextSub, fontSize = 15.sp, modifier = Modifier.padding(start = 6.dp))
+        }
+
+        val tag: @Composable (String) -> Unit = { label ->
+            Text(
+                label, color = Accent, fontSize = 10.sp,
+                modifier = Modifier.padding(start = 6.dp).clip(RoundedCornerShape(4.dp))
+                    .background(Accent.copy(alpha = 0.12f))
+                    .padding(horizontal = 5.dp, vertical = 2.dp),
+            )
+        }
+        LazyColumn(Modifier.fillMaxSize()) {
+            // AI 助手 / 音乐固定置顶
+            item("ai") {
+                MsgListRow(
+                    onClick = onOpenAi, leading = { AiIcon(54) },
+                    title = { Text("AI 助手", color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.Medium); tag("免费") },
+                    end = "", sub = "有问必答，随便问", badge = {},
+                )
             }
-            val shown = convs.filter { if (tab == "single") it.type == 1 else it.type == 2 }
-            if (shown.isEmpty()) EmptyHint(if (tab == "single") "暂无私聊\n去广场或大厅找人打招呼" else "暂无群聊\n点右上角发起群聊")
-            else LazyColumn {
-                items(shown, key = { it.id }) { c ->
-                    val title = if (c.type == 1) c.peer?.nickname ?: "" else "${c.group?.name}（群）"
-                    val avatar = if (c.type == 1) c.peer?.avatar else c.group?.avatar
-                    val target = if (c.type == 1) c.peer?.id else c.group?.id
-                    Column(modifier = Modifier.fillMaxWidth().clickable { target?.let { onOpenChat(c.id, c.type, it, title) } }) {
-                        Row(modifier = Modifier.fillMaxWidth().padding(16.dp, 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Avatar(avatar, 48)
-                            Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-                                Text(title, color = TextMain, fontSize = 15.sp)
-                                Text(preview(c.lastMsg), color = TextSub, fontSize = 13.sp, maxLines = 1)
-                            }
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text(fmtChatTime(c.lastMsgAt), color = TextDim, fontSize = 11.sp)
-                                com.wh.peiwana.ui.RoundBadge(c.unread, Modifier.padding(top = 4.dp))
-                            }
-                        }
-                        // 微信式分隔线（与头像右侧对齐）
-                        Box(modifier = Modifier.fillMaxWidth().padding(start = 76.dp).height(1.dp).background(Line))
+            item("music") {
+                MsgListRow(
+                    onClick = { showMusic = true }, leading = { MusicEntryIcon(54) },
+                    title = { Text("音乐", color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.Medium); tag("每日上新") },
+                    end = "", sub = "DJ 热曲 · 情感音乐，边聊边听", badge = {},
+                )
+            }
+            items(entries, key = { it.key }) { e ->
+                when (e) {
+                    is NoticeEntry -> MsgListRow(
+                        onClick = { onOpenNotices(e.kind) }, leading = { NoticeIcon(e.kind, 54) },
+                        title = { Text(noticeTitle(e.kind), color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.Medium) },
+                        end = fmtChatTime(e.at), sub = e.s.last?.title ?: "",
+                        badge = { com.wh.peiwana.ui.RoundBadge(e.s.unread, Modifier.padding(start = 8.dp)) },
+                    )
+                    is ConvEntry -> {
+                        val c = e.c
+                        val name = if (c.type == 1) c.peer?.nickname ?: "" else c.group?.name ?: ""
+                        val title = if (c.type == 1) name else "$name（群）"
+                        val avatar = if (c.type == 1) c.peer?.avatar else c.group?.avatar
+                        val target = if (c.type == 1) c.peer?.id else c.group?.id
+                        MsgListRow(
+                            onClick = { target?.let { onOpenChat(c.id, c.type, it, title) } }, leading = { Avatar(avatar, 54) },
+                            title = {
+                                Text(name, color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                                if (c.type == 2) Text(
+                                    "群", color = TextSub, fontSize = 10.sp,
+                                    modifier = Modifier.padding(start = 6.dp).clip(RoundedCornerShape(4.dp)).background(Bg3).padding(horizontal = 4.dp),
+                                )
+                            },
+                            end = fmtChatTime(c.lastMsgAt), sub = preview(c.lastMsg),
+                            badge = { com.wh.peiwana.ui.RoundBadge(c.unread, Modifier.padding(start = 8.dp)) },
+                        )
                     }
                 }
             }
-        } else {
-            if (notices.isEmpty()) EmptyHint(if (tab == "comment") "暂无评论消息" else "暂无接单消息")
-            else LazyColumn {
-                items(notices, key = { it.id }) { n ->
-                    Column(modifier = Modifier.fillMaxWidth().clickable { if (tab == "comment") onOpenMoment(n.refId) else onOpenTask(n.refId) }.padding(16.dp, 12.dp)) {
+            if (entries.isEmpty()) item("empty") {
+                Box(Modifier.fillMaxWidth().padding(vertical = 70.dp), contentAlignment = Alignment.Center) {
+                    Text("暂无消息\n去广场或大厅找人打招呼", color = TextSub, fontSize = 14.sp, lineHeight = 26.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                }
+            }
+        }
+    }
+}
+
+/** 评论 / 接单通知列表（消息页里的系统会话点进来），拉取即已读 */
+@Composable
+fun NoticesScreen(kind: String, onBack: () -> Unit, onOpenMoment: (String) -> Unit, onOpenTask: (String) -> Unit) {
+    var list by remember { mutableStateOf<List<NotificationItem>?>(null) }
+    LaunchedEffect(kind) {
+        list = runCatching { Api.getList<NotificationItem>("/notifications?kind=$kind") }.getOrDefault(emptyList())
+        NoticeRefresh.tick.value++
+    }
+    Column(Modifier.fillMaxSize()) {
+        NavBar(noticeTitle(kind), onBack)
+        val items = list
+        when {
+            items == null -> Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { Text("加载中…", color = TextDim, fontSize = 13.sp) }
+            items.isEmpty() -> EmptyHint(if (kind == "task") "暂无接单消息" else "暂无评论消息")
+            else -> LazyColumn {
+                items(items, key = { it.id }) { n ->
+                    Column(modifier = Modifier.fillMaxWidth().clickable { if (kind == "task") onOpenTask(n.refId) else onOpenMoment(n.refId) }.padding(16.dp, 12.dp)) {
                         Row { Text(n.title, color = TextMain, fontSize = 15.sp, fontWeight = if (n.isRead) FontWeight.Normal else FontWeight.SemiBold, modifier = Modifier.weight(1f)); Text(timeAgo(n.createdAt), color = TextDim, fontSize = 11.sp) }
                         if (n.body.isNotEmpty()) Text(n.body, color = TextSub, fontSize = 13.sp, maxLines = 1, modifier = Modifier.padding(top = 3.dp))
                     }

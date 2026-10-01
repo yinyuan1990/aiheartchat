@@ -48,7 +48,7 @@ struct MsgItem: Codable, Identifiable {
     var createdAt: String? = ""
 }
 
-private func preview(_ msg: LastMsg?) -> String {
+func previewOf(_ msg: LastMsg?) -> String {
     guard let msg, let type = msg.type else { return "" }
     switch type {
     case "text": return String((msg.content ?? "").prefix(30))
@@ -62,47 +62,81 @@ private func preview(_ msg: LastMsg?) -> String {
     }
 }
 
-/// 消息主页：私聊 / 群聊 / 评论 / 接单
+/// 消息主页：标题 + 搜索 + 合并列表（AI 助手 / 音乐置顶，会话与评论 / 接单通知按最新时间排）
 struct MessagesView: View {
-    @State private var tab = "single"
     @State private var convs: [ConversationItem] = []
-    @State private var notices: [NotificationItem] = []
-    @State private var unread = UnreadCounts()
+    @State private var summary = NoticeSummaryResp()
     @State private var chatTarget: ChatTarget?
+    @State private var pushRoute: Route?
     @State private var removeListener: (() -> Void)?
-    /// 音乐播放弹层（顶部「正在播放」栏 / 私聊 tab 入口打开）
+    /// 音乐播放弹层（顶部「正在播放」栏 / 置顶入口打开）
     @State private var showMusic = false
+    @State private var showSearch = false
+
+    private enum Entry: Identifiable {
+        case conv(ConversationItem)
+        case notice(String, NoticeSummary)
+
+        var id: String {
+            switch self {
+            case .conv(let c): return "c-\(c.id)"
+            case .notice(let k, _): return "n-\(k)"
+            }
+        }
+
+        var at: Date {
+            switch self {
+            case .conv(let c): return parseIsoDate(c.lastMsgAt) ?? .distantPast
+            case .notice(_, let s): return parseIsoDate(s.last?.createdAt) ?? .distantPast
+            }
+        }
+    }
+
+    private var entries: [Entry] {
+        var list = convs.map { Entry.conv($0) }
+        for k in ["comment", "task"] {
+            if let s = summary.of(k), s.last != nil { list.append(.notice(k, s)) }
+        }
+        return list.sorted { $0.at > $1.at }
+    }
 
     var body: some View {
-        NavStack {
-            VStack(spacing: 0) {
-                // 播放中：固定在消息页最上面
-                NowPlayingBar { showMusic = true }
-                header
-                if tab == "single" || tab == "group" {
-                    // AI 助手 + 花边新闻置顶入口
-                    if tab == "single" { aiEntryRow; newsEntryRow }
-                    let shown = convs.filter { tab == "single" ? $0.type == 1 : $0.type == 2 }
-                    if shown.isEmpty {
-                        EmptyHint(text: tab == "single" ? "暂无私聊\n去广场或大厅找人打招呼" : "暂无群聊\n点右上角发起群聊")
-                    } else {
-                        ScrollView {
-                            LazyVStack(spacing: 0) { ForEach(shown) { convRow($0) } }
-                        }
-                    }
-                } else {
-                    if notices.isEmpty {
-                        EmptyHint(text: tab == "comment" ? "暂无评论消息" : "暂无接单消息")
-                    } else {
-                        ScrollView {
-                            LazyVStack(spacing: 0) { ForEach(notices) { noticeRow($0) } }
+        ZStack {
+            NavStack {
+                VStack(spacing: 0) {
+                    // 播放中：固定在消息页最上面
+                    NowPlayingBar { showMusic = true }
+                    header
+                    searchPill
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            aiEntryRow
+                            newsEntryRow
+                            ForEach(entries) { entryRow($0) }
+                            if entries.isEmpty {
+                                Text("暂无消息\n去广场或大厅找人打招呼").font(.subheadline).foregroundStyle(Theme.textSub)
+                                    .multilineTextAlignment(.center).lineSpacing(8)
+                                    .padding(.vertical, 70)
+                            }
                         }
                     }
                 }
+                .fullBg()
+                .withRoutes()
+                .routePush($pushRoute)
             }
-            .fullBg()
-            .withRoutes()
+            if showSearch {
+                ChatSearchView(
+                    convs: convs,
+                    extras: searchExtras,
+                    onClose: { showSearch = false },
+                    onOpenChat: { t in showSearch = false; chatTarget = t },
+                    onOpenUser: { id in showSearch = false; pushRoute = .userHome(id) }
+                )
+                .transition(.opacity)
+            }
         }
+        .animation(.easeOut(duration: 0.18), value: showSearch)
         .fullScreenCover(item: $chatTarget) { t in
             ChatRoomSheet(target: t)
         }
@@ -110,26 +144,22 @@ struct MessagesView: View {
             MusicSheetView(onClose: { showMusic = false })
         }
         .task {
-            await loadConvs(); await loadUnread()
+            await loadConvs(); await loadSummary()
             WsClient.shared.connect()
             removeListener = WsClient.shared.addListener { frame in
                 let op = frame["op"] as? String
                 // conv_refresh：入群/退群等成员变动（扫码入群后新群立即出现在列表）
                 if op == "msg" || op == "conv_cleared" || op == "conv_refresh" { Task { await loadConvs() } }
-                if op == "notify" { Task { await loadUnread() } }
+                if op == "notify" { Task { await loadSummary() } }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .noticesRead)) { _ in Task { await loadSummary() } }
         .onDisappear { removeListener?() }
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
-            let singleUnread = convs.filter { $0.type == 1 }.reduce(0) { $0 + ($1.unread ?? 0) }
-            let groupUnread = convs.filter { $0.type == 2 }.reduce(0) { $0 + ($1.unread ?? 0) }
-            pillTab("私聊", "single", singleUnread)
-            pillTab("群聊", "group", groupUnread)
-            pillTab("评论", "comment", unread.comment ?? 0)
-            pillTab("接单", "task", unread.task ?? 0)
+        HStack {
+            Text("消息").font(.system(size: 22, weight: .bold)).foregroundStyle(Theme.text)
             Spacer()
             Menu {
                 RouteLink(.createGroup) { Label("创建群聊", systemImage: "person.2.badge.plus") }
@@ -141,50 +171,93 @@ struct MessagesView: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(EdgeInsets(top: 14, leading: 16, bottom: 12, trailing: 16))
+        .padding(EdgeInsets(top: 12, leading: 16, bottom: 8, trailing: 16))
     }
 
-    private func pillTab(_ label: String, _ key: String, _ badge: Int) -> some View {
-        Button {
-            tab = key
-            if key == "comment" || key == "task" { Task { await loadNotices(key) } }
-        } label: {
-            HStack(spacing: 4) {
-                Text(label)
-                    .font(.system(size: 15, weight: tab == key ? .semibold : .regular))
-                    .foregroundStyle(tab == key ? .white : Theme.textSub)
-                if badge > 0 {
-                    Text("\(badge)").font(.system(size: 11)).foregroundStyle(tab == key ? Theme.accent : .white)
-                        .padding(.horizontal, 5).padding(.vertical, 1)
-                        .background(Capsule().fill(tab == key ? .white : Theme.accent))
-                }
+    /// 搜索胶囊：点了弹全屏搜索框
+    private var searchPill: some View {
+        Button { showSearch = true } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass").font(.system(size: 15, weight: .medium))
+                Text("搜索").font(.system(size: 15))
             }
-            .padding(.horizontal, 14).padding(.vertical, 8)
-            .background(Capsule().fill(tab == key ? AnyShapeStyle(Theme.accentGrad) : AnyShapeStyle(Theme.bg3)))
+            .foregroundStyle(Theme.textSub)
+            .frame(maxWidth: .infinity)
+            .frame(height: 36)
+            .background(Capsule().fill(Theme.bg3))
         }
         .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 6)
+    }
+
+    private var searchExtras: [SearchExtra] {
+        var list = [
+            SearchExtra(key: "ai", title: "AI 助手", subtitle: "有问必答，随便问", icon: { AnyView(AiIconView(size: $0)) },
+                        onOpen: { showSearch = false; pushRoute = .aiChat }),
+            SearchExtra(key: "music", title: "音乐", subtitle: "DJ 热曲 · 情感音乐，边聊边听", icon: { AnyView(MusicIconView(size: $0)) },
+                        onOpen: { showSearch = false; showMusic = true }),
+        ]
+        for k in ["comment", "task"] {
+            guard let s = summary.of(k), let last = s.last else { continue }
+            list.append(SearchExtra(key: k, title: noticeTitle(k), subtitle: last.title ?? "", unread: s.unread ?? 0,
+                                    icon: { AnyView(NoticeIconView(kind: k, size: $0)) },
+                                    onOpen: { showSearch = false; pushRoute = .notices(k) }))
+        }
+        return list
+    }
+
+    /// 消息列表一行：左图标 54 + 标题 / 时间 + 预览 / 角标，分隔线和文字对齐
+    private func listRow<Leading: View, Title: View>(
+        time: String, sub: String, badge: Int, pinned: Bool = false,
+        @ViewBuilder leading: () -> Leading, @ViewBuilder title: () -> Title
+    ) -> some View {
+        HStack(spacing: 12) {
+            leading()
+            VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        title()
+                        Spacer(minLength: 8)
+                        if !time.isEmpty { Text(time).font(.system(size: 11)).foregroundStyle(Theme.textDim) }
+                    }
+                    HStack(spacing: 8) {
+                        Text(sub).font(.system(size: 14)).foregroundStyle(Theme.textSub).lineLimit(1)
+                        Spacer(minLength: 0)
+                        if badge > 0 {
+                            Text(badge > 99 ? "99+" : "\(badge)").font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
+                                .padding(.horizontal, 6).frame(minWidth: 20, minHeight: 20)
+                                .background(Capsule().fill(Theme.accent))
+                        }
+                        if pinned {
+                            Image(systemName: "pin.fill").font(.system(size: 11)).foregroundStyle(Theme.textDim).rotationEffect(.degrees(45))
+                        }
+                    }
+                }
+                .frame(maxHeight: .infinity)
+                .padding(.trailing, 16)
+                Rectangle().fill(Theme.line).frame(height: 1)
+            }
+        }
+        .padding(.leading, 16)
+        .frame(height: 72)
+        .contentShape(Rectangle())
+    }
+
+    private func tag(_ text: String) -> some View {
+        Text(text).font(.system(size: 10)).foregroundStyle(Theme.accent)
+            .padding(.horizontal, 5).padding(.vertical, 2)
+            .background(RoundedRectangle(cornerRadius: 4).fill(Theme.accent.opacity(0.12)))
     }
 
     private var aiEntryRow: some View {
         RouteLink(.aiChat) {
-            VStack(spacing: 0) {
-                HStack(spacing: 12) {
-                    Circle().fill(Theme.accentGrad)
-                        .frame(width: 48, height: 48)
-                        .overlay(Text("AI").font(.system(size: 15, weight: .heavy)).foregroundStyle(.white))
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("AI 助手").font(.system(size: 15)).foregroundStyle(Theme.text)
-                        Text("有问必答，随便问").font(.system(size: 13)).foregroundStyle(Theme.textSub).lineLimit(1)
-                    }
-                    Spacer()
-                    Text("免费").font(.system(size: 10)).foregroundStyle(Theme.accent)
-                        .padding(.horizontal, 5).padding(.vertical, 2)
-                        .background(RoundedRectangle(cornerRadius: 4).fill(Theme.accent.opacity(0.12)))
-                }
-                .padding(.horizontal, 16).padding(.vertical, 10)
-                Rectangle().fill(Theme.line).frame(height: 1).padding(.leading, 76)
+            listRow(time: "", sub: "有问必答，随便问", badge: 0, pinned: true) {
+                AiIconView()
+            } title: {
+                Text("AI 助手").font(.system(size: 16, weight: .medium)).foregroundStyle(Theme.text)
+                tag("免费")
             }
-            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -192,90 +265,56 @@ struct MessagesView: View {
     /// 音乐频道置顶入口（Telegram 频道同步，最多保留 100 首）：弹出播放弹层
     private var newsEntryRow: some View {
         Button { showMusic = true } label: {
-            VStack(spacing: 0) {
-                HStack(spacing: 12) {
-                    Circle()
-                        .fill(LinearGradient(colors: [Color(red: 0.48, green: 0.36, blue: 1), Theme.accent], startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .frame(width: 48, height: 48)
-                        .overlay(Image(systemName: "music.note").font(.system(size: 22, weight: .semibold)).foregroundStyle(.white))
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("音乐").font(.system(size: 15)).foregroundStyle(Theme.text)
-                        Text("DJ 热曲 · 情感音乐，边聊边听").font(.system(size: 13)).foregroundStyle(Theme.textSub).lineLimit(1)
-                    }
-                    Spacer()
-                    Text("每日上新").font(.system(size: 10)).foregroundStyle(Theme.accent)
-                        .padding(.horizontal, 5).padding(.vertical, 2)
-                        .background(RoundedRectangle(cornerRadius: 4).fill(Theme.accent.opacity(0.12)))
-                }
-                .padding(.horizontal, 16).padding(.vertical, 10)
-                Rectangle().fill(Theme.line).frame(height: 1).padding(.leading, 76)
+            listRow(time: "", sub: "DJ 热曲 · 情感音乐，边聊边听", badge: 0, pinned: true) {
+                MusicIconView()
+            } title: {
+                Text("音乐").font(.system(size: 16, weight: .medium)).foregroundStyle(Theme.text)
+                tag("每日上新")
             }
-            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
 
+    @ViewBuilder private func entryRow(_ e: Entry) -> some View {
+        switch e {
+        case .conv(let c):
+            convRow(c)
+        case .notice(let k, let s):
+            RouteLink(.notices(k)) {
+                listRow(time: fmtTime(s.last?.createdAt), sub: s.last?.title ?? "", badge: s.unread ?? 0) {
+                    NoticeIconView(kind: k)
+                } title: {
+                    Text(noticeTitle(k)).font(.system(size: 16, weight: .medium)).foregroundStyle(Theme.text)
+                }
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
     private func convRow(_ c: ConversationItem) -> some View {
-        let title = c.type == 1 ? (c.peer?.nickname ?? "") : "\(c.group?.name ?? "")（群）"
+        let name = c.type == 1 ? (c.peer?.nickname ?? "") : (c.group?.name ?? "")
+        let title = c.type == 1 ? name : "\(name)（群）"
         let avatar = c.type == 1 ? c.peer?.avatar : c.group?.avatar
         let target = c.type == 1 ? (c.peer?.id ?? "") : (c.group?.id ?? "")
         return Button {
             chatTarget = ChatTarget(convId: c.id, convType: c.type, targetId: target, title: title)
         } label: {
-            VStack(spacing: 0) {
-                HStack(spacing: 12) {
-                    AvatarView(url: avatar, size: 48)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(title).font(.system(size: 15)).foregroundStyle(Theme.text)
-                        Text(preview(c.lastMsg)).font(.system(size: 13)).foregroundStyle(Theme.textSub).lineLimit(1)
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Text(fmtTime(c.lastMsgAt)).font(.system(size: 11)).foregroundStyle(Theme.textDim)
-                        if (c.unread ?? 0) > 0 {
-                            Text("\(c.unread ?? 0)").font(.system(size: 10)).foregroundStyle(.white)
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Capsule().fill(Theme.accent))
-                        }
-                    }
+            listRow(time: fmtTime(c.lastMsgAt), sub: previewOf(c.lastMsg), badge: c.unread ?? 0) {
+                AvatarView(url: avatar, size: 54)
+            } title: {
+                Text(name).font(.system(size: 16, weight: .medium)).foregroundStyle(Theme.text).lineLimit(1)
+                if c.type == 2 {
+                    Text("群").font(.system(size: 10)).foregroundStyle(Theme.textSub)
+                        .padding(.horizontal, 4)
+                        .background(RoundedRectangle(cornerRadius: 4).fill(Theme.bg3))
                 }
-                .padding(.horizontal, 16).padding(.vertical, 10)
-                // 微信式分隔线（与头像右侧对齐）
-                Rectangle().fill(Theme.line).frame(height: 1).padding(.leading, 76)
             }
-            // 让整行（含空白区域）都可点击
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func noticeRow(_ n: NotificationItem) -> some View {
-        RouteLink(tab == "comment" ? .moment(n.refId ?? "0") : .task(n.refId ?? "0")) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack {
-                    Text(n.title ?? "")
-                        .font(.system(size: 15, weight: (n.isRead ?? false) ? .regular : .semibold))
-                        .foregroundStyle(Theme.text)
-                    Spacer()
-                    Text(timeAgo(n.createdAt)).font(.system(size: 11)).foregroundStyle(Theme.textDim)
-                }
-                if let body = n.body, !body.isEmpty {
-                    Text(body).font(.system(size: 13)).foregroundStyle(Theme.textSub).lineLimit(1)
-                }
-                Rectangle().fill(Theme.line).frame(height: 1).padding(.top, 9)
-            }
-            .padding(.horizontal, 16).padding(.top, 12)
-            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
 
     private func loadConvs() async { convs = (try? await Api.request("/im/conversations")) ?? convs }
-    private func loadUnread() async { unread = (try? await Api.request("/notifications/unread")) ?? unread }
-    private func loadNotices(_ kind: String) async {
-        notices = (try? await Api.request("/notifications?kind=\(kind)")) ?? []
-        await loadUnread()
-    }
+    private func loadSummary() async { summary = (try? await Api.request("/notifications/summary")) ?? summary }
 }
 
 /// 聊天全屏容器（fullScreenCover 用，带关闭按钮）
