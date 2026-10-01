@@ -172,7 +172,9 @@ struct ChatSearchView: View {
     let extras: [SearchExtra]
     let onClose: () -> Void
     let onOpenChat: (ChatTarget) -> Void
-    let onOpenUser: (String) -> Void
+    /// 搜到的用户（id, 昵称）：直接打开私聊
+    let onOpenUser: (String, String) -> Void
+    let onScan: () -> Void
 
     @State private var q = ""
     @State private var tab = 0
@@ -244,6 +246,11 @@ struct ChatSearchView: View {
                 if !q.isEmpty {
                     Button { q = "" } label: {
                         Image(systemName: "xmark.circle.fill").font(.system(size: 16)).foregroundStyle(Theme.textDim)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Button { focused = false; onScan() } label: {
+                        Image(systemName: "qrcode.viewfinder").font(.system(size: 18)).foregroundStyle(Theme.textSub)
                     }
                     .buttonStyle(.plain)
                 }
@@ -427,7 +434,7 @@ struct ChatSearchView: View {
         row(action: {
             addRecent(r)
             focused = false
-            onOpenUser(r.id)
+            onOpenUser(r.id, r.title)
         }) {
             AvatarView(url: r.avatar, size: 44)
         } main: {

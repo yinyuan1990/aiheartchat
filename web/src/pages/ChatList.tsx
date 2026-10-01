@@ -5,6 +5,7 @@ import { api, uploadFile } from '../api';
 import { wsManager } from '../ws';
 import { MusicSheet, NowPlayingBar } from './Music';
 import { ChatSearch, SearchExtra } from '../components/ChatSearch';
+import { parseGroupCode, parseInviteCode, QrScanner, ScanIcon } from '../components/QrScanner';
 
 interface ConversationItem {
   id: string;
@@ -272,6 +273,57 @@ export function JoinGroupSheet({ onClose, onJoined, initialCode }: { onClose: ()
   );
 }
 
+/** 扫一扫（消息页搜索 / 我的页共用）：邀请名片 → 直接打开与对方的私聊；群邀请码 → 加入群聊；收款码 → 提示去转赠页 */
+export function ScanFlow({ onClose }: { onClose: () => void }) {
+  const nav = useNavigate();
+  const [scanning, setScanning] = useState(true);
+  const [joinCode, setJoinCode] = useState<string | null>(null);
+
+  const handle = async (text: string) => {
+    setScanning(false);
+    const invite = parseInviteCode(text);
+    if (invite) {
+      try {
+        const r = await api<{ conversationId: string; peer: { id: string; nickname: string } }>(
+          '/im/conversations/open-by-code', { method: 'POST', body: { code: invite } },
+        );
+        onClose();
+        if (openNativeChat(r.conversationId, 1, r.peer.id, r.peer.nickname)) return;
+        nav(`/chatroom/${r.conversationId}`, { state: { title: r.peer.nickname, convType: 1, targetId: r.peer.id } });
+      } catch (e: any) {
+        alert(e.message);
+        onClose();
+      }
+      return;
+    }
+    if (text.includes('pay?sid=')) {
+      alert('这是收款码，请到「积分明细 - 转赠」里扫码使用');
+      onClose();
+      return;
+    }
+    const g = parseGroupCode(text);
+    if (g) setJoinCode(g);
+    else { alert('无法识别的二维码'); onClose(); }
+  };
+
+  return (
+    <>
+      {scanning && <QrScanner hint="对准邀请名片或群二维码" onResult={handle} onClose={onClose} />}
+      {joinCode && (
+        <JoinGroupSheet
+          initialCode={joinCode}
+          onClose={onClose}
+          onJoined={(convId, name, groupId) => {
+            onClose();
+            if (openNativeChat(convId, 2, groupId, `${name}（群）`)) return;
+            nav(`/chatroom/${convId}`, { state: { title: `${name}（群）`, convType: 2, targetId: groupId } });
+          }}
+        />
+      )}
+    </>
+  );
+}
+
 export function ChatListPage() {
   const nav = useNavigate();
   const [convs, setConvs] = useState<ConversationItem[]>([]);
@@ -281,6 +333,7 @@ export function ChatListPage() {
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [showMusic, setShowMusic] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [showScan, setShowScan] = useState(false);
 
   const loadConvs = () => api<ConversationItem[]>('/im/conversations').then(setConvs).catch(() => {});
   const loadSummary = () => api<Record<NoticeKind, NoticeSummary>>('/notifications/summary').then(setSummary).catch(() => {});
@@ -374,6 +427,9 @@ export function ChatListPage() {
       <div className="cl-search" onClick={() => setShowSearch(true)}>
         <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
         搜索
+        <span className="cl-scan" title="扫一扫" onClick={(e) => { e.stopPropagation(); setShowScan(true); }}>
+          <ScanIcon size={17} color="currentColor" />
+        </span>
       </div>
 
       {/* AI 助手 / 音乐固定置顶，其余按最新消息时间排 */}
@@ -432,9 +488,19 @@ export function ChatListPage() {
           extras={searchExtras}
           onClose={() => setShowSearch(false)}
           onOpenConv={(c) => { setShowSearch(false); openConv(c); }}
-          onOpenUser={(id) => { setShowSearch(false); nav(`/u/${id}`); }}
+          onOpenUser={async (id, nickname) => {
+            setShowSearch(false);
+            try {
+              const r = await api<{ conversationId: string }>(`/im/conversations/open/${id}`, { method: 'POST' });
+              openConv({ id: r.conversationId, type: 1, targetId: id, title: nickname });
+            } catch (e: any) {
+              alert(e.message);
+            }
+          }}
+          onScan={() => { setShowSearch(false); setShowScan(true); }}
         />
       )}
+      {showScan && <ScanFlow onClose={() => setShowScan(false)} />}
 
       {showCreate && (
         <CreateGroupSheet

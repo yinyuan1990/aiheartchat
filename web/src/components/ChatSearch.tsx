@@ -1,5 +1,6 @@
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
+import { ScanIcon } from './QrScanner';
 
 export interface SearchConv {
   id: string;
@@ -118,13 +119,15 @@ function Badge({ n }: { n?: number }) {
  * 空搜索 = 常用联系人横排 + 最近搜索；有关键词 = 聊天（本地会话名 + 全局用户）/ 消息（内容匹配）两栏。
  */
 export function ChatSearch({
-  convs, extras, onClose, onOpenConv, onOpenUser,
+  convs, extras, onClose, onOpenConv, onOpenUser, onScan,
 }: {
   convs: SearchConv[];
   extras: SearchExtra[];
   onClose: () => void;
   onOpenConv: (c: { id: string; type: number; targetId: string; title: string; focusMsgId?: string }) => void;
-  onOpenUser: (id: string) => void;
+  /** 搜到的用户：直接打开私聊 */
+  onOpenUser: (id: string, nickname: string) => void;
+  onScan: () => void;
 }) {
   const [q, setQ] = useState('');
   const [tab, setTab] = useState<'chats' | 'messages'>('chats');
@@ -170,7 +173,7 @@ export function ChatSearch({
   };
   const openUser = (u: { id: string; title: string; avatar: string; subtitle: string }) => {
     remember({ kind: 'user', ...u });
-    onOpenUser(u.id);
+    onOpenUser(u.id, u.title);
   };
 
   const convById = useMemo(() => new Map(convs.map((c) => [c.id, c])), [convs]);
@@ -234,7 +237,9 @@ export function ChatSearch({
           <div className="cs-input">
             <svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
             <input ref={inputRef} value={q} placeholder="搜索" onChange={(e) => setQ(e.target.value)} enterKeyHint="search" />
-            {q && <span className="cs-clear" onClick={() => { setQ(''); inputRef.current?.focus(); }}>×</span>}
+            {q
+              ? <span className="cs-clear" onClick={() => { setQ(''); inputRef.current?.focus(); }}>×</span>
+              : <span className="cs-scan" title="扫一扫" onClick={onScan}><ScanIcon size={19} color="currentColor" /></span>}
           </div>
           <span className="cs-close" onClick={onClose}>
             <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>

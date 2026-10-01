@@ -200,7 +200,7 @@ private fun MsgListRow(onClick: () -> Unit, leading: @Composable () -> Unit, tit
 
 /** 消息主页：标题 + 搜索 + 合并列表（AI 助手 / 音乐置顶，会话与评论 / 接单通知按最新时间排） */
 @Composable
-fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, convType: Int, targetId: String, title: String) -> Unit, onOpenMessage: (convId: String, convType: Int, targetId: String, title: String, msgId: String) -> Unit, onOpenNotices: (String) -> Unit, onOpenUser: (String) -> Unit, onCreateGroup: () -> Unit, onOpenAi: () -> Unit, onOpenNews: () -> Unit = {}, onJoinGroup: () -> Unit = {}) {
+fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, convType: Int, targetId: String, title: String) -> Unit, onOpenMessage: (convId: String, convType: Int, targetId: String, title: String, msgId: String) -> Unit, onOpenNotices: (String) -> Unit, onOpenUser: (userId: String, nickname: String) -> Unit, onScan: () -> Unit, onCreateGroup: () -> Unit, onOpenAi: () -> Unit, onOpenNews: () -> Unit = {}, onJoinGroup: () -> Unit = {}) {
     var convs by remember { mutableStateOf<List<ConversationItem>>(emptyList()) }
     var summary by remember { mutableStateOf(NoticeSummaryResp()) }
     var showSearch by remember { mutableStateOf(false) }
@@ -247,7 +247,8 @@ fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, c
             onDismiss = { showSearch = false },
             onOpenChat = { id, type, target, title -> showSearch = false; onOpenChat(id, type, target, title) },
             onOpenMessage = { id, type, target, title, msgId -> showSearch = false; onOpenMessage(id, type, target, title, msgId) },
-            onOpenUser = { showSearch = false; onOpenUser(it) },
+            onOpenUser = { id, name -> showSearch = false; onOpenUser(id, name) },
+            onScan = { showSearch = false; onScan() },
         )
     }
 
@@ -266,15 +267,19 @@ fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, c
             }
         }
 
-        // 搜索胶囊：点了弹全屏搜索框
-        Row(
+        // 搜索胶囊：点了弹全屏搜索框；右端扫一扫
+        Box(
             Modifier.padding(start = 16.dp, end = 16.dp, bottom = 6.dp).fillMaxWidth().height(36.dp)
                 .clip(RoundedCornerShape(18.dp)).background(Bg3).clickable { showSearch = true },
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center,
         ) {
-            com.wh.peiwana.ui.sticker.SearchIcon(TextSub, 16.dp)
-            Text("搜索", color = TextSub, fontSize = 15.sp, modifier = Modifier.padding(start = 6.dp))
+            Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically) {
+                com.wh.peiwana.ui.sticker.SearchIcon(TextSub, 16.dp)
+                Text("搜索", color = TextSub, fontSize = 15.sp, modifier = Modifier.padding(start = 6.dp))
+            }
+            Box(
+                Modifier.align(Alignment.CenterEnd).padding(end = 4.dp).size(28.dp).clip(androidx.compose.foundation.shape.CircleShape).clickable(onClick = onScan),
+                contentAlignment = Alignment.Center,
+            ) { ScanIcon(TextSub, 17.dp) }
         }
 
         val tag: @Composable (String) -> Unit = { label ->

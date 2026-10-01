@@ -149,7 +149,9 @@ fun ChatSearchDialog(
     onDismiss: () -> Unit,
     onOpenChat: (convId: String, convType: Int, targetId: String, title: String) -> Unit,
     onOpenMessage: (convId: String, convType: Int, targetId: String, title: String, msgId: String) -> Unit,
-    onOpenUser: (String) -> Unit,
+    /** 搜到的用户（id, 昵称）：直接打开私聊 */
+    onOpenUser: (String, String) -> Unit,
+    onScan: () -> Unit,
 ) {
     val ctx = LocalContext.current
     var q by remember { mutableStateOf("") }
@@ -188,7 +190,7 @@ fun ChatSearchDialog(
     fun openUser(r: SearchRecent) {
         addRecent(r)
         keyboard?.hide()
-        onOpenUser(r.id)
+        onOpenUser(r.id, r.title)
     }
 
     val convById = remember(convs) { convs.associateBy { it.id } }
@@ -243,6 +245,10 @@ fun ChatSearchDialog(
                     if (q.isNotEmpty()) {
                         Box(Modifier.size(18.dp).clip(CircleShape).background(TextDim).clickable { q = "" }, contentAlignment = Alignment.Center) {
                             XMarkIcon(Color.White, 12.dp)
+                        }
+                    } else {
+                        Box(Modifier.size(28.dp).clip(CircleShape).clickable { keyboard?.hide(); onScan() }, contentAlignment = Alignment.Center) {
+                            com.wh.peiwana.ui.ScanIcon(TextSub, 19.dp)
                         }
                     }
                 }

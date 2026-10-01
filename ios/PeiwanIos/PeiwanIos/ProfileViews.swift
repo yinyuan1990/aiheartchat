@@ -8,14 +8,6 @@ struct MeView: View {
     @State private var me: UserProfile?
     @State private var camDefaultOn = UserDefaults.standard.bool(forKey: "camDefaultOn")
     @State private var showScan = false
-    @State private var scannedJoin: ScannedJoinCode?
-    @State private var scannedVroomChat: ChatTarget?
-    @State private var scanToast: String?
-
-    struct ScannedJoinCode: Identifiable {
-        let id = UUID()
-        let code: String
-    }
 
     var body: some View {
         NavStack {
@@ -23,70 +15,12 @@ struct MeView: View {
                 .fullBg()
                 .withRoutes()
         }
-        .toast($scanToast)
-        .fullScreenCover(isPresented: $showScan) {
-            QrScanView { text in
-                if text.contains("pay?sid=") {
-                    scanToast = "这是收款码，请到「积分转赠 - 扫一扫」使用"
-                } else if let v = parseVroomQr(text) {
-                    joinVroomByQr(v.groupId, v.token)
-                } else if let c = parseGroupCode(text) {
-                    scannedJoin = ScannedJoinCode(code: c)
-                } else {
-                    scanToast = "无法识别的二维码"
-                }
-            }
-        }
-        .sheet(item: $scannedJoin) { s in
-            NavStack {
-                JoinGroupView(initialCode: s.code)
-            }
-        }
-        .fullScreenCover(item: $scannedVroomChat) { t in
-            ChatRoomSheet(target: t)
-        }
+        // 扫一扫：邀请名片 → 私聊；语音房邀请 → 进房；群邀请码 → 加群；收款码 → 提示
+        .scanFlow(isPresented: $showScan)
         .task {
             if let u: UserProfile = try? await Api.request("/user/me") {
                 me = u
                 state.user = u
-            }
-        }
-    }
-
-    /// 语音房二维码：免密入群 → 打开群聊 → 自动进房
-    private func joinVroomByQr(_ groupId: String, _ token: String) {
-        Task {
-            struct ScanResp: Codable {
-                var groupId: String? = ""
-                var conversationId: String? = ""
-                var groupName: String? = ""
-                var roomActive: Bool? = false
-            }
-            do {
-                let r: ScanResp = try await Api.request("/im/voiceroom/scan", method: "POST", body: [
-                    "groupId": groupId,
-                    "token": token,
-                ])
-                guard let convId = r.conversationId, !convId.isEmpty else {
-                    scanToast = "群会话不存在"
-                    return
-                }
-                scannedVroomChat = ChatTarget(convId: convId, convType: 2, targetId: r.groupId ?? groupId, title: r.groupName ?? "群聊")
-                if r.roomActive == true {
-                    AVCaptureDevice.requestAccess(for: .audio) { ok in
-                        DispatchQueue.main.async {
-                            if ok {
-                                VoiceRoomManager.shared.join(groupId: r.groupId ?? groupId)
-                            } else {
-                                VoiceRoomManager.shared.toastMsg = "需要麦克风权限，请在系统设置中开启"
-                            }
-                        }
-                    }
-                } else {
-                    scanToast = "已入群，语音房当前未开启"
-                }
-            } catch {
-                scanToast = error.localizedDescription
             }
         }
     }

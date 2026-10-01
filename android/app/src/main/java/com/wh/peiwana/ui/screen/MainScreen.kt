@@ -37,6 +37,7 @@ fun MainScreen(
     var meKey by remember { mutableIntStateOf(0) }
     var unreadTotal by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
+    val startScan = rememberQrScan(onNav)
 
     // 未读总数（私聊+群聊+评论+接单），消息到达实时刷新
     fun refreshUnread() {
@@ -113,7 +114,8 @@ fun MainScreen(
                         onNav("chatroom/$convId?convType=$convType&targetId=$targetId&title=${android.net.Uri.encode(title)}&focusMsgId=$msgId")
                     },
                     onOpenNotices = { onNav("notices/$it") },
-                    onOpenUser = { onNav("u/$it") },
+                    onOpenUser = onOpenChatWithUser,
+                    onScan = startScan,
                     onCreateGroup = { onNav("create-group") },
                     onOpenAi = { onNav("aichat") },
                     onOpenNews = { onNav("music") },

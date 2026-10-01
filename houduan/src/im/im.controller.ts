@@ -49,6 +49,12 @@ export class ImController {
     return this.im.clearMessages(userId, BigInt(id));
   }
 
+  /** 扫邀请名片：按名片码（短号）直接打开单聊 */
+  @Post('conversations/open-by-code')
+  openByCode(@CurrentUser() userId: bigint, @Body() dto: { code?: string }) {
+    return this.im.openByInviteCode(userId, String(dto?.code ?? ''));
+  }
+
   /** 打开与某用户的会话（不存在则创建），返回会话 id */
   @Post('conversations/open/:peerId')
   async open(@CurrentUser() userId: bigint, @Param('peerId') peerId: string) {

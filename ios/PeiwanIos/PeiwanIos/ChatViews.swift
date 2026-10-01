@@ -72,6 +72,7 @@ struct MessagesView: View {
     /// 音乐播放弹层（顶部「正在播放」栏 / 置顶入口打开）
     @State private var showMusic = false
     @State private var showSearch = false
+    @State private var showScan = false
 
     private enum Entry: Identifiable {
         case conv(ConversationItem)
@@ -131,12 +132,17 @@ struct MessagesView: View {
                     extras: searchExtras,
                     onClose: { showSearch = false },
                     onOpenChat: { t in showSearch = false; chatTarget = t },
-                    onOpenUser: { id in showSearch = false; pushRoute = .userHome(id) }
+                    onOpenUser: { id, name in
+                        showSearch = false
+                        Task { if let t = await openChatWith(userId: id, nickname: name) { chatTarget = t } }
+                    },
+                    onScan: { showSearch = false; showScan = true }
                 )
                 .transition(.opacity)
             }
         }
         .animation(.easeOut(duration: 0.18), value: showSearch)
+        .scanFlow(isPresented: $showScan)
         .fullScreenCover(item: $chatTarget) { t in
             ChatRoomSheet(target: t)
         }
@@ -187,6 +193,15 @@ struct MessagesView: View {
             .background(Capsule().fill(Theme.bg3))
         }
         .buttonStyle(.plain)
+        // 右端扫一扫（邀请名片 → 私聊）
+        .overlay(alignment: .trailing) {
+            Button { showScan = true } label: {
+                Image(systemName: "qrcode.viewfinder").font(.system(size: 16)).foregroundStyle(Theme.textSub)
+                    .frame(width: 36, height: 36)
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, 2)
+        }
         .padding(.horizontal, 16)
         .padding(.bottom, 6)
     }

@@ -39,6 +39,112 @@ func parseGroupCode(_ text: String) -> String? {
     return nil
 }
 
+/// 从扫码结果里提取邀请名片码（名片二维码内容 https://域名/t/?u=短号）
+func parseInviteCode(_ text: String) -> String? {
+    guard text.contains("/t/"),
+          let range = text.range(of: #"[?&]u=\d{1,19}"#, options: .regularExpression)
+    else { return nil }
+    return String(text[range].dropFirst(3))
+}
+
+/// 扫一扫（我的页 / 消息页搜索共用）：邀请名片 → 直接打开私聊；语音房邀请 → 免密入群进房；群邀请码 → 加入群聊；收款码 → 提示
+struct ScanFlowModifier: ViewModifier {
+    @Binding var isPresented: Bool
+    @State private var joinCode: ScannedCode?
+    @State private var chat: ChatTarget?
+    @State private var toast: String?
+
+    struct ScannedCode: Identifiable {
+        let id = UUID()
+        let code: String
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .toast($toast)
+            .fullScreenCover(isPresented: $isPresented) {
+                QrScanView(hint: "对准邀请名片或群二维码") { text in handle(text) }
+            }
+            .sheet(item: $joinCode) { s in
+                NavStack { JoinGroupView(initialCode: s.code) }
+            }
+            .fullScreenCover(item: $chat) { t in
+                ChatRoomSheet(target: t)
+            }
+    }
+
+    private func handle(_ text: String) {
+        if let code = parseInviteCode(text) {
+            openByInvite(code)
+        } else if text.contains("pay?sid=") {
+            toast = "这是收款码，请到「积分转赠 - 扫一扫」使用"
+        } else if let v = parseVroomQr(text) {
+            joinVroomByQr(v.groupId, v.token)
+        } else if let c = parseGroupCode(text) {
+            joinCode = ScannedCode(code: c)
+        } else {
+            toast = "无法识别的二维码"
+        }
+    }
+
+    private func openByInvite(_ code: String) {
+        Task {
+            struct Peer: Codable { var id: String; var nickname: String? }
+            struct Resp: Codable { var conversationId: String; var peer: Peer }
+            do {
+                let r: Resp = try await Api.request("/im/conversations/open-by-code", method: "POST", body: ["code": code])
+                // 等扫码页的 fullScreenCover 收起后再弹聊天页
+                try? await Task.sleep(nanoseconds: 450_000_000)
+                chat = ChatTarget(convId: r.conversationId, convType: 1, targetId: r.peer.id, title: r.peer.nickname ?? "")
+            } catch {
+                toast = error.localizedDescription
+            }
+        }
+    }
+
+    /// 语音房二维码：免密入群 → 打开群聊 → 自动进房
+    private func joinVroomByQr(_ groupId: String, _ token: String) {
+        Task {
+            struct ScanResp: Codable {
+                var groupId: String? = ""
+                var conversationId: String? = ""
+                var groupName: String? = ""
+                var roomActive: Bool? = false
+            }
+            do {
+                let r: ScanResp = try await Api.request("/im/voiceroom/scan", method: "POST", body: [
+                    "groupId": groupId,
+                    "token": token,
+                ])
+                guard let convId = r.conversationId, !convId.isEmpty else {
+                    toast = "群会话不存在"
+                    return
+                }
+                chat = ChatTarget(convId: convId, convType: 2, targetId: r.groupId ?? groupId, title: r.groupName ?? "群聊")
+                if r.roomActive == true {
+                    AVCaptureDevice.requestAccess(for: .audio) { ok in
+                        DispatchQueue.main.async {
+                            if ok {
+                                VoiceRoomManager.shared.join(groupId: r.groupId ?? groupId)
+                            } else {
+                                VoiceRoomManager.shared.toastMsg = "需要麦克风权限，请在系统设置中开启"
+                            }
+                        }
+                    }
+                } else {
+                    toast = "已入群，语音房当前未开启"
+                }
+            } catch {
+                toast = error.localizedDescription
+            }
+        }
+    }
+}
+
+extension View {
+    func scanFlow(isPresented: Binding<Bool>) -> some View { modifier(ScanFlowModifier(isPresented: isPresented)) }
+}
+
 /// 生成二维码图片
 func makeQRImage(_ text: String, size: CGFloat = 240) -> UIImage? {
     let filter = CIFilter.qrCodeGenerator()
@@ -126,6 +232,7 @@ struct MyQrCodeView: View {
 /// 扫一扫（扫收款码）
 struct QrScanView: View {
     @Environment(\.dismiss) private var dismiss
+    var hint = "对准对方的收款二维码"
     let onResult: (String) -> Void
     @State private var denied = false
 
@@ -147,7 +254,7 @@ struct QrScanView: View {
                 RoundedRectangle(cornerRadius: 14)
                     .stroke(Theme.accent, lineWidth: 2)
                     .frame(width: 230, height: 230)
-                Text("对准对方的收款二维码")
+                Text(hint)
                     .font(.system(size: 13)).foregroundStyle(.white)
                     .padding(.top, 300)
             }

@@ -5,6 +5,7 @@ import { WalletService } from '../wallet/wallet.service';
 import { ConnectionRegistry } from './connection.registry';
 import { IntimacyService } from '../intimacy/intimacy.service';
 import { MessagePayload, SendFrame } from './im.types';
+import { resolveInviteUser } from '../invite/invite.service';
 
 /** 需要扣费的消息类型（礼物走礼物模块自身计费） */
 const CHARGED_TYPES = new Set(['text', 'image', 'video', 'audio', 'location', 'sticker']);
@@ -35,15 +36,14 @@ export class ImService {
     if (peerId === sender.id) throw new BadRequestException('不能给自己发消息');
     const peer = await this.prisma.user.findUnique({ where: { id: peerId } });
     if (!peer || peer.status !== 0) throw new NotFoundException('对方不存在');
-    // 全局性别隔离：单聊仅限异性
-    if (peer.gender === sender.gender) throw new ForbiddenException('无法与该用户聊天');
+    // 不限性别：同性只能经扫邀请名片进来（遇见 / 搜索 / 主页仍只展示异性）
 
     const conv = await this.getOrCreateSingleConversation(sender.id, peerId);
     const key = this.crypto.unwrapKey(conv.wrappedKey);
 
-    // 男→女消息按条扣费（后台设价，收入归女方）
+    // 男→女消息按条扣费（后台设价，收入归女方）；同性之间免费
     let msgFee = 0n;
-    if (sender.gender === 1 && CHARGED_TYPES.has(frame.msgType)) {
+    if (sender.gender === 1 && peer.gender === 2 && CHARGED_TYPES.has(frame.msgType)) {
       const price = await this.prisma.priceConfig.findFirst();
       msgFee = BigInt(price?.msgPriceFen ?? 0);
     }
@@ -144,6 +144,15 @@ export class ImService {
     const targets = members.map((m) => m.userId).filter((id) => id !== sender.id);
     await this.registry.deliver(targets, { op: 'msg', data: payload });
     return payload;
+  }
+
+  /** 扫邀请名片（内容 SITE_BASE/t/?u=短号）：直接打开与名片主人的单聊，不需要对方同意 */
+  async openByInviteCode(userId: bigint, code: string) {
+    const peer = await resolveInviteUser(this.prisma, code);
+    if (!peer || peer.status !== 0) throw new NotFoundException('名片已失效');
+    if (peer.id === userId) throw new BadRequestException('这是你自己的名片');
+    const conv = await this.getOrCreateSingleConversation(userId, peer.id);
+    return { conversationId: conv.id, peer: { id: peer.id, nickname: peer.nickname, avatar: peer.avatar } };
   }
 
   async getOrCreateSingleConversation(a: bigint, b: bigint) {
@@ -258,7 +267,7 @@ export class ImService {
   /**
    * 消息页搜索：
    * messages = 我所在会话里文字消息的内容匹配（密文只能逐条解密后比对，只扫最近 SEARCH_SCAN 条）；
-   * users = 按昵称 / 短号找异性用户（全局搜索，性别隔离同「遇见」）。
+   * users = 按 6 位 ID（不限性别）/ 昵称（仅异性）找用户，客户端点了直接开私聊。
    * 会话名匹配由客户端在本地会话列表里做。
    */
   async search(userId: bigint, raw: string) {
@@ -369,12 +378,12 @@ export class ImService {
       };
     });
 
+    // 6 位 ID 精确匹配不限性别（知道 ID 等同拿到名片）；昵称模糊匹配只找异性
     const users = await this.prisma.user.findMany({
       where: {
-        gender: me.gender === 1 ? 2 : 1,
         status: 0,
         id: { not: userId },
-        OR: [{ nickname: { contains: q } }, { shortId: q }],
+        OR: [{ shortId: q }, { nickname: { contains: q }, gender: me.gender === 1 ? 2 : 1 }],
       },
       orderBy: [{ ratingAvg: 'desc' }, { id: 'desc' }],
       take: 20,
