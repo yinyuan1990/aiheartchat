@@ -200,7 +200,7 @@ private fun MsgListRow(onClick: () -> Unit, leading: @Composable () -> Unit, tit
 
 /** 消息主页：标题 + 搜索 + 合并列表（AI 助手 / 音乐置顶，会话与评论 / 接单通知按最新时间排） */
 @Composable
-fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, convType: Int, targetId: String, title: String) -> Unit, onOpenNotices: (String) -> Unit, onOpenUser: (String) -> Unit, onCreateGroup: () -> Unit, onOpenAi: () -> Unit, onOpenNews: () -> Unit = {}, onJoinGroup: () -> Unit = {}) {
+fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, convType: Int, targetId: String, title: String) -> Unit, onOpenMessage: (convId: String, convType: Int, targetId: String, title: String, msgId: String) -> Unit, onOpenNotices: (String) -> Unit, onOpenUser: (String) -> Unit, onCreateGroup: () -> Unit, onOpenAi: () -> Unit, onOpenNews: () -> Unit = {}, onJoinGroup: () -> Unit = {}) {
     var convs by remember { mutableStateOf<List<ConversationItem>>(emptyList()) }
     var summary by remember { mutableStateOf(NoticeSummaryResp()) }
     var showSearch by remember { mutableStateOf(false) }
@@ -246,6 +246,7 @@ fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, c
             extras = extras,
             onDismiss = { showSearch = false },
             onOpenChat = { id, type, target, title -> showSearch = false; onOpenChat(id, type, target, title) },
+            onOpenMessage = { id, type, target, title, msgId -> showSearch = false; onOpenMessage(id, type, target, title, msgId) },
             onOpenUser = { showSearch = false; onOpenUser(it) },
         )
     }
@@ -372,7 +373,7 @@ private data class GiftWallItem(val id: Int, val name: String, val icon: String,
 @SuppressLint("MissingPermission")
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: String, myUserId: String, myAvatar: String, myNickname: String, onBack: () -> Unit, onCall: (Int) -> Unit, onGroupInfo: () -> Unit) {
+fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: String, focusMsgId: String = "", myUserId: String, myAvatar: String, myNickname: String, onBack: () -> Unit, onCall: (Int) -> Unit, onGroupInfo: () -> Unit) {
     var messages by remember { mutableStateOf<List<MsgItem>>(emptyList()) }
     var input by remember { mutableStateOf("") }
     var showGift by remember { mutableStateOf(false) }
@@ -398,8 +399,12 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
         messages = runCatching { Api.getList<MsgItem>("/im/messages?conversationId=$convId") }.getOrDefault(emptyList())
     }
 
+    // 从搜索结果进来：首屏定位到该消息并闪一下，之后照常滚到底
+    var focusPending by remember { mutableStateOf(focusMsgId.isNotEmpty()) }
+    var flashId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(convId) {
-        messages = runCatching { Api.getList<MsgItem>("/im/messages?conversationId=$convId") }.getOrDefault(emptyList())
+        val around = if (focusMsgId.isNotEmpty()) "&aroundId=$focusMsgId" else ""
+        messages = runCatching { Api.getList<MsgItem>("/im/messages?conversationId=$convId$around") }.getOrDefault(emptyList())
         messages.lastOrNull()?.let { WsClient.markRead(convId, it.id) }
         WsClient.connect()
     }
@@ -430,10 +435,22 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
         onDispose { remove() }
     }
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            // 首次进入直接定位到底部，之后新消息平滑滚动
-            listState.scrollToItem(messages.size - 1)
+        if (messages.isEmpty()) return@LaunchedEffect
+        if (focusPending) {
+            focusPending = false
+            val idx = messages.indexOfFirst { it.id == focusMsgId }
+            if (idx >= 0) {
+                // 目标消息上方留两条上下文
+                listState.scrollToItem((idx - 2).coerceAtLeast(0))
+                flashId = focusMsgId
+                return@LaunchedEffect
+            }
         }
+        // 首次进入直接定位到底部，之后新消息平滑滚动
+        listState.scrollToItem(messages.size - 1)
+    }
+    LaunchedEffect(flashId) {
+        if (flashId != null) { kotlinx.coroutines.delay(1600); flashId = null }
     }
     // 键盘高度变化时把列表滚到底，内容随键盘上移、最后一条贴着输入框
     val imeBottom = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current)
@@ -555,7 +572,13 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
                         Text(fmtChatTime(m.createdAt), color = TextDim, fontSize = 11.sp)
                     }
                 }
-                Bubble(m, m.senderId == myUserId, convType, onImage = { fullImage = it })
+                val flashBg by androidx.compose.animation.animateColorAsState(
+                    if (flashId == m.id) Accent.copy(alpha = 0.14f) else Color.Transparent,
+                    androidx.compose.animation.core.tween(if (flashId == m.id) 150 else 900), label = "flash",
+                )
+                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(flashBg)) {
+                    Bubble(m, m.senderId == myUserId, convType, onImage = { fullImage = it })
+                }
             }
         }
         // 微信式底部区（随键盘上移）：左语音切换 / 输入框 / +面板 / 发送

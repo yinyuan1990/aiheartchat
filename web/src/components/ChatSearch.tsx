@@ -123,7 +123,7 @@ export function ChatSearch({
   convs: SearchConv[];
   extras: SearchExtra[];
   onClose: () => void;
-  onOpenConv: (c: { id: string; type: number; targetId: string; title: string }) => void;
+  onOpenConv: (c: { id: string; type: number; targetId: string; title: string; focusMsgId?: string }) => void;
   onOpenUser: (id: string) => void;
 }) {
   const [q, setQ] = useState('');
@@ -160,9 +160,9 @@ export function ChatSearch({
     saveRecent(next);
   };
 
-  const openConv = (c: SearchConv) => {
+  const openConv = (c: SearchConv, focusMsgId?: string) => {
     remember({ kind: 'conv', id: c.id });
-    onOpenConv({ id: c.id, type: c.type, targetId: (c.type === 1 ? c.peer?.id : c.group?.id) ?? '', title: convTitle(c) });
+    onOpenConv({ id: c.id, type: c.type, targetId: (c.type === 1 ? c.peer?.id : c.group?.id) ?? '', title: convTitle(c), focusMsgId });
   };
   const openExtra = (e: SearchExtra) => {
     remember({ kind: 'extra', id: e.key });
@@ -302,8 +302,8 @@ export function ChatSearch({
                   className="cs-row"
                   onClick={() => {
                     const c = convById.get(m.conversationId);
-                    if (c) { openConv(c); return; }
-                    onOpenConv({ id: m.conversationId, type: m.convType, targetId: m.targetId, title: m.title });
+                    if (c) { openConv(c, m.id); return; }
+                    onOpenConv({ id: m.conversationId, type: m.convType, targetId: m.targetId, title: m.title, focusMsgId: m.id });
                   }}
                 >
                   <div className="avatar" style={{ width: 44, height: 44 }}>{m.avatar && <img src={m.avatar} alt="" />}</div>

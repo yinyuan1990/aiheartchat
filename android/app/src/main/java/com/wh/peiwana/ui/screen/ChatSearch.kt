@@ -148,6 +148,7 @@ fun ChatSearchDialog(
     extras: List<SearchExtra>,
     onDismiss: () -> Unit,
     onOpenChat: (convId: String, convType: Int, targetId: String, title: String) -> Unit,
+    onOpenMessage: (convId: String, convType: Int, targetId: String, title: String, msgId: String) -> Unit,
     onOpenUser: (String) -> Unit,
 ) {
     val ctx = LocalContext.current
@@ -324,11 +325,11 @@ fun ChatSearchDialog(
                     items(msgHits, key = { "m-${it.id}" }) { m ->
                         MessageResultRow(m, keyword) {
                             val c = convById[m.conversationId]
-                            if (c != null) openConv(c)
-                            else {
-                                keyboard?.hide()
-                                onOpenChat(m.conversationId, m.convType, m.targetId, if (m.convType == 2) "${m.title}（群）" else m.title)
-                            }
+                            if (c != null) addRecent(SearchRecent("conv", c.id))
+                            keyboard?.hide()
+                            val title = if (c != null) convTitle(c) else m.title
+                            val target = if (c != null) convTarget(c) else m.targetId
+                            onOpenMessage(m.conversationId, m.convType, target, if (m.convType == 2) "$title（群）" else title, m.id)
                         }
                     }
                     if (msgHits.isEmpty()) item("none") { SearchHint(if (loading) "搜索中…" else "没有找到相关消息") }

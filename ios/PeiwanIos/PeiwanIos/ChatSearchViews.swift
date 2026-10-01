@@ -371,11 +371,11 @@ struct ChatSearchView: View {
         SearchRecentStore.save(recent)
     }
 
-    private func openConv(_ c: ConversationItem) {
+    private func openConv(_ c: ConversationItem, focusMsgId: String? = nil) {
         addRecent(SearchRecent(kind: "conv", id: c.id))
         focused = false
         let title = c.type == 2 ? "\(convTitle(c))（群）" : convTitle(c)
-        onOpenChat(ChatTarget(convId: c.id, convType: c.type, targetId: convTarget(c), title: title))
+        onOpenChat(ChatTarget(convId: c.id, convType: c.type, targetId: convTarget(c), title: title, focusMsgId: focusMsgId))
     }
 
     private func row<Leading: View, Main: View>(action: @escaping () -> Void, badge: Int = 0, @ViewBuilder leading: () -> Leading, @ViewBuilder main: () -> Main) -> some View {
@@ -441,11 +441,11 @@ struct ChatSearchView: View {
         let sender = m.senderNickname ?? ""
         return row(action: {
             if let c = convs.first(where: { $0.id == m.conversationId }) {
-                openConv(c)
+                openConv(c, focusMsgId: m.id)
             } else {
                 focused = false
                 let title = isGroup ? "\(m.title ?? "")（群）" : (m.title ?? "")
-                onOpenChat(ChatTarget(convId: m.conversationId, convType: m.convType ?? 1, targetId: m.targetId ?? "", title: title))
+                onOpenChat(ChatTarget(convId: m.conversationId, convType: m.convType ?? 1, targetId: m.targetId ?? "", title: title, focusMsgId: m.id))
             }
         }) {
             AvatarView(url: m.avatar, size: 44)

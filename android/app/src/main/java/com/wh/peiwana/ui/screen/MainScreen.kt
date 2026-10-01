@@ -109,6 +109,9 @@ fun MainScreen(
             Pane(active = tab == 2) {
                 MessagesScreen(
                     onOpenChat = onOpenChat,
+                    onOpenMessage = { convId, convType, targetId, title, msgId ->
+                        onNav("chatroom/$convId?convType=$convType&targetId=$targetId&title=${android.net.Uri.encode(title)}&focusMsgId=$msgId")
+                    },
                     onOpenNotices = { onNav("notices/$it") },
                     onOpenUser = { onNav("u/$it") },
                     onCreateGroup = { onNav("create-group") },

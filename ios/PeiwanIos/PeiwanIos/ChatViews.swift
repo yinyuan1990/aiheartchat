@@ -324,7 +324,7 @@ struct ChatRoomSheet: View {
 
     var body: some View {
         NavStack {
-            ChatRoomView(convId: target.convId, convType: target.convType, targetId: target.targetId, title: target.title)
+            ChatRoomView(convId: target.convId, convType: target.convType, targetId: target.targetId, title: target.title, focusMsgId: target.focusMsgId)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
                         Button { dismiss() } label: {
@@ -461,9 +461,13 @@ struct ChatRoomView: View {
     let convType: Int
     let targetId: String
     let title: String
+    var focusMsgId: String? = nil
 
     @EnvironmentObject var state: AppState
     @State private var messages: [MsgItem] = []
+    // 从搜索结果进来：首屏定位到该消息并闪一下，之后照常滚到底
+    @State private var focusPending = true
+    @State private var flashId: String?
     @State private var input = ""
     @State private var voiceMode = false
     @State private var recording = false
@@ -496,6 +500,7 @@ struct ChatRoomView: View {
                                       fallbackAvatar: m.senderId == (state.user?.id ?? "") ? (state.user?.avatar ?? "") : peerAvatarGuess) { img in
                                 fullImage = img
                             }
+                            .background(RoundedRectangle(cornerRadius: 8).fill(flashId == m.id ? Theme.accent.opacity(0.14) : Color.clear))
                             .id(m.id)
                         }
                     }
@@ -509,6 +514,17 @@ struct ChatRoomView: View {
                     }
                 }
                 .onChange(of: messages.count) { _ in
+                    if focusPending, !messages.isEmpty {
+                        focusPending = false
+                        if let fid = focusMsgId, messages.contains(where: { $0.id == fid }) {
+                            DispatchQueue.main.async { proxy.scrollTo(fid, anchor: .center) }
+                            withAnimation(.easeOut(duration: 0.15)) { flashId = fid }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+                                withAnimation(.easeOut(duration: 0.9)) { flashId = nil }
+                            }
+                            return
+                        }
+                    }
                     if let last = messages.last { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
                 .onChange(of: inputFocused) { focused in
@@ -610,7 +626,8 @@ struct ChatRoomView: View {
             }
         }
         .task {
-            messages = (try? await Api.request("/im/messages?conversationId=\(convId)")) ?? []
+            let around = focusPending ? focusMsgId.map { "&aroundId=\($0)" } ?? "" : ""
+            messages = (try? await Api.request("/im/messages?conversationId=\(convId)\(around)")) ?? []
             if let last = messages.last { WsClient.shared.markRead(conversationId: convId, msgId: last.id) }
             WsClient.shared.connect()
             // 群聊：拉一次语音房人数（入口角标）

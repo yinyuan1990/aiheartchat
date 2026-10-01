@@ -341,6 +341,8 @@ struct ChatTarget: Identifiable {
     let convType: Int
     let targetId: String
     let title: String
+    /// 搜索结果进来时定位到的消息
+    var focusMsgId: String? = nil
 }
 
 /// 打开与某用户的单聊会话

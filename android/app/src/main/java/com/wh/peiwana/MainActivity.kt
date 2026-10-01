@@ -228,12 +228,13 @@ fun AppRoot() {
                 Box(Modifier.size(0.dp))
             }
             page(
-                "chatroom/{convId}?convType={convType}&targetId={targetId}&title={title}",
+                "chatroom/{convId}?convType={convType}&targetId={targetId}&title={title}&focusMsgId={focusMsgId}",
                 arguments = listOf(
                     navArgument("convId") { type = NavType.StringType },
                     navArgument("convType") { type = NavType.IntType; defaultValue = 1 },
                     navArgument("targetId") { type = NavType.StringType; defaultValue = "" },
                     navArgument("title") { type = NavType.StringType; defaultValue = "" },
+                    navArgument("focusMsgId") { type = NavType.StringType; defaultValue = "" },
                 ),
             ) { entry ->
                 val a = entry.arguments!!
@@ -245,6 +246,7 @@ fun AppRoot() {
                     convType = convType,
                     targetId = targetId,
                     title = a.getString("title") ?: "",
+                    focusMsgId = a.getString("focusMsgId").orEmpty(),
                     myUserId = user?.id ?: "",
                     myAvatar = user?.avatar ?: "",
                     myNickname = user?.nickname ?: "",

@@ -470,7 +470,7 @@ export function ChatRoomPage() {
   const location = useLocation();
   const nav = useNavigate();
   const me = useApp((s) => s.user);
-  const state = (location.state ?? {}) as { title?: string; convType?: number; targetId?: string };
+  const state = (location.state ?? {}) as { title?: string; convType?: number; targetId?: string; focusMsgId?: string };
 
   const [messages, setMessages] = useState<MsgItem[]>([]);
   const [input, setInput] = useState('');
@@ -484,6 +484,9 @@ export function ChatRoomPage() {
   const [toast, setToast] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
+  // 从搜索结果进来：首屏定位到该消息并闪一下，之后照常滚到底
+  const focusPending = useRef(!!state.focusMsgId);
+  const [flashId, setFlashId] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -493,7 +496,8 @@ export function ChatRoomPage() {
 
   useEffect(() => {
     if (!conversationId) return;
-    api<MsgItem[]>(`/im/messages?conversationId=${conversationId}`).then((list) => {
+    const around = state.focusMsgId ? `&aroundId=${state.focusMsgId}` : '';
+    api<MsgItem[]>(`/im/messages?conversationId=${conversationId}${around}`).then((list) => {
       setMessages(list);
       const last = list[list.length - 1];
       if (last) wsManager.markRead(conversationId, last.id);
@@ -538,6 +542,17 @@ export function ChatRoomPage() {
   }, [conversationId]);
 
   useEffect(() => {
+    if (focusPending.current) {
+      if (!messages.length) return;
+      focusPending.current = false;
+      const el = document.getElementById(`msg-${state.focusMsgId}`);
+      if (el) {
+        el.scrollIntoView({ block: 'center' });
+        setFlashId(state.focusMsgId!);
+        setTimeout(() => setFlashId(null), 1600);
+        return;
+      }
+    }
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
 
@@ -631,7 +646,7 @@ export function ChatRoomPage() {
           const cur = new Date(m.createdAt).getTime();
           const showTime = !!m.createdAt && !Number.isNaN(cur) && (i === 0 || cur - prev > 5 * 60 * 1000);
           return (
-            <div key={m.tempId ?? m.id}>
+            <div key={m.tempId ?? m.id} id={`msg-${m.id}`} className={flashId === m.id ? 'msg-flash' : undefined}>
               {showTime && (
                 <div style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-3)', padding: '8px 0' }}>
                   {formatTime(m.createdAt)}

@@ -527,3 +527,5 @@ textarea.input { resize: none; min-height: 90px; }
 .cs-hl { color: var(--accent); font-weight: 600; }
 .cs-badge { min-width: 20px; height: 20px; box-sizing: border-box; padding: 0 6px; border-radius: 10px; background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .cs-hint { text-align: center; color: var(--text-3); font-size: 14px; padding: 60px 20px; }
+.msg-flash { animation: msg-flash 1.6s ease-out; border-radius: 8px; }
+@keyframes msg-flash { 0%, 40% { background: rgba(254, 44, 85, 0.14); } 100% { background: transparent; } }

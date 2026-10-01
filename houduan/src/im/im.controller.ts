@@ -32,12 +32,14 @@ export class ImController {
     @Query('conversationId') conversationId: string,
     @Query('beforeId') beforeId?: string,
     @Query('limit') limit?: string,
+    @Query('aroundId') aroundId?: string,
   ) {
     return this.im.listMessages(
       userId,
       BigInt(conversationId),
       beforeId ? BigInt(beforeId) : undefined,
       limit ? Number(limit) : 30,
+      aroundId ? BigInt(aroundId) : undefined,
     );
   }
 

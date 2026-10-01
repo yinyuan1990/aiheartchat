@@ -412,17 +412,38 @@ export class ImService {
     return { ok: true };
   }
 
-  async listMessages(userId: bigint, conversationId: bigint, beforeId?: bigint, limit = 30) {
+  /**
+   * 默认返回最新 limit 条；带 aroundId（搜索结果定位）时返回「目标往前 20 条 → 最新」的连续一段，
+   * 客户端仍按「列表末尾即最新」追加实时消息。往后最多 1000 条，超出部分不返回。
+   */
+  async listMessages(userId: bigint, conversationId: bigint, beforeId?: bigint, limit = 30, aroundId?: bigint) {
     const conv = await this.prisma.conversation.findUnique({ where: { id: conversationId } });
     if (!conv) throw new NotFoundException('会话不存在');
     await this.assertMember(userId, conv);
 
     const key = this.crypto.unwrapKey(conv.wrappedKey);
-    const messages = await this.prisma.message.findMany({
-      where: { conversationId, ...(beforeId ? { id: { lt: beforeId } } : {}) },
-      orderBy: { id: 'desc' },
-      take: Math.min(limit, 50),
-    });
+    let messages;
+    if (aroundId) {
+      const [older, newer] = await Promise.all([
+        this.prisma.message.findMany({
+          where: { conversationId, id: { lt: aroundId } },
+          orderBy: { id: 'desc' },
+          take: 20,
+        }),
+        this.prisma.message.findMany({
+          where: { conversationId, id: { gte: aroundId } },
+          orderBy: { id: 'asc' },
+          take: 1000,
+        }),
+      ]);
+      messages = [...newer.reverse(), ...older];
+    } else {
+      messages = await this.prisma.message.findMany({
+        where: { conversationId, ...(beforeId ? { id: { lt: beforeId } } : {}) },
+        orderBy: { id: 'desc' },
+        take: Math.min(limit, 50),
+      });
+    }
 
     const senderIds = [...new Set(messages.map((m) => m.senderId.toString()))];
     const senders = await this.prisma.user.findMany({ where: { id: { in: senderIds.map(BigInt) } } });

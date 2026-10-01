@@ -295,10 +295,10 @@ export function ChatListPage() {
     });
   }, []);
 
-  const openConv = (c: { id: string; type: number; targetId: string; title: string }) => {
+  const openConv = (c: { id: string; type: number; targetId: string; title: string; focusMsgId?: string }) => {
     const title = c.type === 2 ? `${c.title}（群）` : c.title;
     if (openNativeChat(c.id, c.type, c.targetId, title)) return;
-    nav(`/chatroom/${c.id}`, { state: { title, convType: c.type, targetId: c.targetId } });
+    nav(`/chatroom/${c.id}`, { state: { title, convType: c.type, targetId: c.targetId, focusMsgId: c.focusMsgId } });
   };
 
   // 会话 + 评论 / 接单两个系统会话混排，最新的在上；AI 助手、音乐固定置顶
