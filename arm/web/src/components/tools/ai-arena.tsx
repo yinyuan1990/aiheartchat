@@ -269,7 +269,7 @@ function TraderCard({ tr, rank, now, market }: { tr: ArenaTrader; rank: number; 
   const zh = locale === "zh";
   const coins = useMemo(() => {
     const seen = new Set(tr.decisions.flatMap((d) => d.actions.map((a) => coinOf(a.symbol))));
-    return (market?.coins.map((c) => c.coin) ?? ["BTC", "ETH"]).filter((c) => !seen.size || seen.has(c));
+    return (market?.coins.map((c) => c.coin) ?? ["BTC", "ETH", "SOL"]).filter((c) => !seen.size || seen.has(c));
   }, [tr.decisions, market]);
   const [coin, setCoin] = useState<string | null>(null);
   const active = coin && coins.includes(coin) ? coin : coins[0];

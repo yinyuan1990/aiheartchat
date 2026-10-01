@@ -9,7 +9,7 @@ const HL_INFO = "https://api.hyperliquid.xyz/info";
 const TTL_MS = 30_000;
 const CURVE_POINTS = 120;
 const HISTORY = 48;
-export const ARENA_COINS = ["BTC", "ETH"];
+export const ARENA_COINS = ["BTC", "ETH", "SOL"];
 
 type Json = Record<string, unknown>;
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : Number(v) || 0);
@@ -203,7 +203,7 @@ async function loadMarket(): Promise<ArenaMarket> {
     ARENA_COINS.map(async (coin) => {
       const c = candles.get(coin);
       if (c && now - c.at < CANDLES_TTL) return;
-      const rows = await hl<Json[]>({ type: "candleSnapshot", req: { coin, interval: "15m", startTime: now - 24 * 3600_000, endTime: now } }).catch(() => null);
+      const rows = await hl<Json[]>({ type: "candleSnapshot", req: { coin, interval: "5m", startTime: now - 12 * 3600_000, endTime: now } }).catch(() => null);
       if (rows) candles.set(coin, { at: now, data: rows.map((k) => [num(k.t), num(k.o), num(k.h), num(k.l), num(k.c), num(k.v)]) });
     }),
   );

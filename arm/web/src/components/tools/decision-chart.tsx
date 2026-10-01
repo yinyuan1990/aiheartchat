@@ -15,7 +15,7 @@ function cssVar(name: string) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
-/** 15m candles with the AI's decision of every cycle pinned to its bar, plus entry / stop / target lines. */
+/** 5m candles with the AI's decision of every cycle pinned to its bar, plus entry / stop / target lines. */
 export function DecisionChart({ bars, live, marks, lines, className }: {
   bars: Bar[]; live: number; marks: DecisionMark[]; lines: PriceMark[]; className?: string;
 }) {
@@ -77,7 +77,7 @@ export function DecisionChart({ bars, live, marks, lines, className }: {
     const list: SeriesMarker<Time>[] = marks
       .filter((d) => bars.length && d.time >= bars[0].time)
       .map((d) => ({
-        time: (Math.floor(d.time / 900) * 900 + offset) as Time,
+        time: (Math.floor(d.time / 300) * 300 + offset) as Time,
         position: (d.kind === "short" ? "aboveBar" : "belowBar") as "aboveBar" | "belowBar",
         shape: (d.kind === "long" ? "arrowUp" : d.kind === "short" ? "arrowDown" : d.kind === "close" ? "square" : "circle") as "arrowUp" | "arrowDown" | "square" | "circle",
         color: d.kind === "long" ? up : d.kind === "short" ? down : d.kind === "close" ? cssVar("--primary") : `${muted}88`,
