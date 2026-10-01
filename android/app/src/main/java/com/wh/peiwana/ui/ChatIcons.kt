@@ -213,6 +213,32 @@ fun BubbleIcon(tint: Color, size: Dp = 26.dp) {
     }
 }
 
+/** 线性单人 + 加号（消息页「+」菜单「创建群聊」） */
+@Composable
+fun PersonPlusIcon(tint: Color, size: Dp = 20.dp) {
+    Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        val s = Stroke(w * 0.085f, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+        drawCircle(tint, radius = w * 0.16f, center = Offset(w * 0.38f, w * 0.32f), style = s)
+        drawArc(tint, 180f, 180f, false, topLeft = Offset(w * 0.1f, w * 0.6f), size = Size(w * 0.56f, w * 0.5f), style = s)
+        drawLine(tint, Offset(w * 0.8f, w * 0.28f), Offset(w * 0.8f, w * 0.56f), strokeWidth = s.width, cap = s.cap)
+        drawLine(tint, Offset(w * 0.66f, w * 0.42f), Offset(w * 0.94f, w * 0.42f), strokeWidth = s.width, cap = s.cap)
+    }
+}
+
+/** 线性双人（消息页「+」菜单「加入群聊」） */
+@Composable
+fun PeopleIcon(tint: Color, size: Dp = 20.dp) {
+    Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        val s = Stroke(w * 0.085f, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+        drawCircle(tint, radius = w * 0.15f, center = Offset(w * 0.36f, w * 0.34f), style = s)
+        drawArc(tint, 180f, 180f, false, topLeft = Offset(w * 0.08f, w * 0.62f), size = Size(w * 0.56f, w * 0.48f), style = s)
+        drawArc(tint, 120f, 270f, false, topLeft = Offset(w * 0.56f, w * 0.2f), size = Size(w * 0.26f, w * 0.26f), style = s)
+        drawArc(tint, 270f, 90f, false, topLeft = Offset(w * 0.5f, w * 0.58f), size = Size(w * 0.42f, w * 0.44f), style = s)
+    }
+}
+
 /** 实心公文包（消息页「接单通知」） */
 @Composable
 fun BriefcaseIcon(tint: Color, size: Dp = 24.dp) {

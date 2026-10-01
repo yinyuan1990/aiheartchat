@@ -9,7 +9,13 @@ import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -27,6 +33,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -35,11 +42,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -198,6 +211,50 @@ private fun MsgListRow(onClick: () -> Unit, leading: @Composable () -> Unit, tit
     }
 }
 
+private class PlusMenuItem(val label: String, val icon: @Composable (Color) -> Unit, val onClick: () -> Unit)
+
+/** 消息页右上「+」弹出菜单：白色圆角卡片 + 阴影，从按钮右上角缩放展开 */
+@Composable
+private fun PlusMenu(expanded: Boolean, onDismiss: () -> Unit, items: List<PlusMenuItem>) {
+    val visible = remember { MutableTransitionState(false) }
+    visible.targetState = expanded
+    if (!visible.currentState && !visible.targetState) return
+    val density = LocalDensity.current
+    // 卡片四周留 12dp 给阴影（Popup 窗口外的阴影会被裁掉），offset 再抵回去
+    Popup(
+        alignment = Alignment.TopEnd,
+        offset = with(density) { IntOffset(12.dp.roundToPx(), 30.dp.roundToPx()) },
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true),
+    ) {
+        AnimatedVisibility(
+            visibleState = visible,
+            enter = fadeIn(tween(140)) + scaleIn(tween(180), initialScale = 0.85f, transformOrigin = TransformOrigin(1f, 0f)),
+            exit = fadeOut(tween(110)) + scaleOut(tween(110), targetScale = 0.92f, transformOrigin = TransformOrigin(1f, 0f)),
+        ) {
+            Column(
+                Modifier.padding(12.dp)
+                    .shadow(10.dp, RoundedCornerShape(14.dp), ambientColor = Color.Black.copy(alpha = 0.10f), spotColor = Color.Black.copy(alpha = 0.16f))
+                    .clip(RoundedCornerShape(14.dp)).background(Bg)
+                    .width(168.dp).padding(vertical = 6.dp),
+            ) {
+                items.forEach { item ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { onDismiss(); item.onClick() }.padding(horizontal = 14.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(Modifier.size(32.dp).clip(CircleShape).background(Accent.copy(alpha = 0.10f)), contentAlignment = Alignment.Center) {
+                            item.icon(Accent)
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Text(item.label, color = TextMain, fontSize = 15.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
 /** 消息主页：标题 + 搜索 + 合并列表（AI 助手 / 音乐置顶，会话与评论 / 接单通知按最新时间排） */
 @Composable
 fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, convType: Int, targetId: String, title: String) -> Unit, onOpenMessage: (convId: String, convType: Int, targetId: String, title: String, msgId: String) -> Unit, onOpenNotices: (String) -> Unit, onOpenUser: (userId: String, nickname: String) -> Unit, onScan: () -> Unit, onCreateGroup: () -> Unit, onOpenAi: () -> Unit, onOpenNews: () -> Unit = {}, onJoinGroup: () -> Unit = {}) {
@@ -259,11 +316,16 @@ fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, c
             Text("消息", color = TextMain, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Box {
                 var showPlusMenu by remember { mutableStateOf(false) }
-                Box(modifier = Modifier.size(34.dp).clip(RoundedCornerShape(17.dp)).background(Bg3).clickable { showPlusMenu = true }, contentAlignment = Alignment.Center) { Text("+", color = TextMain, fontSize = 18.sp) }
-                androidx.compose.material3.DropdownMenu(expanded = showPlusMenu, onDismissRequest = { showPlusMenu = false }) {
-                    androidx.compose.material3.DropdownMenuItem(text = { Text("创建群聊", fontSize = 14.sp) }, onClick = { showPlusMenu = false; onCreateGroup() })
-                    androidx.compose.material3.DropdownMenuItem(text = { Text("加入群聊", fontSize = 14.sp) }, onClick = { showPlusMenu = false; onJoinGroup() })
-                }
+                Box(modifier = Modifier.size(34.dp).clip(CircleShape).background(Bg3).clickable { showPlusMenu = true }, contentAlignment = Alignment.Center) { PlusIcon(TextMain, 18.dp) }
+                PlusMenu(
+                    expanded = showPlusMenu,
+                    onDismiss = { showPlusMenu = false },
+                    items = listOf(
+                        PlusMenuItem("创建群聊", { PersonPlusIcon(it, 19.dp) }, onCreateGroup),
+                        PlusMenuItem("加入群聊", { PeopleIcon(it, 19.dp) }, onJoinGroup),
+                        PlusMenuItem("扫一扫", { ScanIcon(it, 18.dp) }, onScan),
+                    ),
+                )
             }
         }
 
