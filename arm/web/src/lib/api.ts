@@ -303,16 +303,29 @@ export const useCard = (wallet?: string) =>
   });
 
 /** AI live-trading arena: our own NOFX bots on Hyperliquid (indexer proxies NOFX, read-only, 60s cache). */
+export type ArenaAction = {
+  action: string; symbol: string; leverage: number; confidence: number; reasoning: string;
+  price: number; stopLoss: number; takeProfit: number; success: boolean;
+};
+export type ArenaDecision = { time: string; cycle: number; actions: ArenaAction[]; thought: string };
 export type ArenaTrader = {
   id: string; name: string; model: string; exchange: string; running: boolean; equity: number; pnl: number; pnlPct: number;
+  scanMinutes: number; minConfidence: number;
   curve: [number, number][];
-  positions: { symbol: string; side: string; size: number; entry: number; mark: number; upnl: number; leverage: number }[];
+  positions: { symbol: string; side: string; size: number; entry: number; mark: number; upnl: number; leverage: number; stopLoss: number; takeProfit: number }[];
   trades: { symbol: string; side: string; entry: number; exit: number; pnl: number; pnlPct: number; exitTime: number; hold: string }[];
-  decisions: { time: string; cycle: number; actions: { action: string; symbol: string; leverage: number; confidence: number; reasoning: string }[]; thought: string }[];
+  /** newest first; only the newest carries `thought` */
+  decisions: ArenaDecision[];
 };
 export type ArenaState = { enabled: boolean; updatedAt: number; traders: ArenaTrader[] };
+export type ArenaMarket = { updatedAt: number; coins: { coin: string; mid: number; candles: [number, number, number, number, number, number][] }[] };
+/** Polls faster while a new AI decision is due, so the "thinking…" state resolves within seconds. */
+const arenaDue = (s?: ArenaState) =>
+  !!s?.traders.some((tr) => tr.decisions[0] && Date.parse(tr.decisions[0].time) + tr.scanMinutes * 60_000 <= Date.now());
 export const useAiArena = () =>
-  useQuery({ queryKey: ["ai-arena"], queryFn: () => get<ArenaState>("/ai-arena"), refetchInterval: 60_000, retry: 1 });
+  useQuery({ queryKey: ["ai-arena"], queryFn: () => get<ArenaState>("/ai-arena"), refetchInterval: (q) => (arenaDue(q.state.data) ? 10_000 : 30_000), retry: 1 });
+export const useAiMarket = () =>
+  useQuery({ queryKey: ["ai-arena-market"], queryFn: () => get<ArenaMarket>("/ai-arena/market"), refetchInterval: 3_000, retry: 1 });
 
 export const useStats = () => useQuery({ queryKey: ["stats"], queryFn: () => get<Stats>("/stats"), refetchInterval: 10_000 });
 

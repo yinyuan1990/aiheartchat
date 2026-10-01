@@ -5,14 +5,21 @@
 const BASE = process.env.NOFX_URL ?? "http://127.0.0.1:8280/api";
 const EMAIL = process.env.NOFX_EMAIL;
 const PASSWORD = process.env.NOFX_PASSWORD;
-const TTL_MS = 60_000;
+const HL_INFO = "https://api.hyperliquid.xyz/info";
+const TTL_MS = 30_000;
 const CURVE_POINTS = 120;
+const HISTORY = 48;
+export const ARENA_COINS = ["BTC", "ETH"];
 
 type Json = Record<string, unknown>;
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : Number(v) || 0);
 const str = (v: unknown) => (typeof v === "string" ? v : "");
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}…` : s);
 
+export type ArenaAction = {
+  action: string; symbol: string; leverage: number; confidence: number; reasoning: string;
+  price: number; stopLoss: number; takeProfit: number; success: boolean;
+};
 export type ArenaTrader = {
   id: string;
   name: string;
@@ -22,10 +29,13 @@ export type ArenaTrader = {
   equity: number;
   pnl: number;
   pnlPct: number;
+  scanMinutes: number;
+  minConfidence: number;
   curve: [number, number][];
-  positions: { symbol: string; side: string; size: number; entry: number; mark: number; upnl: number; leverage: number }[];
+  positions: { symbol: string; side: string; size: number; entry: number; mark: number; upnl: number; leverage: number; stopLoss: number; takeProfit: number }[];
   trades: { symbol: string; side: string; entry: number; exit: number; pnl: number; pnlPct: number; exitTime: number; hold: string }[];
-  decisions: { time: string; cycle: number; actions: { action: string; symbol: string; leverage: number; confidence: number; reasoning: string }[]; thought: string }[];
+  /** newest first; `thought` is only filled for the newest record */
+  decisions: { time: string; cycle: number; actions: ArenaAction[]; thought: string }[];
 };
 export type ArenaState = { enabled: boolean; updatedAt: number; traders: ArenaTrader[] };
 
@@ -64,18 +74,39 @@ function downsample(points: [number, number][]) {
   return Array.from({ length: CURVE_POINTS }, (_, i) => points[Math.round(i * step)]);
 }
 
+const shapeAction = (a: Json): ArenaAction => ({
+  action: str(a.action),
+  symbol: str(a.symbol),
+  leverage: num(a.leverage),
+  confidence: num(a.confidence),
+  reasoning: clip(str(a.reasoning), 400),
+  price: num(a.price),
+  stopLoss: num(a.stop_loss),
+  takeProfit: num(a.take_profit),
+  success: a.success === true,
+});
+
 async function loadTrader(t: Json): Promise<ArenaTrader> {
   const id = str(t.trader_id);
   const q = `trader_id=${encodeURIComponent(id)}`;
-  const [history, decisions, trades] = await Promise.all([
+  const [history, decisions, trades, config] = await Promise.all([
     get<Json[]>(`/equity-history?${q}`).catch(() => []),
-    get<Json[]>(`/decisions/latest?${q}&limit=6`, true).catch(() => []),
+    get<Json[]>(`/decisions/latest?${q}&limit=${HISTORY}`, true).catch(() => []),
     get<Json[]>(`/trades?${q}&limit=12`, true).catch(() => []),
+    get<Json>(`/traders/${encodeURIComponent(id)}/config`, true).catch(() => ({}) as Json),
   ]);
   const curve = downsample(
     (history ?? []).map((p) => [Date.parse(`${str(p.timestamp).replace(" ", "T")}Z`), num(p.total_equity)] as [number, number]),
   );
-  const latest = (decisions ?? [])[0];
+  const records = decisions ?? [];
+  const latest = records[0];
+  // stop / target of an open position = the most recent open action on that symbol
+  const openPlan = (symbol: string) => {
+    for (const d of records)
+      for (const a of (d.decisions as Json[]) ?? [])
+        if (str(a.symbol) === symbol && str(a.action).startsWith("open_")) return a;
+    return undefined;
+  };
   return {
     id,
     name: str(t.trader_name),
@@ -85,16 +116,23 @@ async function loadTrader(t: Json): Promise<ArenaTrader> {
     equity: num(t.total_equity),
     pnl: num(t.total_pnl),
     pnlPct: num(t.total_pnl_pct),
+    scanMinutes: num(config.scan_interval_minutes) || 15,
+    minConfidence: 75,
     curve,
-    positions: ((latest?.positions as Json[]) ?? []).map((p) => ({
-      symbol: str(p.symbol),
-      side: str(p.side),
-      size: Math.abs(num(p.position_amt)),
-      entry: num(p.entry_price),
-      mark: num(p.mark_price),
-      upnl: num(p.unrealized_profit),
-      leverage: num(p.leverage),
-    })),
+    positions: ((latest?.positions as Json[]) ?? []).map((p) => {
+      const plan = openPlan(str(p.symbol));
+      return {
+        symbol: str(p.symbol),
+        side: str(p.side),
+        size: Math.abs(num(p.position_amt)),
+        entry: num(p.entry_price),
+        mark: num(p.mark_price),
+        upnl: num(p.unrealized_profit),
+        leverage: num(p.leverage),
+        stopLoss: num(plan?.stop_loss),
+        takeProfit: num(plan?.take_profit),
+      };
+    }),
     trades: (trades ?? []).map((x) => ({
       symbol: str(x.symbol),
       side: str(x.side),
@@ -105,17 +143,11 @@ async function loadTrader(t: Json): Promise<ArenaTrader> {
       exitTime: num(x.exit_time),
       hold: str(x.hold_duration),
     })),
-    decisions: (decisions ?? []).map((d) => ({
+    decisions: records.map((d, i) => ({
       time: str(d.timestamp),
       cycle: num(d.cycle_number),
-      actions: ((d.decisions as Json[]) ?? []).map((a) => ({
-        action: str(a.action),
-        symbol: str(a.symbol),
-        leverage: num(a.leverage),
-        confidence: num(a.confidence),
-        reasoning: clip(str(a.reasoning), 400),
-      })),
-      thought: clip(str(d.cot_trace).trim(), 900),
+      actions: ((d.decisions as Json[]) ?? []).map(shapeAction),
+      thought: i === 0 ? clip(str(d.cot_trace).trim(), 1500) : "",
     })),
   };
 }
@@ -138,4 +170,47 @@ export async function aiArena(): Promise<ArenaState> {
     })
     .finally(() => (inflight = null));
   return inflight;
+}
+
+// ---------------------------------------------------------------- live market (Hyperliquid public info API)
+
+export type ArenaMarket = { updatedAt: number; coins: { coin: string; mid: number; candles: [number, number, number, number, number, number][] }[] };
+
+const MIDS_TTL = 3_000;
+const CANDLES_TTL = 60_000;
+let mids: { at: number; data: Record<string, number> } = { at: 0, data: {} };
+const candles = new Map<string, { at: number; data: ArenaMarket["coins"][number]["candles"] }>();
+let marketInflight: Promise<ArenaMarket> | null = null;
+
+async function hl<T>(body: unknown): Promise<T> {
+  const r = await fetch(HL_INFO, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!r.ok) throw new Error(`hyperliquid ${r.status}`);
+  return (await r.json()) as T;
+}
+
+async function loadMarket(): Promise<ArenaMarket> {
+  const now = Date.now();
+  if (now - mids.at > MIDS_TTL) {
+    const all = await hl<Record<string, string>>({ type: "allMids" }).catch(() => null);
+    if (all) mids = { at: now, data: Object.fromEntries(ARENA_COINS.map((c) => [c, num(all[c])])) };
+  }
+  await Promise.all(
+    ARENA_COINS.map(async (coin) => {
+      const c = candles.get(coin);
+      if (c && now - c.at < CANDLES_TTL) return;
+      const rows = await hl<Json[]>({ type: "candleSnapshot", req: { coin, interval: "15m", startTime: now - 24 * 3600_000, endTime: now } }).catch(() => null);
+      if (rows) candles.set(coin, { at: now, data: rows.map((k) => [num(k.t), num(k.o), num(k.h), num(k.l), num(k.c), num(k.v)]) });
+    }),
+  );
+  return { updatedAt: mids.at, coins: ARENA_COINS.map((coin) => ({ coin, mid: mids.data[coin] ?? 0, candles: candles.get(coin)?.data ?? [] })) };
+}
+
+export function aiMarket(): Promise<ArenaMarket> {
+  marketInflight ??= loadMarket().finally(() => (marketInflight = null));
+  return marketInflight;
 }
