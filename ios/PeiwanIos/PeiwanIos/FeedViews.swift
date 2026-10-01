@@ -106,14 +106,6 @@ final class CityLocator: NSObject, CLLocationManagerDelegate {
     }
 }
 
-/// 视频卡片相对屏幕中心的距离（越小越近），用来决定进入抖音模式的起始视频
-private struct VideoDistanceKey: PreferenceKey {
-    static var defaultValue: [String: CGFloat] = [:]
-    static func reduce(value: inout [String: CGFloat], nextValue: () -> [String: CGFloat]) {
-        value.merge(nextValue(), uniquingKeysWith: { $1 })
-    }
-}
-
 /// 广场：动态（推荐+同城合并）/ 遇见
 struct PlazaView: View {
     @State private var tab = "feed"
@@ -122,14 +114,13 @@ struct PlazaView: View {
     @State private var locating = false
     @State private var showTikTok = false
     @State private var tiktokStartId: String?
-    @State private var nearestVideoId: String?
     @State private var myLocation: CLLocation?
 
     var body: some View {
         NavStack {
             VStack(spacing: 0) {
                 HStack(spacing: 12) {
-                    // 左侧 tab 横向滑动，占剩余宽度；右侧按钮固定尺寸不被压缩（否则「视频」会被挤成两行）
+                    // 左侧 tab 横向滑动，占剩余宽度；右侧定位按钮固定尺寸不被压缩
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 16) {
                             TextTab(text: "动态", selected: tab == "feed") { tab = "feed"; Task { await load() } }
@@ -138,20 +129,6 @@ struct PlazaView: View {
                             TextTab(text: "私密树洞", selected: tab == "treehole") { tab = "treehole" }
                         }
                         .padding(.trailing, 4)
-                    }
-                    // 视频（抖音模式）入口只属于动态板块
-                    if tab == "feed" {
-                        Button {
-                            tiktokStartId = nearestVideoId
-                            showTikTok = true
-                        } label: {
-                            Text("视频").font(.system(size: 13)).foregroundStyle(Theme.accent)
-                                .lineLimit(1).fixedSize()
-                                .padding(.horizontal, 10).padding(.vertical, 4)
-                                .background(Capsule().stroke(Theme.accent, lineWidth: 1))
-                        }
-                        .buttonStyle(.plain)
-                        .layoutPriority(1)
                     }
                     Button(locating ? "定位中…" : (city.isEmpty ? "定位" : "\(city) ▾")) { locate() }
                         .font(.system(size: 13)).foregroundStyle(Theme.textSub)
@@ -175,24 +152,15 @@ struct PlazaView: View {
                     ScrollView {
                         LazyVStack(spacing: 0) {
                             ForEach(items) { m in
-                                MomentCardView(m: m, viewerLocation: myLocation, onVideoCall: { user in
+                                // 点视频直接进抖音模式，从这条开始
+                                MomentCardView(m: m, viewerLocation: myLocation, onOpenVideo: {
+                                    tiktokStartId = m.id
+                                    showTikTok = true
+                                }, onVideoCall: { user in
                                     startCallWithPermissions(calleeId: user.id, type: 2, name: user.nickname ?? "", avatar: user.avatar ?? "")
                                 })
-                                .background {
-                                    if m.type == 2, !(m.videoUrl ?? "").isEmpty {
-                                        GeometryReader { geo in
-                                            Color.clear.preference(
-                                                key: VideoDistanceKey.self,
-                                                value: [m.id: abs(geo.frame(in: .global).midY - UIScreen.main.bounds.midY)],
-                                            )
-                                        }
-                                    }
-                                }
                             }
                         }
-                    }
-                    .onPreferenceChange(VideoDistanceKey.self) { dict in
-                        nearestVideoId = dict.min(by: { $0.value < $1.value })?.key
                     }
                     .refreshable { await load() }
                 }
@@ -288,6 +256,8 @@ struct MomentCardView: View {
     var showVideoCover: Bool = true
     /// 观看者位置（用于距离显示）
     var viewerLocation: CLLocation? = nil
+    /// 点视频封面：传了就交给调用方（广场 = 进抖音模式），不传则原地播放
+    var onOpenVideo: (() -> Void)? = nil
     var onVideoCall: (MomentUser) -> Void
     @EnvironmentObject private var appState: AppState
     @State private var liked = false
@@ -511,7 +481,9 @@ struct MomentCardView: View {
                 }
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    if let v = m.videoUrl, let url = URL(string: Api.fullUrl(v)) {
+                    if let onOpenVideo {
+                        onOpenVideo()
+                    } else if let v = m.videoUrl, let url = URL(string: Api.fullUrl(v)) {
                         let p = makeFastStartPlayer(url: url)
                         videoPlayer = p
                         playingVideo = true

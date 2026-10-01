@@ -106,25 +106,6 @@ fun PlazaScreen(
     val startCall = rememberStartCallAny()
     val listState = rememberLazyListState()
 
-    /** 当前视口里离屏幕中心最近的视频动态；没有可见视频则取离首条可见动态最近的视频 */
-    fun nearestVideoId(): String {
-        val videos = items.filter { it.type == 2 && it.videoUrl.isNotEmpty() }
-        if (videos.isEmpty()) return ""
-        val info = listState.layoutInfo
-        val center = (info.viewportStartOffset + info.viewportEndOffset) / 2
-        val visible = info.visibleItemsInfo.mapNotNull { vi ->
-            val m = items.getOrNull(vi.index) ?: return@mapNotNull null
-            if (m.type != 2 || m.videoUrl.isEmpty()) return@mapNotNull null
-            m.id to kotlin.math.abs(vi.offset + vi.size / 2 - center)
-        }
-        if (visible.isNotEmpty()) return visible.minBy { it.second }.first
-        val anchor = info.visibleItemsInfo.firstOrNull()?.index ?: 0
-        return items.withIndex()
-            .filter { it.value.type == 2 && it.value.videoUrl.isNotEmpty() }
-            .minByOrNull { kotlin.math.abs(it.index - anchor) }
-            ?.value?.id ?: ""
-    }
-
     val locPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { g ->
         scope.launch {
             locating = true
@@ -190,18 +171,6 @@ fun PlazaScreen(
                     )
                 }
             }
-            // 视频（抖音模式）入口只属于动态板块
-            if (tab == "feed") {
-                Text(
-                    "视频", color = Accent, fontSize = 13.sp, maxLines = 1, softWrap = false,
-                    modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Accent.copy(alpha = 0.14f))
-                        .noRippleClick {
-                            PlazaCache.tiktokStartId = nearestVideoId()
-                            onOpenTiktok()
-                        }.padding(horizontal = 10.dp, vertical = 3.dp),
-                )
-                Spacer(Modifier.width(12.dp))
-            }
             Text(
                 if (locating) "定位中…" else (if (city.isEmpty()) "定位" else "$city ▾"),
                 color = TextSub, fontSize = 13.sp, maxLines = 1, softWrap = false,
@@ -255,6 +224,8 @@ fun PlazaScreen(
                             onOpenDetail = { onOpenDetail(m.id) },
                             onVideoCall = { m.user?.let { startCall(it.id, it.nickname, it.avatar, 2) } },
                             onOpenUser = { m.user?.let { onOpenUser(it.id) } },
+                            // 点视频直接进抖音模式，从这条开始
+                            onOpenVideo = { PlazaCache.tiktokStartId = m.id; onOpenTiktok() },
                         )
                     }
                 }
@@ -293,7 +264,14 @@ fun FollowMomentsScreen(onBack: () -> Unit, onOpenDetail: (String) -> Unit, onOp
 }
 
 @Composable
-fun MomentCard(m: Moment, onOpenDetail: () -> Unit, onVideoCall: () -> Unit, onOpenUser: () -> Unit = {}) {
+fun MomentCard(
+    m: Moment,
+    onOpenDetail: () -> Unit,
+    onVideoCall: () -> Unit,
+    onOpenUser: () -> Unit = {},
+    /** 点视频封面：传了就交给调用方（广场 = 进抖音模式），不传则原地播放 */
+    onOpenVideo: (() -> Unit)? = null,
+) {
     var liked by remember { mutableStateOf(m.liked) }
     var likeCount by remember { mutableIntStateOf(m.likeCount) }
     var following by remember { mutableStateOf(m.isFollowing) }
@@ -407,7 +385,7 @@ fun MomentCard(m: Moment, onOpenDetail: () -> Unit, onVideoCall: () -> Unit, onO
                 // 点击封面后原地播放，不跳详情；高度与封面一致避免跳动
                 VideoPlayerBox(Api.fullUrl(m.videoUrl), height = 200.dp)
             } else {
-                Box(modifier = Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(10.dp)).background(androidx.compose.ui.graphics.Color.Black).noRippleClick { playingVideo = true }, contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(10.dp)).background(androidx.compose.ui.graphics.Color.Black).noRippleClick { onOpenVideo?.invoke() ?: run { playingVideo = true } }, contentAlignment = Alignment.Center) {
                     if (m.coverUrl.isNotEmpty()) {
                         AsyncImage(model = Api.fullUrl(m.coverUrl), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                     } else {

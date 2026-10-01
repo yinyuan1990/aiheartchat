@@ -22,7 +22,8 @@ export interface MomentItem {
   createdAt: string;
 }
 
-export function MomentCard({ m, onOpenDetail, onGreet }: { m: MomentItem; onOpenDetail: () => void; onGreet: () => void }) {
+/** onOpenVideo：点视频交给调用方（广场 = 进抖音模式）；不传则原地播放 */
+export function MomentCard({ m, onOpenDetail, onGreet, onOpenVideo }: { m: MomentItem; onOpenDetail: () => void; onGreet: () => void; onOpenVideo?: () => void }) {
   const nav = useNavigate();
   const me = useApp((s) => s.user);
   const isSelf = me?.id === m.user?.id;
@@ -126,7 +127,21 @@ export function MomentCard({ m, onOpenDetail, onGreet }: { m: MomentItem; onOpen
           <span style={{ position: 'absolute', top: 16, right: 20, color: '#fff', fontSize: 28, cursor: 'pointer' }}>×</span>
         </div>
       )}
-      {m.type === 2 && m.videoUrl && (
+      {m.type === 2 && m.videoUrl && onOpenVideo && (
+        <div
+          onClick={onOpenVideo}
+          style={{
+            position: 'relative', marginTop: m.content ? 8 : 10, height: 220, borderRadius: 10, overflow: 'hidden',
+            background: '#000', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          {m.coverUrl
+            ? <img src={m.coverUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+            : <video src={`${m.videoUrl}#t=0.1`} muted playsInline preload="metadata" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />}
+          <span style={{ position: 'relative', color: '#fff', fontSize: 34, textShadow: '0 2px 8px rgba(0,0,0,0.4)' }}>▶</span>
+        </div>
+      )}
+      {m.type === 2 && m.videoUrl && !onOpenVideo && (
         <video
           src={m.videoUrl}
           poster={m.coverUrl || undefined}
@@ -531,31 +546,6 @@ export function PlazaPage() {
         <span className={`top-tab${tab === 'meet' ? ' active' : ''}`} onClick={() => setTab('meet')}>遇见</span>
         <span className={`top-tab${tab === 'quotes' ? ' active' : ''}`} onClick={() => setTab('quotes')}>励志行</span>
         <span className="top-right" onClick={() => setShowCity(true)}>{city || '定位中'} ▾</span>
-        {/* 视频（抖音模式）入口只属于动态板块 */}
-        {tab === 'feed' && (
-          <span
-            className="top-right"
-            style={{ marginLeft: 14 }}
-            onClick={() => {
-              // 进入视频模式前停止列表内正在播放的视频
-              document.querySelectorAll('video').forEach((v) => v.pause());
-              const mid = window.innerHeight / 2;
-              let best: string | undefined;
-              let bestDist = Infinity;
-              items.filter((m) => m.type === 2 && m.videoUrl).forEach((m) => {
-                const el = document.querySelector(`[data-moment-id="${m.id}"]`);
-                if (!el) return;
-                const r = el.getBoundingClientRect();
-                const dist = Math.abs((r.top + r.bottom) / 2 - mid);
-                if (dist < bestDist) { bestDist = dist; best = m.id; }
-              });
-              setTiktokStartId(best);
-              setTiktok(true);
-            }}
-          >
-            视频模式
-          </span>
-        )}
       </div>
       {tab === 'meet' && <MeetSection city={city} />}
       {tab === 'quotes' && <QuoteSection />}
@@ -569,7 +559,11 @@ export function PlazaPage() {
         </div>
       )}
       {tab === 'feed' && items.map((m) => (
-        <MomentCard key={m.id} m={m} onOpenDetail={() => nav(`/moment/${m.id}`)} onGreet={() => greet(m)} />
+        <MomentCard
+          key={m.id} m={m} onOpenDetail={() => nav(`/moment/${m.id}`)} onGreet={() => greet(m)}
+          // 点视频直接进抖音模式，从这条开始
+          onOpenVideo={() => { setTiktokStartId(m.id); setTiktok(true); }}
+        />
       ))}
       {showCity && (
         <CityPickerSheet
