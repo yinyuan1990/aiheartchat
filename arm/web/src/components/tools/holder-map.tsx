@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, Info, Network, ScanSearch } from "lucide-react";
+import { CandlestickChart, ExternalLink, Info, Network, ScanSearch } from "lucide-react";
 import { isAddress } from "viem";
 import { useApp } from "@/components/providers";
-import { bubblemapsUrl } from "@/lib/web3";
+import { bubblemapsUrl, gmgnTokenUrl } from "@/lib/web3";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -27,6 +27,9 @@ export function HolderMap({ initial = "" }: { initial?: string }) {
             <Input value={addr} onChange={(e) => setAddr(e.target.value)} placeholder={t("holders.input")} className="font-mono" spellCheck={false} autoComplete="off" />
             <Button type="submit" disabled={!ok} className="shrink-0">
               <ScanSearch /> {t("holders.open")}
+            </Button>
+            <Button type="button" variant="outline" disabled={!ok} className="shrink-0" title={t("gmgn.hint")} onClick={() => window.open(gmgnTokenUrl(value), "_blank", "noopener,noreferrer")}>
+              <CandlestickChart /> GMGN
             </Button>
           </form>
           {value && !ok && <div className="text-xs text-down">{t("holders.bad")}</div>}

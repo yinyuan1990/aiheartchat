@@ -163,3 +163,8 @@ export const txUrl = (hash: string) => `${EXPLORER}/tx/${hash}`;
 export const addrUrl = (a: string) => `${EXPLORER}/address/${a}`;
 /** Bubblemaps holder map (Arc since 9.16). Its CSP frame-ancestors only allows its partners, so open it, don't iframe it. */
 export const bubblemapsUrl = (token: string) => `https://v2.bubblemaps.io/map?address=${token.toLowerCase()}&chain=arc`;
+/** GMGN pages (Arc supported) carrying our referral code; it binds when the visitor logs in to GMGN. */
+const GMGN_REF = process.env.NEXT_PUBLIC_GMGN_REF ?? "vckWkKRq";
+const gmgn = (kind: "token" | "address", a: string) => `https://gmgn.ai/arc/${kind}/${GMGN_REF ? `${GMGN_REF}_` : ""}${a.toLowerCase()}`;
+export const gmgnTokenUrl = (token: string) => gmgn("token", token);
+export const gmgnWalletUrl = (wallet: string) => gmgn("address", wallet);

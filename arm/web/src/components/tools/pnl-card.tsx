@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Copy, Download, Loader2, Sparkles, Wallet } from "lucide-react";
+import { CandlestickChart, Copy, Download, Loader2, Sparkles, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { isAddress } from "viem";
 import { useApp } from "@/components/providers";
 import { useCard, type CardView } from "@/lib/api";
 import { refLink } from "@/lib/referral";
+import { gmgnWalletUrl } from "@/lib/web3";
 import type { DictKey } from "@/lib/i18n";
 import { holdTime, shortWallet, signedPct, signedUsd, usdShort } from "@/app/card/card-format";
 import { Button } from "@/components/ui/button";
@@ -100,6 +101,7 @@ function Result({ card }: { card: CardView }) {
         <Button asChild><a href={intent} target="_blank" rel="noreferrer"><XIcon /> {t("card.share")}</a></Button>
         <Button variant="outline" asChild><a href={img} download={`arm-card-${wallet.slice(2, 8)}.png`}><Download /> {t("card.download")}</a></Button>
         <Button variant="outline" onClick={async () => { await navigator.clipboard.writeText(share).catch(() => {}); toast.success(t("common.copied")); }}><Copy /> {t("card.copy")}</Button>
+        <Button variant="outline" asChild title={t("gmgn.hint")}><a href={gmgnWalletUrl(wallet)} target="_blank" rel="noreferrer"><CandlestickChart /> {t("gmgn.wallet")}</a></Button>
       </div>
 
       <Card>

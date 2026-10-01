@@ -3,12 +3,12 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Copy, ExternalLink, Globe, Hash, LineChart, Lock, MessageCircle, Network, Percent, Send, Share2, Star, X } from "lucide-react";
+import { CandlestickChart, Copy, ExternalLink, Globe, Hash, LineChart, Lock, MessageCircle, Network, Percent, Send, Share2, Star, X } from "lucide-react";
 import { toast } from "sonner";
 import { isTaxToken, progressOf, usd, useCandles, useHolders, useSite, useToken, useTrades, type TokenView } from "@/lib/api";
 import { useWatchlist } from "@/lib/watchlist";
 import { fmtNum, fmtUsd, shortAddr } from "@/lib/format";
-import { addrUrl, bubblemapsUrl, txUrl, SUPPLY_TOKENS } from "@/lib/web3";
+import { addrUrl, bubblemapsUrl, gmgnTokenUrl, txUrl, SUPPLY_TOKENS } from "@/lib/web3";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/components/providers";
 import { Badge } from "@/components/ui/badge";
@@ -110,6 +110,9 @@ export default function TokenPage() {
                 </Button>
                 <Button variant="outline" size="sm" asChild title={t("holders.subtitle")}>
                   <a href={bubblemapsUrl(token.address)} target="_blank" rel="noreferrer"><Network /> {t("tools.tab.holders")}</a>
+                </Button>
+                <Button variant="outline" size="sm" asChild title={t("gmgn.hint")}>
+                  <a href={gmgnTokenUrl(token.address)} target="_blank" rel="noreferrer"><CandlestickChart /> {t("gmgn.token")}</a>
                 </Button>
                 <TokenReferral token={token} />
                 {/* Telegram buy bot (9.17): deep link adds the bot to a group and binds this token in one step */}
