@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Loader2, Radar, ScanSearch } from "lucide-react";
+import { ChevronDown, Loader2, Radar, ScanSearch, Zap } from "lucide-react";
 import { useApp } from "@/components/providers";
+import { Addr } from "@/components/shared";
 import { useScanner, type RadarItem, type ScanBot, type ScanBotId, type ScanState } from "@/lib/api";
 import { signedPct } from "@/app/card/card-format";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { Sparkline, useNow } from "./ai-arena";
+import { QuickBuy } from "./quick-buy";
 
 type Ready = Extract<ScanState, { status: "ready" }>;
 
@@ -94,6 +96,7 @@ function BotRow({ bot, rank, rules, smartWallets, open, onToggle }: {
 function RadarRow({ r, now }: { r: RadarItem; now: number }) {
   const { t, locale } = useApp();
   const zh = locale === "zh";
+  const [buying, setBuying] = useState(false);
   const fresh = now - r.bornAt < 600_000;
   const verdictCls = r.verdict === "buy" ? "bg-up/15 text-up" : r.verdict === "skip" ? "bg-muted text-muted-foreground" : "bg-primary/15 text-primary";
   return (
@@ -118,6 +121,7 @@ function RadarRow({ r, now }: { r: RadarItem; now: number }) {
         </span>
       </div>
       <div className="flex flex-wrap items-center gap-1 text-[10px]">
+        <Addr value={r.token} head={6} tail={4} className="text-[10px]" />
         <span className="text-muted-foreground tabular-nums">{t("scan.buyers").replace("{n}", String(r.buyers))} · {t("scan.vol").replace("{v}", vol(r.volume))}</span>
         {r.score !== null && <span className="rounded bg-muted px-1 tabular-nums">{t("scan.score")} <span className="font-mono">{r.score}</span></span>}
         {r.reasons.map((k) => (
@@ -130,8 +134,15 @@ function RadarRow({ r, now }: { r: RadarItem; now: number }) {
           {r.peakX > 1.05 && <> · {t("scan.peak").replace("{x}", times(r.peakX))}</>}
           {r.dead && <span className="ml-1.5 rounded bg-muted px-1 text-[10px]">{t("scan.dead")}</span>}
         </span>
-        <a href={`/tools?tab=holders&token=${r.token}`} className="shrink-0 text-primary hover:underline">{t("scan.holders")}</a>
+        <span className="flex shrink-0 items-center gap-2.5">
+          <a href={`/tools?tab=holders&token=${r.token}`} className="text-muted-foreground hover:text-foreground hover:underline">{t("scan.holders")}</a>
+          <button type="button" onClick={() => setBuying(true)}
+            className={cn("inline-flex items-center gap-0.5 rounded-md px-2 py-0.5 font-semibold", r.verdict === "buy" && !r.dead ? "bg-primary text-primary-foreground" : "border text-foreground hover:bg-accent")}>
+            <Zap className="size-3" /> {t("scan.buy.button")}
+          </button>
+        </span>
       </div>
+      {buying && <QuickBuy item={r} open={buying} onClose={() => setBuying(false)} />}
     </div>
   );
 }
