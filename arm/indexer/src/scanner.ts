@@ -285,6 +285,13 @@ async function compute(): Promise<ScanState> {
   };
 }
 
+/** Block clock, pool birth blocks and smart wallets as of the last `scanner()` run (launch replay reuses them). */
+export function scanShared() {
+  if (!clock) return null;
+  const c = clock;
+  return { born, smart: smart.set, bt: c.bt, tsOf: (b: number) => (c.ts - (c.head - b) * c.bt) * 1000, NOT_MEME };
+}
+
 let cache: { at: number; state: ScanState } | null = null;
 let inflight: Promise<ScanState> | null = null;
 

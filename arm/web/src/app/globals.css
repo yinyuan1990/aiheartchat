@@ -350,6 +350,39 @@
   }
 }
 
+/* Bars that grow in from the left (HTML or SVG). */
+@keyframes grow-x {
+  from {
+    transform: scaleX(0);
+  }
+}
+@utility grow-x {
+  transform-origin: left center;
+  transform-box: fill-box;
+  animation: grow-x 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+/* Perp heatmap tiles: brief glow when the mark ticks up / down. */
+@keyframes tick-up {
+  from {
+    box-shadow: inset 0 0 0 2px var(--up);
+  }
+}
+@keyframes tick-down {
+  from {
+    box-shadow: inset 0 0 0 2px var(--down);
+  }
+}
+@utility tick-up {
+  animation: tick-up 0.9s ease-out;
+}
+@utility tick-down {
+  animation: tick-down 0.9s ease-out;
+}
+
 /* 🔥 emoji flames (components/hot/flame.tsx): slow flicker + two embers drifting up. */
 @keyframes flame-flicker {
   0%,

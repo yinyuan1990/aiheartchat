@@ -354,6 +354,36 @@ export type ScanState =
 export const useScanner = () =>
   useQuery({ queryKey: ["scanner"], queryFn: () => get<ScanState>("/scanner"), refetchInterval: 15_000, retry: 1 });
 
+// ---------- launch replay (indexer/src/replay.ts) ----------
+export type ReplayRole = "dev" | "bundle" | "bot" | "smart" | "retail";
+export type ReplayLaunch = { pool: string; token: string; symbol: string; bornAt: number; buyers: number; swaps: number; volume: number };
+export type ReplayEvent = { t: number; side: 1 | -1; usdc: number; px: number | null; role: ReplayRole; w: number };
+export type ReplayRoleStat = { wallets: number; spent: number; received: number; value: number; pnl: number };
+export type ReplayDetail = {
+  pool: string; token: string; symbol: string; bornAt: number; window: number; truncated: boolean;
+  p0: number; lastPx: number; peakPx: number; nowPx: number; buyers: number;
+  events: ReplayEvent[]; roles: Record<ReplayRole, ReplayRoleStat>; rolesNow: Record<ReplayRole, ReplayRoleStat>;
+  firstRetail: { t: number; rank: number; x: number } | null; retailAvgX: number | null; aheadOfRetail: number;
+};
+export type ReplayList = { status: "syncing"; progress: number } | { status: "ready"; launches: ReplayLaunch[] };
+export const useReplayList = () => useQuery({ queryKey: ["replay"], queryFn: () => get<ReplayList>("/replay"), staleTime: 120_000, retry: 1 });
+export const useReplay = (pool?: string) =>
+  useQuery({ queryKey: ["replay", pool], queryFn: () => get<ReplayDetail>(`/replay/${pool}`), enabled: !!pool, staleTime: 120_000, retry: 1 });
+
+// ---------- perp radar (indexer/src/perp.ts, Hyperliquid public data) ----------
+export type PerpCoin = {
+  coin: string; mark: number; change: number; funding: number; fundingApr: number; oiUsd: number; volUsd: number;
+  premium: number; maxLev: number; oiChg1h: number | null;
+};
+export type PerpMarket = { updatedAt: number; coins: PerpCoin[]; greed: { value: number; fundingApr: number; breadth: number; oiUsd: number; volUsd: number } };
+export type WhalePosition = { coin: string; side: "long" | "short"; ntl: number; size: number; entry: number; liqPx: number | null; lev: number; upnl: number };
+export type Whale = { address: string; name: string; accountValue: number; monthPnl: number; allPnl: number; positions: WhalePosition[] };
+export type WhaleEvent = { at: number; address: string; name: string; coin: string; kind: "open" | "close" | "add" | "cut" | "flip"; side: "long" | "short"; ntl: number; px: number };
+export type WhaleState = { status: "loading" } | { status: "ready"; updatedAt: number; whales: Whale[]; events: WhaleEvent[]; mids: Record<string, number> };
+export const usePerpMarket = () => useQuery({ queryKey: ["perp-market"], queryFn: () => get<PerpMarket>("/perp/market"), refetchInterval: 3_000, retry: 1 });
+export const usePerpWhales = () =>
+  useQuery({ queryKey: ["perp-whales"], queryFn: () => get<WhaleState>("/perp/whales"), refetchInterval: (q) => (q.state.data?.status === "ready" ? 20_000 : 5_000), retry: 1 });
+
 export const useStats = () => useQuery({ queryKey: ["stats"], queryFn: () => get<Stats>("/stats"), refetchInterval: 10_000 });
 
 // ---------- Arm promoter referrals ----------

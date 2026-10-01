@@ -17,6 +17,8 @@ import { hasStock, quotePrice, quoteToUsdc } from "./quotes.js";
 import { walletCard } from "./wallet-card.js";
 import { aiArena, aiMarket } from "./ai-arena.js";
 import { scanner } from "./scanner.js";
+import { replayDetail, replayList } from "./replay.js";
+import { perpMarket, perpWhales } from "./perp.js";
 
 export const app = new Hono();
 // paged list endpoints report the full row count in X-Total-Count; expose it so the browser can read it
@@ -528,6 +530,19 @@ app.get("/api/ai-arena/market", async (c) => c.json(await aiMarket()));
 
 // Chain-scanner arena (10.1): new Arc USDC pools scored live + four paper strategies replayed on real swaps.
 app.get("/api/scanner", async (c) => c.json(await scanner()));
+
+// Launch replay (10.2): the first hour of a new Arc pool swap by swap, wallets tagged by behaviour.
+app.get("/api/replay", async (c) => c.json(await replayList()));
+app.get("/api/replay/:pool", async (c) => {
+  const pool = c.req.param("pool").toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(pool)) return c.json({ error: "bad pool" }, 400);
+  const d = await replayDetail(pool);
+  return d ? c.json(d) : c.json({ error: "not found" }, 404);
+});
+
+// Perp radar (10.2): Hyperliquid funding / OI dashboard + whale positions and liquidation map.
+app.get("/api/perp/market", async (c) => c.json(await perpMarket()));
+app.get("/api/perp/whales", (c) => c.json(perpWhales()));
 
 // ---------------------------------------------------------------- logo upload
 

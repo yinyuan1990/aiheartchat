@@ -26,9 +26,11 @@ import { PnlCard } from "@/components/tools/pnl-card";
 import { GmgnTool } from "@/components/tools/gmgn-tool";
 import { AiTrade } from "@/components/tools/ai-trade";
 import { ScannerArena } from "@/components/tools/scanner-arena";
+import { LaunchReplay } from "@/components/tools/launch-replay";
+import { PerpRadar } from "@/components/tools/perp-radar";
 
-type Tool = "swap" | "bridge" | "holders" | "card" | "gmgn" | "ai" | "scan";
-const TOOLS: Tool[] = ["swap", "bridge", "holders", "card", "gmgn", "ai", "scan"];
+type Tool = "swap" | "bridge" | "holders" | "card" | "gmgn" | "ai" | "perp" | "scan" | "replay";
+const TOOLS: Tool[] = ["swap", "bridge", "holders", "card", "gmgn", "ai", "perp", "scan", "replay"];
 const noSubscribe = () => () => {};
 
 type Step = "switch" | "approve" | "send";
@@ -121,7 +123,7 @@ export default function ToolsPage() {
     const a = el.getBoundingClientRect(), b = list.getBoundingClientRect();
     list.scrollTo({ left: list.scrollLeft + a.left - b.left - (b.width - a.width) / 2, behavior: "smooth" });
   }, [tool]);
-  const subtitle = { swap: t("swap.subtitle"), bridge: t("tools.subtitle"), holders: t("holders.subtitle"), card: t("card.subtitle"), gmgn: t("gmgn.subtitle"), ai: t("nofx.subtitle"), scan: t("scan.subtitle") }[tool];
+  const subtitle = { swap: t("swap.subtitle"), bridge: t("tools.subtitle"), holders: t("holders.subtitle"), card: t("card.subtitle"), gmgn: t("gmgn.subtitle"), ai: t("nofx.subtitle"), perp: t("perp.subtitle"), scan: t("scan.subtitle"), replay: t("replay.subtitle") }[tool];
   return (
     <div className="mx-auto max-w-lg space-y-4">
       <div className="sticky top-[var(--shell-top,0px)] z-20 -mx-3 -mt-4 bg-background/90 px-3 pt-3 pb-2 backdrop-blur md:mx-0 md:px-0">
@@ -135,7 +137,7 @@ export default function ToolsPage() {
       </div>
       <h1 className="sr-only">{t("tools.page")}</h1>
       <p className="px-1 text-sm text-muted-foreground">{subtitle}</p>
-      {tool === "swap" ? <ArcSwap /> : tool === "bridge" ? <Bridge /> : tool === "holders" ? <HolderMap initial={query.get("token") ?? ""} /> : tool === "card" ? <PnlCard initial={query.get("wallet") ?? ""} /> : tool === "gmgn" ? <GmgnTool /> : tool === "scan" ? <ScannerArena /> : <AiTrade />}
+      {tool === "swap" ? <ArcSwap /> : tool === "bridge" ? <Bridge /> : tool === "holders" ? <HolderMap initial={query.get("token") ?? ""} /> : tool === "card" ? <PnlCard initial={query.get("wallet") ?? ""} /> : tool === "gmgn" ? <GmgnTool /> : tool === "scan" ? <ScannerArena /> : tool === "replay" ? <LaunchReplay /> : tool === "perp" ? <PerpRadar /> : <AiTrade />}
     </div>
   );
 }
