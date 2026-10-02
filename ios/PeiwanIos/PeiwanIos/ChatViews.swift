@@ -546,96 +546,119 @@ struct ChatRoomView: View {
     private var isGroupAdmin: Bool { convType == 2 && (myRole == "owner" || myRole == "admin") }
     private var canPin: Bool { convType == 1 || isGroupAdmin }
 
+    // body 拆成几段，整块写在一起 Swift 类型检查会超时
     var body: some View {
-        msgActionLayers(VStack(spacing: 0) {
-            if !pins.isEmpty && selecting == nil {
-                PinBar(pins: pins, index: pinIdx, canUnpin: canPin, onJump: {
-                    let p = pins[pinIdx % pins.count]
-                    pinIdx += 1
-                    jumpTo(p.id)
-                }, onUnpin: {
-                    togglePin(pins[pinIdx % pins.count].id, pin: false)
-                })
-            }
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        if botFresh, let b = bot { botIntro(b) }
-                        ForEach(Array(messages.enumerated()), id: \.element.id) { idx, m in
-                            // 微信式时间分隔条：与上一条间隔超 5 分钟显示
-                            if shouldShowTime(idx) {
-                                Text(fmtTime(m.createdAt))
-                                    .font(.system(size: 11)).foregroundStyle(Theme.textDim)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 8)
-                            }
-                            messageRow(m)
-                            .background(RoundedRectangle(cornerRadius: 8).fill(flashId == m.id ? Theme.accent.opacity(0.14) : Color.clear))
-                            .id(m.id)
-                        }
-                    }
-                    .padding(.horizontal, 12).padding(.vertical, 8)
-                }
-                .simultaneousGesture(TapGesture().onEnded { showSticker = false; showCmds = false; inputFocused = false })
-                .inAppLinks()
-                .onChange(of: jumpReq) { id in
-                    guard let id else { return }
-                    jumpReq = nil
-                    DispatchQueue.main.async { withAnimation { proxy.scrollTo(id, anchor: .center) } }
-                    withAnimation(.easeOut(duration: 0.15)) { flashId = id }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
-                        withAnimation(.easeOut(duration: 0.9)) { if flashId == id { flashId = nil } }
-                    }
-                }
-                // 进入聊天默认停在最底部（最新消息）；defaultScrollAnchor 是 iOS 17 API，改用 scrollTo
-                .onAppear {
-                    if let last = messages.last {
-                        DispatchQueue.main.async { proxy.scrollTo(last.id, anchor: .bottom) }
-                    }
-                }
-                .onChange(of: messages.count) { _ in
-                    if focusPending, !messages.isEmpty {
-                        focusPending = false
-                        if let fid = focusMsgId, messages.contains(where: { $0.id == fid }) {
-                            DispatchQueue.main.async { proxy.scrollTo(fid, anchor: .center) }
-                            withAnimation(.easeOut(duration: 0.15)) { flashId = fid }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
-                                withAnimation(.easeOut(duration: 0.9)) { flashId = nil }
-                            }
-                            return
-                        }
-                    }
-                    if let last = messages.last { proxy.scrollTo(last.id, anchor: .bottom) }
-                }
-                .onChange(of: inputFocused) { focused in
-                    if focused {
-                        // 键盘弹出时收起表情面板，避免两者叠加把内容顶飞
-                        showSticker = false
-                        if let last = messages.last {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
-                            }
-                        }
-                    }
-                }
-            }
+        decorated(msgActionLayers(mainColumn))
+            .task { await onLoad() }
+            .onDisappear { removeListener?() }
+    }
 
-            if let sel = selecting {
-                selectBar(sel)
-            } else if botFresh {
-                // 和机器人的空会话：底部是「开始」按钮（发 /start），同 Telegram
-                Button { sendMsg("text", "/start") } label: {
-                    Text("开始").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.accent)
-                        .frame(maxWidth: .infinity).padding(.vertical, 16)
-                        .background(Theme.bg2)
-                        .contentShape(Rectangle())
+    private var mainColumn: some View {
+        VStack(spacing: 0) {
+            pinBarView
+            ScrollViewReader { proxy in messageScroll(proxy) }
+            bottomArea
+        }
+    }
+
+    @ViewBuilder
+    private var pinBarView: some View {
+        if !pins.isEmpty && selecting == nil {
+            PinBar(pins: pins, index: pinIdx, canUnpin: canPin, onJump: {
+                let p = pins[pinIdx % pins.count]
+                pinIdx += 1
+                jumpTo(p.id)
+            }, onUnpin: {
+                togglePin(pins[pinIdx % pins.count].id, pin: false)
+            })
+        }
+    }
+
+    private var messageStack: some View {
+        LazyVStack(spacing: 0) {
+            if botFresh, let b = bot { botIntro(b) }
+            ForEach(Array(messages.enumerated()), id: \.element.id) { idx, m in
+                // 微信式时间分隔条：与上一条间隔超 5 分钟显示
+                if shouldShowTime(idx) {
+                    Text(fmtTime(m.createdAt))
+                        .font(.system(size: 11)).foregroundStyle(Theme.textDim)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
                 }
-                .buttonStyle(.plain)
-            } else {
-                bottomBar
+                messageRow(m)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(flashId == m.id ? Theme.accent.opacity(0.14) : Color.clear))
+                    .id(m.id)
             }
-        })
-        .overlay {
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+    }
+
+    private func messageScroll(_ proxy: ScrollViewProxy) -> some View {
+        ScrollView { messageStack }
+        .simultaneousGesture(TapGesture().onEnded { showSticker = false; showCmds = false; inputFocused = false })
+        .inAppLinks()
+        .onChange(of: jumpReq) { id in
+            guard let id else { return }
+            jumpReq = nil
+            DispatchQueue.main.async { withAnimation { proxy.scrollTo(id, anchor: .center) } }
+            withAnimation(.easeOut(duration: 0.15)) { flashId = id }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+                withAnimation(.easeOut(duration: 0.9)) { if flashId == id { flashId = nil } }
+            }
+        }
+        // 进入聊天默认停在最底部（最新消息）；defaultScrollAnchor 是 iOS 17 API，改用 scrollTo
+        .onAppear {
+            if let last = messages.last {
+                DispatchQueue.main.async { proxy.scrollTo(last.id, anchor: .bottom) }
+            }
+        }
+        .onChange(of: messages.count) { _ in
+            if focusPending, !messages.isEmpty {
+                focusPending = false
+                if let fid = focusMsgId, messages.contains(where: { $0.id == fid }) {
+                    DispatchQueue.main.async { proxy.scrollTo(fid, anchor: .center) }
+                    withAnimation(.easeOut(duration: 0.15)) { flashId = fid }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+                        withAnimation(.easeOut(duration: 0.9)) { flashId = nil }
+                    }
+                    return
+                }
+            }
+            if let last = messages.last { proxy.scrollTo(last.id, anchor: .bottom) }
+        }
+        .onChange(of: inputFocused) { focused in
+            if focused {
+                // 键盘弹出时收起表情面板，避免两者叠加把内容顶飞
+                showSticker = false
+                if let last = messages.last {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var bottomArea: some View {
+        if let sel = selecting {
+            selectBar(sel)
+        } else if botFresh {
+            // 和机器人的空会话：底部是「开始」按钮（发 /start），同 Telegram
+            Button { sendMsg("text", "/start") } label: {
+                Text("开始").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.accent)
+                    .frame(maxWidth: .infinity).padding(.vertical, 16)
+                    .background(Theme.bg2)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        } else {
+            bottomBar
+        }
+    }
+
+    private func navDecorated<V: View>(_ v: V) -> some View {
+        v.overlay {
             if recording {
                 RecordingOverlay(recorder: recorderBox)
                     .transition(.opacity.combined(with: .scale(scale: 0.9)))
@@ -647,42 +670,49 @@ struct ChatRoomView: View {
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .compatNavBarBackground(Theme.bg)
-        .toolbar {
-            if bot != nil {
-                ToolbarItem(placement: .principal) {
-                    HStack(spacing: 6) {
-                        Text(title).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
-                        BotTag()
-                    }
+        .toolbar { toolbarItems }
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarItems: some ToolbarContent {
+        if bot != nil {
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: 6) {
+                    Text(title).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
+                    BotTag()
                 }
             }
-            ToolbarItem(placement: .navigationBarTrailing) {
-                HStack(spacing: 14) {
+        }
+        ToolbarItem(placement: .navigationBarTrailing) {
+            HStack(spacing: 14) {
+                Button {
+                    showClearConfirm = true
+                } label: {
+                    Text("清空").font(.system(size: 13)).foregroundStyle(Theme.textSub)
+                }
+                if convType == 2 {
                     Button {
-                        showClearConfirm = true
+                        showVoiceRoom = true
                     } label: {
-                        Text("清空").font(.system(size: 13)).foregroundStyle(Theme.textSub)
+                        HStack(spacing: 3) {
+                            Image(systemName: "waveform").font(.system(size: 11))
+                            Text(vroom.memberCount(targetId) > 0 ? "语音房·\(vroom.memberCount(targetId))" : "语音房")
+                                .font(.system(size: 13))
+                        }
+                        .foregroundStyle(vroom.joinedGroupId == targetId ? Theme.accent : Theme.text)
                     }
-                    if convType == 2 {
-                        Button {
-                            showVoiceRoom = true
-                        } label: {
-                            HStack(spacing: 3) {
-                                Image(systemName: "waveform").font(.system(size: 11))
-                                Text(vroom.memberCount(targetId) > 0 ? "语音房·\(vroom.memberCount(targetId))" : "语音房")
-                                    .font(.system(size: 13))
-                            }
-                            .foregroundStyle(vroom.joinedGroupId == targetId ? Theme.accent : Theme.text)
-                        }
-                        NavigationLink {
-                            LazyView(GroupInfoView(groupId: targetId))
-                        } label: {
-                            Text("群信息").font(.system(size: 13)).foregroundStyle(Theme.accent)
-                        }
+                    NavigationLink {
+                        LazyView(GroupInfoView(groupId: targetId))
+                    } label: {
+                        Text("群信息").font(.system(size: 13)).foregroundStyle(Theme.accent)
                     }
                 }
             }
         }
+    }
+
+    private func decorated<V: View>(_ v: V) -> some View {
+        navDecorated(v)
         .confirmationDialog(
             convType == 1 ? "清空后双方的聊天记录都将删除，不可恢复" : "将删除我在本群发送的全部消息，所有成员都将不再看到",
             isPresented: $showClearConfirm,
@@ -726,111 +756,113 @@ struct ChatRoomView: View {
                 fullImage = nil
             }
         }
-        .task {
-            let around = focusPending ? focusMsgId.map { "&aroundId=\($0)" } ?? "" : ""
-            let first: [MsgItem] = (try? await Api.request("/im/messages?conversationId=\(convId)\(around)")) ?? []
-            // 列表回来前已发出去的消息别被覆盖
-            messages = first + messages.filter { m in m.pending && !first.contains(where: { $0.id == m.id }) }
-            loaded = true
-            Task { @MainActor in
-                await loadPins()
-                guard convType == 2 else { return }
-                struct RoleMember: Codable { var id: String; var role: String? }
-                struct RoleResp: Codable { var members: [RoleMember]? }
-                if let g: RoleResp = try? await Api.request("/im/group/\(targetId)") {
-                    myRole = g.members?.first(where: { $0.id == myId })?.role ?? "member"
-                }
-            }
-            if let last = messages.last { WsClient.shared.markRead(conversationId: convId, msgId: last.id) }
-            WsClient.shared.connect()
-            // 空会话或对方发过机器人消息：查一下对方是不是机器人
-            if convType == 1 && (messages.isEmpty || messages.contains(where: { $0.senderIsBot == true && $0.senderId == targetId })) {
-                bot = await BotInfoCache.shared.get(targetId)
-            }
-            // 群聊：拉一次语音房人数（入口角标）
-            if convType == 2 { await vroom.refreshInfo(groupId: targetId) }
-            removeListener = WsClient.shared.addListener { frame in
-                let op = frame["op"] as? String
-                if op == "error" {
-                    // 发送被后端拒绝（如积分不足）：提示并撤回乐观显示的消息
-                    toastMsg = frame["msg"] as? String ?? "发送失败"
-                    let tid = frame["tempId"] as? String
-                    let idx = tid != nil ? messages.firstIndex(where: { $0.id == tid }) : messages.lastIndex(where: { $0.pending })
-                    if let idx {
-                        messages.remove(at: idx)
-                    }
-                    return
-                }
-                if op == "ack" {
-                    // 乐观消息换成正式 id，菜单 / 回复 / 置顶才能用
-                    guard botFrameStr(frame["conversationId"]) == convId,
-                          let tid = frame["tempId"] as? String,
-                          let mid = botFrameStr(frame["msgId"]),
-                          let idx = messages.firstIndex(where: { $0.id == tid }) else { return }
-                    if messages.contains(where: { $0.id == mid }) { messages.remove(at: idx); return }
-                    messages[idx].id = mid
-                    if let c = frame["createdAt"] as? String { messages[idx].createdAt = c }
-                    return
-                }
-                if op == "read" {
-                    guard botFrameStr(frame["conversationId"]) == convId,
-                          (botFrameStr(frame["userId"]) ?? "") != myId else { return }
-                    for i in messages.indices where messages[i].senderId == myId { messages[i].isRead = true }
-                    return
-                }
-                if op == "msg_reactions" || op == "msg_pin" {
-                    guard let data = frame["data"] as? [String: Any],
-                          botFrameStr(data["conversationId"]) == convId else { return }
-                    if op == "msg_pin" { Task { await loadPins() }; return }
-                    guard let id = botFrameStr(data["msgId"]),
-                          let idx = messages.firstIndex(where: { $0.id == id }),
-                          let raw = data["reactions"],
-                          let json = try? JSONSerialization.data(withJSONObject: raw),
-                          let rs = try? JSONDecoder().decode([MsgReaction].self, from: json) else { return }
-                    messages[idx].reactions = rs
-                    return
-                }
-                if op == "conv_cleared" {
-                    // 有人清空了记录（单聊=全部，群聊=其发送的消息）：重新拉取同步
-                    if let data = frame["data"] as? [String: Any],
-                       (data["conversationId"] as? String) == convId {
-                        Task { await reloadMessages() }
-                    }
-                    return
-                }
-                if op == "msg_edit" || op == "msg_delete" {
-                    // 机器人改消息（文字 / 按钮）或撤回
-                    guard let data = frame["data"] as? [String: Any],
-                          botFrameStr(data["conversationId"]) == convId,
-                          let id = botFrameStr(data["msgId"]) else { return }
-                    if op == "msg_delete" {
-                        messages.removeAll { $0.id == id }
-                        if replyTo?.id == id { replyTo = nil }
-                        if pins.contains(where: { $0.id == id }) { Task { await loadPins() } }
-                    } else if let idx = messages.firstIndex(where: { $0.id == id }) {
-                        if let c = data["content"] as? String { messages[idx].content = c }
-                        messages[idx].markup = InlineMarkup.from(data["markup"])
-                    }
-                    return
-                }
-                guard op == "msg",
-                      let data = frame["data"] as? [String: Any],
-                      let json = try? JSONSerialization.data(withJSONObject: data),
-                      let m = try? JSONDecoder().decode(MessagePayload.self, from: json),
-                      m.conversationId == convId,
-                      !messages.contains(where: { $0.id == m.id }) else { return }
-                messages.append(MsgItem(id: m.id, conversationId: m.conversationId, senderId: m.senderId,
-                                        senderNickname: m.senderNickname, senderAvatar: m.senderAvatar,
-                                        receiverId: m.receiverId, type: m.type, content: m.content, createdAt: m.createdAt,
-                                        senderIsBot: m.senderIsBot, markup: m.markup,
-                                        replyTo: m.replyTo, fwdFrom: m.fwdFrom, reactions: m.reactions))
-                WsClient.shared.markRead(conversationId: convId, msgId: m.id)
-                if m.senderIsBot == true && convType == 1 && bot == nil {
-                    Task { bot = await BotInfoCache.shared.get(m.senderId) }
-                }
+    }
+
+    private func onLoad() async {
+        let around = focusPending ? focusMsgId.map { "&aroundId=\($0)" } ?? "" : ""
+        let first: [MsgItem] = (try? await Api.request("/im/messages?conversationId=\(convId)\(around)")) ?? []
+        // 列表回来前已发出去的消息别被覆盖
+        messages = first + messages.filter { m in m.pending && !first.contains(where: { $0.id == m.id }) }
+        loaded = true
+        Task { @MainActor in
+            await loadPins()
+            guard convType == 2 else { return }
+            struct RoleMember: Codable { var id: String; var role: String? }
+            struct RoleResp: Codable { var members: [RoleMember]? }
+            if let g: RoleResp = try? await Api.request("/im/group/\(targetId)") {
+                myRole = g.members?.first(where: { $0.id == myId })?.role ?? "member"
             }
         }
-        .onDisappear { removeListener?() }
+        if let last = messages.last { WsClient.shared.markRead(conversationId: convId, msgId: last.id) }
+        WsClient.shared.connect()
+        // 空会话或对方发过机器人消息：查一下对方是不是机器人
+        if convType == 1 && (messages.isEmpty || messages.contains(where: { $0.senderIsBot == true && $0.senderId == targetId })) {
+            bot = await BotInfoCache.shared.get(targetId)
+        }
+        // 群聊：拉一次语音房人数（入口角标）
+        if convType == 2 { await vroom.refreshInfo(groupId: targetId) }
+        removeListener = WsClient.shared.addListener { frame in handleFrame(frame) }
+}
+
+    private func handleFrame(_ frame: [String: Any]) {
+        let op = frame["op"] as? String
+        if op == "error" {
+            // 发送被后端拒绝（如积分不足）：提示并撤回乐观显示的消息
+            toastMsg = frame["msg"] as? String ?? "发送失败"
+            let tid = frame["tempId"] as? String
+            let idx = tid != nil ? messages.firstIndex(where: { $0.id == tid }) : messages.lastIndex(where: { $0.pending })
+            if let idx {
+                messages.remove(at: idx)
+            }
+            return
+        }
+        if op == "ack" {
+            // 乐观消息换成正式 id，菜单 / 回复 / 置顶才能用
+            guard botFrameStr(frame["conversationId"]) == convId,
+                  let tid = frame["tempId"] as? String,
+                  let mid = botFrameStr(frame["msgId"]),
+                  let idx = messages.firstIndex(where: { $0.id == tid }) else { return }
+            if messages.contains(where: { $0.id == mid }) { messages.remove(at: idx); return }
+            messages[idx].id = mid
+            if let c = frame["createdAt"] as? String { messages[idx].createdAt = c }
+            return
+        }
+        if op == "read" {
+            guard botFrameStr(frame["conversationId"]) == convId,
+                  (botFrameStr(frame["userId"]) ?? "") != myId else { return }
+            for i in messages.indices where messages[i].senderId == myId { messages[i].isRead = true }
+            return
+        }
+        if op == "msg_reactions" || op == "msg_pin" {
+            guard let data = frame["data"] as? [String: Any],
+                  botFrameStr(data["conversationId"]) == convId else { return }
+            if op == "msg_pin" { Task { await loadPins() }; return }
+            guard let id = botFrameStr(data["msgId"]),
+                  let idx = messages.firstIndex(where: { $0.id == id }),
+                  let raw = data["reactions"],
+                  let json = try? JSONSerialization.data(withJSONObject: raw),
+                  let rs = try? JSONDecoder().decode([MsgReaction].self, from: json) else { return }
+            messages[idx].reactions = rs
+            return
+        }
+        if op == "conv_cleared" {
+            // 有人清空了记录（单聊=全部，群聊=其发送的消息）：重新拉取同步
+            if let data = frame["data"] as? [String: Any],
+               (data["conversationId"] as? String) == convId {
+                Task { await reloadMessages() }
+            }
+            return
+        }
+        if op == "msg_edit" || op == "msg_delete" {
+            // 机器人改消息（文字 / 按钮）或撤回
+            guard let data = frame["data"] as? [String: Any],
+                  botFrameStr(data["conversationId"]) == convId,
+                  let id = botFrameStr(data["msgId"]) else { return }
+            if op == "msg_delete" {
+                messages.removeAll { $0.id == id }
+                if replyTo?.id == id { replyTo = nil }
+                if pins.contains(where: { $0.id == id }) { Task { await loadPins() } }
+            } else if let idx = messages.firstIndex(where: { $0.id == id }) {
+                if let c = data["content"] as? String { messages[idx].content = c }
+                messages[idx].markup = InlineMarkup.from(data["markup"])
+            }
+            return
+        }
+        guard op == "msg",
+              let data = frame["data"] as? [String: Any],
+              let json = try? JSONSerialization.data(withJSONObject: data),
+              let m = try? JSONDecoder().decode(MessagePayload.self, from: json),
+              m.conversationId == convId,
+              !messages.contains(where: { $0.id == m.id }) else { return }
+        messages.append(MsgItem(id: m.id, conversationId: m.conversationId, senderId: m.senderId,
+                                senderNickname: m.senderNickname, senderAvatar: m.senderAvatar,
+                                receiverId: m.receiverId, type: m.type, content: m.content, createdAt: m.createdAt,
+                                senderIsBot: m.senderIsBot, markup: m.markup,
+                                replyTo: m.replyTo, fwdFrom: m.fwdFrom, reactions: m.reactions))
+        WsClient.shared.markRead(conversationId: convId, msgId: m.id)
+        if m.senderIsBot == true && convType == 1 && bot == nil {
+            Task { bot = await BotInfoCache.shared.get(m.senderId) }
+        }
     }
 
     // MARK: - 底部输入区（微信式）
@@ -1146,19 +1178,20 @@ struct ChatRoomView: View {
     private func menuActions(_ m: MsgItem) -> MenuActions {
         let mine = m.senderId == myId
         let pinned = pins.contains(where: { $0.id == m.id })
-        return MenuActions(
-            onReact: { react(m.id, $0) },
-            onReply: { replyTo = m; inputFocused = true },
-            onCopy: m.type == "text" ? { UIPasteboard.general.string = m.content; toastMsg = "已复制" } : nil,
-            onSave: (m.type == "image" || m.type == "video") ? {
-                Task { @MainActor in toastMsg = await saveMediaToPhotos(type: m.type, url: m.content) }
-            } : nil,
-            onPin: canPin ? { togglePin(m.id, pin: !pinned) } : nil,
-            onForward: FORWARDABLE.contains(m.type) ? { forwardIds = IdList(ids: [m.id]) } : nil,
-            onReport: mine ? nil : { reportId = m.id },
-            onDelete: { deleteIds = [m.id] },
-            onSelect: { selecting = [m.id] }
-        )
+        var a = MenuActions(onReact: { react(m.id, $0) })
+        a.onReply = { replyTo = m; inputFocused = true }
+        if m.type == "text" {
+            a.onCopy = { UIPasteboard.general.string = m.content; toastMsg = "已复制" }
+        }
+        if m.type == "image" || m.type == "video" {
+            a.onSave = { Task { @MainActor in toastMsg = await saveMediaToPhotos(type: m.type, url: m.content) } }
+        }
+        if canPin { a.onPin = { togglePin(m.id, pin: !pinned) } }
+        if FORWARDABLE.contains(m.type) { a.onForward = { forwardIds = IdList(ids: [m.id]) } }
+        if !mine { a.onReport = { reportId = m.id } }
+        a.onDelete = { deleteIds = [m.id] }
+        a.onSelect = { selecting = [m.id] }
+        return a
     }
 
     private func msgActionLayers<V: View>(_ content: V) -> some View {
