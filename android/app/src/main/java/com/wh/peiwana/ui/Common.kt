@@ -82,15 +82,44 @@ fun WebPreviewDialog(html: String? = null, url: String? = null, title: String = 
                 }
                 Text("关闭", color = Accent, fontSize = 14.sp, modifier = Modifier.noRippleClick(onClose))
             }
+            var web by remember { mutableStateOf<android.webkit.WebView?>(null) }
+            androidx.activity.compose.BackHandler {
+                val w = web
+                if (w != null && w.canGoBack()) w.goBack() else onClose()
+            }
             androidx.compose.ui.viewinterop.AndroidView(
                 factory = { c ->
                     android.webkit.WebView(c).apply {
+                        // 大多数网页依赖 localStorage / sessionStorage，不开会报 Cannot read properties of null (reading 'getItem')
                         settings.javaScriptEnabled = true
-                        webViewClient = android.webkit.WebViewClient()
+                        settings.domStorageEnabled = true
+                        @Suppress("DEPRECATION")
+                        settings.databaseEnabled = true
+                        settings.useWideViewPort = true
+                        settings.loadWithOverviewMode = true
+                        settings.mediaPlaybackRequiresUserGesture = false
+                        webViewClient = object : android.webkit.WebViewClient() {
+                            override fun shouldOverrideUrlLoading(view: android.webkit.WebView, req: android.webkit.WebResourceRequest): Boolean {
+                                val u = req.url
+                                if (u.scheme == "http" || u.scheme == "https") return false
+                                // weixin:// alipays:// intent:// 等交给系统，打不开就忽略，避免 ERR_UNKNOWN_URL_SCHEME
+                                runCatching {
+                                    val intent = if (u.scheme == "intent") android.content.Intent.parseUri(u.toString(), android.content.Intent.URI_INTENT_SCHEME)
+                                    else android.content.Intent(android.content.Intent.ACTION_VIEW, u)
+                                    intent.addCategory(android.content.Intent.CATEGORY_BROWSABLE)
+                                    intent.component = null
+                                    view.context.startActivity(intent)
+                                }
+                                return true
+                            }
+                        }
+                        webChromeClient = android.webkit.WebChromeClient()
                         if (html != null) loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
                         else if (url != null) loadUrl(url)
+                        web = this
                     }
                 },
+                onRelease = { it.stopLoading(); it.destroy() },
                 modifier = Modifier.weight(1f).fillMaxWidth().navigationBarsPadding(),
             )
         }
