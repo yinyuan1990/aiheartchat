@@ -30,6 +30,8 @@ struct ChannelInfo: Codable {
     /// 我能不能发帖（老后端没有这个字段时按 canPost）
     var canSend: Bool? = nil
     var muted: Bool? = false
+    /// 消息保留天数，0 = 永久
+    var retentionDays: Int? = nil
 
     var sendable: Bool { canSend ?? (canPost == true) }
 }
@@ -380,6 +382,8 @@ struct ChannelView: View {
     @State private var showInfo = false
     @State private var deleteTarget: ChannelPost?
     @State private var showDelete = false
+    /// 正在播删除动画（灰飞烟灭）的帖子 id
+    @State private var dying: Set<String> = []
     @State private var media: MediaTarget?
     @State private var toastMsg: String?
     @State private var route: Route?
@@ -474,14 +478,16 @@ struct ChannelView: View {
                                 .padding(.top, 80)
                         }
                         ForEach(posts, id: \.key) { p in
-                            ChannelPostCard(
-                                ch: c, p: p, canDelete: c.canPost == true || p.senderId == state.user?.id,
-                                onReact: { react(p, $0) },
-                                onComments: { route = .channelComments(p.id, c.canPost == true) },
-                                onMedia: { openMedia(p) },
-                                onDelete: { deleteTarget = p; showDelete = true },
-                                mine: isMine(p)
-                            )
+                            DustOut(dying: dying.contains(p.id), onGone: { postGone(p.id) }) {
+                                ChannelPostCard(
+                                    ch: c, p: p, canDelete: c.canPost == true || p.senderId == state.user?.id,
+                                    onReact: { react(p, $0) },
+                                    onComments: { route = .channelComments(p.id, c.canPost == true) },
+                                    onMedia: { openMedia(p) },
+                                    onDelete: { deleteTarget = p; showDelete = true },
+                                    mine: isMine(p)
+                                )
+                            }
                             .frame(maxWidth: .infinity, alignment: postAlignment(p))
                             .id(p.key)
                         }
@@ -630,7 +636,10 @@ struct ChannelView: View {
             posts[idx].commentCount = data["commentCount"] as? Int ?? 0
         case "channel_post_deleted", "msg_delete":
             guard let data, frameStr(data["conversationId"]) == conv, let id = frameStr(data["msgId"]) else { return }
-            posts.removeAll { $0.id == id }
+            removePosts([id])
+        case "channel_purged":
+            guard let data, frameStr(data["conversationId"]) == conv, let max = Int64(frameStr(data["maxId"]) ?? "") else { return }
+            removePosts(Set(posts.filter { $0.pending != true && (Int64($0.id) ?? Int64.max) <= max }.map(\.id)))
         case "msg_edit":
             guard let data, frameStr(data["conversationId"]) == conv, let id = frameStr(data["msgId"]),
                   let idx = posts.firstIndex(where: { $0.id == id }) else { return }
@@ -775,11 +784,27 @@ struct ChannelView: View {
         Task {
             do {
                 let _: ChannelOkResp = try await Api.request("/im/channel/posts/\(p.id)/delete", method: "POST")
-                posts.removeAll { $0.id == p.id }
+                removePosts([p.id])
             } catch {
                 toastMsg = error.localizedDescription
             }
         }
+    }
+
+    /// 播完灰飞烟灭再从列表移掉；不在屏幕上的（LazyVStack 没渲染）2 秒后兜底移除
+    private func removePosts(_ ids: Set<String>) {
+        let todo = ids.subtracting(dying)
+        guard !todo.isEmpty else { return }
+        dying.formUnion(todo)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            posts.removeAll { todo.contains($0.id) }
+            dying.subtract(todo)
+        }
+    }
+
+    private func postGone(_ id: String) {
+        posts.removeAll { $0.id == id }
+        dying.remove(id)
     }
 
     private func openMedia(_ p: ChannelPost) {
@@ -816,9 +841,11 @@ private struct ChannelInfoSheet: View {
     @State private var showShare = false
     @State private var confirmLeave = false
     @State private var showBots = false
+    @State private var confirmClear = false
     @State private var toastMsg: String?
 
     private var owner: Bool { ch.role == "owner" }
+    private var retentionTip: String { "消息保留 \(ch.retentionDays ?? 0) 天，超过自动删除" }
 
     var body: some View {
         ScrollView {
@@ -869,6 +896,9 @@ private struct ChannelInfoSheet: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.top, 12)
                     }
+                    if (ch.retentionDays ?? 0) > 0 {
+                        Text(retentionTip).font(.system(size: 12)).foregroundStyle(Theme.textSub).padding(.top, 10)
+                    }
                     Rectangle().fill(Theme.line).frame(height: 1).padding(.top, 16)
                     if ch.canPost == true {
                         menuRow("编辑频道资料") { name = ch.name ?? ""; desc = ch.description ?? ""; editing = true }
@@ -882,6 +912,9 @@ private struct ChannelInfoSheet: View {
                     }
                     if ch.isMember == true && !owner {
                         menuRow(ch.muted == true ? "取消静音" : "静音") { toggleMute() }
+                    }
+                    if owner {
+                        menuRow("清空所有消息", color: Theme.danger) { confirmClear = true }
                     }
                     if ch.isMember == true {
                         menuRow(owner ? "删除频道" : "退订", color: Theme.danger) { confirmLeave = true }
@@ -903,6 +936,23 @@ private struct ChannelInfoSheet: View {
             Button("取消", role: .cancel) {}
         } message: {
             Text(owner ? "删除后所有订阅者都看不到它" : "退订后不再收到这个频道的帖子")
+        }
+        .alert("清空所有消息？", isPresented: $confirmClear) {
+            Button("清空", role: .destructive) { clearAll() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("评论、表情回应和图片 / 视频 / 语音文件会一起永久删除，无法恢复")
+        }
+    }
+
+    private func clearAll() {
+        Task {
+            do {
+                let r: ClearResp = try await Api.request("/im/channel/\(ch.id)/clear", method: "POST")
+                toastMsg = (r.deleted ?? 0) > 0 ? "已清空 \(r.deleted ?? 0) 条消息" : "频道里没有消息"
+            } catch {
+                toastMsg = error.localizedDescription
+            }
         }
     }
 
@@ -1141,6 +1191,10 @@ struct ChannelCommentsView: View {
 }
 
 // MARK: - 创建
+
+private struct ClearResp: Decodable {
+    var deleted: Int?
+}
 
 private struct ChannelQuota: Decodable {
     var owned: Int

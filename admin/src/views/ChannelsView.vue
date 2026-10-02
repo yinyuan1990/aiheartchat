@@ -27,23 +27,43 @@ const comments = ref<Comment[]>([]);
 const defaultLimit = ref<number | null>(null);
 const limitInput = ref('');
 const limitSaved = ref(false);
+const retentionDays = ref<number | null>(null);
+const retentionInput = ref('');
+const retentionSaved = ref(false);
 
 async function load() {
   list.value = await api<Channel[]>(`/admin/channels${q.value.trim() ? `?q=${encodeURIComponent(q.value.trim())}` : ''}`);
 }
-async function loadConfig() {
-  const c = await api<{ defaultLimit: number }>('/admin/channels/config');
+interface Config { defaultLimit: number; retentionDays: number }
+function applyConfig(c: Config) {
   defaultLimit.value = c.defaultLimit;
   limitInput.value = String(c.defaultLimit);
+  retentionDays.value = c.retentionDays;
+  retentionInput.value = String(c.retentionDays);
+}
+async function loadConfig() {
+  applyConfig(await api<Config>('/admin/channels/config'));
 }
 async function saveLimit() {
   const n = Number(limitInput.value);
   if (!Number.isInteger(n) || n < 0 || n > 1000) return alert('请填写 0 ~ 1000 的整数');
   try {
-    const c = await api<{ defaultLimit: number }>('/admin/channels/config', { method: 'POST', body: { defaultLimit: n } });
-    defaultLimit.value = c.defaultLimit;
+    applyConfig(await api<Config>('/admin/channels/config', { method: 'POST', body: { defaultLimit: n } }));
     limitSaved.value = true;
     setTimeout(() => (limitSaved.value = false), 1500);
+  } catch (e: any) {
+    alert(e.message);
+  }
+}
+async function saveRetention() {
+  const n = Number(retentionInput.value);
+  if (!Number.isInteger(n) || n < 0 || n > 3650) return alert('请填写 0 ~ 3650 的整数');
+  if (n > 0 && (retentionDays.value === 0 || n < (retentionDays.value ?? 0))
+    && !confirm(`保存后会立即删除所有频道里超过 ${n} 天的消息，连同评论和图片 / 视频 / 语音文件，删除后无法恢复。确定？`)) return;
+  try {
+    applyConfig(await api<Config>('/admin/channels/config', { method: 'POST', body: { retentionDays: n } }));
+    retentionSaved.value = true;
+    setTimeout(() => (retentionSaved.value = false), 1500);
   } catch (e: any) {
     alert(e.message);
   }
@@ -107,6 +127,14 @@ onMounted(() => {
         <button class="small" :disabled="limitInput === String(defaultLimit)" @click="saveLimit">保存</button>
         <span v-if="limitSaved" style="color: #2e9e5b">已保存</span>
         <span class="muted">填 0 = 默认不能创建。个别用户可在「用户管理」里单独设置额度，单独设置的优先。已经建了的频道不受影响，只是超出后不能再建；被封禁的频道也占名额。</span>
+      </div>
+      <div class="row" style="margin-top: 12px">
+        <div style="font-weight: 600">频道消息保留</div>
+        <input v-model="retentionInput" type="number" min="0" max="3650" style="width: 90px" data-testid="channel-retention" @keydown.enter="saveRetention" />
+        <span>天</span>
+        <button class="small" :disabled="retentionInput === String(retentionDays)" @click="saveRetention">保存</button>
+        <span v-if="retentionSaved" style="color: #2e9e5b">已保存</span>
+        <span class="muted">超过的消息每半小时自动清理一次：消息、评论、表情回应连同图片 / 视频 / 语音文件一起物理删除，无法恢复。填 0 = 永久保留。转发到别处的消息有自己的文件副本，不受影响。频道主也可以在频道资料里一键清空。</span>
       </div>
     </div>
     <div class="card">

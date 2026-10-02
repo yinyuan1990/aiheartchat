@@ -536,6 +536,8 @@ struct ChatRoomView: View {
     @State private var pins: [PinItem] = []
     @State private var pinIdx = 0
     @State private var selecting: Set<String>?
+    /// 正在播删除动画（灰飞烟灭）的消息 id
+    @State private var dying: Set<String> = []
     @State private var deleteIds: [String]?
     @State private var forwardIds: IdList?
     @State private var reportId: String?
@@ -585,9 +587,11 @@ struct ChatRoomView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
                 }
-                messageRow(m)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(flashId == m.id ? Theme.accent.opacity(0.14) : Color.clear))
-                    .id(m.id)
+                DustOut(dying: dying.contains(m.id), onGone: { msgGone(m.id) }) {
+                    messageRow(m)
+                }
+                .background(RoundedRectangle(cornerRadius: 8).fill(flashId == m.id ? Theme.accent.opacity(0.14) : Color.clear))
+                .id(m.id)
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
@@ -840,7 +844,7 @@ struct ChatRoomView: View {
                   botFrameStr(data["conversationId"]) == convId,
                   let id = botFrameStr(data["msgId"]) else { return }
             if op == "msg_delete" {
-                messages.removeAll { $0.id == id }
+                removeMsgs([id])
                 if replyTo?.id == id { replyTo = nil }
                 if pins.contains(where: { $0.id == id }) { Task { await loadPins() } }
             } else if let idx = messages.firstIndex(where: { $0.id == id }) {
@@ -1277,6 +1281,22 @@ struct ChatRoomView: View {
         }
     }
 
+    /// 播完灰飞烟灭再从列表移掉；不在屏幕上的（LazyVStack 没渲染）2 秒后兜底移除
+    private func removeMsgs(_ ids: Set<String>) {
+        let todo = ids.subtracting(dying)
+        guard !todo.isEmpty else { return }
+        dying.formUnion(todo)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            messages.removeAll { todo.contains($0.id) }
+            dying.subtract(todo)
+        }
+    }
+
+    private func msgGone(_ id: String) {
+        messages.removeAll { $0.id == id }
+        dying.remove(id)
+    }
+
     private func doDelete(_ ids: [String], forAll: Bool) {
         deleteIds = nil
         Task { @MainActor in
@@ -1285,7 +1305,7 @@ struct ChatRoomView: View {
                 let _: DelResp = try await Api.request("/im/messages/delete", method: "POST", body: [
                     "conversationId": convId, "ids": ids, "forAll": forAll,
                 ])
-                messages.removeAll { ids.contains($0.id) }
+                removeMsgs(Set(ids))
                 if let r = replyTo, ids.contains(r.id) { replyTo = nil }
                 selecting = nil
                 if pins.contains(where: { ids.contains($0.id) }) { await loadPins() }

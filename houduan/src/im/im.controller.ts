@@ -278,6 +278,12 @@ export class ImController {
     return this.channels.setMuted(userId, BigInt(id), !!dto?.muted);
   }
 
+  /** 频道主一键清空所有消息（连同评论、回应和文件物理删除） */
+  @Post('channel/:id/clear')
+  clearChannel(@CurrentUser() userId: bigint, @Param('id') id: string) {
+    return this.channels.clearAll(userId, BigInt(id));
+  }
+
   @Post('channel/:id/delete')
   deleteChannel(@CurrentUser() userId: bigint, @Param('id') id: string) {
     return this.channels.remove(userId, BigInt(id));

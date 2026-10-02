@@ -483,6 +483,24 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
     val inputFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    /** 正在播删除动画（灰飞烟灭）的消息 id */
+    var dying by remember { mutableStateOf(setOf<String>()) }
+
+    /** 屏幕上看得见的播完动画再移除，看不见的直接移除；2 秒兜底防止滚走后卡住 */
+    fun removeMsgs(ids: Collection<String>) {
+        val todo = ids.toSet() - dying
+        if (todo.isEmpty()) return
+        val visible = listState.layoutInfo.visibleItemsInfo.map { it.key.toString() }.toSet()
+        val (show, hide) = todo.partition { it in visible }
+        if (hide.isNotEmpty()) messages = messages.filterNot { it.id in hide }
+        if (show.isEmpty()) return
+        dying = dying + show
+        scope.launch {
+            kotlinx.coroutines.delay(2000)
+            messages = messages.filterNot { it.id in show }
+            dying = dying - show.toSet()
+        }
+    }
     val ctx = LocalContext.current
     var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
     var recFile by remember { mutableStateOf<File?>(null) }
@@ -571,8 +589,8 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
                 "msg_delete" -> {
                     val d = frame["data"]?.jsonObject ?: return@addListener
                     if (d["conversationId"]?.jsonPrimitive?.content != convId) return@addListener
-                    val id = d["msgId"]?.jsonPrimitive?.content
-                    messages = messages.filterNot { it.id == id }
+                    val id = d["msgId"]?.jsonPrimitive?.content ?: return@addListener
+                    removeMsgs(listOf(id))
                     pins = pins.filterNot { it.id == id }
                 }
                 "ack" -> {
@@ -680,7 +698,7 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
             Api.request("/im/messages/delete", "POST", buildJsonObject {
                 put("conversationId", JsonPrimitive(convId)); put("ids", jsonIds(ids)); put("forAll", JsonPrimitive(forAll))
             })
-        }.onSuccess { messages = messages.filterNot { it.id in ids }; selecting = null }
+        }.onSuccess { selecting = null; removeMsgs(ids) }
             .onFailure { toast(it.message ?: "删除失败") }
     }
 
@@ -847,7 +865,11 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
                     androidx.compose.animation.core.tween(if (flashId == m.id) 150 else 900), label = "flash",
                 )
                 val sel = selecting
-                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(flashBg)) {
+                Box(
+                    Modifier.fillMaxWidth()
+                        .dustOut(m.id in dying) { messages = messages.filterNot { it.id == m.id }; dying = dying - m.id }
+                        .clip(RoundedCornerShape(8.dp)).background(flashBg),
+                ) {
                     if (sel != null) {
                         Row(
                             Modifier.fillMaxWidth().noRippleClick { if (!m.pending) selecting = if (m.id in sel) sel - m.id else sel + m.id },

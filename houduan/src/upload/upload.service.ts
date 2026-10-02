@@ -87,11 +87,32 @@ export class UploadService implements OnModuleInit {
     return { url: `/res/${this.bucket}/${object}` };
   }
 
+  /**
+   * 服务端复制一份用户上传的媒体（image/ video/ audio/ 目录），返回新地址；其它地址原样返回。
+   * 转发消息时用：频道消息会被定时物理删除，转发出去 / 转发进来的那份不能跟着失效。
+   */
+  async copy(url: string) {
+    const prefix = `/res/${this.bucket}/`;
+    const i = url.indexOf(prefix);
+    if (i < 0) return url;
+    const src = url.slice(i + prefix.length).split(/[?#]/)[0];
+    const m = /^(image|video|audio)\/[\w./-]+?\.(\w{1,8})$/.exec(src);
+    if (!m) return url;
+    const object = `${m[1]}/${new Date().toISOString().slice(0, 10)}/${randomUUID()}.${m[2]}`;
+    try {
+      await this.client.copyObject(this.bucket, object, `/${this.bucket}/${src}`);
+    } catch (e: any) {
+      this.logger.warn(`copy ${src}: ${e?.message ?? e}`);
+      return url;
+    }
+    return `${url.slice(0, i)}${prefix}${object}`;
+  }
+
   /** 删除站内资源（只认本 bucket 的 /res/<bucket>/ 路径，其它忽略） */
   async remove(url: string) {
     const prefix = `/res/${this.bucket}/`;
     if (!url?.startsWith(prefix)) return;
-    await this.client.removeObject(this.bucket, url.slice(prefix.length)).catch((e) => this.logger.warn(`remove ${url}: ${e?.message}`));
+    await this.client.removeObject(this.bucket, url.slice(prefix.length).split(/[?#]/)[0]).catch((e) => this.logger.warn(`remove ${url}: ${e?.message}`));
   }
 
   /**

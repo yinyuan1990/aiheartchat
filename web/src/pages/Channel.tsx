@@ -10,6 +10,7 @@ import { EmojiPanel } from '../components/EmojiPanel';
 import { StickerView } from '../components/StickerView';
 import { AttachSheet, AttachAction } from '../components/AttachSheet';
 import { LinkText } from '../components/LinkText';
+import { dust, dustThen, undust } from '../dust';
 import { AudioBubble, GroupShareView } from './ChatRoom';
 import { AddBotSheet, InlineKeyboard, InlineMarkup } from './Bots';
 
@@ -35,6 +36,8 @@ export interface ChannelInfo {
   /** 我能不能发帖（管理员，或开了 memberPost 的订阅者） */
   canSend?: boolean;
   muted: boolean;
+  /** 消息保留天数，0 = 永久 */
+  retentionDays?: number;
 }
 
 interface Post {
@@ -55,6 +58,8 @@ interface Post {
   markup?: InlineMarkup | null;
   memberMsg?: boolean;
 }
+
+const postEl = (id: string) => document.querySelector(`[data-mid="${CSS.escape(id)}"]`);
 
 const fmtCount = (n: number) => (n >= 10000 ? `${(n / 10000).toFixed(1)}万` : String(n));
 
@@ -108,7 +113,7 @@ function PostCard({ ch, p, onReact, onComments, onImage, onDelete }: {
   const byAuthor = p.senderId !== ch.ownerId && !p.senderIsBot && !!p.senderNickname;
   const headAvatar = byAuthor ? p.senderAvatar : ch.avatar;
   return (
-    <div className={`ch-post${p.type === 'image' || p.type === 'video' || p.markup ? ' media' : ''}`} style={{ opacity: p.pending ? 0.6 : 1 }}>
+    <div className={`ch-post${p.type === 'image' || p.type === 'video' || p.markup ? ' media' : ''}`} style={{ opacity: p.pending ? 0.6 : 1 }} data-mid={p.id}>
       <div className="ch-post-head">
         <div className="avatar" style={{ width: 28, height: 28 }}>{headAvatar && <img src={headAvatar} alt="" />}</div>
         <span className="ellipsis" style={{ fontWeight: 600, fontSize: 14 }}>{byAuthor ? p.senderNickname : ch.name}</span>
@@ -155,7 +160,7 @@ function MemberBubble({ p, mine, onImage, onDelete }: { p: Post; mine: boolean; 
     if (onDelete && !p.pending && confirm('删除这条消息？')) onDelete();
   };
   return (
-    <div className={`ch-msg${mine ? ' mine' : ''}`} style={{ opacity: p.pending ? 0.6 : 1 }} data-testid="member-msg">
+    <div className={`ch-msg${mine ? ' mine' : ''}`} style={{ opacity: p.pending ? 0.6 : 1 }} data-testid="member-msg" data-mid={p.id}>
       {!mine && <div className="avatar" style={{ width: 32, height: 32, flexShrink: 0 }}>{p.senderAvatar && <img src={p.senderAvatar} alt="" />}</div>}
       <div
         className={`ch-msg-bubble${media ? ' media' : ''}`}
@@ -205,6 +210,16 @@ function ChannelInfoSheet({ ch, onClose, onChanged, onExit }: { ch: ChannelInfo;
       alert(e.message);
     }
   };
+  const clearAll = async () => {
+    if (!confirm('清空频道里的所有消息？评论、表情回应和图片 / 视频 / 语音文件会一起永久删除，无法恢复。')) return;
+    try {
+      const r = await api<{ deleted: number }>(`/im/channel/${ch.id}/clear`, { method: 'POST' });
+      alert(r.deleted ? `已清空 ${r.deleted} 条消息` : '频道里没有消息');
+      onClose();
+    } catch (e: any) {
+      alert(e.message);
+    }
+  };
   const leave = async () => {
     const owner = ch.role === 'owner';
     if (!confirm(owner ? '删除频道后所有订阅者都看不到它，确定删除？' : '确定退订这个频道？')) return;
@@ -243,6 +258,7 @@ function ChannelInfoSheet({ ch, onClose, onChanged, onExit }: { ch: ChannelInfo;
                   <div style={{ fontSize: 18, fontWeight: 700, marginTop: 10 }}>{ch.name}</div>
                   <div className="small" style={{ marginTop: 4 }}>{fmtCount(ch.subscribers)} 位订阅者 · 频道主 {ch.owner?.nickname}</div>
                   {ch.description && <div style={{ fontSize: 14, marginTop: 12, whiteSpace: 'pre-wrap', textAlign: 'left', lineHeight: 1.6 }}>{ch.description}</div>}
+                  {!!ch.retentionDays && <div className="small" style={{ marginTop: 10 }} data-testid="retention-tip">消息保留 {ch.retentionDays} 天，超过自动删除</div>}
                 </>
               )}
             </div>
@@ -258,6 +274,7 @@ function ChannelInfoSheet({ ch, onClose, onChanged, onExit }: { ch: ChannelInfo;
                 {ch.isMember && <div className="ch-menu" onClick={() => setShare(true)}>分享频道（二维码 / 邀请码）</div>}
                 {ch.role === 'owner' && <div className="ch-menu" onClick={() => setBots(true)}>机器人（自动发帖）</div>}
                 {ch.isMember && ch.role !== 'owner' && <div className="ch-menu" onClick={toggleMute}>{ch.muted ? '取消静音' : '静音'}</div>}
+                {ch.role === 'owner' && <div className="ch-menu" style={{ color: 'var(--danger)' }} onClick={clearAll} data-testid="clear-all">清空所有消息</div>}
                 {ch.isMember && <div className="ch-menu" style={{ color: 'var(--danger)' }} onClick={leave}>{ch.role === 'owner' ? '删除频道' : '退订'}</div>}
               </div>
             )}
@@ -324,7 +341,13 @@ export function ChannelPage() {
         const d = frame.data;
         setPosts((prev) => prev.map((p) => (p.id === d.msgId ? { ...p, reactions: d.reactions, commentCount: d.commentCount } : p)));
       } else if ((frame.op === 'channel_post_deleted' || frame.op === 'msg_delete') && frame.data?.conversationId === conv) {
-        setPosts((prev) => prev.filter((p) => p.id !== frame.data.msgId));
+        const mid = String(frame.data.msgId);
+        dustThen([postEl(mid)], () => setPosts((prev) => prev.filter((p) => p.id !== mid)));
+      } else if (frame.op === 'channel_purged' && frame.data?.conversationId === conv) {
+        const max = BigInt(frame.data.maxId);
+        const gone = (id: string) => /^\d+$/.test(id) && BigInt(id) <= max;
+        const els = Array.from(document.querySelectorAll<HTMLElement>('[data-mid]')).filter((e) => gone(e.dataset.mid ?? ''));
+        dustThen(els, () => setPosts((prev) => prev.filter((p) => p.pending || !gone(p.id))));
       } else if (frame.op === 'channel_info' && frame.data?.groupId === id) {
         api<ChannelInfo>(`/im/channel/${id}`).then((c) => alive && setCh(c)).catch(() => {});
       } else if (frame.op === 'msg_edit' && frame.data?.conversationId === conv) {
@@ -380,10 +403,15 @@ export function ChannelPage() {
 
   const deletePost = async (p: Post) => {
     if (!confirm('删除这条帖子？评论和表情回应会一起删除')) return;
+    // 确认后立刻开始化成灰（和接口并行），失败再放回来
+    const el = postEl(p.id);
+    const anim = dust(el);
     try {
       await api(`/im/channel/posts/${p.id}/delete`, { method: 'POST' });
+      await anim;
       setPosts((prev) => prev.filter((x) => x.id !== p.id));
     } catch (e: any) {
+      undust([el]);
       alert(e.message);
     }
   };

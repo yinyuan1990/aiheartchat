@@ -15,6 +15,10 @@ import {
   ReactionChips, ReplyBar, ReplyQuote, ReportSheet, saveMedia,
 } from '../components/MsgActions';
 import { AddBotSheet, BotPublic, botInfo, InlineKeyboard, InlineMarkup } from './Bots';
+import { dustThen, undust } from '../dust';
+
+/** 消息气泡那一行（不含上面的时间分隔），删除时化成灰 */
+const msgEl = (id: string) => document.getElementById(`msg-${id}`)?.querySelector('.bubble-row');
 
 interface MsgItem {
   id: string;
@@ -632,8 +636,9 @@ export function ChatRoomPage() {
         const d = frame.data;
         setMessages((prev) => prev.map((m) => (m.id === d.msgId ? { ...m, content: d.content ?? m.content, markup: d.markup } : m)));
       } else if (frame.op === 'msg_delete' && frame.data?.conversationId === conversationId) {
-        setMessages((prev) => prev.filter((m) => m.id !== frame.data.msgId));
-        setPins((prev) => prev.filter((p) => p.id !== frame.data.msgId));
+        const mid = String(frame.data.msgId);
+        setPins((prev) => prev.filter((p) => p.id !== mid));
+        dustThen([msgEl(mid)], () => setMessages((prev) => prev.filter((m) => m.id !== mid)));
       } else if (frame.op === 'msg_reactions' && frame.data?.conversationId === conversationId) {
         const d = frame.data;
         setMessages((prev) => prev.map((m) => (m.id === d.msgId ? { ...m, reactions: d.reactions } : m)));
@@ -740,11 +745,16 @@ export function ChatRoomPage() {
   const doDelete = async (forAll: boolean) => {
     const ids = deleteIds ?? [];
     setDeleteIds(null);
+    // 确认后立刻开始化成灰（和接口并行），失败再放回来
+    const els = ids.map(msgEl);
+    const anim = new Promise<void>((resolve) => dustThen(els, resolve));
     try {
       await api('/im/messages/delete', { method: 'POST', body: { conversationId, ids, forAll } });
-      setMessages((prev) => prev.filter((m) => !ids.includes(m.id)));
       setSelecting(null);
+      await anim;
+      setMessages((prev) => prev.filter((m) => !ids.includes(m.id)));
     } catch (e: any) {
+      undust(els);
       showToast(e.message || '删除失败');
     }
   };

@@ -90,8 +90,8 @@ export class AdminController {
 
   @Post('channels/config')
   @UseGuards(AdminGuard)
-  setChannelConfig(@Body() body: { defaultLimit?: number }) {
-    return this.channels.adminSetDefaultLimit(Number(body?.defaultLimit));
+  setChannelConfig(@Body() body: { defaultLimit?: number; retentionDays?: number }) {
+    return this.channels.adminSetConfig(body ?? {});
   }
 
   @Get('channels')

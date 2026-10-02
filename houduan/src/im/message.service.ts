@@ -3,7 +3,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto.service';
 import { ConnectionRegistry } from './connection.registry';
 import { ImService } from './im.service';
-import { CHANNEL_KIND, ChannelService } from './channel.service';
+import { CHANNEL_KIND, ChannelService, MEDIA_RE } from './channel.service';
+import { UploadService } from '../upload/upload.service';
 
 /** 聊天里长按消息可选的表情；前 7 个是菜单顶上那一排 */
 export const MSG_REACTIONS = ['❤️', '👍', '👎', '🔥', '🥰', '👏', '😁', '😂', '😮', '😢', '🎉', '🙏'];
@@ -24,7 +25,16 @@ export class MessageService {
     private readonly registry: ConnectionRegistry,
     private readonly im: ImService,
     private readonly channels: ChannelService,
+    private readonly uploads: UploadService,
   ) {}
+
+  /** 转发的图片 / 视频 / 语音复制一份新文件：频道消息会被物理删除，两边不能共用同一个文件 */
+  private async copyMedia(type: string, content: string) {
+    if (type !== 'image' && type !== 'video' && type !== 'audio') return content;
+    let out = content;
+    for (const u of new Set(content.match(MEDIA_RE) ?? [])) out = out.split(u).join(await this.uploads.copy(u));
+    return out;
+  }
 
   // ---------- 删除 ----------
 
@@ -102,7 +112,8 @@ export class MessageService {
       }
       try {
         for (const it of items) {
-          await this.im.sendMessage(userId, { op: 'send', convType, targetId, msgType: it.type, content: it.content, fwdFrom: it.fwdFrom });
+          const content = await this.copyMedia(it.type, it.content);
+          await this.im.sendMessage(userId, { op: 'send', convType, targetId, msgType: it.type, content, fwdFrom: it.fwdFrom });
         }
         results.push({ convType, targetId, ok: true });
       } catch (e: any) {

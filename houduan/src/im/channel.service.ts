@@ -1,7 +1,8 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto.service';
 import { StickerService, parseStickerJson } from '../sticker/sticker.service';
+import { UploadService } from '../upload/upload.service';
 import { ConnectionRegistry } from './connection.registry';
 
 /** 频道 = chat_group.kind=2：群主 / 管理员发帖（开了 memberPost 订阅者也能发），订阅者（group_member.role=member）看、表情回应、评论 */
@@ -11,19 +12,35 @@ const CHANNEL_LIMIT = 1_000_000;
 /** 每人能创建的频道数：后台可改全局默认，也可在用户管理里单独设（user.channel_limit） */
 const DEFAULT_CHANNEL_LIMIT = 5;
 const KEY_DEFAULT_LIMIT = 'channel_limit_default';
+/** 频道消息保留天数：超过的连同评论、回应和图片 / 视频 / 语音文件物理删除；0 = 不自动清 */
+const DEFAULT_RETENTION_DAYS = 3;
+const KEY_RETENTION = 'channel_retention_days';
+const PURGE_BATCH = 500;
+/** 只删用户上传目录里的文件；贴纸、音乐库、GIF 等共享资源在别的目录，不会被误删 */
+const MEDIA_TYPES = new Set(['image', 'video', 'audio']);
+export const MEDIA_RE = /\/res\/[\w.-]+\/(?:image|video|audio)\/[\w./-]+/g;
 /** 可用的表情回应 */
 export const REACTIONS = ['❤️', '👍', '🔥', '😂', '😮', '😢', '🎉', '👎'];
 
 type Reactions = { emoji: string; count: number }[];
 
 @Injectable()
-export class ChannelService {
+export class ChannelService implements OnModuleInit {
+  private readonly log = new Logger('Channel');
+  private purging = false;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
     private readonly registry: ConnectionRegistry,
     private readonly stickers: StickerService,
+    private readonly uploads: UploadService,
   ) {}
+
+  onModuleInit() {
+    setTimeout(() => void this.autoPurge(), 60_000);
+    setInterval(() => void this.autoPurge(), 30 * 60_000);
+  }
 
   // ---------- 频道本身 ----------
 
@@ -78,6 +95,8 @@ export class ChannelService {
       /** 能不能在频道里发帖：管理员，或开了「订阅者可发帖」的订阅者 */
       canSend: me?.role === 'owner' || me?.role === 'admin' || (!!me && g.memberPost),
       muted: me?.muted ?? false,
+      /** 消息保留天数（0 = 永久）：频道资料里提示 */
+      retentionDays: await this.retentionDays(),
       createdAt: g.createdAt,
     };
   }
@@ -348,20 +367,126 @@ export class ChannelService {
     return this.purgePost(groupId, messageId);
   }
 
-  /** 物理删除帖子 + 回应 + 评论，通知订阅者刷新（后台也用） */
+  /** 物理删除帖子 + 回应 + 评论 + 图片 / 视频 / 语音文件，通知订阅者刷新（后台也用） */
   async purgePost(groupId: bigint, messageId: bigint) {
-    await this.prisma.$transaction([
-      this.prisma.message.delete({ where: { id: messageId } }),
-      this.prisma.channelReaction.deleteMany({ where: { messageId } }),
-      this.prisma.channelComment.deleteMany({ where: { messageId } }),
-      this.prisma.botMessageMarkup.deleteMany({ where: { messageId } }),
-    ]);
-    const conv = await this.prisma.conversation.findUnique({ where: { groupId }, select: { id: true } });
+    const conv = await this.prisma.conversation.findUnique({ where: { groupId } });
+    const m = await this.prisma.message.findUnique({ where: { id: messageId }, select: { id: true, type: true, cipherContent: true } });
+    if (!m) return { ok: true };
+    const files = conv ? this.mediaFiles(this.crypto.unwrapKey(conv.wrappedKey), [m]) : [];
+    await this.deleteRows([messageId]);
+    await this.removeFiles(files);
     const members = await this.prisma.groupMember.findMany({ where: { groupId }, select: { userId: true } });
     void this.registry
       .deliver(members.map((m) => m.userId), { op: 'channel_post_deleted', data: { conversationId: conv?.id.toString(), msgId: messageId.toString() } })
       .catch(() => {});
     return { ok: true };
+  }
+
+  // ---------- 清空 / 定时清理 ----------
+
+  async retentionDays() {
+    const row = await this.prisma.sysSetting.findUnique({ where: { key: KEY_RETENTION } });
+    const n = row ? parseInt(row.value, 10) : NaN;
+    return Number.isFinite(n) && n >= 0 ? n : DEFAULT_RETENTION_DAYS;
+  }
+
+  /** 频道主一键清空：现有全部消息连同评论、回应、置顶和文件物理删除（清空过程中新发的不动） */
+  async clearAll(userId: bigint, groupId: bigint) {
+    const g = await this.mustChannel(groupId);
+    if (g.ownerId !== userId) throw new ForbiddenException('只有频道主能清空消息');
+    const conv = await this.prisma.conversation.findUnique({ where: { groupId } });
+    if (!conv) throw new NotFoundException('频道不存在');
+    const last = await this.prisma.message.findFirst({ where: { conversationId: conv.id }, orderBy: { id: 'desc' }, select: { id: true } });
+    if (!last) return { deleted: 0 };
+    return this.purgeConversation(groupId, conv, { id: { lte: last.id } });
+  }
+
+  /** 定时：所有频道里超过保留天数的消息物理删除 */
+  async autoPurge() {
+    if (this.purging) return;
+    this.purging = true;
+    try {
+      const days = await this.retentionDays();
+      if (days <= 0) return;
+      const cutoff = new Date(Date.now() - days * 86_400_000);
+      const groups = await this.prisma.chatGroup.findMany({ where: { kind: CHANNEL_KIND }, select: { id: true } });
+      if (!groups.length) return;
+      const convs = await this.prisma.conversation.findMany({ where: { groupId: { in: groups.map((g) => g.id) } } });
+      let total = 0;
+      for (const c of convs) {
+        if (!c.groupId) continue;
+        total += (await this.purgeConversation(c.groupId, c, { createdAt: { lt: cutoff } })).deleted;
+      }
+      if (total) this.log.log(`自动清理频道消息 ${total} 条（保留 ${days} 天）`);
+    } catch (e: any) {
+      this.log.warn(`autoPurge: ${e?.message ?? e}`);
+    } finally {
+      this.purging = false;
+    }
+  }
+
+  /** 分批删除一个频道会话里符合条件的消息；删完推 channel_purged，客户端把 id ≤ maxId 的帖子移掉 */
+  private async purgeConversation(groupId: bigint, conv: { id: bigint; wrappedKey: string }, where: Record<string, unknown>) {
+    const key = this.crypto.unwrapKey(conv.wrappedKey);
+    let deleted = 0;
+    let maxId = 0n;
+    for (;;) {
+      const rows = await this.prisma.message.findMany({
+        where: { conversationId: conv.id, ...where },
+        orderBy: { id: 'asc' },
+        take: PURGE_BATCH,
+        select: { id: true, type: true, cipherContent: true },
+      });
+      if (!rows.length) break;
+      const ids = rows.map((r) => r.id);
+      const files = this.mediaFiles(key, rows);
+      await this.deleteRows(ids);
+      await this.removeFiles(files);
+      deleted += rows.length;
+      maxId = ids[ids.length - 1];
+      if (rows.length < PURGE_BATCH) break;
+    }
+    if (deleted) {
+      const members = (await this.prisma.groupMember.findMany({ where: { groupId }, select: { userId: true } })).map((m) => m.userId);
+      void this.registry
+        .deliver(members, { op: 'channel_purged', data: { conversationId: conv.id.toString(), groupId: groupId.toString(), maxId: maxId.toString() } })
+        .then(() => this.registry.deliver(members, { op: 'conv_refresh' }))
+        .catch(() => {});
+    }
+    return { deleted };
+  }
+
+  private async deleteRows(ids: bigint[]) {
+    const w = { messageId: { in: ids } };
+    await this.prisma.$transaction([
+      this.prisma.channelComment.deleteMany({ where: w }),
+      this.prisma.channelReaction.deleteMany({ where: w }),
+      this.prisma.botMessageMarkup.deleteMany({ where: w }),
+      this.prisma.messagePin.deleteMany({ where: w }),
+      this.prisma.messageHide.deleteMany({ where: w }),
+      this.prisma.message.deleteMany({ where: { id: { in: ids } } }),
+    ]);
+  }
+
+  private mediaFiles(key: Buffer, rows: { type: string; cipherContent: string }[]) {
+    const files = new Set<string>();
+    for (const r of rows) {
+      if (!MEDIA_TYPES.has(r.type)) continue;
+      let content = '';
+      try {
+        content = this.crypto.decrypt(key, r.cipherContent);
+      } catch {
+        continue;
+      }
+      for (const u of content.match(MEDIA_RE) ?? []) files.add(u);
+    }
+    return [...files];
+  }
+
+  private async removeFiles(urls: string[]) {
+    for (let i = 0; i < urls.length; i += 10) {
+      await Promise.all(urls.slice(i, i + 10).map((u) => this.uploads.remove(u)));
+    }
   }
 
   // ---------- 后台 ----------
@@ -439,17 +564,21 @@ export class ChannelService {
   }
 
   async adminGetConfig() {
-    return { defaultLimit: await this.defaultLimit() };
+    return { defaultLimit: await this.defaultLimit(), retentionDays: await this.retentionDays() };
   }
 
-  async adminSetDefaultLimit(n: number) {
-    if (!Number.isInteger(n) || n < 0 || n > 1000) throw new BadRequestException('请填写 0 ~ 1000 的整数');
-    await this.prisma.sysSetting.upsert({
-      where: { key: KEY_DEFAULT_LIMIT },
-      update: { value: String(n) },
-      create: { key: KEY_DEFAULT_LIMIT, value: String(n) },
-    });
-    return { defaultLimit: n };
+  async adminSetConfig(body: { defaultLimit?: unknown; retentionDays?: unknown }) {
+    const put = async (key: string, raw: unknown, max: number, label: string) => {
+      const n = Number(raw);
+      if (!Number.isInteger(n) || n < 0 || n > max) throw new BadRequestException(`${label}请填写 0 ~ ${max} 的整数`);
+      await this.prisma.sysSetting.upsert({ where: { key }, update: { value: String(n) }, create: { key, value: String(n) } });
+    };
+    if (body?.defaultLimit !== undefined) await put(KEY_DEFAULT_LIMIT, body.defaultLimit, 1000, '创建数量');
+    if (body?.retentionDays !== undefined) {
+      await put(KEY_RETENTION, body.retentionDays, 3650, '保留天数');
+      void this.autoPurge();
+    }
+    return this.adminGetConfig();
   }
 
   /** 单独给某个用户设额度；null = 恢复跟随全局默认 */

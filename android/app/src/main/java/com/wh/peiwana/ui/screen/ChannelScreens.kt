@@ -91,6 +91,8 @@ data class ChannelInfo(
     /** 我能不能发帖（老后端没有这个字段时按 canPost） */
     val canSend: Boolean? = null,
     val muted: Boolean = false,
+    /** 消息保留天数，0 = 永久 */
+    val retentionDays: Int = 0,
 )
 
 @Serializable
@@ -353,6 +355,24 @@ fun ChannelScreen(groupId: String, myUserId: String, onBack: () -> Unit, onExit:
     var confirmDelete by remember { mutableStateOf<ChannelPost?>(null) }
     var viewer by remember { mutableStateOf<Pair<List<List<MediaItem>>, Int>?>(null) }
     val listState = rememberLazyListState()
+    /** 正在播删除动画（灰飞烟灭）的帖子 id */
+    var dying by remember { mutableStateOf(setOf<String>()) }
+
+    /** 屏幕上看得见的播完动画再移除，看不见的直接移除；2 秒兜底防止滚走后卡住 */
+    fun removePosts(ids: Set<String>) {
+        if (ids.isEmpty()) return
+        val visible = listState.layoutInfo.visibleItemsInfo.map { it.key.toString() }.toSet()
+        val keyOf = posts.associate { it.id to (it.tempId ?: it.id) }
+        val (show, hide) = ids.partition { keyOf[it] in visible }
+        if (hide.isNotEmpty()) posts = posts.filterNot { it.id in hide }
+        if (show.isEmpty()) return
+        dying = dying + show
+        scope.launch {
+            kotlinx.coroutines.delay(2000)
+            posts = posts.filterNot { it.id in show }
+            dying = dying - show.toSet()
+        }
+    }
     val inputFocus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = LocalFocusManager.current
@@ -417,8 +437,14 @@ fun ChannelScreen(groupId: String, myUserId: String, onBack: () -> Unit, onExit:
                 "channel_post_deleted", "msg_delete" -> {
                     val d = frame["data"]?.jsonObject ?: return@addListener
                     if (d["conversationId"]?.jsonPrimitive?.content != conv) return@addListener
-                    val id = d["msgId"]?.jsonPrimitive?.content
-                    posts = posts.filterNot { it.id == id }
+                    val id = d["msgId"]?.jsonPrimitive?.content ?: return@addListener
+                    if (id !in dying) removePosts(setOf(id))
+                }
+                "channel_purged" -> {
+                    val d = frame["data"]?.jsonObject ?: return@addListener
+                    if (d["conversationId"]?.jsonPrimitive?.content != conv) return@addListener
+                    val max = d["maxId"]?.jsonPrimitive?.content?.toBigIntegerOrNull() ?: return@addListener
+                    removePosts(posts.filter { !it.pending && (it.id.toBigIntegerOrNull()?.let { n -> n <= max } ?: false) }.map { it.id }.toSet() - dying)
                 }
                 "msg_edit" -> {
                     val d = frame["data"]?.jsonObject ?: return@addListener
@@ -544,17 +570,19 @@ fun ChannelScreen(groupId: String, myUserId: String, onBack: () -> Unit, onExit:
                 )
             }
             items(posts, key = { it.tempId ?: it.id }) { p ->
-                if (p.memberMsg) MemberBubble(
-                    p, mine = p.senderId == myUserId,
-                    onMedia = { openMedia(p) },
-                    onDelete = if (c.canPost || p.senderId == myUserId) ({ confirmDelete = p }) else null,
-                ) else PostCard(
-                    ch = c, p = p,
-                    onReact = { react(p, it) },
-                    onComments = { onOpenComments(p.id, c.canPost) },
-                    onMedia = { openMedia(p) },
-                    onDelete = if (c.canPost || p.senderId == myUserId) ({ confirmDelete = p }) else null,
-                )
+                Box(Modifier.dustOut(p.id in dying) { posts = posts.filterNot { it.id == p.id }; dying = dying - p.id }) {
+                    if (p.memberMsg) MemberBubble(
+                        p, mine = p.senderId == myUserId,
+                        onMedia = { openMedia(p) },
+                        onDelete = if (c.canPost || p.senderId == myUserId) ({ confirmDelete = p }) else null,
+                    ) else PostCard(
+                        ch = c, p = p,
+                        onReact = { react(p, it) },
+                        onComments = { onOpenComments(p.id, c.canPost) },
+                        onMedia = { openMedia(p) },
+                        onDelete = if (c.canPost || p.senderId == myUserId) ({ confirmDelete = p }) else null,
+                    )
+                }
             }
         }
 
@@ -644,7 +672,7 @@ fun ChannelScreen(groupId: String, myUserId: String, onBack: () -> Unit, onExit:
         ConfirmDialog("删除这条帖子？评论和表情回应会一起删除", "删除", onDismiss = { confirmDelete = null }, onConfirm = {
             scope.launch {
                 runCatching { Api.request("/im/channel/posts/${p.id}/delete", "POST") }
-                    .onSuccess { posts = posts.filterNot { it.id == p.id } }
+                    .onSuccess { if (p.id !in dying) removePosts(setOf(p.id)) }
                     .onFailure { toast(ctx, it.message ?: "删除失败") }
             }
         })
@@ -671,6 +699,7 @@ private fun ChannelInfoSheet(ch: ChannelInfo, onClose: () -> Unit, onChanged: (C
     var showShare by remember { mutableStateOf(false) }
     var confirmLeave by remember { mutableStateOf(false) }
     var showBots by remember { mutableStateOf(false) }
+    var confirmClear by remember { mutableStateOf(false) }
     val owner = ch.role == "owner"
 
     fun save(body: kotlinx.serialization.json.JsonObject) {
@@ -708,6 +737,9 @@ private fun ChannelInfoSheet(ch: ChannelInfo, onClose: () -> Unit, onChanged: (C
                 if (ch.description.isNotEmpty()) {
                     Text(ch.description, color = TextMain, fontSize = 14.sp, lineHeight = 22.sp, modifier = Modifier.fillMaxWidth().padding(top = 12.dp))
                 }
+                if (ch.retentionDays > 0) {
+                    Text("消息保留 ${ch.retentionDays} 天，超过自动删除", color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp))
+                }
                 Box(Modifier.padding(top = 16.dp).fillMaxWidth().height(1.dp).background(Line))
                 val menu: @Composable (String, Color, () -> Unit) -> Unit = { label, color, onClick ->
                     Text(label, color = color, fontSize = 15.sp, modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 14.dp))
@@ -722,6 +754,7 @@ private fun ChannelInfoSheet(ch: ChannelInfo, onClose: () -> Unit, onChanged: (C
                             .onSuccess { onChanged(ch.copy(muted = !ch.muted)) }
                     }
                 }
+                if (owner) menu("清空所有消息", Danger) { confirmClear = true }
                 if (ch.isMember) menu(if (owner) "删除频道" else "退订", Danger) { confirmLeave = true }
             }
         }
@@ -738,6 +771,25 @@ private fun ChannelInfoSheet(ch: ChannelInfo, onClose: () -> Unit, onChanged: (C
                     runCatching { Api.request("/im/channel/${ch.id}/${if (owner) "delete" else "unsubscribe"}", "POST") }
                         .onSuccess { onExit() }
                         .onFailure { toast(ctx, it.message ?: "操作失败") }
+                }
+            },
+        )
+    }
+    if (confirmClear) {
+        ConfirmDialog(
+            "清空频道里的所有消息？评论、表情回应和图片 / 视频 / 语音文件会一起永久删除，无法恢复。",
+            "清空",
+            onDismiss = { confirmClear = false },
+            onConfirm = {
+                confirmClear = false
+                scope.launch {
+                    runCatching { Api.request("/im/channel/${ch.id}/clear", "POST") }
+                        .onSuccess { r ->
+                            val n = r?.jsonObject?.get("deleted")?.jsonPrimitive?.intOrNull ?: 0
+                            toast(ctx, if (n > 0) "已清空 $n 条消息" else "频道里没有消息")
+                            onClose()
+                        }
+                        .onFailure { toast(ctx, it.message ?: "清空失败") }
                 }
             },
         )
