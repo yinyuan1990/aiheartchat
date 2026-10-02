@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -859,6 +860,57 @@ fun ChannelCommentsScreen(msgId: String, canAdmin: Boolean, myUserId: String, on
     }
 }
 
+private val GroupBg = Color(0xFFF2F2F7)
+
+/** 白色分组卡片里的无边框输入框，右上角字数 */
+@Composable
+private fun GroupField(value: String, hint: String, max: Int, singleLine: Boolean, onChange: (String) -> Unit) {
+    Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
+        BasicTextField(
+            value, { if (it.length <= max) onChange(it) },
+            singleLine = singleLine, minLines = if (singleLine) 1 else 3, maxLines = if (singleLine) 1 else 6,
+            textStyle = TextStyle(color = TextMain, fontSize = 16.sp, lineHeight = 24.sp),
+            cursorBrush = SolidColor(Accent),
+            modifier = Modifier.fillMaxWidth().padding(end = 48.dp),
+            decorationBox = { inner ->
+                Box {
+                    if (value.isEmpty()) Text(hint, color = TextDim, fontSize = 16.sp, lineHeight = 24.sp)
+                    inner()
+                }
+            },
+        )
+        if (value.isNotEmpty()) Text("${value.length}/$max", color = TextDim, fontSize = 12.sp, modifier = Modifier.align(Alignment.TopEnd).padding(top = 3.dp))
+    }
+}
+
+@Composable
+private fun GroupCaption(text: String) {
+    Text(text, color = TextSub, fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 18.dp))
+}
+
+@Composable
+private fun CameraGlyph(size: androidx.compose.ui.unit.Dp, color: Color) {
+    androidx.compose.foundation.Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        val st = androidx.compose.ui.graphics.drawscope.Stroke(width = w * 0.08f)
+        drawRoundRect(
+            color, topLeft = androidx.compose.ui.geometry.Offset(w * 0.12f, w * 0.28f),
+            size = androidx.compose.ui.geometry.Size(w * 0.76f, w * 0.54f),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.1f), style = st,
+        )
+        drawLine(color, androidx.compose.ui.geometry.Offset(w * 0.38f, w * 0.18f), androidx.compose.ui.geometry.Offset(w * 0.62f, w * 0.18f), strokeWidth = w * 0.08f)
+        drawCircle(color, radius = w * 0.14f, center = androidx.compose.ui.geometry.Offset(w * 0.5f, w * 0.55f), style = st)
+    }
+}
+
+@Composable
+private fun BubbleGlyph(size: androidx.compose.ui.unit.Dp, color: Color) {
+    androidx.compose.foundation.Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        drawCircle(color, radius = w * 0.4f, center = androidx.compose.ui.geometry.Offset(w * 0.5f, w * 0.48f), style = androidx.compose.ui.graphics.drawscope.Stroke(width = w * 0.11f))
+    }
+}
+
 /** 创建频道 */
 @Composable
 fun CreateChannelScreen(onBack: () -> Unit, onCreated: (groupId: String) -> Unit) {
@@ -881,28 +933,60 @@ fun CreateChannelScreen(onBack: () -> Unit, onCreated: (groupId: String) -> Unit
         }
     }
 
-    Column(Modifier.fillMaxSize()) {
-        NavBar("创建频道", onBack)
-        Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Box(Modifier.size(56.dp).clip(CircleShape).background(Bg3).noRippleClick { pickAvatar.launch("image/*") }, contentAlignment = Alignment.Center) {
-                    if (avatar.isNotEmpty()) Avatar(avatar, 56) else Text(if (busy) "…" else "头像", color = TextDim, fontSize = 11.sp)
+    val pick = { if (!busy) pickAvatar.launch("image/*") }
+    Column(Modifier.fillMaxSize().background(GroupBg)) {
+        NavBar("新建频道", onBack)
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
+            Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.size(88.dp).noRippleClick(pick)) {
+                    Box(Modifier.fillMaxSize().clip(CircleShape).background(AccentBrush), contentAlignment = Alignment.Center) {
+                        when {
+                            avatar.isNotEmpty() -> Avatar(avatar, 88)
+                            name.isNotBlank() -> Text(String(Character.toChars(name.trim().codePointAt(0))), color = Color.White, fontSize = 36.sp, fontWeight = FontWeight.SemiBold)
+                            else -> CameraGlyph(30.dp, Color.White)
+                        }
+                        if (busy) Box(Modifier.fillMaxSize().background(Color(0x73000000)), contentAlignment = Alignment.Center) {
+                            Text("上传中…", color = Color.White, fontSize = 12.sp)
+                        }
+                    }
+                    Box(
+                        Modifier.align(Alignment.BottomEnd).offset(2.dp, 2.dp).size(28.dp).clip(CircleShape).background(Bg),
+                        contentAlignment = Alignment.Center,
+                    ) { CameraGlyph(14.dp, Accent) }
                 }
-                OutlinedTextField(name, { if (it.length <= 50) name = it }, placeholder = { Text("频道名称") }, singleLine = true, modifier = Modifier.weight(1f))
+                Text(
+                    if (avatar.isEmpty()) "设置频道头像" else "更换头像", color = Accent, fontSize = 14.sp,
+                    modifier = Modifier.padding(top = 8.dp).noRippleClick(pick),
+                )
             }
-            OutlinedTextField(
-                desc, { if (it.length <= 500) desc = it },
-                placeholder = { Text("频道简介（可选）：这个频道发什么") },
-                minLines = 3, maxLines = 6,
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Bg)) {
+                GroupField(name, "频道名称", 50, singleLine = true) { name = it }
+                Box(Modifier.padding(start = 16.dp).fillMaxWidth().height(0.5.dp).background(Line))
+                GroupField(desc, "简介（可选）", 500, singleLine = false) { desc = it }
+            }
+            GroupCaption("简介会显示在频道资料页，告诉别人这个频道发什么。")
+
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Bg)
+                    .noRippleClick { memberPost = !memberPost }.padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(30.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF34C759)), contentAlignment = Alignment.Center) {
+                    BubbleGlyph(16.dp, Color.White)
+                }
+                Text("订阅者可发消息", color = TextMain, fontSize = 16.sp, modifier = Modifier.weight(1f).padding(start = 12.dp))
+                androidx.compose.material3.Switch(
+                    checked = memberPost, onCheckedChange = { memberPost = it },
+                    colors = androidx.compose.material3.SwitchDefaults.colors(checkedTrackColor = Accent),
+                )
+            }
+            GroupCaption(
+                (if (memberPost) "所有订阅者都能在频道里发帖，你可以删除任何人的帖子。" else "只有你能发帖，订阅者可以看、点表情、评论。") +
+                    "创建后也能在频道资料里修改。",
             )
-            MemberPostSwitch(memberPost) { memberPost = it }
-            Text(
-                if (memberPost) "所有订阅者都能在频道里发帖，大家都能看到；你可以删除任何人的帖子，之后也能在频道资料里关掉。"
-                else "频道是一对多的广播：只有你能发帖，订阅的人可以看、点表情、评论。之后可以在频道资料里打开「订阅者可发消息」。",
-                color = TextSub, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(bottom = 16.dp),
-            )
-            AccentButton(if (busy) "请稍候…" else "创建", enabled = !busy) {
+
+            AccentButton(if (busy) "请稍候…" else "创建频道", enabled = !busy && name.isNotBlank()) {
                 if (name.isBlank()) { toast(ctx, "请填写频道名称"); return@AccentButton }
                 busy = true
                 scope.launch {

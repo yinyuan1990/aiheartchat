@@ -1082,66 +1082,143 @@ struct CreateChannelView: View {
 
     private var createHint: String {
         memberPost
-            ? "所有订阅者都能在频道里发帖，大家都能看到；你可以删除任何人的帖子，之后也能在频道资料里关掉。"
-            : "频道是一对多的广播：只有你能发帖，订阅的人可以看、点表情、评论。之后可以在频道资料里打开「订阅者可发消息」。"
+            ? "所有订阅者都能在频道里发帖，你可以删除任何人的帖子。创建后也能在频道资料里修改。"
+            : "只有你能发帖，订阅者可以看、点表情、评论。创建后也能在频道资料里修改。"
     }
+    private var avatarTip: String { avatar.isEmpty ? "设置频道头像" : "更换头像" }
+    private var submitTitle: String { busy ? "请稍候…" : "创建频道" }
+    private static let groupBg = Color(red: 0.949, green: 0.949, blue: 0.969)
     @State private var busy = false
     @State private var toastMsg: String?
     @State private var route: Route?
     @State private var created = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                CompatPhotoPicker(kind: .images, onPicked: { datas in
-                    guard let data = datas.first else { return }
-                    busy = true
-                    Task {
-                        if let url = try? await Api.upload("image", data: data, filename: "c.jpg", mime: "image/jpeg") {
-                            avatar = url
-                        } else {
-                            toastMsg = "上传失败"
-                        }
-                        busy = false
-                    }
-                }) {
-                    if avatar.isEmpty {
-                        Circle().fill(Theme.bg3)
-                            .frame(width: 56, height: 56)
-                            .overlay(Text(busy ? "…" : "头像").font(.system(size: 11)).foregroundStyle(Theme.textDim))
-                    } else {
-                        AvatarView(url: avatar, size: 56)
-                    }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                avatarPicker
+                fieldsGroup
+                caption("简介会显示在频道资料页，告诉别人这个频道发什么。")
+                memberPostGroup
+                caption(createHint)
+                AccentButton(title: submitTitle, enabled: !busy && !name.trimmingCharacters(in: .whitespaces).isEmpty) {
+                    create()
                 }
-                TextField("", text: $name, prompt: Text("频道名称").foregroundColor(Theme.textDim))
-                    .foregroundStyle(Theme.text)
-                    .padding(14)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(Theme.bg2))
-                    .onChange(of: name) { v in if v.count > 50 { name = String(v.prefix(50)) } }
+                .padding(.top, 4)
             }
-            CompatVerticalTextField(text: $desc, prompt: Text("频道简介（可选）：这个频道发什么").foregroundColor(Theme.textDim), lineRange: 3...6)
-                .foregroundStyle(Theme.text)
-                .padding(14)
-                .background(RoundedRectangle(cornerRadius: 12).fill(Theme.bg2))
-                .onChange(of: desc) { v in if v.count > 500 { desc = String(v.prefix(500)) } }
-            MemberPostToggle(isOn: memberPost) { memberPost = $0 }
-            Text(createHint)
-                .font(.system(size: 12)).foregroundStyle(Theme.textSub).lineSpacing(3)
-            AccentButton(title: busy ? "请稍候…" : "创建", enabled: !busy && !name.trimmingCharacters(in: .whitespaces).isEmpty) {
-                create()
-            }
-            .padding(.top, 6)
-            Spacer()
+            .padding(16)
         }
-        .padding(16)
-        .fullBg()
-        .navigationTitle("创建频道")
+        .background(Self.groupBg.ignoresSafeArea())
+        .navigationTitle("新建频道")
         .navigationBarTitleDisplayMode(.inline)
         .compatNavBarBackground(Theme.bg)
         .toast($toastMsg)
         .routePush($route)
         // 从新频道返回时直接回到上一页，不停在已提交的表单
         .onChange(of: route) { r in if r == nil && created { dismiss() } }
+    }
+
+    private var avatarPicker: some View {
+        CompatPhotoPicker(kind: .images, onPicked: { datas in upload(datas.first) }) {
+            VStack(spacing: 8) {
+                avatarCircle
+                Text(avatarTip).font(.system(size: 14)).foregroundStyle(Theme.accent)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 8).padding(.bottom, 18)
+    }
+
+    private var avatarCircle: some View {
+        ZStack(alignment: .bottomTrailing) {
+            ZStack {
+                Circle().fill(Theme.accentGrad)
+                avatarInner
+                if busy {
+                    Circle().fill(Color.black.opacity(0.45))
+                    Text("上传中…").font(.system(size: 12)).foregroundStyle(Color.white)
+                }
+            }
+            .frame(width: 88, height: 88)
+            .clipShape(Circle())
+            .shadow(color: Theme.accent.opacity(0.25), radius: 8, x: 0, y: 4)
+            Image(systemName: "camera.fill")
+                .font(.system(size: 12)).foregroundStyle(Theme.accent)
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(Color.white))
+                .shadow(color: Color.black.opacity(0.15), radius: 2, x: 0, y: 1)
+                .offset(x: 2, y: 2)
+        }
+    }
+
+    @ViewBuilder private var avatarInner: some View {
+        if !avatar.isEmpty {
+            AvatarView(url: avatar, size: 88)
+        } else if let first = name.trimmingCharacters(in: .whitespaces).first {
+            Text(String(first)).font(.system(size: 36, weight: .semibold)).foregroundStyle(Color.white)
+        } else {
+            Image(systemName: "camera").font(.system(size: 28)).foregroundStyle(Color.white)
+        }
+    }
+
+    private var fieldsGroup: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 8) {
+                TextField("", text: $name, prompt: Text("频道名称").foregroundColor(Theme.textDim))
+                    .font(.system(size: 16)).foregroundStyle(Theme.text)
+                counter(name.count, 50)
+            }
+            .padding(.horizontal, 16).padding(.vertical, 14)
+            Rectangle().fill(Theme.line).frame(height: 0.5).padding(.leading, 16)
+            HStack(alignment: .top, spacing: 8) {
+                CompatVerticalTextField(text: $desc, prompt: Text("简介（可选）").foregroundColor(Theme.textDim), lineRange: 3...6)
+                    .font(.system(size: 16)).foregroundStyle(Theme.text)
+                counter(desc.count, 500)
+            }
+            .padding(.horizontal, 16).padding(.vertical, 14)
+        }
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color.white))
+        .onChange(of: name) { v in if v.count > 50 { name = String(v.prefix(50)) } }
+        .onChange(of: desc) { v in if v.count > 500 { desc = String(v.prefix(500)) } }
+    }
+
+    @ViewBuilder private func counter(_ n: Int, _ max: Int) -> some View {
+        if n > 0 {
+            Text("\(n)/\(max)").font(.system(size: 12)).foregroundStyle(Theme.textDim).padding(.top, 2)
+        }
+    }
+
+    private var memberPostGroup: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "bubble.left.fill")
+                .font(.system(size: 14)).foregroundStyle(Color.white)
+                .frame(width: 30, height: 30)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.204, green: 0.78, blue: 0.349)))
+            Toggle(isOn: $memberPost) {
+                Text("订阅者可发消息").font(.system(size: 16)).foregroundStyle(Theme.text)
+            }
+            .tint(Theme.accent)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color.white))
+    }
+
+    private func caption(_ s: String) -> some View {
+        Text(s).font(.system(size: 13)).foregroundStyle(Theme.textSub).lineSpacing(3)
+            .padding(.horizontal, 16).padding(.top, 6).padding(.bottom, 18)
+    }
+
+    private func upload(_ data: Data?) {
+        guard let data = data else { return }
+        busy = true
+        Task {
+            if let url = try? await Api.upload("image", data: data, filename: "c.jpg", mime: "image/jpeg") {
+                avatar = url
+            } else {
+                toastMsg = "上传失败"
+            }
+            busy = false
+        }
     }
 
     private func create() {

@@ -632,6 +632,15 @@ interface ChannelListItem {
   isMember: boolean;
 }
 
+function CameraIcon({ size }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.7l1.3-2h5l1.3 2h1.7A2.5 2.5 0 0 1 20 8.5v8a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5z" />
+      <circle cx="12" cy="12.5" r="3.5" />
+    </svg>
+  );
+}
+
 /** 创建频道弹层 */
 export function CreateChannelSheet({ onClose, onCreated }: { onClose: () => void; onCreated: (c: ChannelInfo) => void }) {
   const [name, setName] = useState('');
@@ -664,26 +673,53 @@ export function CreateChannelSheet({ onClose, onCreated }: { onClose: () => void
 
   return (
     <div className="mask bottom" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
-        <div style={{ textAlign: 'center', marginBottom: 12, fontWeight: 600 }}>创建频道</div>
-        <div className="row" style={{ gap: 12 }}>
-          <div className="avatar" onClick={() => fileRef.current?.click()} style={{ width: 56, height: 56, flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-input)', fontSize: 11, color: 'var(--text-3)' }}>
-            {avatar ? <img src={avatar} alt="" /> : busy ? '…' : '头像'}
+      <div className="sheet sheet-up cc-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="cc-grab" />
+        <div className="cc-top">
+          <span className="cc-cancel" onClick={onClose}>取消</span>
+          <span className="cc-title">新建频道</span>
+          <span className="cc-cancel" style={{ visibility: 'hidden' }}>取消</span>
+        </div>
+
+        <div className="cc-avatar-wrap">
+          <div className="cc-avatar" onClick={() => !busy && fileRef.current?.click()}>
+            {avatar ? <img src={avatar} alt="" /> : name.trim() ? <span>{Array.from(name.trim())[0]}</span> : <CameraIcon size={30} />}
+            {busy && <div className="cc-avatar-busy">上传中…</div>}
+            <div className="cc-avatar-badge"><CameraIcon size={14} /></div>
           </div>
+          <span className="cc-avatar-tip" onClick={() => !busy && fileRef.current?.click()}>{avatar ? '更换头像' : '设置频道头像'}</span>
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => pick(e.target.files?.[0])} />
-          <input className="input grow" style={{ marginBottom: 0 }} placeholder="频道名称" value={name} maxLength={50} onChange={(e) => setName(e.target.value)} />
         </div>
-        <textarea className="input" style={{ marginTop: 12, height: 90, resize: 'none' }} placeholder="频道简介（可选）：这个频道发什么" value={desc} maxLength={500} onChange={(e) => setDesc(e.target.value)} />
-        <div className="row" style={{ marginBottom: 6, cursor: 'pointer' }} onClick={() => setMemberPost((v) => !v)}>
-          <span className="grow" style={{ fontSize: 15 }}>订阅者可发消息</span>
-          <span className={`switch${memberPost ? ' on' : ''}`} data-testid="create-member-post" />
+
+        <div className="cc-group">
+          <div className="cc-field">
+            <input placeholder="频道名称" value={name} maxLength={50} autoFocus onChange={(e) => setName(e.target.value)} />
+            {name && <span className="cc-count">{Array.from(name).length}/50</span>}
+          </div>
+          <div className="cc-field">
+            <textarea placeholder="简介（可选）" rows={3} value={desc} maxLength={500} onChange={(e) => setDesc(e.target.value)} />
+            {desc && <span className="cc-count">{desc.length}/500</span>}
+          </div>
         </div>
-        <div className="muted" style={{ marginBottom: 12 }}>
+        <div className="cc-caption">简介会显示在频道资料页，告诉别人这个频道发什么。</div>
+
+        <div className="cc-group">
+          <div className="cc-row" onClick={() => setMemberPost((v) => !v)}>
+            <span className="cc-row-icon">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1.1-4.6A8 8 0 1 1 21 12z" /></svg>
+            </span>
+            <span className="grow">订阅者可发消息</span>
+            <span className={`switch${memberPost ? ' on' : ''}`} data-testid="create-member-post" />
+          </div>
+        </div>
+        <div className="cc-caption">
           {memberPost
-            ? '所有订阅者都能在频道里发帖，大家都能看到；你可以删除任何人的帖子，之后也能在频道资料里关掉。'
-            : '频道是一对多的广播：只有你能发帖，订阅的人可以看、点表情、评论。之后可以在频道资料里打开「订阅者可发消息」。'}
+            ? '所有订阅者都能在频道里发帖，你可以删除任何人的帖子。'
+            : '只有你能发帖，订阅者可以看、点表情、评论。'}
+          创建后也能在频道资料里修改。
         </div>
-        <button className="btn" disabled={busy} onClick={create}>创建</button>
+
+        <button className="btn cc-submit" disabled={busy || !name.trim()} onClick={create}>创建频道</button>
       </div>
     </div>
   );
