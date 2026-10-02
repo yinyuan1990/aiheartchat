@@ -311,6 +311,8 @@ export type ArenaDecision = { time: string; cycle: number; actions: ArenaAction[
 export type ArenaTrader = {
   id: string; name: string; model: string; exchange: string; running: boolean; equity: number; pnl: number; pnlPct: number;
   scanMinutes: number; minConfidence: number;
+  /** bots share one Hyperliquid account and are split by coin */
+  coins: string[];
   curve: [number, number][];
   positions: { symbol: string; side: string; size: number; entry: number; mark: number; upnl: number; leverage: number; stopLoss: number; takeProfit: number }[];
   trades: { symbol: string; side: string; entry: number; exit: number; pnl: number; pnlPct: number; exitTime: number; hold: string }[];
@@ -318,7 +320,9 @@ export type ArenaTrader = {
   decisions: ArenaDecision[];
 };
 export type ArenaState = { enabled: boolean; updatedAt: number; traders: ArenaTrader[] };
-export type ArenaMarket = { updatedAt: number; coins: { coin: string; mid: number; candles: [number, number, number, number, number, number][] }[] };
+type Kline = [number, number, number, number, number, number];
+/** `candles` = 5m over 12h, `candlesH` = 1h over 7d */
+export type ArenaMarket = { updatedAt: number; coins: { coin: string; mid: number; candles: Kline[]; candlesH: Kline[] }[] };
 /** Polls faster while a new AI decision is due, so the "thinking…" state resolves within seconds. */
 const arenaDue = (s?: ArenaState) =>
   !!s?.traders.some((tr) => tr.decisions[0] && Date.parse(tr.decisions[0].time) + tr.scanMinutes * 60_000 <= Date.now());

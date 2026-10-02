@@ -51,8 +51,11 @@ function ThinkingBar({ tr, now }: { tr: ArenaTrader; now: number }) {
   const period = tr.scanMinutes * 60_000;
   const left = Date.parse(last.time) + period - now;
   const due = left <= 0;
-  const mm = String(Math.floor(Math.max(left, 0) / 60_000)).padStart(2, "0");
-  const ss = String(Math.floor((Math.max(left, 0) % 60_000) / 1000)).padStart(2, "0");
+  const sec = Math.floor(Math.max(left, 0) / 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const hh = Math.floor(sec / 3600);
+  const mm = hh ? `${hh}:${pad(Math.floor(sec / 60) % 60)}` : pad(Math.floor(sec / 60));
+  const ss = pad(sec % 60);
   return (
     <div className="space-y-1.5 rounded-xl bg-muted/40 px-3 py-2.5">
       <div className="flex items-center justify-between gap-2 text-xs">
@@ -151,9 +154,10 @@ function CoinPanel({ tr, coin, market }: { tr: ArenaTrader; coin: string; market
   const { t, locale } = useApp();
   const zh = locale === "zh";
   const m = market?.coins.find((c) => c.coin === coin);
+  const series = tr.scanMinutes >= 60 ? m?.candlesH : m?.candles;
   const bars = useMemo<Bar[]>(
-    () => (m?.candles ?? []).map(([ts, open, high, low, close]) => ({ time: Math.floor(ts / 1000), open, high, low, close })),
-    [m?.candles],
+    () => (series ?? []).map(([ts, open, high, low, close]) => ({ time: Math.floor(ts / 1000), open, high, low, close })),
+    [series],
   );
   const calls = useMemo(
     () =>
@@ -267,10 +271,10 @@ function Typer({ decision, onReplay }: { decision: ArenaDecision; onReplay: () =
 function TraderCard({ tr, rank, now, market }: { tr: ArenaTrader; rank: number; now: number; market?: ArenaMarket }) {
   const { t, locale } = useApp();
   const zh = locale === "zh";
-  const coins = useMemo(() => {
-    const seen = new Set(tr.decisions.flatMap((d) => d.actions.map((a) => coinOf(a.symbol))));
-    return (market?.coins.map((c) => c.coin) ?? ["BTC", "ETH", "SOL"]).filter((c) => !seen.size || seen.has(c));
-  }, [tr.decisions, market]);
+  const coins = tr.coins;
+  const cadence = tr.scanMinutes >= 60
+    ? t("arena.everyH").replace("{n}", String(Math.round(tr.scanMinutes / 60)))
+    : t("arena.everyM").replace("{n}", String(tr.scanMinutes));
   const [coin, setCoin] = useState<string | null>(null);
   const active = coin && coins.includes(coin) ? coin : coins[0];
 
@@ -284,7 +288,7 @@ function TraderCard({ tr, rank, now, market }: { tr: ArenaTrader; rank: number; 
               <span className="truncate">{tr.name}</span>
               {!tr.running && <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{t("arena.stopped")}</span>}
             </div>
-            <div className="text-xs text-muted-foreground">{tr.model} · {tr.exchange} · {t("arena.equity")} <span className="text-foreground tabular-nums">{usdShort(tr.equity)}</span></div>
+            <div className="text-xs text-muted-foreground">{tr.model} · {coins.join(" / ")} · {cadence} · {t("arena.equity")} <span className="text-foreground tabular-nums">{usdShort(tr.equity)}</span></div>
           </div>
           <div className="text-right">
             <div className={cn("text-xl font-bold tabular-nums", tone(tr.pnl))}>{signedPct(tr.pnlPct / 100)}</div>
@@ -356,7 +360,10 @@ export function AiArena() {
           ) : traders.length === 0 ? (
             <p className="rounded-lg bg-muted/40 px-3 py-2 text-xs text-muted-foreground">{t("arena.pending")}</p>
           ) : (
-            <p className="text-[11px] text-muted-foreground">{t("arena.notAdvice")}</p>
+            <>
+              {traders.length > 1 && <p className="text-[11px] text-muted-foreground">{t("arena.shared")}</p>}
+              <p className="text-[11px] text-muted-foreground">{t("arena.notAdvice")}</p>
+            </>
           )}
         </CardContent>
       </Card>
