@@ -22,6 +22,8 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.input.pointer.pointerInput
@@ -75,7 +77,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 
 @Serializable
-data class PeerBrief(val id: String, val nickname: String, val avatar: String = "", val gender: Int = 0)
+data class PeerBrief(val id: String, val nickname: String, val avatar: String = "", val gender: Int = 0, val isBot: Boolean = false)
 
 @Serializable
 data class GroupBrief(val id: String, val name: String, val avatar: String = "", /** 2 = 频道 */ val kind: Int = 1)
@@ -107,6 +109,8 @@ data class MsgItem(
     val type: String,
     val content: String,
     val createdAt: String,
+    val senderIsBot: Boolean = false,
+    val markup: InlineMarkup? = null,
 )
 
 private fun parseIso(iso: String?): java.time.Instant? =
@@ -259,7 +263,7 @@ private fun PlusMenu(expanded: Boolean, onDismiss: () -> Unit, items: List<PlusM
 
 /** 消息主页：标题 + 搜索 + 合并列表（AI 助手 / 音乐置顶，会话与评论 / 接单通知按最新时间排） */
 @Composable
-fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, convType: Int, targetId: String, title: String) -> Unit, onOpenMessage: (convId: String, convType: Int, targetId: String, title: String, msgId: String) -> Unit, onOpenNotices: (String) -> Unit, onOpenUser: (userId: String, nickname: String) -> Unit, onScan: () -> Unit, onCreateGroup: () -> Unit, onOpenAi: () -> Unit, onOpenNews: () -> Unit = {}, onJoinGroup: () -> Unit = {}, onOpenChannel: (groupId: String) -> Unit = {}, onOpenChannels: () -> Unit = {}, onCreateChannel: () -> Unit = {}) {
+fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, convType: Int, targetId: String, title: String) -> Unit, onOpenMessage: (convId: String, convType: Int, targetId: String, title: String, msgId: String) -> Unit, onOpenNotices: (String) -> Unit, onOpenUser: (userId: String, nickname: String) -> Unit, onScan: () -> Unit, onCreateGroup: () -> Unit, onOpenAi: () -> Unit, onOpenNews: () -> Unit = {}, onJoinGroup: () -> Unit = {}, onOpenChannel: (groupId: String) -> Unit = {}, onOpenChannels: () -> Unit = {}, onCreateChannel: () -> Unit = {}, onOpenBots: () -> Unit = {}) {
     var convs by remember { mutableStateOf<List<ConversationItem>>(emptyList()) }
     // 频道会话进频道页，其余进聊天页
     val openConv: (String, Int, String, String) -> Unit = { id, type, target, title ->
@@ -336,6 +340,7 @@ fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, c
                         PlusMenuItem("加入群聊", { PeopleIcon(it, 19.dp) }, onJoinGroup),
                         PlusMenuItem("创建频道", { BroadcastIcon(it, 19.dp) }, onCreateChannel),
                         PlusMenuItem("发现频道", { com.wh.peiwana.ui.sticker.SearchIcon(it, 18.dp) }, onOpenChannels),
+                        PlusMenuItem("我的机器人", { Text("Bot", color = it, fontSize = 11.sp, fontWeight = FontWeight.Bold) }, onOpenBots),
                         PlusMenuItem("扫一扫", { ScanIcon(it, 18.dp) }, onScan),
                     ),
                 )
@@ -403,6 +408,7 @@ fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, c
                                     if (c.group?.kind == 2) "频道" else "群", color = TextSub, fontSize = 10.sp,
                                     modifier = Modifier.padding(start = 6.dp).clip(RoundedCornerShape(4.dp)).background(Bg3).padding(horizontal = 4.dp),
                                 )
+                                if (c.peer?.isBot == true) BotTag()
                             },
                             end = fmtChatTime(c.lastMsgAt), sub = preview(c.lastMsg),
                             badge = { com.wh.peiwana.ui.RoundBadge(c.unread, Modifier.padding(start = 8.dp), color = if (c.muted) TextDim else Accent) },
@@ -455,6 +461,9 @@ private data class GiftWallItem(val id: Int, val name: String, val icon: String,
 @Composable
 fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: String, focusMsgId: String = "", myUserId: String, myAvatar: String, myNickname: String, onBack: () -> Unit, onCall: (Int) -> Unit, onGroupInfo: () -> Unit) {
     var messages by remember { mutableStateOf<List<MsgItem>>(emptyList()) }
+    var loaded by remember { mutableStateOf(false) }
+    var bot by remember { mutableStateOf<BotPublic?>(null) }
+    var showCmds by remember { mutableStateOf(false) }
     var input by remember { mutableStateOf("") }
     var showGift by remember { mutableStateOf(false) }
     var fullImage by remember { mutableStateOf<String?>(null) }
@@ -485,8 +494,11 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
     LaunchedEffect(convId) {
         val around = if (focusMsgId.isNotEmpty()) "&aroundId=$focusMsgId" else ""
         messages = runCatching { Api.getList<MsgItem>("/im/messages?conversationId=$convId$around") }.getOrDefault(emptyList())
+        loaded = true
         messages.lastOrNull()?.let { WsClient.markRead(convId, it.id) }
         WsClient.connect()
+        // 空会话或对方发过机器人消息：查一下对方是不是机器人（简介卡片 / 开始按钮 / 命令菜单）
+        if (convType == 1 && (messages.isEmpty() || messages.any { it.senderIsBot && it.senderId == targetId })) bot = BotInfoCache.get(targetId)
     }
     DisposableEffect(convId) {
         val remove = WsClient.addListener { frame ->
@@ -495,9 +507,24 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
                     val data = frame["data"]?.jsonObject ?: return@addListener
                     val m = WsClient.json.decodeFromJsonElement(MessagePayload.serializer(), data)
                     if (m.conversationId == convId) {
-                        messages = messages + MsgItem(m.id, m.conversationId, m.senderId, m.senderNickname, m.senderAvatar, m.receiverId, m.type, m.content, m.createdAt)
+                        messages = messages + MsgItem(m.id, m.conversationId, m.senderId, m.senderNickname, m.senderAvatar, m.receiverId, m.type, m.content, m.createdAt, m.senderIsBot, m.markup)
                         WsClient.markRead(convId, m.id)
+                        if (m.senderIsBot && convType == 1 && bot == null) scope.launch { bot = BotInfoCache.get(m.senderId) }
                     }
+                }
+                "msg_edit" -> {
+                    val d = frame["data"]?.jsonObject ?: return@addListener
+                    if (d["conversationId"]?.jsonPrimitive?.content != convId) return@addListener
+                    val id = d["msgId"]?.jsonPrimitive?.content
+                    val content = d["content"]?.jsonPrimitive?.content
+                    val mk = d["markup"]?.let { el -> runCatching { WsClient.json.decodeFromJsonElement(InlineMarkup.serializer(), el) }.getOrNull() }
+                    messages = messages.map { if (it.id == id) it.copy(content = content ?: it.content, markup = mk) else it }
+                }
+                "msg_delete" -> {
+                    val d = frame["data"]?.jsonObject ?: return@addListener
+                    if (d["conversationId"]?.jsonPrimitive?.content != convId) return@addListener
+                    val id = d["msgId"]?.jsonPrimitive?.content
+                    messages = messages.filterNot { it.id == id }
                 }
                 "error" -> {
                     // 发送被后端拒绝（如积分不足）：提示并撤回乐观显示的消息
@@ -603,7 +630,10 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
     Column(Modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxWidth().padding(8.dp, 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.size(40.dp).noRippleClick(onBack), contentAlignment = Alignment.Center) { BackIcon(TextMain, 24.dp) }
-            Text(title, color = TextMain, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.weight(1f))
+            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                Text(title, color = TextMain, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                if (bot != null) BotTag()
+            }
             Text("清空", color = TextSub, fontSize = 13.sp, modifier = Modifier.noRippleClick { showClearConfirm = true })
             if (convType == 2) {
                 Spacer(Modifier.width(14.dp))
@@ -644,7 +674,26 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
                 dismissButton = { Text("取消", color = TextSub, modifier = Modifier.noRippleClick { showClearConfirm = false }.padding(8.dp)) },
             )
         }
-        LazyColumn(state = listState, modifier = Modifier.weight(1f).padding(horizontal = 12.dp).noRippleClick { showSticker = false; focus.clearFocus(); keyboard?.hide() }) {
+        val botFresh = bot != null && loaded && messages.isEmpty()
+        LazyColumn(state = listState, modifier = Modifier.weight(1f).padding(horizontal = 12.dp).noRippleClick { showSticker = false; showCmds = false; focus.clearFocus(); keyboard?.hide() }) {
+            if (botFresh) item(key = "bot_intro") {
+                val b = bot!!
+                Column(
+                    Modifier.fillMaxWidth().padding(top = 40.dp, start = 24.dp, end = 24.dp).clip(RoundedCornerShape(14.dp)).background(Bg2).padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Avatar(b.avatar, 64)
+                    Spacer(Modifier.height(10.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(b.name, color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold); BotTag()
+                    }
+                    Text("@${b.username}", color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+                    if (b.description.isNotBlank()) Text(
+                        b.description, color = TextMain, fontSize = 14.sp, lineHeight = 20.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(top = 12.dp),
+                    )
+                }
+            }
             itemsIndexed(messages, key = { _, m -> m.id }) { idx, m ->
                 // 微信式时间分隔条：与上一条间隔超 5 分钟显示
                 if (shouldShowTime(messages, idx)) {
@@ -661,9 +710,49 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
                 }
             }
         }
+        // 和机器人的空会话：底部是「开始」按钮（发 /start），同 Telegram
+        if (botFresh) {
+            Box(
+                Modifier.fillMaxWidth().background(Bg2).navigationBarsPadding().noRippleClick {
+                    WsClient.send(convType, targetId, "text", "/start"); appendLocal("text", "/start")
+                }.padding(vertical = 16.dp),
+                contentAlignment = Alignment.Center,
+            ) { Text("开始", color = Accent, fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
+        } else
         // 微信式底部区（随键盘上移）：左语音切换 / 输入框 / +面板 / 发送
         Column(modifier = Modifier.background(Bg2).imePadding().navigationBarsPadding()) {
+            val cmds = bot?.commands.orEmpty()
+            val cmdQuery = if (input.startsWith("/")) input.drop(1).substringBefore(' ') else null
+            val shownCmds = when {
+                showCmds -> cmds
+                cmdQuery != null && !input.contains(' ') -> cmds.filter { it.command.startsWith(cmdQuery, ignoreCase = true) }
+                else -> emptyList()
+            }
+            if (shownCmds.isNotEmpty()) {
+                Column(Modifier.fillMaxWidth().heightIn(max = 220.dp).verticalScroll(rememberScrollState()).background(Bg2)) {
+                    shownCmds.forEach { c ->
+                        Row(
+                            Modifier.fillMaxWidth().noRippleClick {
+                                showCmds = false; input = ""
+                                WsClient.send(convType, targetId, "text", "/${c.command}"); appendLocal("text", "/${c.command}")
+                            }.padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("/${c.command}", color = BotBlue, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                            Spacer(Modifier.width(12.dp))
+                            Text(c.description, color = TextSub, fontSize = 13.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
             Row(modifier = Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.Bottom) {
+                if (cmds.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier.size(40.dp).clip(RoundedCornerShape(20.dp)).background(if (showCmds) BubbleMine else Bg3).noRippleClick { showSticker = false; showCmds = !showCmds },
+                        contentAlignment = Alignment.Center,
+                    ) { Text("/", color = if (showCmds) BotBlue else TextSub, fontSize = 18.sp, fontWeight = FontWeight.Bold) }
+                    Spacer(Modifier.width(8.dp))
+                }
                 Box(
                     modifier = Modifier.size(40.dp).clip(RoundedCornerShape(20.dp)).background(Bg3).noRippleClick { voiceMode = !voiceMode; showSticker = false; focus.clearFocus(); keyboard?.hide() },
                     contentAlignment = Alignment.Center,
@@ -732,7 +821,7 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
 
     if (showAttach) {
         AttachSheet(
-            isSingle = convType == 1,
+            isSingle = convType == 1 && bot == null,
             // 视频通话仅男方可发起（女方只能接听）
             canVideoCall = com.wh.peiwana.net.Session.gender == 1,
             onDismiss = { showAttach = false },
@@ -767,7 +856,10 @@ private fun Bubble(m: MsgItem, mine: Boolean, convType: Int, onImage: (String) -
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Top) {
         if (!mine) { Avatar(m.senderAvatar, 38); Spacer(Modifier.width(8.dp)) }
         Column(horizontalAlignment = if (mine) Alignment.End else Alignment.Start, modifier = Modifier.widthIn(max = 240.dp)) {
-            if (!mine) Text(m.senderNickname, color = TextSub, fontSize = 11.sp, modifier = Modifier.padding(bottom = 2.dp, start = 4.dp))
+            if (!mine) Row(Modifier.padding(bottom = 2.dp, start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(m.senderNickname, color = TextSub, fontSize = 11.sp)
+                if (m.senderIsBot && convType == 2) BotTag()
+            }
             when (m.type) {
                 "image" -> AsyncImage(model = Api.fullUrl(m.content), contentDescription = null, contentScale = ContentScale.FillWidth, modifier = Modifier.widthIn(max = 160.dp).clip(RoundedCornerShape(10.dp)).noRippleClick { onImage(m.content) })
                 "sticker" -> {
@@ -847,6 +939,7 @@ private fun Bubble(m: MsgItem, mine: Boolean, convType: Int, onImage: (String) -
                 }
                 else -> Box(modifier = Modifier.clip(bubbleShape).background(bg).padding(horizontal = 14.dp, vertical = 10.dp)) { Text(m.content, color = fg, fontSize = 15.sp, lineHeight = 21.sp) }
             }
+            InlineKeyboard(m.markup, m.id, Modifier.width(230.dp))
         }
         if (mine) { Spacer(Modifier.width(8.dp)); Avatar(m.senderAvatar, 38) }
     }

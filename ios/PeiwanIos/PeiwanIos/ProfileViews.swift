@@ -144,6 +144,7 @@ struct MeView: View {
                     menuRow("关注动态", .followMoments)
                     menuRow(u.gender == 2 ? "我的接单" : "我的约单", .taskMine)
                     menuRow("收到的礼物", .giftsReceived)
+                    menuRow("我的机器人", .bots)
                     // 搭子认证已合并实名认证（申请时提交姓名+身份证，审核通过即实名）
                     if !u.isGuide { menuRow("搭子认证", .guideApply) }
                 }

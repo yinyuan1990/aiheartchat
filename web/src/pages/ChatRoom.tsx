@@ -9,6 +9,7 @@ import { dropLastGrapheme } from '../emojis';
 import { EmojiPanel } from '../components/EmojiPanel';
 import { StickerView } from '../components/StickerView';
 import { AttachSheet, AttachAction } from '../components/AttachSheet';
+import { AddBotSheet, BotPublic, botInfo, InlineKeyboard, InlineMarkup } from './Bots';
 
 interface MsgItem {
   id: string;
@@ -21,6 +22,8 @@ interface MsgItem {
   isRead?: boolean;
   pending?: boolean;
   tempId?: string;
+  senderIsBot?: boolean;
+  markup?: InlineMarkup | null;
 }
 
 /** Web 端点语音/视频弹下载引导 */
@@ -129,6 +132,7 @@ function GroupInfoSheet({ groupId, onClose, onExit }: { groupId: string; onClose
   const [info, setInfo] = useState<any>(null);
   const [showInvite, setShowInvite] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [showBots, setShowBots] = useState(false);
   const [people, setPeople] = useState<any[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const avatarFileRef = useRef<HTMLInputElement>(null);
@@ -233,6 +237,7 @@ function GroupInfoSheet({ groupId, onClose, onExit }: { groupId: string; onClose
                   <div className="small ellipsis" style={{ marginTop: 4 }}>
                     {m.nickname}{m.role === 'owner' && <span className="accent"> 主</span>}
                   </div>
+                  {m.isBot && <div style={{ fontSize: 10, color: '#2f7cf6' }}>机器人</div>}
                   {myRole === 'owner' && m.role !== 'owner' && (
                     <span
                       onClick={() => kick(m.id, m.nickname)}
@@ -246,6 +251,12 @@ function GroupInfoSheet({ groupId, onClose, onExit }: { groupId: string; onClose
                 <div style={{ width: 48, height: 48, margin: '0 auto', borderRadius: 24, border: '1px dashed #333', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-3)', fontSize: 20 }}>+</div>
                 <div className="small" style={{ marginTop: 4 }}>邀请</div>
               </div>
+              {canEditInfo && (
+                <div style={{ textAlign: 'center', cursor: 'pointer' }} onClick={() => setShowBots(true)}>
+                  <div style={{ width: 48, height: 48, margin: '0 auto', borderRadius: 24, border: '1px dashed #2f7cf6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2f7cf6', fontSize: 13 }}>Bot</div>
+                  <div className="small" style={{ marginTop: 4 }}>机器人</div>
+                </div>
+              )}
             </div>
 
             {info.notice && (
@@ -286,6 +297,7 @@ function GroupInfoSheet({ groupId, onClose, onExit }: { groupId: string; onClose
           </>
         )}
       </div>
+      {showBots && <AddBotSheet groupId={groupId} onClose={() => setShowBots(false)} onChanged={load} />}
     </div>
   );
 }
@@ -453,8 +465,9 @@ function MsgBubble({ m, mine, convType, onImage }: { m: MsgItem; mine: boolean; 
       {!mine && avatar}
       <div className="bubble-wrap">
         {/* 对齐 iOS：只显示对方昵称，自己的不显示 */}
-        {!mine && <div className="small" style={{ marginBottom: 3 }}>{m.senderNickname}</div>}
+        {!mine && <div className="small" style={{ marginBottom: 3 }}>{m.senderNickname}{m.senderIsBot && convType === 2 && <span className="bot-tag">机器人</span>}</div>}
         <div className={`bubble ${mine ? 'mine' : 'theirs'}${isMedia ? ' media' : ''}`} style={{ opacity: m.pending ? 0.6 : 1 }}>{body}</div>
+        {m.markup && <InlineKeyboard markup={m.markup} messageId={m.id} />}
         <div className="msg-meta" style={{ justifyContent: mine ? 'flex-end' : 'flex-start' }}>
           {m.pending && <span>发送中…</span>}
           {mine && convType === 1 && !m.pending && <span className={m.isRead ? '' : 'accent'}>{m.isRead ? '已读' : '未读'}</span>}
@@ -470,9 +483,12 @@ export function ChatRoomPage() {
   const location = useLocation();
   const nav = useNavigate();
   const me = useApp((s) => s.user);
-  const state = (location.state ?? {}) as { title?: string; convType?: number; targetId?: string; focusMsgId?: string };
+  const state = (location.state ?? {}) as { title?: string; convType?: number; targetId?: string; focusMsgId?: string; isBot?: boolean };
 
   const [messages, setMessages] = useState<MsgItem[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [bot, setBot] = useState<BotPublic | null>(null);
+  const [showCmds, setShowCmds] = useState(false);
   const [input, setInput] = useState('');
   const [showDownload, setShowDownload] = useState(false);
   const [showGift, setShowGift] = useState(false);
@@ -499,9 +515,13 @@ export function ChatRoomPage() {
     const around = state.focusMsgId ? `&aroundId=${state.focusMsgId}` : '';
     api<MsgItem[]>(`/im/messages?conversationId=${conversationId}${around}`).then((list) => {
       setMessages(list);
+      setLoaded(true);
       const last = list[list.length - 1];
       if (last) wsManager.markRead(conversationId, last.id);
-    }).catch(() => {});
+      if (state.convType === 1 && state.targetId && (state.isBot || list.some((m) => m.senderIsBot && m.senderId === state.targetId))) {
+        botInfo(state.targetId).then(setBot);
+      }
+    }).catch(() => setLoaded(true));
 
     wsManager.connect();
     return wsManager.on((frame) => {
@@ -510,7 +530,13 @@ export function ChatRoomPage() {
         if (m.conversationId === conversationId) {
           setMessages((prev) => [...prev, m]);
           wsManager.markRead(conversationId, m.id);
+          if (m.senderIsBot && state.convType === 1 && m.senderId === state.targetId) botInfo(m.senderId).then(setBot);
         }
+      } else if (frame.op === 'msg_edit' && frame.data?.conversationId === conversationId) {
+        const d = frame.data;
+        setMessages((prev) => prev.map((m) => (m.id === d.msgId ? { ...m, content: d.content ?? m.content, markup: d.markup } : m)));
+      } else if (frame.op === 'msg_delete' && frame.data?.conversationId === conversationId) {
+        setMessages((prev) => prev.filter((m) => m.id !== frame.data.msgId));
       } else if (frame.op === 'conv_cleared') {
         // 有人清空了记录（单聊=全部，群聊=其发送的消息）：重新拉取同步
         if (frame.data?.conversationId === conversationId) {
@@ -570,7 +596,19 @@ export function ChatRoomPage() {
     if (!content) return;
     sendRaw('text', content);
     setInput('');
+    setShowCmds(false);
   };
+
+  const sendCommand = (cmd: string) => {
+    sendRaw('text', `/${cmd}`);
+    setInput('');
+    setShowCmds(false);
+  };
+
+  // 机器人私聊：输入 / 开头时按前缀过滤命令菜单
+  const cmdFilter = input.startsWith('/') ? input.slice(1).toLowerCase() : null;
+  const cmdList = (bot?.commands ?? []).filter((c) => cmdFilter === null || c.command.toLowerCase().startsWith(cmdFilter));
+  const cmdOpen = !!bot && cmdList.length > 0 && (showCmds || (cmdFilter !== null && !input.includes(' ')));
 
   /** 贴纸 / GIF：点即发（Telegram 式）；「最近使用」由面板自己记 */
   const sendSticker = (p: StickerPayload) => {
@@ -614,7 +652,7 @@ export function ChatRoomPage() {
     <div className="app">
       <div className="navbar">
         <span className="back" onClick={() => nav(-1)}>‹</span>
-        <span className="title">{state.title ?? '聊天'}</span>
+        <span className="title">{state.title ?? '聊天'}{bot && <span className="bot-tag">机器人</span>}</span>
         <span
           className="action"
           style={{ color: 'var(--text-2)' }}
@@ -639,7 +677,15 @@ export function ChatRoomPage() {
         )}
       </div>
 
-      <div className="page page-pad" onClick={() => setShowSticker(false)}>
+      <div className="page page-pad" onClick={() => { setShowSticker(false); setShowCmds(false); }}>
+        {bot && loaded && messages.length === 0 && (
+          <div className="bot-intro">
+            <div className="avatar" style={{ width: 64, height: 64, margin: '0 auto' }}>{bot.avatar && <img src={bot.avatar} alt="" />}</div>
+            <div style={{ fontWeight: 700, fontSize: 17, marginTop: 10 }}>{bot.name}</div>
+            <div className="small" style={{ marginTop: 2 }}>@{bot.username}</div>
+            <div style={{ fontSize: 14, marginTop: 12, whiteSpace: 'pre-wrap', lineHeight: 1.6, textAlign: 'left' }}>{bot.description || '这是一个机器人，点下面的「开始」和它聊天'}</div>
+          </div>
+        )}
         {messages.map((m, i) => {
           // 微信式时间分隔条：与上一条间隔超 5 分钟显示
           const prev = i > 0 ? new Date(messages[i - 1].createdAt).getTime() : 0;
@@ -660,8 +706,25 @@ export function ChatRoomPage() {
       </div>
 
       {/* 底部输入区（微信式，对齐 iOS）：输入框 + 圆形加号呼出功能面板，发送键仅有文字时出现 */}
-      <div style={{ background: 'var(--bg-card)' }}>
+      {bot && loaded && messages.length === 0 ? (
+        <div className="ch-bottom"><span className="accent" style={{ fontWeight: 600 }} onClick={() => sendCommand('start')}>开始</span></div>
+      ) : (
+      <div style={{ background: 'var(--bg-card)', position: 'relative' }}>
+        {cmdOpen && (
+          <div className="bot-cmds">
+            {cmdList.map((c) => (
+              <div key={c.command} onClick={() => sendCommand(c.command)}><b>/{c.command}</b><span className="small">{c.description}</span></div>
+            ))}
+          </div>
+        )}
         <div className="row" style={{ padding: 8, gap: 8 }}>
+          {bot && bot.commands.length > 0 && (
+            <span
+              title="命令菜单"
+              style={{ width: 40, height: 40, borderRadius: 20, flexShrink: 0, background: showCmds ? 'rgba(47,124,246,0.15)' : 'var(--bg-input)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#2f7cf6', fontSize: 18, fontWeight: 700 }}
+              onClick={() => { setShowCmds((v) => !v); setShowSticker(false); }}
+            >/</span>
+          )}
           <input
             ref={inputRef}
             className="input grow"
@@ -693,10 +756,11 @@ export function ChatRoomPage() {
           />
         )}
       </div>
+      )}
 
       {showAttach && (
         <AttachSheet
-          isSingle={state.convType === 1}
+          isSingle={state.convType === 1 && !bot}
           canVideoCall={me?.gender === 1}
           onClose={() => setShowAttach(false)}
           onSend={sendMedia}

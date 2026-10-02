@@ -6,6 +6,7 @@ import { ConnectionRegistry } from './connection.registry';
 import { IntimacyService } from '../intimacy/intimacy.service';
 import { MessagePayload, SendFrame } from './im.types';
 import { resolveInviteUser } from '../invite/invite.service';
+import { BotService } from './bot.service';
 
 /** 需要扣费的消息类型（礼物走礼物模块自身计费） */
 const CHARGED_TYPES = new Set(['text', 'image', 'video', 'audio', 'location', 'sticker']);
@@ -20,6 +21,7 @@ export class ImService {
     private readonly registry: ConnectionRegistry,
     private readonly wallets: WalletService,
     private readonly intimacy: IntimacyService,
+    private readonly bots: BotService,
   ) {}
 
   // ---------- 发送 ----------
@@ -75,6 +77,10 @@ export class ImService {
     });
 
     const payload = this.toPayload(msg, conv, sender, frame.content);
+    if (peer.isBot) {
+      void this.bots.onPrivateMessage(peer, sender, msg, frame.msgType, frame.content).catch(() => {});
+      return payload;
+    }
     await this.registry.deliver([peerId], { op: 'msg', data: payload });
     // 亲密度：发送方 +1，接收方 +0.5（异步不阻塞发送）
     void this.intimacy.bump(sender.id, peerId);
@@ -126,7 +132,7 @@ export class ImService {
       where: { groupId_userId: { groupId, userId: sender.id } },
     });
     if (!member) throw new ForbiddenException('不在该群中');
-    const group = await this.prisma.chatGroup.findUnique({ where: { id: groupId }, select: { kind: true, status: true } });
+    const group = await this.prisma.chatGroup.findUnique({ where: { id: groupId }, select: { id: true, name: true, kind: true, status: true } });
     if (!group || group.status !== 0) throw new NotFoundException('群不存在');
     if (group.kind === 2) {
       if (member.role !== 'owner' && member.role !== 'admin') throw new ForbiddenException('频道只有频道主能发帖');
@@ -153,6 +159,7 @@ export class ImService {
     const members = await this.prisma.groupMember.findMany({ where: { groupId }, select: { userId: true } });
     const targets = members.map((m) => m.userId).filter((id) => id !== sender.id);
     await this.registry.deliver(targets, { op: 'msg', data: payload });
+    void this.bots.onGroupMessage(group, sender, msg, frame.msgType, frame.content).catch(() => {});
     return payload;
   }
 
@@ -238,13 +245,15 @@ export class ImService {
       if (conv.type === 1) {
         const peerId = conv.userAId === userId ? conv.userBId! : conv.userAId!;
         const peer = await this.prisma.user.findUnique({ where: { id: peerId } });
+        // 机器人被删除 / 封禁：会话不再显示
+        if (peer?.isBot && peer.status !== 0) continue;
         const unread = await this.prisma.message.count({
           where: { conversationId: conv.id, receiverId: userId, isRead: false },
         });
         result.push({
           id: conv.id,
           type: 1,
-          peer: peer && { id: peer.id, nickname: peer.nickname, avatar: peer.avatar, gender: peer.gender },
+          peer: peer && { id: peer.id, nickname: peer.nickname, avatar: peer.avatar, gender: peer.gender, isBot: peer.isBot },
           lastMsg: lastMsg && this.preview(lastMsg, key),
           unread,
           lastMsgAt: conv.lastMsgAt,
@@ -395,6 +404,7 @@ export class ImService {
     const users = await this.prisma.user.findMany({
       where: {
         status: 0,
+        isBot: false,
         id: { not: userId },
         OR: [{ shortId: q }, { nickname: { contains: q }, gender: me.gender === 1 ? 2 : 1 }],
       },
@@ -403,7 +413,18 @@ export class ImService {
       select: { id: true, nickname: true, avatar: true, gender: true, age: true, cityName: true },
     });
 
-    return { messages, users };
+    // 机器人按用户名找（@xxx_bot 或 xxx_bot 都行）
+    const uname = q.replace(/^@/, '');
+    const bots = /^[A-Za-z0-9_]{2,40}$/.test(uname)
+      ? await this.prisma.bot.findMany({ where: { username: { contains: uname } }, take: 10 })
+      : [];
+    const botUsers = bots.length
+      ? await this.prisma.user.findMany({ where: { id: { in: bots.map((b) => b.id) }, status: 0 }, select: { id: true, nickname: true, avatar: true } })
+      : [];
+    const botMap = new Map(bots.map((b) => [b.id.toString(), b]));
+    const botHits = botUsers.map((u) => ({ ...u, gender: 0, age: 0, cityName: '', isBot: true, username: botMap.get(u.id.toString())?.username ?? '' }));
+
+    return { messages, users: [...botHits, ...users] };
   }
 
   /**
@@ -470,6 +491,7 @@ export class ImService {
     const senderIds = [...new Set(messages.map((m) => m.senderId.toString()))];
     const senders = await this.prisma.user.findMany({ where: { id: { in: senderIds.map(BigInt) } } });
     const senderMap = new Map(senders.map((s) => [s.id.toString(), s]));
+    const markups = await this.markupsOf(messages.filter((m) => senderMap.get(m.senderId.toString())?.isBot).map((m) => m.id));
 
     return messages.reverse().map((m) => {
       const sender = senderMap.get(m.senderId.toString());
@@ -479,6 +501,7 @@ export class ImService {
         senderId: m.senderId,
         senderNickname: sender?.nickname ?? '',
         senderAvatar: sender?.avatar ?? '',
+        ...(sender?.isBot ? { senderIsBot: true, markup: markups.get(m.id.toString()) ?? null } : {}),
         receiverId: m.receiverId,
         type: m.type,
         content: this.crypto.decrypt(key, m.cipherContent),
@@ -486,6 +509,21 @@ export class ImService {
         createdAt: m.createdAt,
       };
     });
+  }
+
+  /** 机器人消息的按钮（inline_keyboard），messageId → markup */
+  async markupsOf(ids: bigint[]) {
+    const map = new Map<string, unknown>();
+    if (!ids.length) return map;
+    const rows = await this.prisma.botMessageMarkup.findMany({ where: { messageId: { in: ids } } });
+    for (const r of rows) {
+      try {
+        map.set(r.messageId.toString(), JSON.parse(r.markup));
+      } catch {
+        /* ignore */
+      }
+    }
+    return map;
   }
 
   private async assertMember(userId: bigint, conv: any) {

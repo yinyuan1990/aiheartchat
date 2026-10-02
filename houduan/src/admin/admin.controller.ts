@@ -19,6 +19,7 @@ import { TgForwardService } from '../tgforward/tg-forward.service';
 import { PublishService } from '../publish/publish.service';
 import { XPicsService } from '../publish/x-pics.service';
 import { ChannelService } from '../im/channel.service';
+import { BotService } from '../im/bot.service';
 
 @Controller('admin')
 export class AdminController {
@@ -40,7 +41,28 @@ export class AdminController {
     private readonly hallTabs: HallTabsService,
     private readonly tgForward: TgForwardService,
     private readonly channels: ChannelService,
+    private readonly bots: BotService,
   ) {}
+
+  // ---------- 机器人（用户建的 Bot API 机器人：查看 / 封禁 / 删除） ----------
+
+  @Get('bots')
+  @UseGuards(AdminGuard)
+  botList(@Query('q') q?: string) {
+    return this.bots.adminList(q);
+  }
+
+  @Post('bots/:id/status')
+  @UseGuards(AdminGuard)
+  botStatus(@Param('id') id: string, @Body() body: { banned?: boolean }) {
+    return this.bots.adminSetBanned(BigInt(id), !!body?.banned);
+  }
+
+  @Post('bots/:id/delete')
+  @UseGuards(AdminGuard)
+  botDelete(@Param('id') id: string) {
+    return this.bots.adminDelete(BigInt(id));
+  }
 
   // ---------- 频道（用户开的频道：查看 / 封禁 / 删帖 / 删评论） ----------
 

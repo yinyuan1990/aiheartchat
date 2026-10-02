@@ -15,7 +15,7 @@ export class AuthService {
 
   async enter(deviceId: string) {
     const user = await this.prisma.user.findUnique({ where: { deviceId } });
-    if (!user) {
+    if (!user || user.isBot) {
       return { registered: false, token: null, user: null };
     }
     if (user.status !== 0) {
@@ -26,6 +26,7 @@ export class AuthService {
 
   async register(dto: RegisterDto, ip = '') {
     const exists = await this.prisma.user.findUnique({ where: { deviceId: dto.deviceId } });
+    if (exists?.isBot || dto.deviceId.startsWith('bot_')) throw new BadRequestException('设备 ID 无效');
     if (exists) {
       // 一机一号：已注册直接恢复，不允许二次注册
       return { registered: true, token: this.sign(exists.id), user: this.toProfile(exists), inviter: null };

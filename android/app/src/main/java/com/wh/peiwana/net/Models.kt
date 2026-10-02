@@ -1,6 +1,14 @@
 package com.wh.peiwana.net
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+
+/** 机器人消息下面的内联按钮（Telegram inline_keyboard 格式） */
+@Serializable
+data class InlineButton(val text: String = "", val url: String? = null, @SerialName("callback_data") val callbackData: String? = null)
+
+@Serializable
+data class InlineMarkup(@SerialName("inline_keyboard") val inlineKeyboard: List<List<InlineButton>> = emptyList())
 
 @Serializable
 data class MomentUser(

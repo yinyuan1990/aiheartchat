@@ -37,6 +37,8 @@ struct SearchUserHit: Codable, Identifiable {
     var avatar: String?
     var age: Int?
     var cityName: String?
+    var isBot: Bool?
+    var username: String?
 }
 
 struct SearchResp: Codable {
@@ -349,20 +351,31 @@ struct ChatSearchView: View {
         let extraHits = extras.filter { $0.title.lowercased().contains(lower) }
         let chatHits = convs.filter { convTitle($0).lowercased().contains(lower) }
         let peerIds = Set(convs.filter { $0.type == 1 }.compactMap { $0.peer?.id })
-        let userHits = resultQuery == keyword ? (result.users ?? []).filter { !peerIds.contains($0.id) } : []
+        let serverUsers = resultQuery == keyword ? (result.users ?? []) : []
+        let userHits = serverUsers.filter { !peerIds.contains($0.id) }
+        // 服务端按 @用户名 搜到、但本地已有会话的（比如机器人），按会话显示
+        let knownHits = serverUsers.filter { peerIds.contains($0.id) }
+            .compactMap { u in convs.first { $0.type == 1 && $0.peer?.id == u.id } }
+            .filter { c in !chatHits.contains { $0.id == c.id } }
         ForEach(extraHits) { extraRow($0) }
         ForEach(chatHits) { convRow($0) }
+        ForEach(knownHits) { convRow($0) }
         if !userHits.isEmpty {
             sectionHead("全局搜索")
             ForEach(userHits) { u in
-                let sub = [u.age.flatMap { $0 > 0 ? "\($0) 岁" : nil }, u.cityName.flatMap { $0.isEmpty ? nil : $0 }]
-                    .compactMap { $0 }.joined(separator: " · ")
+                let sub = userHitSubtitle(u)
                 userRow(SearchRecent(kind: "user", id: u.id, title: u.nickname ?? "", avatar: u.avatar ?? "", subtitle: sub.isEmpty ? "用户" : sub))
             }
         }
-        if extraHits.isEmpty && chatHits.isEmpty && userHits.isEmpty {
+        if extraHits.isEmpty && chatHits.isEmpty && knownHits.isEmpty && userHits.isEmpty {
             hint(loading ? "搜索中…" : "没有找到相关聊天")
         }
+    }
+
+    private func userHitSubtitle(_ u: SearchUserHit) -> String {
+        if u.isBot == true { return "@\(u.username ?? "") · 机器人" }
+        let parts: [String?] = [u.age.flatMap { $0 > 0 ? "\($0) 岁" : nil }, u.cityName.flatMap { $0.isEmpty ? nil : $0 }]
+        return parts.compactMap { $0 }.joined(separator: " · ")
     }
 
     @ViewBuilder private var messagesContent: some View {

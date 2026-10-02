@@ -18,6 +18,8 @@ export class GiftService {
   /** 送礼：扣积分 → 对方入账 → 写送礼记录 → 发一条礼物消息 */
   async send(senderId: bigint, receiverId: bigint, giftId: number) {
     if (senderId === receiverId) throw new BadRequestException('不能送给自己');
+    const receiver = await this.prisma.user.findUnique({ where: { id: receiverId }, select: { isBot: true, status: true } });
+    if (!receiver || receiver.status !== 0 || receiver.isBot) throw new BadRequestException('不能给 TA 送礼物');
     const gift = await this.prisma.gift.findUnique({ where: { id: giftId } });
     if (!gift || !gift.enabled) throw new NotFoundException('礼物不存在');
 

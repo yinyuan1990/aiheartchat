@@ -12,6 +12,9 @@ struct MessagePayload: Codable {
     let type: String
     let content: String
     let createdAt: String
+    /// 机器人发的消息才有
+    var senderIsBot: Bool?
+    var markup: InlineMarkup?
 }
 
 /// IM WebSocket：自动重连 + 心跳 + 帧分发（协议见后端 im.types.ts）

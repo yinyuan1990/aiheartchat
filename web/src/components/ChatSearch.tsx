@@ -5,7 +5,7 @@ import { ScanIcon } from './QrScanner';
 export interface SearchConv {
   id: string;
   type: number;
-  peer?: { id: string; nickname: string; avatar: string };
+  peer?: { id: string; nickname: string; avatar: string; isBot?: boolean };
   group?: { id: string; name: string; avatar: string };
   lastMsg?: { type: string; content: string } | null;
   unread: number;
@@ -39,11 +39,13 @@ interface UserHit {
   avatar: string;
   age?: number;
   cityName?: string;
+  isBot?: boolean;
+  username?: string;
 }
 
 type Recent =
   | { kind: 'conv'; id: string }
-  | { kind: 'user'; id: string; title: string; avatar: string; subtitle: string }
+  | { kind: 'user'; id: string; title: string; avatar: string; subtitle: string; isBot?: boolean }
   | { kind: 'extra'; id: string };
 
 const RECENT_KEY = 'pw_chat_search_recent';
@@ -126,7 +128,7 @@ export function ChatSearch({
   onClose: () => void;
   onOpenConv: (c: { id: string; type: number; targetId: string; title: string; focusMsgId?: string }) => void;
   /** 搜到的用户：直接打开私聊 */
-  onOpenUser: (id: string, nickname: string) => void;
+  onOpenUser: (id: string, nickname: string, isBot?: boolean) => void;
   onScan: () => void;
 }) {
   const [q, setQ] = useState('');
@@ -171,9 +173,9 @@ export function ChatSearch({
     remember({ kind: 'extra', id: e.key });
     e.onOpen();
   };
-  const openUser = (u: { id: string; title: string; avatar: string; subtitle: string }) => {
+  const openUser = (u: { id: string; title: string; avatar: string; subtitle: string; isBot?: boolean }) => {
     remember({ kind: 'user', ...u });
-    onOpenUser(u.id, u.title);
+    onOpenUser(u.id, u.title, u.isBot);
   };
 
   const convById = useMemo(() => new Map(convs.map((c) => [c.id, c])), [convs]);
@@ -181,9 +183,15 @@ export function ChatSearch({
   const peerIds = useMemo(() => new Set(convs.filter((c) => c.type === 1).map((c) => c.peer?.id)), [convs]);
 
   const lower = keyword.toLowerCase();
-  const chatHits = keyword ? convs.filter((c) => convTitle(c).toLowerCase().includes(lower)) : [];
-  const extraHits = keyword ? extras.filter((e) => e.title.toLowerCase().includes(lower)) : [];
   const fresh = result && result.q === keyword ? result : null;
+  const titleHits = keyword ? convs.filter((c) => convTitle(c).toLowerCase().includes(lower)) : [];
+  // 服务端搜到的人（如按 @用户名 搜到的机器人）已经聊过：显示成会话
+  const knownHits = (fresh?.users ?? [])
+    .filter((u) => peerIds.has(u.id))
+    .map((u) => convs.find((c) => c.type === 1 && c.peer?.id === u.id)!)
+    .filter((c) => c && !titleHits.includes(c));
+  const chatHits = [...titleHits, ...knownHits];
+  const extraHits = keyword ? extras.filter((e) => e.title.toLowerCase().includes(lower)) : [];
   const userHits = (fresh?.users ?? []).filter((u) => !peerIds.has(u.id));
   const msgHits = fresh?.messages ?? [];
 
@@ -191,7 +199,7 @@ export function ChatSearch({
     <div key={`c${c.id}`} className="cs-row" onClick={() => openConv(c)}>
       <div className="avatar" style={{ width: 44, height: 44 }}>{convAvatar(c) && <img src={convAvatar(c)} alt="" />}</div>
       <div className="cs-row-main">
-        <div className="cs-row-title ellipsis"><Highlight text={convTitle(c)} q={keyword} />{c.type === 2 && <span className="cs-tag">群</span>}</div>
+        <div className="cs-row-title ellipsis"><Highlight text={convTitle(c)} q={keyword} />{c.type === 2 && <span className="cs-tag">群</span>}{c.peer?.isBot && <span className="bot-tag">机器人</span>}</div>
         <div className="cs-row-sub ellipsis">{sub ?? previewOf(c.lastMsg)}</div>
       </div>
       <Badge n={c.unread} />
@@ -209,17 +217,17 @@ export function ChatSearch({
     </div>
   );
 
-  const userRow = (u: { id: string; title: string; avatar: string; subtitle: string }) => (
+  const userRow = (u: { id: string; title: string; avatar: string; subtitle: string; isBot?: boolean }) => (
     <div key={`u${u.id}`} className="cs-row" onClick={() => openUser(u)}>
       <div className="avatar" style={{ width: 44, height: 44 }}>{u.avatar && <img src={u.avatar} alt="" />}</div>
       <div className="cs-row-main">
-        <div className="cs-row-title ellipsis"><Highlight text={u.title} q={keyword} /></div>
+        <div className="cs-row-title ellipsis"><Highlight text={u.title} q={keyword} />{u.isBot && <span className="bot-tag">机器人</span>}</div>
         <div className="cs-row-sub ellipsis">{u.subtitle}</div>
       </div>
     </div>
   );
 
-  const userSub = (u: UserHit) => [u.age ? `${u.age} 岁` : '', u.cityName ?? ''].filter(Boolean).join(' · ') || '用户';
+  const userSub = (u: UserHit) => (u.isBot ? `@${u.username}` : [u.age ? `${u.age} 岁` : '', u.cityName ?? ''].filter(Boolean).join(' · ') || '用户');
 
   const top = convs.slice(0, 12);
   const recentRows = recent
@@ -290,7 +298,7 @@ export function ChatSearch({
               {userHits.length > 0 && (
                 <>
                   <div className="cs-section"><span>全局搜索</span></div>
-                  {userHits.map((u) => userRow({ id: u.id, title: u.nickname, avatar: u.avatar, subtitle: userSub(u) }))}
+                  {userHits.map((u) => userRow({ id: u.id, title: u.nickname, avatar: u.avatar, subtitle: userSub(u), isBot: u.isBot }))}
                 </>
               )}
               {chatHits.length + extraHits.length + userHits.length === 0 && (

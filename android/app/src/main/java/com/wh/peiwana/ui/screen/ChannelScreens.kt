@@ -97,6 +97,7 @@ private data class ChannelPost(
     val reactions: List<ChannelReaction> = emptyList(),
     val myReaction: String? = null,
     val commentCount: Int = 0,
+    val markup: InlineMarkup? = null,
     /** 本地发出的帖子：ack 前 pending，tempId 一直留着当列表 key */
     val tempId: String? = null,
     val pending: Boolean = false,
@@ -223,6 +224,7 @@ private fun PostCard(ch: ChannelInfo, p: ChannelPost, onReact: (String) -> Unit,
             if (onDelete != null && !p.pending) Text("删除", color = TextDim, fontSize = 12.sp, modifier = Modifier.noRippleClick(onDelete))
         }
         PostBody(p, onMedia)
+        InlineKeyboard(p.markup, p.id, Modifier.fillMaxWidth().padding(horizontal = 12.dp))
         Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 p.reactions.forEach { r -> ReactChip("${r.emoji} ${fmtCount(r.count)}", p.myReaction == r.emoji) { onReact(r.emoji) } }
@@ -311,7 +313,7 @@ fun ChannelScreen(groupId: String, myUserId: String, onBack: () -> Unit, onExit:
                     if (m.conversationId != conv) return@addListener
                     if (posts.none { it.id == m.id }) {
                         stickBottom = true
-                        posts = posts + ChannelPost(m.id, m.senderId, m.type, m.content, m.createdAt, views = 1)
+                        posts = posts + ChannelPost(m.id, m.senderId, m.type, m.content, m.createdAt, views = 1, markup = m.markup)
                     }
                     WsClient.markRead(conv, m.id)
                 }
@@ -336,11 +338,19 @@ fun ChannelScreen(groupId: String, myUserId: String, onBack: () -> Unit, onExit:
                     val cc = d["commentCount"]?.jsonPrimitive?.intOrNull ?: 0
                     posts = posts.map { if (it.id == id) it.copy(reactions = rx, commentCount = cc) else it }
                 }
-                "channel_post_deleted" -> {
+                "channel_post_deleted", "msg_delete" -> {
                     val d = frame["data"]?.jsonObject ?: return@addListener
                     if (d["conversationId"]?.jsonPrimitive?.content != conv) return@addListener
                     val id = d["msgId"]?.jsonPrimitive?.content
                     posts = posts.filterNot { it.id == id }
+                }
+                "msg_edit" -> {
+                    val d = frame["data"]?.jsonObject ?: return@addListener
+                    if (d["conversationId"]?.jsonPrimitive?.content != conv) return@addListener
+                    val id = d["msgId"]?.jsonPrimitive?.content
+                    val content = d["content"]?.jsonPrimitive?.content
+                    val mk = d["markup"]?.let { el -> runCatching { WsClient.json.decodeFromJsonElement(InlineMarkup.serializer(), el) }.getOrNull() }
+                    posts = posts.map { if (it.id == id) it.copy(content = content ?: it.content, markup = mk) else it }
                 }
             }
         }
@@ -576,6 +586,7 @@ private fun ChannelInfoSheet(ch: ChannelInfo, onClose: () -> Unit, onChanged: (C
     var desc by remember { mutableStateOf(ch.description) }
     var showShare by remember { mutableStateOf(false) }
     var confirmLeave by remember { mutableStateOf(false) }
+    var showBots by remember { mutableStateOf(false) }
     val owner = ch.role == "owner"
 
     fun save(body: kotlinx.serialization.json.JsonObject) {
@@ -619,6 +630,7 @@ private fun ChannelInfoSheet(ch: ChannelInfo, onClose: () -> Unit, onChanged: (C
                 }
                 if (ch.canPost) menu("编辑频道资料", TextMain) { name = ch.name; desc = ch.description; editing = true }
                 if (ch.isMember) menu("分享频道（二维码 / 邀请码）", TextMain) { showShare = true }
+                if (owner) menu("机器人（自动发帖）", TextMain) { showBots = true }
                 if (ch.isMember && !owner) menu(if (ch.muted) "取消静音" else "静音", TextMain) {
                     scope.launch {
                         runCatching { Api.request("/im/channel/${ch.id}/mute", "POST", buildJsonObject { put("muted", JsonPrimitive(!ch.muted)) }) }
@@ -630,6 +642,7 @@ private fun ChannelInfoSheet(ch: ChannelInfo, onClose: () -> Unit, onChanged: (C
         }
     }
     if (showShare) GroupShareDialog(groupId = ch.id, onClose = { showShare = false }, channel = true)
+    if (showBots) AddBotSheet(groupId = ch.id, channel = true, onDismiss = { showBots = false })
     if (confirmLeave) {
         ConfirmDialog(
             if (owner) "删除频道后所有订阅者都看不到它，确定删除？" else "确定退订这个频道？",

@@ -376,6 +376,14 @@ fun AppRoot() {
             page("guide-apply") { GuideApplyScreen(onBack = { nav.popBackStack() }) }
             page("realname") { RealnameScreen(onBack = { nav.popBackStack() }) }
             page("gifts-received") { GiftsReceivedScreen(onBack = { nav.popBackStack() }) }
+            page("bots") { BotsScreen(onBack = { nav.popBackStack() }, onOpen = { nav.navigate("bots/$it") }) }
+            page("bots/{id}", listOf(navArgument("id") { type = NavType.StringType })) { e ->
+                BotDetailScreen(
+                    botId = e.arguments?.getString("id") ?: "",
+                    onBack = { nav.popBackStack() },
+                    onOpenChat = { id, name -> openChatWithUser(id, name) },
+                )
+            }
             page("my-moments") { MyMomentsScreen(onBack = { nav.popBackStack() }, onOpen = { nav.navigate("moment/$it") }) }
             page("follow-moments") {
                 FollowMomentsScreen(

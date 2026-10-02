@@ -15,6 +15,9 @@
  *   { op: "read", conversationId, msgId, userId }
  *   { op: "error", tempId?, msg }
  *   { op: "pong" }
+ *   { op: "msg_edit", data: { conversationId, msgId, content, markup } }   机器人编辑了自己的消息
+ *   { op: "msg_delete", data: { conversationId, msgId } }                  机器人删了自己的消息
+ *   { op: "bot_callback_answer", data: { queryId, text, showAlert, url } } 点回调按钮后机器人的回应
  */
 
 export interface SendFrame {
@@ -44,6 +47,9 @@ export interface MessagePayload {
   type: string;
   content: string;
   createdAt: string;
+  /** 机器人发的消息才有：发送者是机器人、消息下方的按钮 */
+  senderIsBot?: boolean;
+  markup?: { inline_keyboard: { text: string; url?: string; callback_data?: string }[][] } | null;
 }
 
 /** Redis 跨节点投递载荷 */

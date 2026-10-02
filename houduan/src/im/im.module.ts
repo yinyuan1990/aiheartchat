@@ -8,12 +8,15 @@ import { ImGateway } from './im.gateway';
 import { ImService } from './im.service';
 import { VoiceRoomService } from './voiceroom.service';
 import { ChannelService } from './channel.service';
+import { BotService } from './bot.service';
+import { BotApiController } from './bot-api.controller';
 import { StickerModule } from '../sticker/sticker.module';
+import { UploadModule } from '../upload/upload.module';
 
 @Module({
-  imports: [AuthModule, WalletModule, StickerModule],
-  controllers: [ImController],
-  providers: [ConnectionRegistry, ImService, GroupService, ImGateway, VoiceRoomService, ChannelService],
-  exports: [ConnectionRegistry, ImService, ChannelService],
+  imports: [AuthModule, WalletModule, StickerModule, UploadModule],
+  controllers: [ImController, BotApiController],
+  providers: [ConnectionRegistry, ImService, GroupService, ImGateway, VoiceRoomService, ChannelService, BotService],
+  exports: [ConnectionRegistry, ImService, ChannelService, BotService],
 })
 export class ImModule {}

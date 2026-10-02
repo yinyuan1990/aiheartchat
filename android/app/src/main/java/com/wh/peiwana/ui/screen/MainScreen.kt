@@ -123,6 +123,7 @@ fun MainScreen(
                     onOpenChannel = { onNav("channel/$it") },
                     onOpenChannels = { onNav("channels") },
                     onCreateChannel = { onNav("create-channel") },
+                    onOpenBots = { onNav("bots") },
                 )
             }
             Pane(active = tab == 3) {

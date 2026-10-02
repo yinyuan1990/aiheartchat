@@ -102,6 +102,7 @@ fun MeScreen(modifier: Modifier = Modifier, initialUser: UserProfile?, onNav: (S
             add("关注动态" to "follow-moments")
             add((if (u.gender == 2) "我的接单" else "我的约单") to "task/mine")
             add("收到的礼物" to "gifts-received")
+            add("我的机器人" to "bots")
             // 搭子认证已合并实名认证（申请时提交姓名+身份证，审核通过即实名）
             if (!u.isGuide) add("搭子认证" to "guide-apply")
         }

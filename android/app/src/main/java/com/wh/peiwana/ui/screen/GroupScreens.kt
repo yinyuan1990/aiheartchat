@@ -101,7 +101,7 @@ fun CreateGroupScreen(onBack: () -> Unit, onCreated: (convId: String, groupId: S
 }
 
 @Serializable
-private data class GroupMemberItem(val id: String, val nickname: String = "", val avatar: String = "", val role: String = "member")
+private data class GroupMemberItem(val id: String, val nickname: String = "", val avatar: String = "", val role: String = "member", val isBot: Boolean = false)
 
 @Serializable
 private data class GroupInfo(val id: String, val name: String, val avatar: String = "", val notice: String = "", val members: List<GroupMemberItem> = emptyList())
@@ -113,6 +113,7 @@ data class GroupShareInfo(val code: String = "", val hasPassword: Boolean = fals
 fun GroupInfoScreen(groupId: String, myUserId: String, onBack: () -> Unit, onExit: () -> Unit) {
     var info by remember { mutableStateOf<GroupInfo?>(null) }
     var showShare by remember { mutableStateOf(false) }
+    var showBots by remember { mutableStateOf(false) }
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     fun load() { scope.launch { info = runCatching { Api.getObj<GroupInfo>("/im/group/$groupId") }.getOrNull() } }
@@ -139,24 +140,28 @@ fun GroupInfoScreen(groupId: String, myUserId: String, onBack: () -> Unit, onExi
     if (showShare) {
         GroupShareDialog(groupId = groupId, onClose = { showShare = false })
     }
+    if (showBots) AddBotSheet(groupId = groupId, channel = false, onDismiss = { showBots = false }, onChanged = { load() })
 
     Column(Modifier.fillMaxSize()) {
         NavBar(g.name, onBack, action = {
             Text("分享", color = Accent, fontSize = 14.sp, modifier = Modifier.clickable { showShare = true })
         })
         // 群头像 + 人数
-        Row(Modifier.padding(16.dp, 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(Modifier.fillMaxWidth().padding(16.dp, 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(Modifier.noRippleClick { if (canEdit) pickAvatar.launch("image/*") }) { Avatar(g.avatar, 56) }
             Column {
                 Text("共 ${g.members.size} 人", color = TextSub, fontSize = 13.sp)
                 if (canEdit) Text("点头像可修改", color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp))
             }
+            Spacer(Modifier.weight(1f))
+            if (canEdit) Text("机器人", color = BotBlue, fontSize = 13.sp, modifier = Modifier.clip(RoundedCornerShape(14.dp)).background(Bg3).clickable { showBots = true }.padding(horizontal = 12.dp, vertical = 6.dp))
         }
         LazyVerticalGrid(columns = GridCells.Fixed(5), contentPadding = PaddingValues(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.weight(1f)) {
             items(g.members, key = { it.id }) { m ->
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Avatar(m.avatar, 48)
-                    Text(m.nickname + (if (m.role == "owner") " 主" else ""), color = TextSub, fontSize = 11.sp, maxLines = 1)
+                    Text(m.nickname + (if (m.role == "owner") " 主" else ""), color = if (m.isBot) BotBlue else TextSub, fontSize = 11.sp, maxLines = 1)
+                    if (m.isBot) Text("机器人", color = BotBlue, fontSize = 9.sp)
                 }
             }
         }

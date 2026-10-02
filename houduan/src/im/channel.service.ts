@@ -200,10 +200,14 @@ export class ChannelService {
     const [reactions, comments] = await this.stats(ids, userId);
     const senders = await this.prisma.user.findMany({
       where: { id: { in: [...new Set(rows.map((m) => m.senderId.toString()))].map(BigInt) } },
-      select: { id: true, nickname: true, avatar: true },
+      select: { id: true, nickname: true, avatar: true, isBot: true },
     });
     const senderMap = new Map(senders.map((s) => [s.id.toString(), s]));
+    const botMsgIds = rows.filter((m) => senderMap.get(m.senderId.toString())?.isBot).map((m) => m.id);
+    const markupRows = botMsgIds.length ? await this.prisma.botMessageMarkup.findMany({ where: { messageId: { in: botMsgIds } } }) : [];
+    const markupMap = new Map(markupRows.map((r) => [r.messageId.toString(), r.markup]));
     return rows.map((m) => {
+      const markup = markupMap.get(m.id.toString());
       let content = '';
       try {
         content = this.crypto.decrypt(key, m.cipherContent);
@@ -224,6 +228,7 @@ export class ChannelService {
         reactions: r?.list ?? [],
         myReaction: r?.mine ?? null,
         commentCount: comments.get(m.id.toString()) ?? 0,
+        ...(markup ? { markup: JSON.parse(markup) } : {}),
       };
     });
   }
@@ -323,6 +328,7 @@ export class ChannelService {
       this.prisma.message.delete({ where: { id: messageId } }),
       this.prisma.channelReaction.deleteMany({ where: { messageId } }),
       this.prisma.channelComment.deleteMany({ where: { messageId } }),
+      this.prisma.botMessageMarkup.deleteMany({ where: { messageId } }),
     ]);
     const conv = await this.prisma.conversation.findUnique({ where: { groupId }, select: { id: true } });
     const members = await this.prisma.groupMember.findMany({ where: { groupId }, select: { userId: true } });

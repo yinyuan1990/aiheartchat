@@ -253,6 +253,7 @@ export class UserService {
       this.prisma.user.findUnique({ where: { id: targetId }, include: { albums: { orderBy: { sort: 'asc' } } } }),
     ]);
     if (!target || target.status !== 0) throw new NotFoundException('用户不存在');
+    if (target.isBot) throw new NotFoundException('机器人没有个人主页');
     // 全局性别隔离：仅异性可见
     if (viewer && viewer.gender === target.gender && viewerId !== targetId) {
       throw new ForbiddenException('无法查看该用户');

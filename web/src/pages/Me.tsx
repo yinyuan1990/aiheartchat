@@ -108,6 +108,7 @@ export function MePage() {
         <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/follow-moments')}>关注动态</div>
         <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/task/mine')}>{me.gender === 2 ? '我的接单' : '我的约单'}</div>
         <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/gifts-received')}>收到的礼物</div>
+        <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/bots')}>我的机器人</div>
       </div>
       {/* 搭子认证已合并实名认证（申请时提交姓名+身份证，审核通过即实名） */}
       {!me.isGuide && (

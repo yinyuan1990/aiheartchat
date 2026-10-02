@@ -10,6 +10,7 @@ struct PeerBrief: Codable, Hashable {
     var nickname: String? = ""
     var avatar: String? = ""
     var gender: Int? = 0
+    var isBot: Bool? = false
 }
 
 struct GroupBrief: Codable, Hashable {
@@ -50,6 +51,8 @@ struct MsgItem: Codable, Identifiable {
     var type: String = "text"
     var content: String = ""
     var createdAt: String? = ""
+    var senderIsBot: Bool? = nil
+    var markup: InlineMarkup? = nil
 }
 
 func previewOf(_ msg: LastMsg?) -> String {
@@ -183,6 +186,7 @@ struct MessagesView: View {
                 RouteLink(.joinGroup(nil)) { Label("加入群聊", systemImage: "qrcode.viewfinder") }
                 RouteLink(.createChannel) { Label("创建频道", systemImage: "megaphone") }
                 RouteLink(.channels) { Label("发现频道", systemImage: "magnifyingglass") }
+                RouteLink(.bots) { Label("我的机器人", systemImage: "cpu") }
             } label: {
                 Text("+").font(.system(size: 18)).foregroundStyle(Theme.text)
                     .frame(width: 34, height: 34)
@@ -341,6 +345,7 @@ struct MessagesView: View {
                         .padding(.horizontal, 4)
                         .background(RoundedRectangle(cornerRadius: 4).fill(Theme.bg3))
                 }
+                if c.peer?.isBot == true { BotTag() }
             }
         }
         .buttonStyle(.plain)
@@ -498,6 +503,10 @@ struct ChatRoomView: View {
 
     @EnvironmentObject var state: AppState
     @State private var messages: [MsgItem] = []
+    @State private var loaded = false
+    /// 对方是机器人时的公开资料（简介卡片 / 开始按钮 / 命令菜单）
+    @State private var bot: BotPublic?
+    @State private var showCmds = false
     // 从搜索结果进来：首屏定位到该消息并闪一下，之后照常滚到底
     @State private var focusPending = true
     @State private var flashId: String?
@@ -521,6 +530,7 @@ struct ChatRoomView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 0) {
+                        if botFresh, let b = bot { botIntro(b) }
                         ForEach(Array(messages.enumerated()), id: \.element.id) { idx, m in
                             // 微信式时间分隔条：与上一条间隔超 5 分钟显示
                             if shouldShowTime(idx) {
@@ -539,7 +549,7 @@ struct ChatRoomView: View {
                     }
                     .padding(.horizontal, 12).padding(.vertical, 8)
                 }
-                .onTapGesture { showSticker = false; inputFocused = false }
+                .onTapGesture { showSticker = false; showCmds = false; inputFocused = false }
                 // 进入聊天默认停在最底部（最新消息）；defaultScrollAnchor 是 iOS 17 API，改用 scrollTo
                 .onAppear {
                     if let last = messages.last {
@@ -573,7 +583,18 @@ struct ChatRoomView: View {
                 }
             }
 
-            bottomBar
+            if botFresh {
+                // 和机器人的空会话：底部是「开始」按钮（发 /start），同 Telegram
+                Button { sendMsg("text", "/start") } label: {
+                    Text("开始").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.accent)
+                        .frame(maxWidth: .infinity).padding(.vertical, 16)
+                        .background(Theme.bg2)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            } else {
+                bottomBar
+            }
         }
         .overlay {
             if recording {
@@ -588,6 +609,14 @@ struct ChatRoomView: View {
         .navigationBarTitleDisplayMode(.inline)
         .compatNavBarBackground(Theme.bg)
         .toolbar {
+            if bot != nil {
+                ToolbarItem(placement: .principal) {
+                    HStack(spacing: 6) {
+                        Text(title).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
+                        BotTag()
+                    }
+                }
+            }
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 14) {
                     Button {
@@ -634,7 +663,7 @@ struct ChatRoomView: View {
         }
         .sheet(isPresented: $showAttach) {
             AttachSheet(
-                isSingle: convType == 1,
+                isSingle: convType == 1 && bot == nil,
                 canVideoCall: state.user?.gender == 1,
                 onClose: { showAttach = false },
                 onSendAssets: sendAttachAssets,
@@ -661,8 +690,13 @@ struct ChatRoomView: View {
         .task {
             let around = focusPending ? focusMsgId.map { "&aroundId=\($0)" } ?? "" : ""
             messages = (try? await Api.request("/im/messages?conversationId=\(convId)\(around)")) ?? []
+            loaded = true
             if let last = messages.last { WsClient.shared.markRead(conversationId: convId, msgId: last.id) }
             WsClient.shared.connect()
+            // 空会话或对方发过机器人消息：查一下对方是不是机器人
+            if convType == 1 && (messages.isEmpty || messages.contains(where: { $0.senderIsBot == true && $0.senderId == targetId })) {
+                bot = await BotInfoCache.shared.get(targetId)
+            }
             // 群聊：拉一次语音房人数（入口角标）
             if convType == 2 { await vroom.refreshInfo(groupId: targetId) }
             removeListener = WsClient.shared.addListener { frame in
@@ -683,6 +717,19 @@ struct ChatRoomView: View {
                     }
                     return
                 }
+                if op == "msg_edit" || op == "msg_delete" {
+                    // 机器人改消息（文字 / 按钮）或撤回
+                    guard let data = frame["data"] as? [String: Any],
+                          botFrameStr(data["conversationId"]) == convId,
+                          let id = botFrameStr(data["msgId"]) else { return }
+                    if op == "msg_delete" {
+                        messages.removeAll { $0.id == id }
+                    } else if let idx = messages.firstIndex(where: { $0.id == id }) {
+                        if let c = data["content"] as? String { messages[idx].content = c }
+                        messages[idx].markup = InlineMarkup.from(data["markup"])
+                    }
+                    return
+                }
                 guard op == "msg",
                       let data = frame["data"] as? [String: Any],
                       let json = try? JSONSerialization.data(withJSONObject: data),
@@ -690,8 +737,12 @@ struct ChatRoomView: View {
                       m.conversationId == convId else { return }
                 messages.append(MsgItem(id: m.id, conversationId: m.conversationId, senderId: m.senderId,
                                         senderNickname: m.senderNickname, senderAvatar: m.senderAvatar,
-                                        receiverId: m.receiverId, type: m.type, content: m.content, createdAt: m.createdAt))
+                                        receiverId: m.receiverId, type: m.type, content: m.content, createdAt: m.createdAt,
+                                        senderIsBot: m.senderIsBot, markup: m.markup))
                 WsClient.shared.markRead(conversationId: convId, msgId: m.id)
+                if m.senderIsBot == true && convType == 1 && bot == nil {
+                    Task { bot = await BotInfoCache.shared.get(m.senderId) }
+                }
             }
         }
         .onDisappear { removeListener?() }
@@ -699,9 +750,72 @@ struct ChatRoomView: View {
 
     // MARK: - 底部输入区（微信式）
 
+    private var botFresh: Bool { bot != nil && loaded && messages.isEmpty }
+
+    private func botIntro(_ b: BotPublic) -> some View {
+        VStack(spacing: 4) {
+            AvatarView(url: b.avatar, size: 64)
+            HStack(spacing: 6) {
+                Text(b.name ?? title).font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
+                BotTag()
+            }
+            .padding(.top, 6)
+            Text("@\(b.username ?? "")").font(.system(size: 12)).foregroundStyle(Theme.textSub)
+            if let d = b.description, !d.isEmpty {
+                Text(d).font(.system(size: 14)).foregroundStyle(Theme.text).lineSpacing(4)
+                    .multilineTextAlignment(.center).padding(.top, 8)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(20)
+        .background(RoundedRectangle(cornerRadius: 14).fill(Theme.bg2))
+        .padding(.horizontal, 24).padding(.top, 40)
+    }
+
+    /// 命令菜单：点「/」展开全部，或输入以 / 开头时按前缀过滤
+    private var shownCmds: [BotCommandItem] {
+        let cmds = bot?.commands ?? []
+        if showCmds { return cmds }
+        guard input.hasPrefix("/"), !input.contains(" ") else { return [] }
+        let q = input.dropFirst().lowercased()
+        return cmds.filter { $0.command.lowercased().hasPrefix(q) }
+    }
+
     private var bottomBar: some View {
         VStack(spacing: 0) {
+            if !shownCmds.isEmpty {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(shownCmds, id: \.command) { c in
+                            Button {
+                                showCmds = false; input = ""
+                                sendMsg("text", "/\(c.command)")
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Text("/\(c.command)").font(.system(size: 14, weight: .medium)).foregroundStyle(botBlue)
+                                    Text(c.description ?? "").font(.system(size: 13)).foregroundStyle(Theme.textSub).lineLimit(1)
+                                    Spacer(minLength: 0)
+                                }
+                                .padding(.horizontal, 16).padding(.vertical, 10)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .frame(maxHeight: min(CGFloat(shownCmds.count) * 40, 220))
+            }
             HStack(alignment: .bottom, spacing: 8) {
+                if !(bot?.commands ?? []).isEmpty {
+                    Button {
+                        showSticker = false; showCmds.toggle()
+                    } label: {
+                        Text("/").font(.system(size: 18, weight: .bold)).foregroundStyle(showCmds ? botBlue : Theme.textSub)
+                            .frame(width: 40, height: 40)
+                            .background(Circle().fill(showCmds ? Theme.bubbleMine : Theme.bg3))
+                    }
+                    .buttonStyle(.plain)
+                }
                 Button {
                     voiceMode.toggle(); showSticker = false; inputFocused = false
                 } label: {
@@ -947,10 +1061,16 @@ struct MsgBubble: View {
             if !mine { AvatarView(url: avatarUrl, size: 38) }
             VStack(alignment: mine ? .trailing : .leading, spacing: 2) {
                 if !mine {
-                    Text(m.senderNickname ?? "").font(.system(size: 11)).foregroundStyle(Theme.textSub)
-                        .padding(.leading, 4)
+                    HStack(spacing: 4) {
+                        Text(m.senderNickname ?? "").font(.system(size: 11)).foregroundStyle(Theme.textSub)
+                        if m.senderIsBot == true && convType == 2 { BotTag() }
+                    }
+                    .padding(.leading, 4)
                 }
                 content
+                if !(m.markup?.inlineKeyboard ?? []).isEmpty {
+                    InlineKeyboardView(markup: m.markup, messageId: m.id).frame(width: 230)
+                }
             }
             .frame(maxWidth: 240, alignment: mine ? .trailing : .leading)
             if mine { AvatarView(url: avatarUrl, size: 38) }
@@ -1568,6 +1688,7 @@ struct GroupInfoView: View {
         var nickname: String? = ""
         var avatar: String? = ""
         var role: String? = "member"
+        var isBot: Bool? = false
     }
     struct GroupInfoData: Codable {
         var id: String = ""
@@ -1579,6 +1700,7 @@ struct GroupInfoView: View {
 
     @State private var info: GroupInfoData?
     @State private var showShare = false
+    @State private var showBots = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1611,6 +1733,14 @@ struct GroupInfoView: View {
                         }
                     }
                     Spacer()
+                    if canEdit {
+                        Button { showBots = true } label: {
+                            Text("机器人").font(.system(size: 13)).foregroundStyle(botBlue)
+                                .padding(.horizontal, 12).padding(.vertical, 6)
+                                .background(Capsule().fill(Theme.bg3))
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 6)
@@ -1621,7 +1751,8 @@ struct GroupInfoView: View {
                             VStack(spacing: 4) {
                                 AvatarView(url: m.avatar, size: 48)
                                 Text((m.nickname ?? "") + (m.role == "owner" ? " 主" : ""))
-                                    .font(.system(size: 11)).foregroundStyle(Theme.textSub).lineLimit(1)
+                                    .font(.system(size: 11)).foregroundStyle(m.isBot == true ? botBlue : Theme.textSub).lineLimit(1)
+                                if m.isBot == true { Text("机器人").font(.system(size: 9)).foregroundStyle(botBlue) }
                             }
                         }
                     }
@@ -1652,6 +1783,11 @@ struct GroupInfoView: View {
         }
         .sheet(isPresented: $showShare) {
             GroupShareSheet(groupId: groupId)
+        }
+        .sheet(isPresented: $showBots) {
+            AddBotSheet(groupId: groupId) {
+                Task { info = try? await Api.request("/im/group/\(groupId)") }
+            }
         }
         .task {
             info = try? await Api.request("/im/group/\(groupId)")

@@ -120,6 +120,7 @@ export class CallService implements OnModuleInit, OnModuleDestroy {
       this.prisma.user.findUnique({ where: { id: calleeId } }),
     ]);
     if (!callee || callee.status !== 0) throw new NotFoundException('对方不存在');
+    if (callee.isBot) throw new ForbiddenException('不能呼叫机器人');
     if (!caller || caller.gender === callee.gender) throw new ForbiddenException('无法呼叫该用户');
     // 视频通话仅男方可发起（女方只能接听）
     if (type === 2 && caller.gender !== 1) throw new ForbiddenException('视频通话仅支持男士发起');

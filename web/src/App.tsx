@@ -10,6 +10,7 @@ import { HallPage } from './pages/Hall';
 import { ChatListPage, NoticesPage } from './pages/ChatList';
 import { ChatRoomPage } from './pages/ChatRoom';
 import { ChannelCommentsPage, ChannelPage, ChannelsPage } from './pages/Channel';
+import { BotDetailPage, BotsPage } from './pages/Bots';
 import { AiChatPage } from './pages/AiChat';
 import { NewsDetailPage, NewsListPage } from './pages/NewsDetail';
 import { MusicPage, MusicSharePage } from './pages/Music';
@@ -184,6 +185,8 @@ export function App() {
         <Route path="/publish" element={<PublishPage />} />
         <Route path="/chatroom/:id" element={<ChatRoomPage />} />
         <Route path="/channels" element={<ChannelsPage />} />
+        <Route path="/bots" element={<BotsPage />} />
+        <Route path="/bots/:id" element={<BotDetailPage />} />
         <Route path="/channel/post/:msgId" element={<ChannelCommentsPage />} />
         <Route path="/channel/:id" element={<ChannelPage />} />
         <Route path="/ai-chat" element={<AiChatPage />} />

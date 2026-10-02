@@ -10,6 +10,7 @@ import { EmojiPanel } from '../components/EmojiPanel';
 import { StickerView } from '../components/StickerView';
 import { AttachSheet, AttachAction } from '../components/AttachSheet';
 import { AudioBubble, GroupShareView } from './ChatRoom';
+import { AddBotSheet, InlineKeyboard, InlineMarkup } from './Bots';
 
 /** 频道（kind=2 的群）：频道主发帖，订阅者看帖 + 表情回应 + 评论。帖子就是这个群会话里的消息。 */
 
@@ -42,6 +43,7 @@ interface Post {
   commentCount: number;
   pending?: boolean;
   tempId?: string;
+  markup?: InlineMarkup | null;
 }
 
 const fmtCount = (n: number) => (n >= 10000 ? `${(n / 10000).toFixed(1)}万` : String(n));
@@ -101,6 +103,7 @@ function PostCard({ ch, p, onReact, onComments, onImage, onDelete }: {
         {onDelete && !p.pending && <span className="small" style={{ cursor: 'pointer' }} onClick={onDelete}>删除</span>}
       </div>
       <PostBody p={p} onImage={onImage} />
+      {p.markup && <InlineKeyboard markup={p.markup} messageId={p.id} />}
       <div className="ch-post-foot">
         <div className="ch-reacts">
           {p.reactions.map((r) => (
@@ -137,6 +140,7 @@ function ChannelInfoSheet({ ch, onClose, onChanged, onExit }: { ch: ChannelInfo;
   const [name, setName] = useState(ch.name);
   const [desc, setDesc] = useState(ch.description);
   const [share, setShare] = useState(false);
+  const [bots, setBots] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const save = async (body: Record<string, string>) => {
@@ -208,6 +212,7 @@ function ChannelInfoSheet({ ch, onClose, onChanged, onExit }: { ch: ChannelInfo;
               <div style={{ marginTop: 16, borderTop: '1px solid var(--line)' }}>
                 {ch.canPost && <div className="ch-menu" onClick={() => setEditing(true)}>编辑频道资料</div>}
                 {ch.isMember && <div className="ch-menu" onClick={() => setShare(true)}>分享频道（二维码 / 邀请码）</div>}
+                {ch.role === 'owner' && <div className="ch-menu" onClick={() => setBots(true)}>机器人（自动发帖）</div>}
                 {ch.isMember && ch.role !== 'owner' && <div className="ch-menu" onClick={toggleMute}>{ch.muted ? '取消静音' : '静音'}</div>}
                 {ch.isMember && <div className="ch-menu" style={{ color: 'var(--danger)' }} onClick={leave}>{ch.role === 'owner' ? '删除频道' : '退订'}</div>}
               </div>
@@ -215,6 +220,7 @@ function ChannelInfoSheet({ ch, onClose, onChanged, onExit }: { ch: ChannelInfo;
           </>
         )}
       </div>
+      {bots && <AddBotSheet groupId={ch.id} channel onClose={() => setBots(false)} />}
     </div>
   );
 }
@@ -273,8 +279,11 @@ export function ChannelPage() {
       } else if (frame.op === 'channel_stats' && frame.data?.conversationId === conv) {
         const d = frame.data;
         setPosts((prev) => prev.map((p) => (p.id === d.msgId ? { ...p, reactions: d.reactions, commentCount: d.commentCount } : p)));
-      } else if (frame.op === 'channel_post_deleted' && frame.data?.conversationId === conv) {
+      } else if ((frame.op === 'channel_post_deleted' || frame.op === 'msg_delete') && frame.data?.conversationId === conv) {
         setPosts((prev) => prev.filter((p) => p.id !== frame.data.msgId));
+      } else if (frame.op === 'msg_edit' && frame.data?.conversationId === conv) {
+        const d = frame.data;
+        setPosts((prev) => prev.map((p) => (p.id === d.msgId ? { ...p, content: d.content ?? p.content, markup: d.markup } : p)));
       }
     });
     return () => {

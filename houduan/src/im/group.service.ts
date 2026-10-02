@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto.service';
 import { ConnectionRegistry } from './connection.registry';
+import { BotService } from './bot.service';
 
 @Injectable()
 export class GroupService {
@@ -9,6 +10,7 @@ export class GroupService {
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
     private readonly registry: ConnectionRegistry,
+    private readonly bots: BotService,
   ) {}
 
   /** 群成员变动后通知相关用户刷新会话列表（否则新群要等有人发消息才会出现在列表里） */
@@ -52,7 +54,7 @@ export class GroupService {
     }
     const users = await this.prisma.user.findMany({
       where: { id: { in: members.map((m) => m.userId) } },
-      select: { id: true, nickname: true, avatar: true, gender: true },
+      select: { id: true, nickname: true, avatar: true, gender: true, isBot: true },
     });
     const userMap = new Map(users.map((u) => [u.id.toString(), u]));
     const conv = await this.prisma.conversation.findUnique({ where: { groupId } });
@@ -82,7 +84,8 @@ export class GroupService {
     const count = await this.prisma.groupMember.count({ where: { groupId } });
     if (count + userIds.length > group.memberLimit) throw new BadRequestException('群成员已达上限');
 
-    const valid = await this.prisma.user.findMany({ where: { id: { in: userIds }, status: 0 }, select: { id: true } });
+    // 机器人只能由群主 / 管理员按用户名添加（POST group/:id/bot）
+    const valid = await this.prisma.user.findMany({ where: { id: { in: userIds }, status: 0, isBot: false }, select: { id: true } });
     await this.prisma.groupMember.createMany({
       data: valid.map((u) => ({ groupId, userId: u.id })),
       skipDuplicates: true,
@@ -254,6 +257,7 @@ export class GroupService {
     if (target.role === 'owner') throw new ForbiddenException('无法移出群主');
     await this.prisma.groupMember.delete({ where: { groupId_userId: { groupId, userId: targetId } } });
     this.notifyConvRefresh([targetId]);
+    void this.bots.onRemovedFromChat(targetId, groupId, operatorId).catch(() => {});
     return { ok: true };
   }
 
@@ -261,6 +265,8 @@ export class GroupService {
     const owner = await this.mustMember(groupId, ownerId);
     if (owner.role !== 'owner') throw new ForbiddenException('仅群主可转让');
     await this.mustMember(groupId, targetId);
+    const target = await this.prisma.user.findUnique({ where: { id: targetId }, select: { isBot: true } });
+    if (target?.isBot) throw new BadRequestException('不能转让给机器人');
     await this.prisma.$transaction([
       this.prisma.groupMember.update({ where: { groupId_userId: { groupId, userId: ownerId } }, data: { role: 'member' } }),
       this.prisma.groupMember.update({ where: { groupId_userId: { groupId, userId: targetId } }, data: { role: 'owner' } }),

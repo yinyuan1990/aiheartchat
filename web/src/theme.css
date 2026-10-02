@@ -554,3 +554,20 @@ textarea.input { resize: none; min-height: 90px; }
 .ch-sub-btn.on { background: var(--bg-input); color: var(--text-2); }
 .msg-flash { animation: msg-flash 1.6s ease-out; border-radius: 8px; }
 @keyframes msg-flash { 0%, 40% { background: rgba(254, 44, 85, 0.14); } 100% { background: transparent; } }
+
+/* 机器人 */
+.bot-tag { margin-left: 6px; font-size: 10px; color: #2f7cf6; border: 1px solid #2f7cf6; border-radius: 4px; padding: 0 4px; vertical-align: 2px; font-weight: 400; }
+.bot-kb { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; width: 100%; min-width: 200px; }
+.bot-kb-row { display: flex; gap: 4px; }
+.bot-kb-btn { flex: 1; min-width: 0; padding: 8px 6px; border-radius: 8px; background: rgba(47, 124, 246, 0.1); color: #2f7cf6; font-size: 14px; text-align: center; cursor: pointer; user-select: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; position: relative; }
+.bot-kb-btn:active { opacity: 0.6; }
+.bot-kb-btn.busy { opacity: 0.5; }
+.bot-kb-btn .ext { position: absolute; top: 2px; right: 4px; font-size: 9px; }
+.ch-post .bot-kb { padding: 8px 12px 0; box-sizing: border-box; }
+.bot-cmds { position: absolute; left: 8px; right: 8px; bottom: 56px; max-height: 260px; overflow-y: auto; background: var(--bg-card); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15); z-index: 20; }
+.bot-cmds div { padding: 10px 14px; cursor: pointer; font-size: 14px; border-bottom: 1px solid var(--line); }
+.bot-cmds div:last-child { border-bottom: none; }
+.bot-cmds b { color: #2f7cf6; font-weight: 600; margin-right: 10px; }
+.bot-intro { margin: 40px auto 20px; max-width: 320px; text-align: center; background: var(--bg-input); border-radius: 16px; padding: 20px 16px; }
+.bot-code { background: #1e1f24; color: #e6e6e6; border-radius: 8px; padding: 10px 12px; font: 12px/1.6 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-all; margin: 6px 0 12px; }
+.bot-toast { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 300; background: rgba(0, 0, 0, 0.8); color: #fff; font-size: 14px; padding: 10px 18px; border-radius: 20px; max-width: 80vw; }

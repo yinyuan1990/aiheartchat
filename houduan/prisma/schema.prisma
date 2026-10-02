@@ -46,6 +46,8 @@ model User {
   inviterId    BigInt?  @map("inviter_id")
   /// 表情包：是否已把「新用户默认包」写进 user_sticker_set（第一次拉我的表情包时置 true；之后用户删光也不再补）
   stickerInited Boolean @default(false) @map("sticker_inited")
+  /// 机器人账号（资料见 bot 表）：gender=0、没有短号，不能登录、不出现在遇见 / 搜索昵称里
+  isBot        Boolean  @default(false) @map("is_bot")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
@@ -204,6 +206,47 @@ model GroupMember {
   @@unique([groupId, userId])
   @@index([userId])
   @@map("group_member")
+}
+
+/// 机器人（Telegram Bot API 兼容）：id = 机器人自己的 user.id，token = `{id}:{secret}`，库里只存 sha256
+model Bot {
+  id            BigInt    @id
+  ownerId       BigInt    @map("owner_id")
+  /// 全局唯一，字母数字下划线，以 bot 结尾（大小写不敏感）
+  username      String    @unique @db.VarChar(40)
+  description   String    @default("") @db.VarChar(500)
+  tokenHash     String    @unique @map("token_hash") @db.VarChar(64)
+  /// setMyCommands：[{command, description}]
+  commands      String    @default("[]") @db.VarChar(4000)
+  /// 隐私模式：群里只收 /命令 和 @我（群管理员身份的机器人收全部）
+  privacy       Boolean   @default(true)
+  webhookUrl    String    @default("") @map("webhook_url") @db.VarChar(500)
+  webhookSecret String    @default("") @map("webhook_secret") @db.VarChar(256)
+  lastErrorAt   DateTime? @map("last_error_at")
+  lastError     String    @default("") @map("last_error") @db.VarChar(300)
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@index([ownerId])
+  @@map("bot")
+}
+
+/// 待取走的 Update（getUpdates / webhook），id 即 update_id；确认或投递成功后删除，最多留 24 小时
+model BotUpdate {
+  id        BigInt   @id @default(autoincrement())
+  botId     BigInt   @map("bot_id")
+  payload   String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([botId, id])
+  @@map("bot_update")
+}
+
+/// 机器人消息下方的按钮（reply_markup.inline_keyboard），老客户端忽略
+model BotMessageMarkup {
+  messageId BigInt @id @map("message_id")
+  markup    String @db.Text
+
+  @@map("bot_message_markup")
 }
 
 /// 频道帖子的表情回应：每人每帖一个（Telegram 免费用户同款），再点同一个 = 取消

@@ -12,6 +12,9 @@ export interface MessagePayload {
   type: string;
   content: string;
   createdAt: string;
+  /** 机器人发的消息才有 */
+  senderIsBot?: boolean;
+  markup?: { inline_keyboard: { text: string; url?: string; callback_data?: string }[][] } | null;
 }
 
 type Handler = (frame: any) => void;

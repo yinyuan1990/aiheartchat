@@ -26,6 +26,9 @@ data class MessagePayload(
     val type: String,
     val content: String,
     val createdAt: String,
+    /** 机器人发的消息才有 */
+    val senderIsBot: Boolean = false,
+    val markup: InlineMarkup? = null,
 )
 
 /** IM WebSocket：自动重连 + 心跳 + 帧分发（协议见后端 im.types.ts） */

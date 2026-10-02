@@ -11,7 +11,7 @@ import { CreateChannelSheet } from './Channel';
 interface ConversationItem {
   id: string;
   type: number;
-  peer?: { id: string; nickname: string; avatar: string; gender: number };
+  peer?: { id: string; nickname: string; avatar: string; gender: number; isBot?: boolean };
   /** kind 2 = 频道 */
   group?: { id: string; name: string; avatar: string; kind?: number };
   lastMsg?: { type: string; content: string; createdAt: string } | null;
@@ -359,14 +359,16 @@ export function ChatListPage() {
     });
   }, []);
 
-  const openConv = (c: { id: string; type: number; targetId: string; title: string; focusMsgId?: string }) => {
-    if (convs.find((x) => x.id === c.id)?.group?.kind === 2) {
+  const openConv = (c: { id: string; type: number; targetId: string; title: string; focusMsgId?: string; isBot?: boolean }) => {
+    const conv = convs.find((x) => x.id === c.id);
+    if (conv?.group?.kind === 2) {
       nav(`/channel/${c.targetId}`);
       return;
     }
     const title = c.type === 2 ? `${c.title}（群）` : c.title;
     if (openNativeChat(c.id, c.type, c.targetId, title)) return;
-    nav(`/chatroom/${c.id}`, { state: { title, convType: c.type, targetId: c.targetId, focusMsgId: c.focusMsgId } });
+    const isBot = c.isBot ?? !!conv?.peer?.isBot;
+    nav(`/chatroom/${c.id}`, { state: { title, convType: c.type, targetId: c.targetId, focusMsgId: c.focusMsgId, isBot } });
   };
 
   // 会话 + 评论 / 接单两个系统会话混排，最新的在上；AI 助手、音乐固定置顶
@@ -434,6 +436,7 @@ export function ChatListPage() {
                 <div style={{ padding: '11px 16px', fontSize: 14, cursor: 'pointer', borderTop: '1px solid var(--line)' }} onClick={() => { setShowPlusMenu(false); setShowJoin(true); }}>加入群聊</div>
                 <div style={{ padding: '11px 16px', fontSize: 14, cursor: 'pointer', borderTop: '1px solid var(--line)' }} onClick={() => { setShowPlusMenu(false); setShowCreateChannel(true); }}>创建频道</div>
                 <div style={{ padding: '11px 16px', fontSize: 14, cursor: 'pointer', borderTop: '1px solid var(--line)' }} onClick={() => { setShowPlusMenu(false); nav('/channels'); }}>发现频道</div>
+                <div style={{ padding: '11px 16px', fontSize: 14, cursor: 'pointer', borderTop: '1px solid var(--line)' }} onClick={() => { setShowPlusMenu(false); nav('/bots'); }}>我的机器人</div>
               </div>
             </>
           )}
@@ -486,6 +489,7 @@ export function ChatListPage() {
                 <span className="cl-row-title ellipsis">
                   {title}
                   {c.type === 2 && <span className="cs-tag">{c.group?.kind === 2 ? '频道' : '群'}</span>}
+                  {c.peer?.isBot && <span className="bot-tag">机器人</span>}
                 </span>
                 <span className="small">{timeText(c.lastMsgAt)}</span>
               </div>
@@ -505,11 +509,11 @@ export function ChatListPage() {
           extras={searchExtras}
           onClose={() => setShowSearch(false)}
           onOpenConv={(c) => { setShowSearch(false); openConv(c); }}
-          onOpenUser={async (id, nickname) => {
+          onOpenUser={async (id, nickname, isBot) => {
             setShowSearch(false);
             try {
               const r = await api<{ conversationId: string }>(`/im/conversations/open/${id}`, { method: 'POST' });
-              openConv({ id: r.conversationId, type: 1, targetId: id, title: nickname });
+              openConv({ id: r.conversationId, type: 1, targetId: id, title: nickname, isBot });
             } catch (e: any) {
               alert(e.message);
             }

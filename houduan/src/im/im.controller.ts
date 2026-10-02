@@ -5,6 +5,7 @@ import { ImService } from './im.service';
 import { GroupService } from './group.service';
 import { VoiceRoomService } from './voiceroom.service';
 import { ChannelService } from './channel.service';
+import { BotService } from './bot.service';
 import { CreateGroupDto, GroupInfoDto, MemberIdsDto } from './im.dto';
 
 @Controller('im')
@@ -15,6 +16,7 @@ export class ImController {
     private readonly groups: GroupService,
     private readonly voiceRoom: VoiceRoomService,
     private readonly channels: ChannelService,
+    private readonly bots: BotService,
   ) {}
 
   @Get('conversations')
@@ -219,6 +221,56 @@ export class ImController {
   @Post('channel/:id/delete')
   deleteChannel(@CurrentUser() userId: bigint, @Param('id') id: string) {
     return this.channels.remove(userId, BigInt(id));
+  }
+
+  // ---------- 机器人（管理自己的机器人；第三方调用走 /api/bot<token>/<method>） ----------
+
+  @Get('bots')
+  myBots(@CurrentUser() userId: bigint) {
+    return this.bots.mine(userId);
+  }
+
+  @Post('bots')
+  createBot(@CurrentUser() userId: bigint, @Body() dto: { name?: string; username?: string; description?: string; avatar?: string }) {
+    return this.bots.create(userId, dto ?? {});
+  }
+
+  /** 机器人公开资料（id 或用户名）：聊天页头部、命令菜单 */
+  @Get('bot/info/:key')
+  botInfo(@Param('key') key: string) {
+    return this.bots.publicInfo(key);
+  }
+
+  /** 用户点了机器人消息上的回调按钮 */
+  @Post('bot/callback')
+  botCallback(@CurrentUser() userId: bigint, @Body() dto: { messageId?: string; data?: string }) {
+    return this.bots.userCallback(userId, BigInt(String(dto?.messageId ?? '0')), String(dto?.data ?? ''));
+  }
+
+  @Get('bots/:id')
+  myBot(@CurrentUser() userId: bigint, @Param('id') id: string) {
+    return this.bots.mineOne(userId, BigInt(id));
+  }
+
+  @Put('bots/:id')
+  updateBot(@CurrentUser() userId: bigint, @Param('id') id: string, @Body() dto: { name?: string; description?: string; avatar?: string; privacy?: boolean }) {
+    return this.bots.update(userId, BigInt(id), dto ?? {});
+  }
+
+  @Post('bots/:id/token')
+  resetBotToken(@CurrentUser() userId: bigint, @Param('id') id: string) {
+    return this.bots.resetToken(userId, BigInt(id));
+  }
+
+  @Post('bots/:id/delete')
+  deleteBot(@CurrentUser() userId: bigint, @Param('id') id: string) {
+    return this.bots.remove(userId, BigInt(id));
+  }
+
+  /** 群主 / 管理员按用户名把机器人加进群；频道里机器人是管理员（能发帖） */
+  @Post('group/:id/bot')
+  addBot(@CurrentUser() userId: bigint, @Param('id') id: string, @Body() dto: { username?: string }) {
+    return this.bots.addToChat(userId, BigInt(id), String(dto?.username ?? ''));
   }
 
   // ---------- 群聊语音房 ----------

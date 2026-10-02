@@ -73,7 +73,7 @@ data class SearchMsgHit(
 )
 
 @Serializable
-data class SearchUserHit(val id: String, val nickname: String = "", val avatar: String = "", val age: Int? = null, val cityName: String? = null)
+data class SearchUserHit(val id: String, val nickname: String = "", val avatar: String = "", val age: Int? = null, val cityName: String? = null, val isBot: Boolean = false, val username: String? = null)
 
 @Serializable
 data class SearchResp(val messages: List<SearchMsgHit> = emptyList(), val users: List<SearchUserHit> = emptyList())
@@ -200,6 +200,9 @@ fun ChatSearchDialog(
     val extraHits = if (keyword.isEmpty()) emptyList() else extras.filter { it.title.contains(keyword, ignoreCase = true) }
     val fresh = result?.takeIf { it.first == keyword }?.second
     val userHits = fresh?.users.orEmpty().filterNot { it.id in peerIds }
+    // 服务端按 @用户名 搜到、但本地已有会话的（比如机器人），按会话显示
+    val knownHits = fresh?.users.orEmpty().filter { it.id in peerIds }.mapNotNull { u -> convs.find { it.type == 1 && it.peer?.id == u.id } }
+        .filter { c -> chatHits.none { it.id == c.id } }
     val msgHits = fresh?.messages.orEmpty()
 
     Dialog(
@@ -317,14 +320,16 @@ fun ChatSearchDialog(
                 } else if (tab == 0) {
                     items(extraHits, key = { "e-${it.key}" }) { ExtraResultRow(it, keyword, ::openExtra) }
                     items(chatHits, key = { "c-${it.id}" }) { ConvResultRow(it, keyword, ::openConv) }
+                    items(knownHits, key = { "k-${it.id}" }) { ConvResultRow(it, keyword, ::openConv) }
                     if (userHits.isNotEmpty()) {
                         item("global-head") { SectionHead("全局搜索") }
                         items(userHits, key = { "u-${it.id}" }) { u ->
-                            val sub = listOfNotNull(u.age?.takeIf { it > 0 }?.let { "$it 岁" }, u.cityName?.takeIf { it.isNotEmpty() }).joinToString(" · ").ifEmpty { "用户" }
+                            val sub = if (u.isBot) "@${u.username.orEmpty()} · 机器人"
+                            else listOfNotNull(u.age?.takeIf { it > 0 }?.let { "$it 岁" }, u.cityName?.takeIf { it.isNotEmpty() }).joinToString(" · ").ifEmpty { "用户" }
                             UserResultRow(u.nickname, u.avatar, sub, keyword) { openUser(SearchRecent("user", u.id, u.nickname, u.avatar, sub)) }
                         }
                     }
-                    if (extraHits.isEmpty() && chatHits.isEmpty() && userHits.isEmpty()) {
+                    if (extraHits.isEmpty() && chatHits.isEmpty() && knownHits.isEmpty() && userHits.isEmpty()) {
                         item("none") { SearchHint(if (loading) "搜索中…" else "没有找到相关聊天") }
                     }
                 } else {

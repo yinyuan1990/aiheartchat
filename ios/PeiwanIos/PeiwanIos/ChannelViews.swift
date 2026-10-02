@@ -45,6 +45,8 @@ struct ChannelPost: Codable {
     /// 本地发出的帖子：ack 前 pending，tempId 一直留着当列表 key
     var tempId: String? = nil
     var pending: Bool? = false
+    /// 机器人发的帖子可能带按钮
+    var markup: InlineMarkup? = nil
 
     var key: String { tempId ?? id }
 }
@@ -105,6 +107,10 @@ private struct ChannelPostCard: View {
             .padding(.horizontal, 12).padding(.top, 10)
 
             postBody
+
+            if !(p.markup?.inlineKeyboard ?? []).isEmpty {
+                InlineKeyboardView(markup: p.markup, messageId: p.id).padding(.horizontal, 12)
+            }
 
             HStack(spacing: 8) {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -494,7 +500,7 @@ struct ChannelView: View {
                   m.conversationId == conv else { return }
             if !posts.contains(where: { $0.id == m.id }) {
                 stickBottom = true
-                posts.append(ChannelPost(id: m.id, senderId: m.senderId, type: m.type, content: m.content, createdAt: m.createdAt, views: 1))
+                posts.append(ChannelPost(id: m.id, senderId: m.senderId, type: m.type, content: m.content, createdAt: m.createdAt, views: 1, markup: m.markup))
             }
             WsClient.shared.markRead(conversationId: conv, msgId: m.id)
         case "ack":
@@ -517,9 +523,14 @@ struct ChannelView: View {
                 return ChannelReaction(emoji: e, count: r["count"] as? Int ?? 0)
             }
             posts[idx].commentCount = data["commentCount"] as? Int ?? 0
-        case "channel_post_deleted":
+        case "channel_post_deleted", "msg_delete":
             guard let data, frameStr(data["conversationId"]) == conv, let id = frameStr(data["msgId"]) else { return }
             posts.removeAll { $0.id == id }
+        case "msg_edit":
+            guard let data, frameStr(data["conversationId"]) == conv, let id = frameStr(data["msgId"]),
+                  let idx = posts.firstIndex(where: { $0.id == id }) else { return }
+            if let c = data["content"] as? String { posts[idx].content = c }
+            posts[idx].markup = InlineMarkup.from(data["markup"])
         default:
             break
         }
@@ -667,6 +678,7 @@ private struct ChannelInfoSheet: View {
     @State private var desc = ""
     @State private var showShare = false
     @State private var confirmLeave = false
+    @State private var showBots = false
     @State private var toastMsg: String?
 
     private var owner: Bool { ch.role == "owner" }
@@ -727,6 +739,9 @@ private struct ChannelInfoSheet: View {
                     if ch.isMember == true {
                         menuRow("分享频道（二维码 / 邀请码）") { showShare = true }
                     }
+                    if owner {
+                        menuRow("机器人（自动发帖）") { showBots = true }
+                    }
                     if ch.isMember == true && !owner {
                         menuRow(ch.muted == true ? "取消静音" : "静音") { toggleMute() }
                     }
@@ -741,6 +756,9 @@ private struct ChannelInfoSheet: View {
         .toast($toastMsg)
         .sheet(isPresented: $showShare) {
             GroupShareSheet(groupId: ch.id, channel: true)
+        }
+        .sheet(isPresented: $showBots) {
+            AddBotSheet(groupId: ch.id, channel: true)
         }
         .alert(owner ? "删除频道？" : "退订频道？", isPresented: $confirmLeave) {
             Button(owner ? "删除" : "退订", role: .destructive) { leave() }

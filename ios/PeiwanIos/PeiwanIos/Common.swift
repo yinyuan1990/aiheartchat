@@ -225,6 +225,9 @@ enum Route: Hashable {
     case createChannel
     case channel(String)
     case channelComments(String, Bool)
+    /// 我的机器人 / 机器人详情（机器人 id）
+    case bots
+    case bot(String)
 }
 
 @ViewBuilder
@@ -261,6 +264,8 @@ func routeView(_ route: Route) -> some View {
     case .createChannel: CreateChannelView()
     case .channel(let id): ChannelView(groupId: id)
     case .channelComments(let msgId, let canAdmin): ChannelCommentsView(msgId: msgId, canAdmin: canAdmin)
+    case .bots: BotsView()
+    case .bot(let id): BotDetailView(botId: id)
     }
 }
 
