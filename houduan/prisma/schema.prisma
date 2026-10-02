@@ -186,6 +186,8 @@ model ChatGroup {
   joinPassword String  @default("") @map("join_password") @db.VarChar(20)
   /// 1=群聊 2=频道（只有群主/管理员能发，订阅者只看 + 表情回应 + 评论，notice 当频道简介）
   kind        Int      @default(1) @db.TinyInt
+  /// 频道：订阅者也能发帖（频道主创建时 / 之后在频道资料里开关）
+  memberPost  Boolean  @default(false) @map("member_post")
   /// 0=正常 1=已解散 2=后台封禁
   status      Int      @default(0) @db.TinyInt
   createdAt   DateTime @default(now()) @map("created_at")

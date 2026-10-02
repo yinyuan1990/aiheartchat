@@ -80,7 +80,12 @@ data class ChannelInfo(
     val conversationId: String? = null,
     val isMember: Boolean = false,
     val role: String? = null,
+    /** 频道主 / 管理员 */
     val canPost: Boolean = false,
+    /** 订阅者也能发帖 */
+    val memberPost: Boolean = false,
+    /** 我能不能发帖（老后端没有这个字段时按 canPost） */
+    val canSend: Boolean? = null,
     val muted: Boolean = false,
 )
 
@@ -102,6 +107,9 @@ private data class ChannelPost(
     /** 本地发出的帖子：ack 前 pending，tempId 一直留着当列表 key */
     val tempId: String? = null,
     val pending: Boolean = false,
+    val senderNickname: String = "",
+    val senderAvatar: String = "",
+    val senderIsBot: Boolean = false,
 )
 
 @Serializable
@@ -129,6 +137,18 @@ private fun ConfirmDialog(text: String, confirm: String, onConfirm: () -> Unit, 
         confirmButton = { Text(confirm, color = Danger, modifier = Modifier.noRippleClick { onDismiss(); onConfirm() }.padding(8.dp)) },
         dismissButton = { Text("取消", color = TextSub, modifier = Modifier.noRippleClick(onDismiss).padding(8.dp)) },
     )
+}
+
+/** 「订阅者可发消息」开关：创建页和频道资料里共用 */
+@Composable
+private fun MemberPostSwitch(on: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().noRippleClick { onChange(!on) }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("订阅者可发消息", color = TextMain, fontSize = 15.sp, modifier = Modifier.weight(1f))
+        androidx.compose.material3.Switch(
+            checked = on, onCheckedChange = onChange,
+            colors = androidx.compose.material3.SwitchDefaults.colors(checkedTrackColor = Accent),
+        )
+    }
 }
 
 @Composable
@@ -216,10 +236,12 @@ private fun PostCard(ch: ChannelInfo, p: ChannelPost, onReact: (String) -> Unit,
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp)
             .clip(RoundedCornerShape(14.dp)).background(Bg).alpha(if (p.pending) 0.6f else 1f),
     ) {
+        // 频道主 / 机器人发的算频道发帖；订阅者（和其他管理员）发的显示作者
+        val byAuthor = p.senderId != ch.ownerId && !p.senderIsBot && p.senderNickname.isNotEmpty()
         Row(Modifier.padding(start = 12.dp, end = 12.dp, top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Avatar(ch.avatar, 26)
+            Avatar(if (byAuthor) p.senderAvatar else ch.avatar, 26)
             Text(
-                ch.name, color = TextMain, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                if (byAuthor) p.senderNickname else ch.name, color = TextMain, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f).padding(start = 8.dp),
             )
             if (onDelete != null && !p.pending) Text("删除", color = TextDim, fontSize = 12.sp, modifier = Modifier.noRippleClick(onDelete))
@@ -314,7 +336,13 @@ fun ChannelScreen(groupId: String, myUserId: String, onBack: () -> Unit, onExit:
                     if (m.conversationId != conv) return@addListener
                     if (posts.none { it.id == m.id }) {
                         stickBottom = true
-                        posts = posts + ChannelPost(m.id, m.senderId, m.type, m.content, m.createdAt, views = 1, markup = m.markup)
+                        posts = posts + ChannelPost(
+                            m.id, m.senderId, m.type, m.content, m.createdAt, views = 1, markup = m.markup,
+                            senderNickname = m.senderNickname, senderAvatar = m.senderAvatar, senderIsBot = m.senderIsBot,
+                        )
+                    } else {
+                        // 自己发的：ack 先到时本地那条没有昵称头像，用推送补上
+                        posts = posts.map { if (it.id == m.id && it.senderNickname.isEmpty()) it.copy(senderNickname = m.senderNickname, senderAvatar = m.senderAvatar, senderIsBot = m.senderIsBot) else it }
                     }
                     WsClient.markRead(conv, m.id)
                 }
@@ -352,6 +380,10 @@ fun ChannelScreen(groupId: String, myUserId: String, onBack: () -> Unit, onExit:
                     val content = d["content"]?.jsonPrimitive?.content
                     val mk = d["markup"]?.let { el -> runCatching { WsClient.json.decodeFromJsonElement(InlineMarkup.serializer(), el) }.getOrNull() }
                     posts = posts.map { if (it.id == id) it.copy(content = content ?: it.content, markup = mk) else it }
+                }
+                "channel_info" -> {
+                    if (frame["data"]?.jsonObject?.get("groupId")?.jsonPrimitive?.content != groupId) return@addListener
+                    scope.launch { runCatching { Api.getObj<ChannelInfo>("/im/channel/$groupId") }.onSuccess { ch = it } }
                 }
             }
         }
@@ -459,7 +491,7 @@ fun ChannelScreen(groupId: String, myUserId: String, onBack: () -> Unit, onExit:
             }
             if (posts.isEmpty()) item("empty") {
                 Text(
-                    if (c.canPost) "发第一条帖子吧，订阅者都会收到" else "频道还没有发帖",
+                    if (c.canSend ?: c.canPost) "发第一条帖子吧，订阅者都会收到" else "频道还没有发帖",
                     color = TextSub, fontSize = 14.sp, textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(vertical = 80.dp),
                 )
@@ -470,19 +502,19 @@ fun ChannelScreen(groupId: String, myUserId: String, onBack: () -> Unit, onExit:
                     onReact = { react(p, it) },
                     onComments = { onOpenComments(p.id, c.canPost) },
                     onMedia = { openMedia(p) },
-                    onDelete = if (c.canPost) ({ confirmDelete = p }) else null,
+                    onDelete = if (c.canPost || p.senderId == myUserId) ({ confirmDelete = p }) else null,
                 )
             }
         }
 
-        if (c.canPost) {
+        if (c.canSend ?: c.canPost) {
             Column(Modifier.background(Bg2).imePadding().navigationBarsPadding()) {
                 Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.Bottom) {
                     Box(
                         Modifier.weight(1f).heightIn(min = 40.dp).clip(RoundedCornerShape(20.dp)).background(Bg3).padding(horizontal = 14.dp, vertical = 9.dp),
                         contentAlignment = Alignment.CenterStart,
                     ) {
-                        if (input.isEmpty()) Text("发帖…", color = TextDim, fontSize = 15.sp)
+                        if (input.isEmpty()) Text(if (c.canPost) "发帖…" else "发消息…", color = TextDim, fontSize = 15.sp)
                         BasicTextField(
                             value = input, onValueChange = { input = it },
                             textStyle = TextStyle(color = TextMain, fontSize = 15.sp),
@@ -630,6 +662,7 @@ private fun ChannelInfoSheet(ch: ChannelInfo, onClose: () -> Unit, onChanged: (C
                     Text(label, color = color, fontSize = 15.sp, modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 14.dp))
                 }
                 if (ch.canPost) menu("编辑频道资料", TextMain) { name = ch.name; desc = ch.description; editing = true }
+                if (ch.canPost) MemberPostSwitch(ch.memberPost) { save(buildJsonObject { put("memberPost", JsonPrimitive(it)) }) }
                 if (ch.isMember) menu("分享频道（二维码 / 邀请码）", TextMain) { showShare = true }
                 if (owner) menu("机器人（自动发帖）", TextMain) { showBots = true }
                 if (ch.isMember && !owner) menu(if (ch.muted) "取消静音" else "静音", TextMain) {
@@ -829,6 +862,7 @@ fun CreateChannelScreen(onBack: () -> Unit, onCreated: (groupId: String) -> Unit
     var name by remember { mutableStateOf("") }
     var desc by remember { mutableStateOf("") }
     var avatar by remember { mutableStateOf("") }
+    var memberPost by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
 
     val pickAvatar = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -857,9 +891,11 @@ fun CreateChannelScreen(onBack: () -> Unit, onCreated: (groupId: String) -> Unit
                 minLines = 3, maxLines = 6,
                 modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
             )
+            MemberPostSwitch(memberPost) { memberPost = it }
             Text(
-                "频道是一对多的广播：只有你能发帖，订阅的人可以看、点表情、评论。",
-                color = TextSub, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 10.dp, bottom = 16.dp),
+                if (memberPost) "所有订阅者都能在频道里发帖，大家都能看到；你可以删除任何人的帖子，之后也能在频道资料里关掉。"
+                else "频道是一对多的广播：只有你能发帖，订阅的人可以看、点表情、评论。之后可以在频道资料里打开「订阅者可发消息」。",
+                color = TextSub, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(bottom = 16.dp),
             )
             AccentButton(if (busy) "请稍候…" else "创建", enabled = !busy) {
                 if (name.isBlank()) { toast(ctx, "请填写频道名称"); return@AccentButton }
@@ -870,6 +906,7 @@ fun CreateChannelScreen(onBack: () -> Unit, onCreated: (groupId: String) -> Unit
                             put("name", JsonPrimitive(name.trim()))
                             put("description", JsonPrimitive(desc.trim()))
                             put("avatar", JsonPrimitive(avatar))
+                            put("memberPost", JsonPrimitive(memberPost))
                         })!!
                         Api.json.decodeFromJsonElement(ChannelInfo.serializer(), d)
                     }.onSuccess { onCreated(it.id) }

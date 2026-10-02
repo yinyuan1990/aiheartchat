@@ -23,8 +23,15 @@ struct ChannelInfo: Codable {
     var conversationId: String? = nil
     var isMember: Bool? = false
     var role: String? = nil
+    /// 频道主 / 管理员
     var canPost: Bool? = false
+    /// 订阅者也能发帖
+    var memberPost: Bool? = false
+    /// 我能不能发帖（老后端没有这个字段时按 canPost）
+    var canSend: Bool? = nil
     var muted: Bool? = false
+
+    var sendable: Bool { canSend ?? (canPost == true) }
 }
 
 struct ChannelReaction: Codable, Hashable {
@@ -47,6 +54,9 @@ struct ChannelPost: Codable {
     var pending: Bool? = false
     /// 机器人发的帖子可能带按钮
     var markup: InlineMarkup? = nil
+    var senderNickname: String? = nil
+    var senderAvatar: String? = nil
+    var senderIsBot: Bool? = nil
 
     var key: String { tempId ?? id }
 }
@@ -91,12 +101,16 @@ private struct ChannelPostCard: View {
 
     private var pending: Bool { p.pending == true }
     private var content: String { p.content ?? "" }
+    /// 频道主 / 机器人发的算频道发帖；订阅者（和其他管理员）发的显示作者
+    private var byAuthor: Bool {
+        p.senderId != ch.ownerId && p.senderIsBot != true && !(p.senderNickname ?? "").isEmpty
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                AvatarView(url: ch.avatar, size: 26)
-                Text(ch.name ?? "").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
+                AvatarView(url: byAuthor ? (p.senderAvatar ?? "") : (ch.avatar ?? ""), size: 26)
+                Text(byAuthor ? (p.senderNickname ?? "") : (ch.name ?? "")).font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
                 Spacer(minLength: 0)
                 if canDelete && !pending {
                     Button("删除", action: onDelete)
@@ -369,13 +383,13 @@ struct ChannelView: View {
                             .buttonStyle(.plain)
                         }
                         if posts.isEmpty {
-                            Text(c.canPost == true ? "发第一条帖子吧，订阅者都会收到" : "频道还没有发帖")
+                            Text(c.sendable ? "发第一条帖子吧，订阅者都会收到" : "频道还没有发帖")
                                 .font(.system(size: 14)).foregroundStyle(Theme.textSub)
                                 .padding(.top, 80)
                         }
                         ForEach(posts, id: \.key) { p in
                             ChannelPostCard(
-                                ch: c, p: p, canDelete: c.canPost == true,
+                                ch: c, p: p, canDelete: c.canPost == true || p.senderId == state.user?.id,
                                 onReact: { react(p, $0) },
                                 onComments: { route = .channelComments(p.id, c.canPost == true) },
                                 onMedia: { openMedia(p) },
@@ -398,10 +412,10 @@ struct ChannelView: View {
     }
 
     @ViewBuilder private func bottomBar(_ c: ChannelInfo) -> some View {
-        if c.canPost == true {
+        if c.sendable {
             VStack(spacing: 0) {
                 HStack(alignment: .bottom, spacing: 8) {
-                    CompatVerticalTextField(text: $input, prompt: Text("发帖…").foregroundColor(Theme.textDim), lineRange: 1...6)
+                    CompatVerticalTextField(text: $input, prompt: Text(c.canPost == true ? "发帖…" : "发消息…").foregroundColor(Theme.textDim), lineRange: 1...6)
                         .focused($inputFocused)
                         .foregroundStyle(Theme.text)
                         .padding(.horizontal, 14).padding(.vertical, 9)
@@ -501,7 +515,8 @@ struct ChannelView: View {
                   m.conversationId == conv else { return }
             if !posts.contains(where: { $0.id == m.id }) {
                 stickBottom = true
-                posts.append(ChannelPost(id: m.id, senderId: m.senderId, type: m.type, content: m.content, createdAt: m.createdAt, views: 1, markup: m.markup))
+                posts.append(ChannelPost(id: m.id, senderId: m.senderId, type: m.type, content: m.content, createdAt: m.createdAt, views: 1, markup: m.markup,
+                                         senderNickname: m.senderNickname, senderAvatar: m.senderAvatar, senderIsBot: m.senderIsBot))
             }
             WsClient.shared.markRead(conversationId: conv, msgId: m.id)
         case "ack":
@@ -532,6 +547,12 @@ struct ChannelView: View {
                   let idx = posts.firstIndex(where: { $0.id == id }) else { return }
             if let c = data["content"] as? String { posts[idx].content = c }
             posts[idx].markup = InlineMarkup.from(data["markup"])
+        case "channel_info":
+            // 频道主开关了「订阅者可发消息」：重新拉资料，输入框跟着出现 / 收起
+            guard let data, frameStr(data["groupId"]) == groupId else { return }
+            Task { @MainActor in
+                if let c: ChannelInfo = try? await Api.request("/im/channel/\(groupId)") { ch = c }
+            }
         default:
             break
         }
@@ -554,7 +575,8 @@ struct ChannelView: View {
         let tempId = WsClient.shared.send(convType: 2, targetId: c.id, msgType: type, content: content)
         posts.append(ChannelPost(
             id: tempId, senderId: state.user?.id ?? "", type: type, content: content,
-            createdAt: ISO8601DateFormatter().string(from: Date()), views: 1, tempId: tempId, pending: true
+            createdAt: ISO8601DateFormatter().string(from: Date()), views: 1, tempId: tempId, pending: true,
+            senderNickname: state.user?.nickname, senderAvatar: state.user?.avatar
         ))
     }
 
@@ -669,6 +691,20 @@ struct ChannelView: View {
 
 // MARK: - 频道资料
 
+/// 「订阅者可发消息」开关：创建页和频道资料里共用
+private struct MemberPostToggle: View {
+    let isOn: Bool
+    let onChange: (Bool) -> Void
+
+    var body: some View {
+        Toggle(isOn: Binding(get: { isOn }, set: { onChange($0) })) {
+            Text("订阅者可发消息").font(.system(size: 15)).foregroundStyle(Theme.text)
+        }
+        .tint(Theme.accent)
+        .padding(.vertical, 8)
+    }
+}
+
 /// 频道资料：头像 / 名称 / 简介（频道主可改）、订阅数、分享、静音、退订 / 删除
 private struct ChannelInfoSheet: View {
     let ch: ChannelInfo
@@ -736,6 +772,7 @@ private struct ChannelInfoSheet: View {
                     Rectangle().fill(Theme.line).frame(height: 1).padding(.top, 16)
                     if ch.canPost == true {
                         menuRow("编辑频道资料") { name = ch.name ?? ""; desc = ch.description ?? ""; editing = true }
+                        MemberPostToggle(isOn: ch.memberPost == true) { save(["memberPost": $0]) }
                     }
                     if ch.isMember == true {
                         menuRow("分享频道（二维码 / 邀请码）") { showShare = true }
@@ -1011,6 +1048,13 @@ struct CreateChannelView: View {
     @State private var name = ""
     @State private var desc = ""
     @State private var avatar = ""
+    @State private var memberPost = false
+
+    private var createHint: String {
+        memberPost
+            ? "所有订阅者都能在频道里发帖，大家都能看到；你可以删除任何人的帖子，之后也能在频道资料里关掉。"
+            : "频道是一对多的广播：只有你能发帖，订阅的人可以看、点表情、评论。之后可以在频道资料里打开「订阅者可发消息」。"
+    }
     @State private var busy = false
     @State private var toastMsg: String?
     @State private var route: Route?
@@ -1050,7 +1094,8 @@ struct CreateChannelView: View {
                 .padding(14)
                 .background(RoundedRectangle(cornerRadius: 12).fill(Theme.bg2))
                 .onChange(of: desc) { v in if v.count > 500 { desc = String(v.prefix(500)) } }
-            Text("频道是一对多的广播：只有你能发帖，订阅的人可以看、点表情、评论。")
+            MemberPostToggle(isOn: memberPost) { memberPost = $0 }
+            Text(createHint)
                 .font(.system(size: 12)).foregroundStyle(Theme.textSub).lineSpacing(3)
             AccentButton(title: busy ? "请稍候…" : "创建", enabled: !busy && !name.trimmingCharacters(in: .whitespaces).isEmpty) {
                 create()
@@ -1078,6 +1123,7 @@ struct CreateChannelView: View {
                     "name": name.trimmingCharacters(in: .whitespaces),
                     "description": desc.trimmingCharacters(in: .whitespacesAndNewlines),
                     "avatar": avatar,
+                    "memberPost": memberPost,
                 ])
                 created = true
                 route = .channel(c.id)

@@ -203,7 +203,7 @@ export class ImController {
   // ---------- 频道（kind=2 的群：频道主发帖，订阅者看 + 表情回应 + 评论） ----------
 
   @Post('channel')
-  createChannel(@CurrentUser() userId: bigint, @Body() dto: { name?: string; avatar?: string; description?: string }) {
+  createChannel(@CurrentUser() userId: bigint, @Body() dto: { name?: string; avatar?: string; description?: string; memberPost?: boolean }) {
     return this.channels.create(userId, dto ?? {});
   }
 
@@ -248,7 +248,7 @@ export class ImController {
   }
 
   @Put('channel/:id')
-  updateChannel(@CurrentUser() userId: bigint, @Param('id') id: string, @Body() dto: { name?: string; avatar?: string; description?: string }) {
+  updateChannel(@CurrentUser() userId: bigint, @Param('id') id: string, @Body() dto: { name?: string; avatar?: string; description?: string; memberPost?: boolean }) {
     return this.channels.update(userId, BigInt(id), dto ?? {});
   }
 

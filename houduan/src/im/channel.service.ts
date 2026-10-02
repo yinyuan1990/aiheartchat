@@ -4,7 +4,7 @@ import { CryptoService } from '../common/crypto.service';
 import { StickerService, parseStickerJson } from '../sticker/sticker.service';
 import { ConnectionRegistry } from './connection.registry';
 
-/** 频道 = chat_group.kind=2：群主 / 管理员发帖，订阅者（group_member.role=member）只看、表情回应、评论 */
+/** 频道 = chat_group.kind=2：群主 / 管理员发帖（开了 memberPost 订阅者也能发），订阅者（group_member.role=member）看、表情回应、评论 */
 export const CHANNEL_KIND = 2;
 /** 订阅人数上限（复用 memberLimit） */
 const CHANNEL_LIMIT = 1_000_000;
@@ -24,7 +24,7 @@ export class ChannelService {
 
   // ---------- 频道本身 ----------
 
-  async create(ownerId: bigint, dto: { name?: string; avatar?: string; description?: string }) {
+  async create(ownerId: bigint, dto: { name?: string; avatar?: string; description?: string; memberPost?: boolean }) {
     const name = (dto.name ?? '').trim();
     if (!name) throw new BadRequestException('请填写频道名称');
     if (name.length > 50) throw new BadRequestException('频道名称最长 50 字');
@@ -34,7 +34,7 @@ export class ChannelService {
     if (owned >= 10) throw new BadRequestException('每人最多创建 10 个频道');
 
     const group = await this.prisma.chatGroup.create({
-      data: { name, avatar: dto.avatar ?? '', notice: description, ownerId, kind: CHANNEL_KIND, memberLimit: CHANNEL_LIMIT },
+      data: { name, avatar: dto.avatar ?? '', notice: description, ownerId, kind: CHANNEL_KIND, memberLimit: CHANNEL_LIMIT, memberPost: dto.memberPost === true },
     });
     await this.prisma.conversation.create({
       data: {
@@ -69,7 +69,11 @@ export class ChannelService {
       conversationId: conv?.id,
       isMember: !!me,
       role: me?.role ?? null,
+      /** 频道主 / 管理员（能管理：改资料、删任何帖）；老客户端靠它决定显不显示输入框 */
       canPost: me?.role === 'owner' || me?.role === 'admin',
+      memberPost: g.memberPost,
+      /** 能不能在频道里发帖：管理员，或开了「订阅者可发帖」的订阅者 */
+      canSend: me?.role === 'owner' || me?.role === 'admin' || (!!me && g.memberPost),
       muted: me?.muted ?? false,
       createdAt: g.createdAt,
     };
@@ -139,10 +143,11 @@ export class ChannelService {
     return { muted };
   }
 
-  async update(userId: bigint, groupId: bigint, dto: { name?: string; avatar?: string; description?: string }) {
-    await this.mustChannel(groupId);
+  async update(userId: bigint, groupId: bigint, dto: { name?: string; avatar?: string; description?: string; memberPost?: boolean }) {
+    const g = await this.mustChannel(groupId);
     await this.mustAdmin(groupId, userId);
-    const data: { name?: string; avatar?: string; notice?: string } = {};
+    const data: { name?: string; avatar?: string; notice?: string; memberPost?: boolean } = {};
+    if (dto.memberPost !== undefined && !!dto.memberPost !== g.memberPost) data.memberPost = !!dto.memberPost;
     if (dto.name !== undefined) {
       const name = dto.name.trim();
       if (!name || name.length > 50) throw new BadRequestException('频道名称 1~50 字');
@@ -154,6 +159,13 @@ export class ChannelService {
       data.notice = dto.description.trim();
     }
     await this.prisma.chatGroup.update({ where: { id: groupId }, data });
+    if (data.memberPost !== undefined) {
+      // 正开着频道页的订阅者要立刻出现 / 收起输入框
+      const members = await this.prisma.groupMember.findMany({ where: { groupId }, select: { userId: true } });
+      void this.registry
+        .deliver(members.map((m) => m.userId), { op: 'channel_info', data: { groupId: groupId.toString(), memberPost: data.memberPost } })
+        .catch(() => {});
+    }
     return this.info(userId, groupId);
   }
 
@@ -221,6 +233,7 @@ export class ChannelService {
         senderId: m.senderId,
         senderNickname: senderMap.get(m.senderId.toString())?.nickname ?? '',
         senderAvatar: senderMap.get(m.senderId.toString())?.avatar ?? '',
+        senderIsBot: senderMap.get(m.senderId.toString())?.isBot ?? false,
         type: m.type,
         content,
         createdAt: m.createdAt,
@@ -315,10 +328,11 @@ export class ChannelService {
     return { ok: true };
   }
 
-  /** 删帖：频道主 / 管理员 */
+  /** 删帖：频道主 / 管理员，或帖子作者自己 */
   async deletePost(userId: bigint, messageId: bigint) {
     const { groupId } = await this.postOf(messageId);
-    await this.mustAdmin(groupId, userId);
+    const m = await this.prisma.message.findUnique({ where: { id: messageId }, select: { senderId: true } });
+    if (m?.senderId !== userId) await this.mustAdmin(groupId, userId);
     return this.purgePost(groupId, messageId);
   }
 

@@ -135,10 +135,10 @@ export class ImService {
       where: { groupId_userId: { groupId, userId: sender.id } },
     });
     if (!member) throw new ForbiddenException('不在该群中');
-    const group = await this.prisma.chatGroup.findUnique({ where: { id: groupId }, select: { id: true, name: true, kind: true, status: true } });
+    const group = await this.prisma.chatGroup.findUnique({ where: { id: groupId }, select: { id: true, name: true, kind: true, status: true, memberPost: true } });
     if (!group || group.status !== 0) throw new NotFoundException('群不存在');
     if (group.kind === 2) {
-      if (member.role !== 'owner' && member.role !== 'admin') throw new ForbiddenException('频道只有频道主能发帖');
+      if (member.role !== 'owner' && member.role !== 'admin' && !group.memberPost) throw new ForbiddenException('频道只有频道主能发帖');
       if (!CHANNEL_TYPES.has(frame.msgType)) throw new BadRequestException('频道不支持这种消息');
     }
     const conv = await this.prisma.conversation.findUnique({ where: { groupId } });

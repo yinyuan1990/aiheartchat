@@ -28,13 +28,21 @@ export interface ChannelInfo {
   conversationId?: string;
   isMember: boolean;
   role: string | null;
+  /** 频道主 / 管理员 */
   canPost: boolean;
+  /** 订阅者也能发帖 */
+  memberPost?: boolean;
+  /** 我能不能发帖（管理员，或开了 memberPost 的订阅者） */
+  canSend?: boolean;
   muted: boolean;
 }
 
 interface Post {
   id: string;
   senderId: string;
+  senderNickname?: string;
+  senderAvatar?: string;
+  senderIsBot?: boolean;
   type: string;
   content: string;
   createdAt: string;
@@ -95,11 +103,14 @@ function PostCard({ ch, p, onReact, onComments, onImage, onDelete }: {
   onDelete?: () => void;
 }) {
   const [picker, setPicker] = useState(false);
+  // 频道主 / 机器人发的算频道发帖；订阅者（和其他管理员）发的显示作者
+  const byAuthor = p.senderId !== ch.ownerId && !p.senderIsBot && !!p.senderNickname;
+  const headAvatar = byAuthor ? p.senderAvatar : ch.avatar;
   return (
     <div className="ch-post" style={{ opacity: p.pending ? 0.6 : 1 }}>
       <div className="ch-post-head">
-        <div className="avatar" style={{ width: 28, height: 28 }}>{ch.avatar && <img src={ch.avatar} alt="" />}</div>
-        <span className="ellipsis" style={{ fontWeight: 600, fontSize: 14 }}>{ch.name}</span>
+        <div className="avatar" style={{ width: 28, height: 28 }}>{headAvatar && <img src={headAvatar} alt="" />}</div>
+        <span className="ellipsis" style={{ fontWeight: 600, fontSize: 14 }}>{byAuthor ? p.senderNickname : ch.name}</span>
         <span className="grow" />
         {onDelete && !p.pending && <span className="small" style={{ cursor: 'pointer' }} onClick={onDelete}>删除</span>}
       </div>
@@ -144,7 +155,7 @@ function ChannelInfoSheet({ ch, onClose, onChanged, onExit }: { ch: ChannelInfo;
   const [bots, setBots] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const save = async (body: Record<string, string>) => {
+  const save = async (body: Record<string, string | boolean>) => {
     try {
       onChanged(await api<ChannelInfo>(`/im/channel/${ch.id}`, { method: 'PUT', body }));
       setEditing(false);
@@ -212,6 +223,12 @@ function ChannelInfoSheet({ ch, onClose, onChanged, onExit }: { ch: ChannelInfo;
             {!editing && (
               <div style={{ marginTop: 16, borderTop: '1px solid var(--line)' }}>
                 {ch.canPost && <div className="ch-menu" onClick={() => setEditing(true)}>编辑频道资料</div>}
+                {ch.canPost && (
+                  <div className="ch-menu row" onClick={() => save({ memberPost: !ch.memberPost })}>
+                    <span className="grow">订阅者可发消息</span>
+                    <span className={`switch${ch.memberPost ? ' on' : ''}`} data-testid="member-post-switch" />
+                  </div>
+                )}
                 {ch.isMember && <div className="ch-menu" onClick={() => setShare(true)}>分享频道（二维码 / 邀请码）</div>}
                 {ch.role === 'owner' && <div className="ch-menu" onClick={() => setBots(true)}>机器人（自动发帖）</div>}
                 {ch.isMember && ch.role !== 'owner' && <div className="ch-menu" onClick={toggleMute}>{ch.muted ? '取消静音' : '静音'}</div>}
@@ -282,6 +299,8 @@ export function ChannelPage() {
         setPosts((prev) => prev.map((p) => (p.id === d.msgId ? { ...p, reactions: d.reactions, commentCount: d.commentCount } : p)));
       } else if ((frame.op === 'channel_post_deleted' || frame.op === 'msg_delete') && frame.data?.conversationId === conv) {
         setPosts((prev) => prev.filter((p) => p.id !== frame.data.msgId));
+      } else if (frame.op === 'channel_info' && frame.data?.groupId === id) {
+        api<ChannelInfo>(`/im/channel/${id}`).then((c) => alive && setCh(c)).catch(() => {});
       } else if (frame.op === 'msg_edit' && frame.data?.conversationId === conv) {
         const d = frame.data;
         setPosts((prev) => prev.map((p) => (p.id === d.msgId ? { ...p, content: d.content ?? p.content, markup: d.markup } : p)));
@@ -347,7 +366,7 @@ export function ChannelPage() {
     if (!me || !ch) return;
     stickBottom.current = true;
     const tempId = wsManager.send(2, ch.id, type, content);
-    setPosts((prev) => [...prev, { id: tempId, tempId, senderId: me.id, type, content, createdAt: new Date().toISOString(), views: 1, reactions: [], myReaction: null, commentCount: 0, pending: true }]);
+    setPosts((prev) => [...prev, { id: tempId, tempId, senderId: me.id, senderNickname: me.nickname, senderAvatar: me.avatar, type, content, createdAt: new Date().toISOString(), views: 1, reactions: [], myReaction: null, commentCount: 0, pending: true }]);
   };
   const send = () => {
     const t = input.trim();
@@ -386,6 +405,7 @@ export function ChannelPage() {
     );
   }
   if (!ch) return <div className="app"><div className="empty">加载中…</div></div>;
+  const canSend = ch.canSend ?? ch.canPost;
 
   return (
     <div className="app">
@@ -404,7 +424,7 @@ export function ChannelPage() {
       <div className="page ch-page no-scrollbar" onClick={() => setShowSticker(false)}>
         {hasMore && posts.length > 0 && <div className="small" style={{ textAlign: 'center', padding: 10, cursor: 'pointer' }} onClick={loadMore}>查看更早的帖子</div>}
         {posts.length === 0 && (
-          <div className="empty">{ch.canPost ? '发第一条帖子吧，订阅者都会收到' : '频道还没有发帖'}</div>
+          <div className="empty">{canSend ? '发第一条帖子吧，订阅者都会收到' : '频道还没有发帖'}</div>
         )}
         {posts.map((p) => (
           <PostCard
@@ -414,13 +434,13 @@ export function ChannelPage() {
             onReact={(e) => react(p, e)}
             onImage={setFullImage}
             onComments={() => nav(`/channel/post/${p.id}`, { state: { channelName: ch.name, canAdmin: ch.canPost } })}
-            onDelete={ch.canPost ? () => deletePost(p) : undefined}
+            onDelete={ch.canPost || p.senderId === me?.id ? () => deletePost(p) : undefined}
           />
         ))}
         <div ref={bottomRef} style={{ height: 8 }} />
       </div>
 
-      {ch.canPost ? (
+      {canSend ? (
         <div style={{ background: 'var(--bg-card)' }}>
           <div className="row" style={{ padding: 8, gap: 8 }}>
             <input
@@ -428,7 +448,7 @@ export function ChannelPage() {
               className="input grow"
               style={{ marginBottom: 0, borderRadius: 20, height: 40 }}
               value={input}
-              placeholder="发帖…"
+              placeholder={ch.canPost ? '发帖…' : '发消息…'}
               onChange={(e) => setInput(e.target.value)}
               onFocus={() => setShowSticker(false)}
               onKeyDown={(e) => e.key === 'Enter' && send()}
@@ -617,6 +637,7 @@ export function CreateChannelSheet({ onClose, onCreated }: { onClose: () => void
   const [name, setName] = useState('');
   const [desc, setDesc] = useState('');
   const [avatar, setAvatar] = useState('');
+  const [memberPost, setMemberPost] = useState(false);
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -634,7 +655,7 @@ export function CreateChannelSheet({ onClose, onCreated }: { onClose: () => void
     if (!name.trim()) return alert('请填写频道名称');
     setBusy(true);
     try {
-      onCreated(await api<ChannelInfo>('/im/channel', { method: 'POST', body: { name: name.trim(), description: desc.trim(), avatar } }));
+      onCreated(await api<ChannelInfo>('/im/channel', { method: 'POST', body: { name: name.trim(), description: desc.trim(), avatar, memberPost } }));
     } catch (e: any) {
       alert(e.message);
     }
@@ -653,7 +674,15 @@ export function CreateChannelSheet({ onClose, onCreated }: { onClose: () => void
           <input className="input grow" style={{ marginBottom: 0 }} placeholder="频道名称" value={name} maxLength={50} onChange={(e) => setName(e.target.value)} />
         </div>
         <textarea className="input" style={{ marginTop: 12, height: 90, resize: 'none' }} placeholder="频道简介（可选）：这个频道发什么" value={desc} maxLength={500} onChange={(e) => setDesc(e.target.value)} />
-        <div className="muted" style={{ marginBottom: 12 }}>频道是一对多的广播：只有你能发帖，订阅的人可以看、点表情、评论。</div>
+        <div className="row" style={{ marginBottom: 6, cursor: 'pointer' }} onClick={() => setMemberPost((v) => !v)}>
+          <span className="grow" style={{ fontSize: 15 }}>订阅者可发消息</span>
+          <span className={`switch${memberPost ? ' on' : ''}`} data-testid="create-member-post" />
+        </div>
+        <div className="muted" style={{ marginBottom: 12 }}>
+          {memberPost
+            ? '所有订阅者都能在频道里发帖，大家都能看到；你可以删除任何人的帖子，之后也能在频道资料里关掉。'
+            : '频道是一对多的广播：只有你能发帖，订阅的人可以看、点表情、评论。之后可以在频道资料里打开「订阅者可发消息」。'}
+        </div>
         <button className="btn" disabled={busy} onClick={create}>创建</button>
       </div>
     </div>
