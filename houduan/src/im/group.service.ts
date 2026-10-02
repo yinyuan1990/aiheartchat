@@ -43,7 +43,13 @@ export class GroupService {
   async getGroup(userId: bigint, groupId: bigint) {
     const group = await this.prisma.chatGroup.findUnique({ where: { id: groupId } });
     if (!group || group.status !== 0) throw new NotFoundException('群不存在');
-    const members = await this.prisma.groupMember.findMany({ where: { groupId }, orderBy: { joinedAt: 'asc' } });
+    let members = await this.prisma.groupMember.findMany({ where: { groupId }, orderBy: { joinedAt: 'asc' } });
+    const memberCount = members.length;
+    // 频道的订阅者名单只给频道主 / 管理员看
+    if (group.kind === 2) {
+      const me = members.find((m) => m.userId === userId);
+      if (me?.role !== 'owner' && me?.role !== 'admin') members = members.filter((m) => m.role !== 'member' || m.userId === userId);
+    }
     const users = await this.prisma.user.findMany({
       where: { id: { in: members.map((m) => m.userId) } },
       select: { id: true, nickname: true, avatar: true, gender: true },
@@ -57,6 +63,8 @@ export class GroupService {
       avatar: group.avatar || (userMap.get(group.ownerId.toString())?.avatar ?? ''),
       notice: group.notice,
       ownerId: group.ownerId,
+      kind: group.kind,
+      memberCount,
       memberLimit: group.memberLimit,
       conversationId: conv?.id,
       isMember: members.some((m) => m.userId === userId),
@@ -103,7 +111,7 @@ export class GroupService {
   /** 群广场：可加入的群列表（含是否需要密码、是否已加入） */
   async listGroups(userId: bigint) {
     const groups = await this.prisma.chatGroup.findMany({
-      where: { status: 0 },
+      where: { status: 0, kind: 1 },
       orderBy: { id: 'desc' },
       take: 100,
     });
@@ -184,6 +192,7 @@ export class GroupService {
     const owner = await this.prisma.user.findUnique({ where: { id: group.ownerId }, select: { avatar: true } });
     return {
       groupId: group.id,
+      kind: group.kind,
       name: group.name,
       avatar: group.avatar || (owner?.avatar ?? ''),
       memberCount,

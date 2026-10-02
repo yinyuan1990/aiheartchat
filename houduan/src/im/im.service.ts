@@ -9,6 +9,8 @@ import { resolveInviteUser } from '../invite/invite.service';
 
 /** 需要扣费的消息类型（礼物走礼物模块自身计费） */
 const CHARGED_TYPES = new Set(['text', 'image', 'video', 'audio', 'location', 'sticker']);
+/** 频道帖子允许的类型 */
+const CHANNEL_TYPES = new Set(['text', 'image', 'video', 'audio', 'location', 'sticker']);
 
 @Injectable()
 export class ImService {
@@ -124,6 +126,12 @@ export class ImService {
       where: { groupId_userId: { groupId, userId: sender.id } },
     });
     if (!member) throw new ForbiddenException('不在该群中');
+    const group = await this.prisma.chatGroup.findUnique({ where: { id: groupId }, select: { kind: true, status: true } });
+    if (!group || group.status !== 0) throw new NotFoundException('群不存在');
+    if (group.kind === 2) {
+      if (member.role !== 'owner' && member.role !== 'admin') throw new ForbiddenException('频道只有频道主能发帖');
+      if (!CHANNEL_TYPES.has(frame.msgType)) throw new BadRequestException('频道不支持这种消息');
+    }
     const conv = await this.prisma.conversation.findUnique({ where: { groupId } });
     if (!conv) throw new NotFoundException('群会话不存在');
 
@@ -200,9 +208,10 @@ export class ImService {
   // ---------- 查询（REST） ----------
 
   async listConversations(userId: bigint) {
-    const memberships = await this.prisma.groupMember.findMany({ where: { userId }, select: { groupId: true, lastReadMsgId: true } });
+    const memberships = await this.prisma.groupMember.findMany({ where: { userId }, select: { groupId: true, lastReadMsgId: true, muted: true } });
     const groupIds = memberships.map((m) => m.groupId);
     const lastReadByGroup = new Map(memberships.map((m) => [m.groupId.toString(), m.lastReadMsgId]));
+    const mutedGroups = new Set(memberships.filter((m) => m.muted).map((m) => m.groupId.toString()));
 
     const convs = await this.prisma.conversation.findMany({
       where: {
@@ -254,9 +263,11 @@ export class ImService {
         result.push({
           id: conv.id,
           type: 2,
-          group: { id: group.id, name: group.name, avatar: groupAvatar },
+          // kind 2 = 频道（老客户端忽略 kind，按群聊显示）
+          group: { id: group.id, name: group.name, avatar: groupAvatar, kind: group.kind },
           lastMsg: lastMsg && this.preview(lastMsg, key),
           unread,
+          muted: mutedGroups.has(conv.groupId.toString()),
           lastMsgAt: conv.lastMsgAt,
         });
       }

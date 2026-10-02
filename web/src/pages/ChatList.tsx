@@ -6,14 +6,17 @@ import { wsManager } from '../ws';
 import { MusicSheet, NowPlayingBar } from './Music';
 import { ChatSearch, SearchExtra } from '../components/ChatSearch';
 import { parseGroupCode, parseInviteCode, QrScanner, ScanIcon } from '../components/QrScanner';
+import { CreateChannelSheet } from './Channel';
 
 interface ConversationItem {
   id: string;
   type: number;
   peer?: { id: string; nickname: string; avatar: string; gender: number };
-  group?: { id: string; name: string; avatar: string };
+  /** kind 2 = 频道 */
+  group?: { id: string; name: string; avatar: string; kind?: number };
   lastMsg?: { type: string; content: string; createdAt: string } | null;
   unread: number;
+  muted?: boolean;
   lastMsgAt: string;
 }
 
@@ -151,8 +154,10 @@ function CreateGroupSheet({ onClose, onCreated }: { onClose: () => void; onCreat
   );
 }
 
-/** 加入群聊弹层：群列表可直接加入，也可输邀请码；有密码的群需输密码；initialCode 由「扫一扫」预填并自动查询 */
+/** 加入群聊弹层：群列表可直接加入，也可输邀请码；有密码的群需输密码；initialCode 由「扫一扫」预填并自动查询。
+ *  邀请码是频道的（kind=2）直接跳频道页，在那里订阅。 */
 export function JoinGroupSheet({ onClose, onJoined, initialCode }: { onClose: () => void; onJoined: (convId: string, name: string, groupId: string) => void; initialCode?: string }) {
+  const nav = useNavigate();
   const [code, setCode] = useState(initialCode ?? '');
   const [info, setInfo] = useState<any>(null);
   const [pwd, setPwd] = useState('');
@@ -192,6 +197,11 @@ export function JoinGroupSheet({ onClose, onJoined, initialCode }: { onClose: ()
     setBusy(true);
     try {
       const g = await api<any>(`/im/group/code/${c}`);
+      if (g.kind === 2) {
+        onClose();
+        nav(`/channel/${g.groupId}`);
+        return;
+      }
       setInfo(g);
       setPwd('');
     } catch (e: any) {
@@ -334,6 +344,7 @@ export function ChatListPage() {
   const [showMusic, setShowMusic] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showScan, setShowScan] = useState(false);
+  const [showCreateChannel, setShowCreateChannel] = useState(false);
 
   const loadConvs = () => api<ConversationItem[]>('/im/conversations').then(setConvs).catch(() => {});
   const loadSummary = () => api<Record<NoticeKind, NoticeSummary>>('/notifications/summary').then(setSummary).catch(() => {});
@@ -349,6 +360,10 @@ export function ChatListPage() {
   }, []);
 
   const openConv = (c: { id: string; type: number; targetId: string; title: string; focusMsgId?: string }) => {
+    if (convs.find((x) => x.id === c.id)?.group?.kind === 2) {
+      nav(`/channel/${c.targetId}`);
+      return;
+    }
     const title = c.type === 2 ? `${c.title}（群）` : c.title;
     if (openNativeChat(c.id, c.type, c.targetId, title)) return;
     nav(`/chatroom/${c.id}`, { state: { title, convType: c.type, targetId: c.targetId, focusMsgId: c.focusMsgId } });
@@ -417,6 +432,8 @@ export function ChatListPage() {
               }}>
                 <div style={{ padding: '11px 16px', fontSize: 14, cursor: 'pointer' }} onClick={() => { setShowPlusMenu(false); setShowCreate(true); }}>创建群聊</div>
                 <div style={{ padding: '11px 16px', fontSize: 14, cursor: 'pointer', borderTop: '1px solid var(--line)' }} onClick={() => { setShowPlusMenu(false); setShowJoin(true); }}>加入群聊</div>
+                <div style={{ padding: '11px 16px', fontSize: 14, cursor: 'pointer', borderTop: '1px solid var(--line)' }} onClick={() => { setShowPlusMenu(false); setShowCreateChannel(true); }}>创建频道</div>
+                <div style={{ padding: '11px 16px', fontSize: 14, cursor: 'pointer', borderTop: '1px solid var(--line)' }} onClick={() => { setShowPlusMenu(false); nav('/channels'); }}>发现频道</div>
               </div>
             </>
           )}
@@ -468,13 +485,13 @@ export function ChatListPage() {
               <div className="cl-row-top">
                 <span className="cl-row-title ellipsis">
                   {title}
-                  {c.type === 2 && <span className="cs-tag">群</span>}
+                  {c.type === 2 && <span className="cs-tag">{c.group?.kind === 2 ? '频道' : '群'}</span>}
                 </span>
                 <span className="small">{timeText(c.lastMsgAt)}</span>
               </div>
               <div className="cl-row-sub">
                 <span className="ellipsis">{previewText(c.lastMsg)}</span>
-                {c.unread > 0 && <span className="cs-badge">{c.unread > 99 ? '99+' : c.unread}</span>}
+                {c.unread > 0 && <span className={`cs-badge${c.muted ? ' muted' : ''}`}>{c.unread > 99 ? '99+' : c.unread}</span>}
               </div>
             </div>
           </div>
@@ -514,6 +531,13 @@ export function ChatListPage() {
       )}
 
       {showMusic && <MusicSheet onClose={() => setShowMusic(false)} />}
+
+      {showCreateChannel && (
+        <CreateChannelSheet
+          onClose={() => setShowCreateChannel(false)}
+          onCreated={(c) => { setShowCreateChannel(false); nav(`/channel/${c.id}`); }}
+        />
+      )}
 
       {showJoin && (
         <JoinGroupSheet

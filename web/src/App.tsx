@@ -9,6 +9,7 @@ import { PlazaPage } from './pages/Plaza';
 import { HallPage } from './pages/Hall';
 import { ChatListPage, NoticesPage } from './pages/ChatList';
 import { ChatRoomPage } from './pages/ChatRoom';
+import { ChannelCommentsPage, ChannelPage, ChannelsPage } from './pages/Channel';
 import { AiChatPage } from './pages/AiChat';
 import { NewsDetailPage, NewsListPage } from './pages/NewsDetail';
 import { MusicPage, MusicSharePage } from './pages/Music';
@@ -43,7 +44,7 @@ function Shell() {
     wsManager.connect();
     const load = () =>
       api<any[]>('/im/conversations')
-        .then((list) => setUnread(list.reduce((s, c) => s + (c.unread ?? 0), 0)))
+        .then((list) => setUnread(list.reduce((s, c) => s + (c.muted ? 0 : c.unread ?? 0), 0)))
         .catch(() => {});
     load();
     return wsManager.on((frame) => {
@@ -175,6 +176,9 @@ export function App() {
         </Route>
         <Route path="/publish" element={<PublishPage />} />
         <Route path="/chatroom/:id" element={<ChatRoomPage />} />
+        <Route path="/channels" element={<ChannelsPage />} />
+        <Route path="/channel/post/:msgId" element={<ChannelCommentsPage />} />
+        <Route path="/channel/:id" element={<ChannelPage />} />
         <Route path="/ai-chat" element={<AiChatPage />} />
         <Route path="/notices/:kind" element={<NoticesPage />} />
         <Route path="/treehole/publish" element={<TreeholePublishPage />} />

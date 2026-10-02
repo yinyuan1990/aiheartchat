@@ -278,6 +278,38 @@ fun AppRoot() {
                         nav.navigate("chatroom/$convId?convType=2&targetId=$groupId&title=${Uri.encode("$name（群）")}")
                     },
                     initialCode = entry.arguments?.getString("code")?.takeIf { it.isNotBlank() },
+                    onOpenChannel = { nav.popBackStack(); nav.navigate("channel/$it") },
+                )
+            }
+            // 频道：发现 / 创建 / 频道页（id = 群 id）/ 帖子评论
+            page("channels") {
+                ChannelsScreen(onBack = { nav.popBackStack() }, onOpen = { nav.navigate("channel/$it") }, onCreate = { nav.navigate("create-channel") })
+            }
+            page("create-channel") {
+                CreateChannelScreen(onBack = { nav.popBackStack() }, onCreated = { nav.popBackStack(); nav.navigate("channel/$it") })
+            }
+            page("channel/{id}", listOf(navArgument("id") { type = NavType.StringType })) { entry ->
+                ChannelScreen(
+                    groupId = entry.arguments!!.getString("id")!!,
+                    myUserId = user?.id ?: "",
+                    onBack = { nav.popBackStack() },
+                    onExit = { nav.popBackStack("main", false) },
+                    onOpenComments = { msgId, canAdmin -> nav.navigate("channel-post/$msgId?canAdmin=$canAdmin") },
+                )
+            }
+            page(
+                "channel-post/{msgId}?canAdmin={canAdmin}",
+                listOf(
+                    navArgument("msgId") { type = NavType.StringType },
+                    navArgument("canAdmin") { type = NavType.BoolType; defaultValue = false },
+                ),
+            ) { entry ->
+                ChannelCommentsScreen(
+                    msgId = entry.arguments!!.getString("msgId")!!,
+                    canAdmin = entry.arguments!!.getBoolean("canAdmin"),
+                    myUserId = user?.id ?: "",
+                    onBack = { nav.popBackStack() },
+                    onOpenUser = { nav.navigate("u/$it") },
                 )
             }
             page("notices/{kind}", listOf(navArgument("kind") { type = NavType.StringType })) { entry ->

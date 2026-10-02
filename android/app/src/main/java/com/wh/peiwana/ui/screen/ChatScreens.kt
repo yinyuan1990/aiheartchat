@@ -78,7 +78,7 @@ import java.io.File
 data class PeerBrief(val id: String, val nickname: String, val avatar: String = "", val gender: Int = 0)
 
 @Serializable
-data class GroupBrief(val id: String, val name: String, val avatar: String = "")
+data class GroupBrief(val id: String, val name: String, val avatar: String = "", /** 2 = 频道 */ val kind: Int = 1)
 
 @Serializable
 data class LastMsg(val id: String, val senderId: String, val type: String, val content: String = "", val createdAt: String)
@@ -91,6 +91,8 @@ data class ConversationItem(
     val group: GroupBrief? = null,
     val lastMsg: LastMsg? = null,
     val unread: Int = 0,
+    /** 频道静音：未读不计入底栏总数，角标显示灰色 */
+    val muted: Boolean = false,
     val lastMsgAt: String,
 )
 
@@ -257,8 +259,13 @@ private fun PlusMenu(expanded: Boolean, onDismiss: () -> Unit, items: List<PlusM
 
 /** 消息主页：标题 + 搜索 + 合并列表（AI 助手 / 音乐置顶，会话与评论 / 接单通知按最新时间排） */
 @Composable
-fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, convType: Int, targetId: String, title: String) -> Unit, onOpenMessage: (convId: String, convType: Int, targetId: String, title: String, msgId: String) -> Unit, onOpenNotices: (String) -> Unit, onOpenUser: (userId: String, nickname: String) -> Unit, onScan: () -> Unit, onCreateGroup: () -> Unit, onOpenAi: () -> Unit, onOpenNews: () -> Unit = {}, onJoinGroup: () -> Unit = {}) {
+fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, convType: Int, targetId: String, title: String) -> Unit, onOpenMessage: (convId: String, convType: Int, targetId: String, title: String, msgId: String) -> Unit, onOpenNotices: (String) -> Unit, onOpenUser: (userId: String, nickname: String) -> Unit, onScan: () -> Unit, onCreateGroup: () -> Unit, onOpenAi: () -> Unit, onOpenNews: () -> Unit = {}, onJoinGroup: () -> Unit = {}, onOpenChannel: (groupId: String) -> Unit = {}, onOpenChannels: () -> Unit = {}, onCreateChannel: () -> Unit = {}) {
     var convs by remember { mutableStateOf<List<ConversationItem>>(emptyList()) }
+    // 频道会话进频道页，其余进聊天页
+    val openConv: (String, Int, String, String) -> Unit = { id, type, target, title ->
+        val g = convs.find { it.id == id }?.group
+        if (g?.kind == 2) onOpenChannel(g.id) else onOpenChat(id, type, target, title)
+    }
     var summary by remember { mutableStateOf(NoticeSummaryResp()) }
     var showSearch by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -302,8 +309,12 @@ fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, c
             convs = convs,
             extras = extras,
             onDismiss = { showSearch = false },
-            onOpenChat = { id, type, target, title -> showSearch = false; onOpenChat(id, type, target, title) },
-            onOpenMessage = { id, type, target, title, msgId -> showSearch = false; onOpenMessage(id, type, target, title, msgId) },
+            onOpenChat = { id, type, target, title -> showSearch = false; openConv(id, type, target, title) },
+            onOpenMessage = { id, type, target, title, msgId ->
+                showSearch = false
+                val g = convs.find { it.id == id }?.group
+                if (g?.kind == 2) onOpenChannel(g.id) else onOpenMessage(id, type, target, title, msgId)
+            },
             onOpenUser = { id, name -> showSearch = false; onOpenUser(id, name) },
             onScan = { showSearch = false; onScan() },
         )
@@ -323,6 +334,8 @@ fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, c
                     items = listOf(
                         PlusMenuItem("创建群聊", { PersonPlusIcon(it, 19.dp) }, onCreateGroup),
                         PlusMenuItem("加入群聊", { PeopleIcon(it, 19.dp) }, onJoinGroup),
+                        PlusMenuItem("创建频道", { BroadcastIcon(it, 19.dp) }, onCreateChannel),
+                        PlusMenuItem("发现频道", { com.wh.peiwana.ui.sticker.SearchIcon(it, 18.dp) }, onOpenChannels),
                         PlusMenuItem("扫一扫", { ScanIcon(it, 18.dp) }, onScan),
                     ),
                 )
@@ -383,16 +396,16 @@ fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, c
                         val avatar = if (c.type == 1) c.peer?.avatar else c.group?.avatar
                         val target = if (c.type == 1) c.peer?.id else c.group?.id
                         MsgListRow(
-                            onClick = { target?.let { onOpenChat(c.id, c.type, it, title) } }, leading = { Avatar(avatar, 54) },
+                            onClick = { target?.let { openConv(c.id, c.type, it, title) } }, leading = { Avatar(avatar, 54) },
                             title = {
                                 Text(name, color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                                 if (c.type == 2) Text(
-                                    "群", color = TextSub, fontSize = 10.sp,
+                                    if (c.group?.kind == 2) "频道" else "群", color = TextSub, fontSize = 10.sp,
                                     modifier = Modifier.padding(start = 6.dp).clip(RoundedCornerShape(4.dp)).background(Bg3).padding(horizontal = 4.dp),
                                 )
                             },
                             end = fmtChatTime(c.lastMsgAt), sub = preview(c.lastMsg),
-                            badge = { com.wh.peiwana.ui.RoundBadge(c.unread, Modifier.padding(start = 8.dp)) },
+                            badge = { com.wh.peiwana.ui.RoundBadge(c.unread, Modifier.padding(start = 8.dp), color = if (c.muted) TextDim else Accent) },
                         )
                     }
                 }
@@ -930,7 +943,7 @@ private fun Modifier.pointerInputRecord(onStart: () -> Unit, onStop: () -> Unit)
     }
 
 @SuppressLint("MissingPermission")
-private fun sendLocation(ctx: Context, cb: (String, Double, Double) -> Unit) {
+internal fun sendLocation(ctx: Context, cb: (String, Double, Double) -> Unit) {
     runCatching {
         val lm = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
         val loc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER) ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)

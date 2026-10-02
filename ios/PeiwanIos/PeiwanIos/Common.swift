@@ -220,6 +220,11 @@ enum Route: Hashable {
     case treeholePublish
     /// 评论 / 接单通知列表：kind = comment | task
     case notices(String)
+    /// 频道：发现 / 创建 / 频道页（群 id）/ 帖子评论（帖子 id，是否频道主）
+    case channels
+    case createChannel
+    case channel(String)
+    case channelComments(String, Bool)
 }
 
 @ViewBuilder
@@ -252,6 +257,10 @@ func routeView(_ route: Route) -> some View {
     case .treehole(let id): TreeholeDetailView(postId: id)
     case .treeholePublish: TreeholePublishView()
     case .notices(let kind): NoticesView(kind: kind)
+    case .channels: ChannelsView()
+    case .createChannel: CreateChannelView()
+    case .channel(let id): ChannelView(groupId: id)
+    case .channelComments(let msgId, let canAdmin): ChannelCommentsView(msgId: msgId, canAdmin: canAdmin)
     }
 }
 

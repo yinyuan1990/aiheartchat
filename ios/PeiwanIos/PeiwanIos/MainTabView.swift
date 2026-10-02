@@ -54,7 +54,7 @@ struct MainTabView: View {
     private func refreshUnread() async {
         let convs: [ConversationItem] = (try? await Api.request("/im/conversations")) ?? []
         let n: UnreadCounts = (try? await Api.request("/notifications/unread")) ?? UnreadCounts()
-        unreadTotal = convs.reduce(0) { $0 + ($1.unread ?? 0) } + (n.comment ?? 0) + (n.task ?? 0)
+        unreadTotal = convs.reduce(0) { $0 + ($1.muted == true ? 0 : ($1.unread ?? 0)) } + (n.comment ?? 0) + (n.task ?? 0)
     }
 
     private var bottomBar: some View {

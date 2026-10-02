@@ -168,9 +168,9 @@ fun GroupInfoScreen(groupId: String, myUserId: String, onBack: () -> Unit, onExi
     }
 }
 
-/** 群分享弹窗：二维码 + 邀请码 + 密码设置（群主/管理员） */
+/** 群分享弹窗：二维码 + 邀请码 + 密码设置（群主/管理员）；频道不设密码 */
 @Composable
-private fun GroupShareDialog(groupId: String, onClose: () -> Unit) {
+internal fun GroupShareDialog(groupId: String, onClose: () -> Unit, channel: Boolean = false) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     val scope = rememberCoroutineScope()
@@ -194,9 +194,13 @@ private fun GroupShareDialog(groupId: String, onClose: () -> Unit) {
             if (s == null) {
                 Text("加载中…", color = TextSub, fontSize = 13.sp, modifier = Modifier.padding(30.dp))
             } else {
-                Text("群邀请", color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text(if (channel) "分享频道" else "群邀请", color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 Text(
-                    if (s.hasPassword) "扫码或输码后需输入密码才能加入" else "扫码或输入邀请码即可加入",
+                    when {
+                        channel -> "扫码或输入邀请码即可打开频道订阅"
+                        s.hasPassword -> "扫码或输码后需输入密码才能加入"
+                        else -> "扫码或输入邀请码即可加入"
+                    },
                     color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp),
                 )
                 // 二维码（白底）
@@ -220,7 +224,7 @@ private fun GroupShareDialog(groupId: String, onClose: () -> Unit) {
                 }
 
                 // 密码设置（仅群主/管理员）：模式切换 + 行内小保存按钮，不再用整行大按钮
-                if (s.canEdit) {
+                if (s.canEdit && !channel) {
                     fun save() {
                         if (saving) return
                         if (mode == "pwd" && pwd.isBlank()) {
@@ -308,6 +312,8 @@ private data class GroupCodeInfo(
     val hasPassword: Boolean = false,
     val isMember: Boolean = false,
     val conversationId: String? = null,
+    /** 2 = 频道 */
+    val kind: Int = 1,
 )
 
 @Serializable
@@ -321,9 +327,9 @@ private data class GroupListItem(
     val conversationId: String? = null,
 )
 
-/** 加入群聊：群列表可直接加入，也可输邀请码/扫码；有密码的群需输入密码 */
+/** 加入群聊：群列表可直接加入，也可输邀请码/扫码；有密码的群需输入密码。邀请码是频道的直接进频道页订阅 */
 @Composable
-fun JoinGroupScreen(onBack: () -> Unit, onJoined: (convId: String, groupId: String, name: String) -> Unit, initialCode: String? = null) {
+fun JoinGroupScreen(onBack: () -> Unit, onJoined: (convId: String, groupId: String, name: String) -> Unit, initialCode: String? = null, onOpenChannel: (groupId: String) -> Unit = {}) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var code by remember { mutableStateOf(initialCode ?: "") }
     var info by remember { mutableStateOf<GroupCodeInfo?>(null) }
@@ -341,7 +347,7 @@ fun JoinGroupScreen(onBack: () -> Unit, onJoined: (convId: String, groupId: Stri
         busy = true
         scope.launch {
             runCatching { Api.getObj<GroupCodeInfo>("/im/group/code/$c") }
-                .onSuccess { info = it; pwd = "" }
+                .onSuccess { if (it.kind == 2) onOpenChannel(it.groupId) else { info = it; pwd = "" } }
                 .onFailure { toast(it.message ?: "邀请码无效") }
             busy = false
         }

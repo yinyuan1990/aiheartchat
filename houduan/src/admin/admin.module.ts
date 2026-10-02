@@ -11,12 +11,13 @@ import { StickerModule } from '../sticker/sticker.module';
 import { GifModule } from '../gif/gif.module';
 import { TgForwardModule } from '../tgforward/tg-forward.module';
 import { PublishModule } from '../publish/publish.module';
+import { ImModule } from '../im/im.module';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { AdminGuard } from './admin.guard';
 
 @Module({
-  imports: [AuthModule, WalletModule, NewsModule, TreeholeModule, ModuleConfigModule, TelegramModule, MusicModule, GalleryModule, StickerModule, GifModule, TgForwardModule, PublishModule],
+  imports: [AuthModule, WalletModule, NewsModule, TreeholeModule, ModuleConfigModule, TelegramModule, MusicModule, GalleryModule, StickerModule, GifModule, TgForwardModule, PublishModule, ImModule],
   controllers: [AdminController],
   providers: [AdminService, AdminGuard],
 })

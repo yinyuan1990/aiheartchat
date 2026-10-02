@@ -15,6 +15,7 @@ import TelegramView from './views/TelegramView.vue';
 import PublishView from './views/PublishView.vue';
 import SrsNodesView from './views/SrsNodesView.vue';
 import AppVersionView from './views/AppVersionView.vue';
+import ChannelsView from './views/ChannelsView.vue';
 
 const logged = ref(!!getToken());
 const username = ref('');
@@ -33,6 +34,7 @@ const tabs = [
   { key: 'modules', label: '大厅 / 小游戏' },
   { key: 'telegram', label: 'Telegram 来源' },
   { key: 'publish', label: '内容分发（推广）' },
+  { key: 'channels', label: '频道' },
   { key: 'treehole', label: '私密树洞' },
   { key: 'music', label: '音乐频道' },
   { key: 'srs', label: 'SRS 节点' },
@@ -95,6 +97,7 @@ function logout() {
       <ModulesView v-if="tab === 'modules'" />
       <TelegramView v-if="tab === 'telegram'" />
       <PublishView v-if="tab === 'publish'" />
+      <ChannelsView v-if="tab === 'channels'" />
       <TreeholeView v-if="tab === 'treehole'" />
       <MusicView v-if="tab === 'music'" />
       <SrsNodesView v-if="tab === 'srs'" />

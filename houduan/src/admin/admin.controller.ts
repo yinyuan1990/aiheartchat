@@ -18,6 +18,7 @@ import { HallTabsService } from '../module/hall-tabs.service';
 import { TgForwardService } from '../tgforward/tg-forward.service';
 import { PublishService } from '../publish/publish.service';
 import { XPicsService } from '../publish/x-pics.service';
+import { ChannelService } from '../im/channel.service';
 
 @Controller('admin')
 export class AdminController {
@@ -38,7 +39,46 @@ export class AdminController {
     private readonly gifs: GifService,
     private readonly hallTabs: HallTabsService,
     private readonly tgForward: TgForwardService,
+    private readonly channels: ChannelService,
   ) {}
+
+  // ---------- 频道（用户开的频道：查看 / 封禁 / 删帖 / 删评论） ----------
+
+  @Get('channels')
+  @UseGuards(AdminGuard)
+  channelList(@Query('q') q?: string) {
+    return this.channels.adminList(q);
+  }
+
+  @Post('channels/:id/status')
+  @UseGuards(AdminGuard)
+  channelStatus(@Param('id') id: string, @Body() body: { banned?: boolean }) {
+    return this.channels.adminSetStatus(BigInt(id), body?.banned ? 2 : 0);
+  }
+
+  @Get('channels/:id/posts')
+  @UseGuards(AdminGuard)
+  channelPosts(@Param('id') id: string, @Query('beforeId') beforeId?: string) {
+    return this.channels.adminPosts(BigInt(id), beforeId ? BigInt(beforeId) : undefined);
+  }
+
+  @Get('channels/posts/:msgId/comments')
+  @UseGuards(AdminGuard)
+  channelPostComments(@Param('msgId') msgId: string) {
+    return this.channels.comments(BigInt(msgId)).catch(() => []);
+  }
+
+  @Post('channels/posts/:msgId/delete')
+  @UseGuards(AdminGuard)
+  channelDeletePost(@Param('msgId') msgId: string) {
+    return this.channels.adminDeletePost(BigInt(msgId));
+  }
+
+  @Post('channels/comments/:id/delete')
+  @UseGuards(AdminGuard)
+  channelDeleteComment(@Param('id') id: string) {
+    return this.channels.adminDeleteComment(BigInt(id));
+  }
 
   // ---------- 内容分发（推广：树洞新帖 → AI 改写 → 小红书 / 抖音 / 快手 / 知乎，发布机在操作者本机） ----------
 

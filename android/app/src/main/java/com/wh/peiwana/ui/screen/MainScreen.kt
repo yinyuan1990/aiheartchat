@@ -45,7 +45,7 @@ fun MainScreen(
             runCatching {
                 val convs = com.wh.peiwana.net.Api.getList<ConversationItem>("/im/conversations")
                 val n = com.wh.peiwana.net.Api.getObj<com.wh.peiwana.net.UnreadCounts>("/notifications/unread")
-                unreadTotal = convs.sumOf { it.unread } + n.comment + n.task
+                unreadTotal = convs.sumOf { if (it.muted) 0 else it.unread } + n.comment + n.task
             }
         }
     }
@@ -120,6 +120,9 @@ fun MainScreen(
                     onOpenAi = { onNav("aichat") },
                     onOpenNews = { onNav("music") },
                     onJoinGroup = { onNav("join-group") },
+                    onOpenChannel = { onNav("channel/$it") },
+                    onOpenChannels = { onNav("channels") },
+                    onCreateChannel = { onNav("create-channel") },
                 )
             }
             Pane(active = tab == 3) {

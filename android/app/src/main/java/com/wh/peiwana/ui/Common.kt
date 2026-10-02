@@ -335,14 +335,14 @@ fun PillTab(text: String, active: Boolean, badge: Int = 0, onClick: () -> Unit) 
 
 /** 正圆未读徽标（两位数以上自动变胶囊），微信式 */
 @Composable
-fun RoundBadge(count: Int, modifier: Modifier = Modifier) {
+fun RoundBadge(count: Int, modifier: Modifier = Modifier, color: Color = Accent) {
     if (count <= 0) return
     Box(
         modifier = modifier
             .height(16.dp)
             .defaultMinSize(minWidth = 16.dp)
             .clip(RoundedCornerShape(percent = 50))
-            .background(Accent)
+            .background(color)
             .padding(horizontal = 4.dp),
         contentAlignment = Alignment.Center,
     ) {

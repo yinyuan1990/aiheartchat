@@ -16,6 +16,8 @@ struct GroupBrief: Codable, Hashable {
     var id: String = ""
     var name: String? = ""
     var avatar: String? = ""
+    /// 2 = 频道
+    var kind: Int? = 1
 }
 
 struct LastMsg: Codable, Hashable {
@@ -33,6 +35,8 @@ struct ConversationItem: Codable, Identifiable, Hashable {
     var group: GroupBrief? = nil
     var lastMsg: LastMsg? = nil
     var unread: Int? = 0
+    /// 频道静音：未读不计入底栏总数，角标显示灰色
+    var muted: Bool? = false
     var lastMsgAt: String? = ""
 }
 
@@ -131,7 +135,14 @@ struct MessagesView: View {
                     convs: convs,
                     extras: searchExtras,
                     onClose: { showSearch = false },
-                    onOpenChat: { t in showSearch = false; chatTarget = t },
+                    onOpenChat: { t in
+                        showSearch = false
+                        if let g = convs.first(where: { $0.id == t.convId })?.group, g.kind == 2 {
+                            pushRoute = .channel(g.id)
+                        } else {
+                            chatTarget = t
+                        }
+                    },
                     onOpenUser: { id, name in
                         showSearch = false
                         Task { if let t = await openChatWith(userId: id, nickname: name) { chatTarget = t } }
@@ -170,6 +181,8 @@ struct MessagesView: View {
             Menu {
                 RouteLink(.createGroup) { Label("创建群聊", systemImage: "person.2.badge.plus") }
                 RouteLink(.joinGroup(nil)) { Label("加入群聊", systemImage: "qrcode.viewfinder") }
+                RouteLink(.createChannel) { Label("创建频道", systemImage: "megaphone") }
+                RouteLink(.channels) { Label("发现频道", systemImage: "magnifyingglass") }
             } label: {
                 Text("+").font(.system(size: 18)).foregroundStyle(Theme.text)
                     .frame(width: 34, height: 34)
@@ -224,7 +237,7 @@ struct MessagesView: View {
 
     /// 消息列表一行：左图标 54 + 标题 / 时间 + 预览 / 角标，分隔线和文字对齐
     private func listRow<Leading: View, Title: View>(
-        time: String, sub: String, badge: Int, pinned: Bool = false,
+        time: String, sub: String, badge: Int, badgeMuted: Bool = false, pinned: Bool = false,
         @ViewBuilder leading: () -> Leading, @ViewBuilder title: () -> Title
     ) -> some View {
         HStack(spacing: 12) {
@@ -242,7 +255,7 @@ struct MessagesView: View {
                         if badge > 0 {
                             Text(badge > 99 ? "99+" : "\(badge)").font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
                                 .padding(.horizontal, 6).frame(minWidth: 20, minHeight: 20)
-                                .background(Capsule().fill(Theme.accent))
+                                .background(Capsule().fill(badgeMuted ? Theme.textDim : Theme.accent))
                         }
                         if pinned {
                             Image(systemName: "pin.fill").font(.system(size: 11)).foregroundStyle(Theme.textDim).rotationEffect(.degrees(45))
@@ -311,15 +324,20 @@ struct MessagesView: View {
         let title = c.type == 1 ? name : "\(name)（群）"
         let avatar = c.type == 1 ? c.peer?.avatar : c.group?.avatar
         let target = c.type == 1 ? (c.peer?.id ?? "") : (c.group?.id ?? "")
+        let isChannel = c.type == 2 && c.group?.kind == 2
         return Button {
-            chatTarget = ChatTarget(convId: c.id, convType: c.type, targetId: target, title: title)
+            if isChannel {
+                pushRoute = .channel(target)
+            } else {
+                chatTarget = ChatTarget(convId: c.id, convType: c.type, targetId: target, title: title)
+            }
         } label: {
-            listRow(time: fmtTime(c.lastMsgAt), sub: previewOf(c.lastMsg), badge: c.unread ?? 0) {
+            listRow(time: fmtTime(c.lastMsgAt), sub: previewOf(c.lastMsg), badge: c.unread ?? 0, badgeMuted: c.muted == true) {
                 AvatarView(url: avatar, size: 54)
             } title: {
                 Text(name).font(.system(size: 16, weight: .medium)).foregroundStyle(Theme.text).lineLimit(1)
                 if c.type == 2 {
-                    Text("群").font(.system(size: 10)).foregroundStyle(Theme.textSub)
+                    Text(isChannel ? "频道" : "群").font(.system(size: 10)).foregroundStyle(Theme.textSub)
                         .padding(.horizontal, 4)
                         .background(RoundedRectangle(cornerRadius: 4).fill(Theme.bg3))
                 }
@@ -1641,9 +1659,10 @@ struct GroupInfoView: View {
     }
 }
 
-/// 群分享面板：二维码 + 邀请码 + 密码设置（群主/管理员）
+/// 群分享面板：二维码 + 邀请码 + 密码设置（群主/管理员）；频道不设密码
 struct GroupShareSheet: View {
     let groupId: String
+    var channel = false
     @Environment(\.dismiss) private var dismiss
 
     struct ShareInfo: Codable {
@@ -1664,8 +1683,8 @@ struct GroupShareSheet: View {
         ScrollView {
             VStack(spacing: 14) {
                 if let s = share {
-                    Text("群邀请").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
-                    Text(s.hasPassword ? "扫码或输码后需输入密码才能加入" : "扫码或输入邀请码即可加入")
+                    Text(channel ? "分享频道" : "群邀请").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
+                    Text(channel ? "扫码或输入邀请码即可打开频道订阅" : (s.hasPassword ? "扫码或输码后需输入密码才能加入" : "扫码或输入邀请码即可加入"))
                         .font(.system(size: 12)).foregroundStyle(Theme.textSub)
 
                     if let img = makeQRImage(groupQrContent(code: s.code), size: 640) {
@@ -1690,7 +1709,7 @@ struct GroupShareSheet: View {
                     }
                     .buttonStyle(.plain)
 
-                    if s.canEdit {
+                    if s.canEdit && !channel {
                         // 模式切换 + 行内小保存按钮
                         HStack(spacing: 8) {
                             ForEach([("none", "无密码"), ("pwd", "有密码")], id: \.0) { k, label in
@@ -1784,6 +1803,8 @@ struct JoinGroupView: View {
         var hasPassword: Bool = false
         var isMember: Bool = false
         var conversationId: String? = nil
+        /// 2 = 频道：直接进频道页订阅
+        var kind: Int? = 1
     }
 
     struct GroupListItem: Codable, Identifiable {
@@ -1807,6 +1828,7 @@ struct JoinGroupView: View {
     @State private var pwdTarget: GroupListItem?
     @State private var showPwdAlert = false
     @State private var pwdInput = ""
+    @State private var channelRoute: Route?
 
     var body: some View {
         VStack(spacing: 14) {
@@ -1969,6 +1991,7 @@ struct JoinGroupView: View {
         .fullScreenCover(item: $opened) { t in
             ChatRoomSheet(target: t)
         }
+        .routePush($channelRoute)
     }
 
     private func check(_ c: String) async {
@@ -1976,8 +1999,12 @@ struct JoinGroupView: View {
         busy = true
         do {
             let g: CodeInfo = try await Api.request("/im/group/code/\(c)")
-            info = g
-            pwd = ""
+            if g.kind == 2 {
+                channelRoute = .channel(g.groupId)
+            } else {
+                info = g
+                pwd = ""
+            }
         } catch {
             toastMsg = (error as? ApiError)?.msg ?? "邀请码无效"
         }

@@ -4,6 +4,7 @@ import { CurrentUser } from '../common/current-user.decorator';
 import { ImService } from './im.service';
 import { GroupService } from './group.service';
 import { VoiceRoomService } from './voiceroom.service';
+import { ChannelService } from './channel.service';
 import { CreateGroupDto, GroupInfoDto, MemberIdsDto } from './im.dto';
 
 @Controller('im')
@@ -13,6 +14,7 @@ export class ImController {
     private readonly im: ImService,
     private readonly groups: GroupService,
     private readonly voiceRoom: VoiceRoomService,
+    private readonly channels: ChannelService,
   ) {}
 
   @Get('conversations')
@@ -139,6 +141,84 @@ export class ImController {
   @Post('group/:id/dissolve')
   dissolve(@CurrentUser() userId: bigint, @Param('id') id: string) {
     return this.groups.dissolve(userId, BigInt(id));
+  }
+
+  // ---------- 频道（kind=2 的群：频道主发帖，订阅者看 + 表情回应 + 评论） ----------
+
+  @Post('channel')
+  createChannel(@CurrentUser() userId: bigint, @Body() dto: { name?: string; avatar?: string; description?: string }) {
+    return this.channels.create(userId, dto ?? {});
+  }
+
+  /** 发现频道：按订阅数倒序，q 搜名称 / 简介 */
+  @Get('channel/list')
+  listChannels(@CurrentUser() userId: bigint, @Query('q') q?: string) {
+    return this.channels.list(userId, q);
+  }
+
+  @Post('channel/posts/:msgId/react')
+  react(@CurrentUser() userId: bigint, @Param('msgId') msgId: string, @Body() dto: { emoji?: string }) {
+    return this.channels.react(userId, BigInt(msgId), dto?.emoji ?? '');
+  }
+
+  @Get('channel/posts/:msgId/comments')
+  postComments(@Param('msgId') msgId: string, @Query('beforeId') beforeId?: string) {
+    return this.channels.comments(BigInt(msgId), beforeId ? BigInt(beforeId) : undefined);
+  }
+
+  @Post('channel/posts/:msgId/comments')
+  addPostComment(
+    @CurrentUser() userId: bigint,
+    @Param('msgId') msgId: string,
+    @Body() dto: { content?: string; stickerId?: string; replyToId?: string },
+  ) {
+    return this.channels.addComment(userId, BigInt(msgId), dto ?? {});
+  }
+
+  @Post('channel/posts/:msgId/delete')
+  deletePost(@CurrentUser() userId: bigint, @Param('msgId') msgId: string) {
+    return this.channels.deletePost(userId, BigInt(msgId));
+  }
+
+  @Post('channel/comments/:id/delete')
+  deletePostComment(@CurrentUser() userId: bigint, @Param('id') id: string) {
+    return this.channels.deleteComment(userId, BigInt(id));
+  }
+
+  @Get('channel/:id')
+  channelInfo(@CurrentUser() userId: bigint, @Param('id') id: string) {
+    return this.channels.info(userId, BigInt(id));
+  }
+
+  @Put('channel/:id')
+  updateChannel(@CurrentUser() userId: bigint, @Param('id') id: string, @Body() dto: { name?: string; avatar?: string; description?: string }) {
+    return this.channels.update(userId, BigInt(id), dto ?? {});
+  }
+
+  /** 帖子列表（订阅前也能预览），最新在后，beforeId 往前翻 */
+  @Get('channel/:id/posts')
+  channelPosts(@CurrentUser() userId: bigint, @Param('id') id: string, @Query('beforeId') beforeId?: string) {
+    return this.channels.posts(userId, BigInt(id), beforeId ? BigInt(beforeId) : undefined);
+  }
+
+  @Post('channel/:id/subscribe')
+  subscribe(@CurrentUser() userId: bigint, @Param('id') id: string) {
+    return this.channels.subscribe(userId, BigInt(id));
+  }
+
+  @Post('channel/:id/unsubscribe')
+  unsubscribe(@CurrentUser() userId: bigint, @Param('id') id: string) {
+    return this.channels.unsubscribe(userId, BigInt(id));
+  }
+
+  @Post('channel/:id/mute')
+  muteChannel(@CurrentUser() userId: bigint, @Param('id') id: string, @Body() dto: { muted?: boolean }) {
+    return this.channels.setMuted(userId, BigInt(id), !!dto?.muted);
+  }
+
+  @Post('channel/:id/delete')
+  deleteChannel(@CurrentUser() userId: bigint, @Param('id') id: string) {
+    return this.channels.remove(userId, BigInt(id));
   }
 
   // ---------- 群聊语音房 ----------

@@ -529,5 +529,28 @@ textarea.input { resize: none; min-height: 90px; }
 .cs-hl { color: var(--accent); font-weight: 600; }
 .cs-badge { min-width: 20px; height: 20px; box-sizing: border-box; padding: 0 6px; border-radius: 10px; background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .cs-hint { text-align: center; color: var(--text-3); font-size: 14px; padding: 60px 20px; }
+.cs-badge.muted { background: var(--text-3); }
+
+/* 频道 */
+.ch-page { background: var(--bg-card); padding: 8px 12px; }
+.ch-post { background: #fff; border-radius: 14px; margin: 8px auto; max-width: 560px; overflow: hidden; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06); }
+.ch-post-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px 0; }
+.ch-text { padding: 8px 12px 0; font-size: 15px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+.ch-media { display: block; width: 100%; max-height: 520px; object-fit: cover; margin-top: 8px; cursor: pointer; }
+.ch-post-foot { display: flex; align-items: flex-end; gap: 8px; padding: 8px 12px; }
+.ch-reacts { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
+.ch-react { font-size: 13px; padding: 3px 9px; border-radius: 14px; background: var(--bg-input); cursor: pointer; user-select: none; }
+.ch-react.on { background: #ffe1e7; color: var(--accent); font-weight: 600; }
+.ch-react.add { color: var(--text-3); }
+.ch-picker { display: flex; gap: 4px; padding: 0 12px 8px; flex-wrap: wrap; }
+.ch-picker span { font-size: 22px; padding: 4px 6px; border-radius: 10px; cursor: pointer; }
+.ch-picker span.on { background: #ffe1e7; }
+.ch-comment-bar { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-top: 1px solid var(--line); color: var(--accent); font-size: 14px; cursor: pointer; }
+.ch-bottom { background: var(--bg-card); border-top: 1px solid var(--line); text-align: center; padding: 14px 0 calc(14px + env(safe-area-inset-bottom)); font-size: 15px; }
+.ch-bottom span { cursor: pointer; padding: 6px 40px; }
+.ch-round { width: 40px; height: 40px; border-radius: 20px; flex-shrink: 0; background: var(--bg-input); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-2); font-size: 21px; }
+.ch-menu { padding: 14px 4px; border-bottom: 1px solid var(--line); font-size: 15px; cursor: pointer; }
+.ch-sub-btn { flex-shrink: 0; padding: 4px 14px; border-radius: 14px; font-size: 12px; background: var(--accent-grad); color: #fff; }
+.ch-sub-btn.on { background: var(--bg-input); color: var(--text-2); }
 .msg-flash { animation: msg-flash 1.6s ease-out; border-radius: 8px; }
 @keyframes msg-flash { 0%, 40% { background: rgba(254, 44, 85, 0.14); } 100% { background: transparent; } }

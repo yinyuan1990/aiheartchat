@@ -37,8 +37,8 @@ function DownloadDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** 群分享面板：二维码 + 邀请码 + 密码设置（群主/管理员） */
-function GroupShareView({ groupId, onBack }: { groupId: string; onBack: () => void }) {
+/** 群分享面板：二维码 + 邀请码 + 密码设置（群主/管理员；频道没有密码） */
+export function GroupShareView({ groupId, onBack, channel }: { groupId: string; onBack: () => void; channel?: boolean }) {
   const [share, setShare] = useState<any>(null);
   const [qrUrl, setQrUrl] = useState('');
   const [mode, setMode] = useState<'none' | 'pwd'>('none');
@@ -78,9 +78,9 @@ function GroupShareView({ groupId, onBack }: { groupId: string; onBack: () => vo
   return (
     <div style={{ textAlign: 'center' }}>
       <div className="small" style={{ marginBottom: 12 }}>
-        {share.hasPassword ? '扫码或输码后需输入密码才能加入' : '扫码或输入邀请码即可加入'}
+        {channel ? '扫码或输入邀请码即可订阅' : share.hasPassword ? '扫码或输码后需输入密码才能加入' : '扫码或输入邀请码即可加入'}
       </div>
-      {qrUrl && <img src={qrUrl} alt="群二维码" style={{ width: 200, height: 200, borderRadius: 12, background: '#fff', padding: 8 }} />}
+      {qrUrl && <img src={qrUrl} alt="二维码" style={{ width: 200, height: 200, borderRadius: 12, background: '#fff', padding: 8 }} />}
       <div
         style={{ display: 'inline-flex', alignItems: 'center', gap: 8, margin: '12px auto 0', padding: '8px 14px', background: 'var(--bg-input)', borderRadius: 8, cursor: 'pointer' }}
         onClick={() => { navigator.clipboard?.writeText(share.code); alert('邀请码已复制'); }}
@@ -89,7 +89,7 @@ function GroupShareView({ groupId, onBack }: { groupId: string; onBack: () => vo
         <span className="accent" style={{ fontSize: 12 }}>复制</span>
       </div>
 
-      {share.canEdit && (
+      {share.canEdit && !channel && (
         <div style={{ marginTop: 16 }}>
           {/* 模式切换 + 行内小保存按钮 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -117,7 +117,7 @@ function GroupShareView({ groupId, onBack }: { groupId: string; onBack: () => vo
       )}
 
       <div style={{ borderTop: '1px solid var(--line)', marginTop: 16, paddingTop: 10 }}>
-        <span className="small" style={{ cursor: 'pointer' }} onClick={onBack}>‹ 返回群信息</span>
+        <span className="small" style={{ cursor: 'pointer' }} onClick={onBack}>‹ {channel ? '返回' : '返回群信息'}</span>
       </div>
     </div>
   );
@@ -349,7 +349,7 @@ function formatTime(iso: string): string {
 }
 
 /** 语音气泡：播放中声条跳动 */
-function AudioBubble({ a }: { a: any }) {
+export function AudioBubble({ a }: { a: any }) {
   const [playing, setPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 

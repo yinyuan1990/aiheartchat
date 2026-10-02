@@ -239,6 +239,22 @@ fun PeopleIcon(tint: Color, size: Dp = 20.dp) {
     }
 }
 
+/** 线性喇叭（消息页「+」菜单「创建频道」） */
+@Composable
+fun BroadcastIcon(tint: Color, size: Dp = 20.dp) {
+    Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        val s = Stroke(w * 0.085f, cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round)
+        val p = androidx.compose.ui.graphics.Path().apply {
+            moveTo(w * 0.14f, w * 0.4f); lineTo(w * 0.34f, w * 0.4f); lineTo(w * 0.72f, w * 0.18f)
+            lineTo(w * 0.72f, w * 0.82f); lineTo(w * 0.34f, w * 0.6f); lineTo(w * 0.14f, w * 0.6f); close()
+        }
+        drawPath(p, tint, style = s)
+        drawLine(tint, Offset(w * 0.36f, w * 0.62f), Offset(w * 0.42f, w * 0.86f), strokeWidth = w * 0.085f, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+        drawArc(tint, -40f, 80f, false, topLeft = Offset(w * 0.7f, w * 0.34f), size = Size(w * 0.2f, w * 0.32f), style = s)
+    }
+}
+
 /** 实心公文包（消息页「接单通知」） */
 @Composable
 fun BriefcaseIcon(tint: Color, size: Dp = 24.dp) {
