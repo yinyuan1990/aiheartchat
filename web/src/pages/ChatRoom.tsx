@@ -2,13 +2,18 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api, fmtPoints, uploadFile } from '../api';
 import { useApp } from '../store';
-import { wsManager, MessagePayload } from '../ws';
+import { wsManager, MessagePayload, Reaction, ReplyPreview } from '../ws';
 import { nearestCity } from '../cities';
 import { parseSticker, StickerPayload } from '../stickers';
 import { dropLastGrapheme } from '../emojis';
 import { EmojiPanel } from '../components/EmojiPanel';
 import { StickerView } from '../components/StickerView';
 import { AttachSheet, AttachAction } from '../components/AttachSheet';
+import { LinkText } from '../components/LinkText';
+import {
+  DeleteDialog, FORWARDABLE, ForwardSheet, MenuActions, MsgMenu, PinBar, PinItem,
+  ReactionChips, ReplyBar, ReplyQuote, ReportSheet, saveMedia,
+} from '../components/MsgActions';
 import { AddBotSheet, BotPublic, botInfo, InlineKeyboard, InlineMarkup } from './Bots';
 
 interface MsgItem {
@@ -24,6 +29,9 @@ interface MsgItem {
   tempId?: string;
   senderIsBot?: boolean;
   markup?: InlineMarkup | null;
+  replyTo?: ReplyPreview | null;
+  fwdFrom?: string | null;
+  reactions?: Reaction[];
 }
 
 /** Web 端点语音/视频弹下载引导 */
@@ -380,7 +388,7 @@ export function AudioBubble({ a }: { a: any }) {
   };
 
   return (
-    <span className="row" style={{ gap: 8, cursor: 'pointer' }} onClick={toggle}>
+    <span className="row no-menu" style={{ gap: 8, cursor: 'pointer' }} onClick={toggle}>
       <span className={`voice-bars${playing ? ' playing' : ''}`}>
         <span /><span /><span />
       </span>
@@ -389,7 +397,18 @@ export function AudioBubble({ a }: { a: any }) {
   );
 }
 
-function MsgBubble({ m, mine, convType, onImage }: { m: MsgItem; mine: boolean; convType: number; onImage: (url: string) => void }) {
+/** 点这些元素走它们自己的逻辑（看大图、播放、点链接等），不弹消息菜单 */
+const NO_MENU = 'a,img,video,audio,.no-menu,.bot-kb,.react-chips,.reply-quote';
+
+function MsgBubble({ m, mine, convType, myId, onImage, onMenu, onReact, onJump }: {
+  m: MsgItem; mine: boolean; convType: number; myId?: string;
+  onImage: (url: string) => void;
+  onMenu: (x: number, y: number) => void;
+  onReact: (emoji: string) => void;
+  onJump: (id: string) => void;
+}) {
+  const press = useRef<ReturnType<typeof setTimeout>>();
+  const pressed = useRef(false);
   const isMedia = m.type === 'image' || m.type === 'video' || m.type === 'sticker';
   let body: JSX.Element;
   switch (m.type) {
@@ -416,7 +435,7 @@ function MsgBubble({ m, mine, convType, onImage }: { m: MsgItem; mine: boolean; 
       try { loc = JSON.parse(m.content); } catch {}
       body = (
         <span
-          className="row"
+          className="row no-menu"
           style={{ gap: 8, cursor: 'pointer' }}
           onClick={() => loc.lat && window.open(`https://uri.amap.com/marker?position=${loc.lng},${loc.lat}`, '_blank')}
         >
@@ -451,7 +470,7 @@ function MsgBubble({ m, mine, convType, onImage }: { m: MsgItem; mine: boolean; 
           : c.result === 'reject' ? `${label} 已拒绝` : `${label} 已取消`;
         body = <span className="row" style={{ gap: 8 }}><span style={{ fontSize: 15 }}>{c.callType === 2 ? '▣' : '✆'}</span><span>{text}</span></span>;
       } else {
-        body = <span>{m.content}</span>;
+        body = <LinkText text={m.content} style={{ whiteSpace: 'pre-wrap' }} />;
       }
   }
   const avatar = (
@@ -463,11 +482,31 @@ function MsgBubble({ m, mine, convType, onImage }: { m: MsgItem; mine: boolean; 
   return (
     <div className={`bubble-row${mine ? ' mine' : ''}`} style={{ gap: 8, alignItems: 'flex-start' }}>
       {!mine && avatar}
-      <div className="bubble-wrap">
+      <div
+        className="bubble-wrap"
+        onClick={(e) => {
+          if (pressed.current) { pressed.current = false; return; }
+          if ((e.target as Element).closest(NO_MENU)) return;
+          onMenu(e.clientX, e.clientY);
+        }}
+        onContextMenu={(e) => { e.preventDefault(); onMenu(e.clientX, e.clientY); }}
+        onTouchStart={(e) => {
+          const t = e.touches[0];
+          pressed.current = false;
+          press.current = setTimeout(() => { pressed.current = true; onMenu(t.clientX, t.clientY); }, 450);
+        }}
+        onTouchMove={() => clearTimeout(press.current)}
+        onTouchEnd={() => clearTimeout(press.current)}
+      >
         {/* 对齐 iOS：只显示对方昵称，自己的不显示 */}
         {!mine && <div className="small" style={{ marginBottom: 3 }}>{m.senderNickname}{m.senderIsBot && convType === 2 && <span className="bot-tag">机器人</span>}</div>}
-        <div className={`bubble ${mine ? 'mine' : 'theirs'}${isMedia ? ' media' : ''}`} style={{ opacity: m.pending ? 0.6 : 1 }}>{body}</div>
+        <div className={`bubble ${mine ? 'mine' : 'theirs'}${isMedia ? ' media' : ''}`} style={{ opacity: m.pending ? 0.6 : 1 }}>
+          {m.fwdFrom && <div className="fwd-from">转发自 {m.fwdFrom}</div>}
+          {m.replyTo && <ReplyQuote r={m.replyTo} onClick={() => onJump(m.replyTo!.id)} />}
+          {body}
+        </div>
         {m.markup && <InlineKeyboard markup={m.markup} messageId={m.id} />}
+        <ReactionChips reactions={m.reactions} myId={myId} onToggle={onReact} />
         <div className="msg-meta" style={{ justifyContent: mine ? 'flex-end' : 'flex-start' }}>
           {m.pending && <span>发送中…</span>}
           {mine && convType === 1 && !m.pending && <span className={m.isRead ? '' : 'accent'}>{m.isRead ? '已读' : '未读'}</span>}
@@ -500,9 +539,24 @@ export function ChatRoomPage() {
   const [toast, setToast] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
-  // 从搜索结果进来：首屏定位到该消息并闪一下，之后照常滚到底
-  const focusPending = useRef(!!state.focusMsgId);
+  // 从搜索结果 / 引用 / 置顶跳过来：定位到该消息并闪一下，之后照常滚到底
+  const focusId = useRef<string | null>(state.focusMsgId ?? null);
   const [flashId, setFlashId] = useState<string | null>(null);
+
+  const [menu, setMenu] = useState<{ m: MsgItem; x: number; y: number } | null>(null);
+  const [replyTo, setReplyTo] = useState<MsgItem | null>(null);
+  const replyRef = useRef<MsgItem | null>(null);
+  replyRef.current = replyTo;
+  const [pins, setPins] = useState<PinItem[]>([]);
+  const [pinIdx, setPinIdx] = useState(0);
+  const [selecting, setSelecting] = useState<Set<string> | null>(null);
+  const [forwardIds, setForwardIds] = useState<string[] | null>(null);
+  const [reportId, setReportId] = useState<string | null>(null);
+  const [deleteIds, setDeleteIds] = useState<string[] | null>(null);
+  const [groupRoles, setGroupRoles] = useState<Record<string, string>>({});
+  const myRole = (me && groupRoles[me.id]) || 'member';
+  const isGroupAdmin = state.convType === 2 && (myRole === 'owner' || myRole === 'admin');
+  const canPin = state.convType === 1 || isGroupAdmin;
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -510,11 +564,47 @@ export function ChatRoomPage() {
     toastTimer.current = setTimeout(() => setToast(''), 2000);
   };
 
+  const loadPins = () => {
+    if (!conversationId) return;
+    api<PinItem[]>(`/im/conversations/${conversationId}/pins`).then((l) => { setPins(l); setPinIdx(0); }).catch(() => {});
+  };
+
+  const flash = (id: string) => {
+    const el = document.getElementById(`msg-${id}`);
+    if (!el) return false;
+    el.scrollIntoView({ block: 'center' });
+    setFlashId(id);
+    setTimeout(() => setFlashId(null), 1600);
+    return true;
+  };
+
+  /** 跳到某条消息：不在当前列表就按 aroundId 重新拉一段 */
+  const jumpTo = async (id: string) => {
+    if (flash(id)) return;
+    try {
+      focusId.current = id;
+      const list = await api<MsgItem[]>(`/im/messages?conversationId=${conversationId}&aroundId=${id}`);
+      if (!list.some((m) => m.id === id)) {
+        focusId.current = null;
+        showToast('原消息已不存在');
+        return;
+      }
+      setMessages(list);
+      setTimeout(() => { if (focusId.current === id && flash(id)) focusId.current = null; }, 80);
+    } catch {
+      focusId.current = null;
+    }
+  };
+
   useEffect(() => {
     if (!conversationId) return;
     const around = state.focusMsgId ? `&aroundId=${state.focusMsgId}` : '';
     api<MsgItem[]>(`/im/messages?conversationId=${conversationId}${around}`).then((list) => {
-      setMessages(list);
+      // 列表回来之前就发出 / 收到的消息不能被覆盖掉
+      setMessages((prev) => {
+        const ids = new Set(list.map((m) => m.id));
+        return [...list, ...prev.filter((m) => !ids.has(m.id))];
+      });
       setLoaded(true);
       const last = list[list.length - 1];
       if (last) wsManager.markRead(conversationId, last.id);
@@ -522,6 +612,12 @@ export function ChatRoomPage() {
         botInfo(state.targetId).then(setBot);
       }
     }).catch(() => setLoaded(true));
+    loadPins();
+    if (state.convType === 2 && state.targetId) {
+      api<any>(`/im/group/${state.targetId}`)
+        .then((g) => setGroupRoles(Object.fromEntries((g?.members ?? []).map((x: any) => [x.id, x.role]))))
+        .catch(() => {});
+    }
 
     wsManager.connect();
     return wsManager.on((frame) => {
@@ -537,6 +633,12 @@ export function ChatRoomPage() {
         setMessages((prev) => prev.map((m) => (m.id === d.msgId ? { ...m, content: d.content ?? m.content, markup: d.markup } : m)));
       } else if (frame.op === 'msg_delete' && frame.data?.conversationId === conversationId) {
         setMessages((prev) => prev.filter((m) => m.id !== frame.data.msgId));
+        setPins((prev) => prev.filter((p) => p.id !== frame.data.msgId));
+      } else if (frame.op === 'msg_reactions' && frame.data?.conversationId === conversationId) {
+        const d = frame.data;
+        setMessages((prev) => prev.map((m) => (m.id === d.msgId ? { ...m, reactions: d.reactions } : m)));
+      } else if (frame.op === 'msg_pin' && frame.data?.conversationId === conversationId) {
+        loadPins();
       } else if (frame.op === 'conv_cleared') {
         // 有人清空了记录（单聊=全部，群聊=其发送的消息）：重新拉取同步
         if (frame.data?.conversationId === conversationId) {
@@ -568,27 +670,103 @@ export function ChatRoomPage() {
   }, [conversationId]);
 
   useEffect(() => {
-    if (focusPending.current) {
+    if (focusId.current) {
       if (!messages.length) return;
-      focusPending.current = false;
-      const el = document.getElementById(`msg-${state.focusMsgId}`);
-      if (el) {
-        el.scrollIntoView({ block: 'center' });
-        setFlashId(state.focusMsgId!);
-        setTimeout(() => setFlashId(null), 1600);
-        return;
-      }
+      const id = focusId.current;
+      focusId.current = null;
+      if (flash(id)) return;
     }
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
 
   const sendRaw = (msgType: string, content: string) => {
     if (!state.targetId || !me) return;
-    const tempId = wsManager.send((state.convType as 1 | 2) ?? 1, state.targetId, msgType, content);
+    // 一次回复只挂在紧接着发的第一条上（多图连发时后面的不带）
+    const r = replyRef.current;
+    replyRef.current = null;
+    if (r) setReplyTo(null);
+    const tempId = wsManager.send((state.convType as 1 | 2) ?? 1, state.targetId, msgType, content, r?.id);
     setMessages((prev) => [...prev, {
       id: tempId, tempId, senderId: me.id, senderNickname: me.nickname, senderAvatar: me.avatar,
       type: msgType, content, createdAt: new Date().toISOString(), pending: true,
+      replyTo: r ? {
+        id: r.id, senderId: r.senderId, senderNickname: r.senderNickname, type: r.type,
+        content: r.type === 'text' ? r.content.slice(0, 100) : r.type === 'image' ? r.content : '',
+      } : null,
     }]);
+  };
+
+  // ---------- 长按菜单 ----------
+
+  const react = async (msgId: string, emoji: string) => {
+    try {
+      const r = await api<{ reactions: Reaction[] }>(`/im/messages/${msgId}/react`, { method: 'POST', body: { emoji } });
+      setMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, reactions: r.reactions } : m)));
+    } catch (e: any) {
+      showToast(e.message || '操作失败');
+    }
+  };
+
+  const togglePin = async (msgId: string, pin: boolean) => {
+    try {
+      await api(`/im/messages/${msgId}/pin`, { method: 'POST', body: { pin } });
+      loadPins();
+      showToast(pin ? '已置顶' : '已取消置顶');
+    } catch (e: any) {
+      showToast(e.message || '操作失败');
+    }
+  };
+
+  const copyText = (text: string) => {
+    navigator.clipboard?.writeText(text).then(() => showToast('已复制')).catch(() => showToast('复制失败'));
+  };
+
+  const isMine = (m: MsgItem) => !!me && m.senderId === me.id;
+  /** 能否「为双方删除」：自己的或群管理员，礼物不行 */
+  const canDeleteForAll = (m: MsgItem) => m.type !== 'gift' && (isMine(m) || isGroupAdmin);
+
+  const menuActions = (m: MsgItem): MenuActions => ({
+    onReact: (e) => react(m.id, e),
+    onReply: () => { setReplyTo(m); setShowSticker(false); setTimeout(() => inputRef.current?.focus(), 0); },
+    onCopy: m.type === 'text' ? () => copyText(m.content) : undefined,
+    onSave: m.type === 'image' || m.type === 'video' ? () => saveMedia(m.content, m.type) : undefined,
+    onPin: canPin ? () => togglePin(m.id, !pins.some((p) => p.id === m.id)) : undefined,
+    onForward: FORWARDABLE.has(m.type) ? () => setForwardIds([m.id]) : undefined,
+    onReport: !isMine(m) ? () => setReportId(m.id) : undefined,
+    onDelete: () => setDeleteIds([m.id]),
+    onSelect: () => setSelecting(new Set([m.id])),
+  });
+
+  const doDelete = async (forAll: boolean) => {
+    const ids = deleteIds ?? [];
+    setDeleteIds(null);
+    try {
+      await api('/im/messages/delete', { method: 'POST', body: { conversationId, ids, forAll } });
+      setMessages((prev) => prev.filter((m) => !ids.includes(m.id)));
+      setSelecting(null);
+    } catch (e: any) {
+      showToast(e.message || '删除失败');
+    }
+  };
+
+  const selected = selecting ? messages.filter((m) => selecting.has(m.id)) : [];
+  const toggleSelect = (id: string) => setSelecting((s) => {
+    if (!s) return s;
+    const n = new Set(s);
+    n.has(id) ? n.delete(id) : n.add(id);
+    return n;
+  });
+  const copySelected = () => {
+    const texts = selected.filter((m) => m.type === 'text');
+    if (!texts.length) return showToast('选中的消息里没有文字');
+    copyText(texts.map((m) => (state.convType === 2 ? `${m.senderNickname}：${m.content}` : m.content)).join('\n'));
+    setSelecting(null);
+  };
+  const forwardSelected = () => {
+    const ok = selected.filter((m) => FORWARDABLE.has(m.type)).map((m) => m.id);
+    if (!ok.length) return showToast('礼物、通话记录不能转发');
+    if (ok.length < selected.length) showToast('礼物、通话记录不会被转发');
+    setForwardIds(ok);
   };
 
   const send = () => {
@@ -676,6 +854,15 @@ export function ChatRoomPage() {
           <span className="action" onClick={() => setShowGroupInfo(true)}>群信息</span>
         )}
       </div>
+      {pins.length > 0 && (
+        <PinBar
+          pins={pins}
+          index={pinIdx}
+          canUnpin={canPin}
+          onJump={() => { jumpTo(pins[pinIdx % pins.length].id); setPinIdx((i) => (i + 1) % pins.length); }}
+          onUnpin={() => { const p = pins[pinIdx % pins.length]; if (confirm('取消置顶这条消息？')) togglePin(p.id, false); }}
+        />
+      )}
 
       <div className="page page-pad" onClick={() => { setShowSticker(false); setShowCmds(false); }}>
         {bot && loaded && messages.length === 0 && (
@@ -698,7 +885,23 @@ export function ChatRoomPage() {
                   {formatTime(m.createdAt)}
                 </div>
               )}
-              <MsgBubble m={m} mine={!!me && m.senderId === me.id} convType={state.convType ?? 1} onImage={setFullImage} />
+              {selecting ? (
+                <div className="sel-row" onClick={() => !m.pending && toggleSelect(m.id)}>
+                  <span className={`sel-circle${selecting.has(m.id) ? ' on' : ''}`}>{selecting.has(m.id) ? '✓' : ''}</span>
+                  <MsgBubble m={m} mine={isMine(m)} convType={state.convType ?? 1} myId={me?.id} onImage={() => {}} onMenu={() => {}} onReact={() => {}} onJump={() => {}} />
+                </div>
+              ) : (
+                <MsgBubble
+                  m={m}
+                  mine={isMine(m)}
+                  convType={state.convType ?? 1}
+                  myId={me?.id}
+                  onImage={setFullImage}
+                  onMenu={(x, y) => !m.pending && setMenu({ m, x, y })}
+                  onReact={(e) => react(m.id, e)}
+                  onJump={jumpTo}
+                />
+              )}
             </div>
           );
         })}
@@ -706,10 +909,19 @@ export function ChatRoomPage() {
       </div>
 
       {/* 底部输入区（微信式，对齐 iOS）：输入框 + 圆形加号呼出功能面板，发送键仅有文字时出现 */}
-      {bot && loaded && messages.length === 0 ? (
+      {selecting ? (
+        <div className="sel-bar">
+          <span onClick={() => setSelecting(null)}>取消</span>
+          <span className="grow small" style={{ cursor: 'default' }}>已选 {selecting.size} 条</span>
+          <span className={selected.length ? '' : 'off'} onClick={() => selected.length && copySelected()}>拷贝</span>
+          <span className={selected.length ? '' : 'off'} onClick={() => selected.length && forwardSelected()}>转发</span>
+          <span className={selected.length ? '' : 'off'} style={selected.length ? { color: 'var(--danger)' } : undefined} onClick={() => selected.length && setDeleteIds(selected.map((m) => m.id))}>删除</span>
+        </div>
+      ) : bot && loaded && messages.length === 0 ? (
         <div className="ch-bottom"><span className="accent" style={{ fontWeight: 600 }} onClick={() => sendCommand('start')}>开始</span></div>
       ) : (
       <div style={{ background: 'var(--bg-card)', position: 'relative' }}>
+        {replyTo && <ReplyBar m={replyTo} onCancel={() => setReplyTo(null)} />}
         {cmdOpen && (
           <div className="bot-cmds">
             {cmdList.map((c) => (
@@ -783,6 +995,47 @@ export function ChatRoomPage() {
             style={{ position: 'fixed', top: 16, right: 16, width: 36, height: 36, borderRadius: 18, background: 'rgba(255,255,255,0.15)', color: '#fff', fontSize: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
           >×</span>
         </div>
+      )}
+      {menu && (
+        <MsgMenu
+          m={menu.m}
+          mine={isMine(menu.m)}
+          convType={state.convType ?? 1}
+          myReaction={menu.m.reactions?.find((r) => me && r.userIds.includes(me.id))?.emoji}
+          pinned={pins.some((p) => p.id === menu.m.id)}
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+          actions={menuActions(menu.m)}
+        />
+      )}
+      {deleteIds && (
+        <DeleteDialog
+          count={deleteIds.length}
+          canForAll={messages.filter((m) => deleteIds.includes(m.id)).every(canDeleteForAll)}
+          convType={state.convType ?? 1}
+          peerName={state.title}
+          onConfirm={doDelete}
+          onClose={() => setDeleteIds(null)}
+        />
+      )}
+      {forwardIds && conversationId && (
+        <ForwardSheet
+          fromConversationId={conversationId}
+          ids={forwardIds}
+          onClose={() => setForwardIds(null)}
+          onDone={(tip, convIds) => {
+            setForwardIds(null);
+            setSelecting(null);
+            showToast(tip);
+            if (convIds.includes(conversationId)) {
+              api<MsgItem[]>(`/im/messages?conversationId=${conversationId}`).then(setMessages).catch(() => {});
+            }
+          }}
+        />
+      )}
+      {reportId && (
+        <ReportSheet msgId={reportId} onClose={() => setReportId(null)} onDone={(tip) => { setReportId(null); showToast(tip); }} />
       )}
       {showDownload && <DownloadDialog onClose={() => setShowDownload(false)} />}
       {showGift && state.targetId && (

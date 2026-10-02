@@ -3,6 +3,7 @@ import { HashRouter, Navigate, NavLink, Outlet, Route, Routes, useNavigate, useS
 import { api, getDeviceId, getToken, setToken, UserProfile } from './api';
 import { useApp } from './store';
 import { wsManager } from './ws';
+import { LinkHost } from './components/LinkText';
 import { EnterPage } from './pages/Enter';
 import { RegisterPage } from './pages/Register';
 import { PlazaPage } from './pages/Plaza';
@@ -167,6 +168,7 @@ export function App() {
 
   return (
     <HashRouter>
+      <LinkHost />
       <Routes>
         <Route path="/" element={<Boot />} />
         <Route path="/enter" element={<EnterPage />} />

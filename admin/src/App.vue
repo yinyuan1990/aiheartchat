@@ -17,6 +17,7 @@ import SrsNodesView from './views/SrsNodesView.vue';
 import AppVersionView from './views/AppVersionView.vue';
 import ChannelsView from './views/ChannelsView.vue';
 import BotsView from './views/BotsView.vue';
+import ReportsView from './views/ReportsView.vue';
 
 const logged = ref(!!getToken());
 const username = ref('');
@@ -37,6 +38,7 @@ const tabs = [
   { key: 'publish', label: '内容分发（推广）' },
   { key: 'channels', label: '频道' },
   { key: 'bots', label: '机器人' },
+  { key: 'reports', label: '举报' },
   { key: 'treehole', label: '私密树洞' },
   { key: 'music', label: '音乐频道' },
   { key: 'srs', label: 'SRS 节点' },
@@ -101,6 +103,7 @@ function logout() {
       <PublishView v-if="tab === 'publish'" />
       <ChannelsView v-if="tab === 'channels'" />
       <BotsView v-if="tab === 'bots'" />
+      <ReportsView v-if="tab === 'reports'" />
       <TreeholeView v-if="tab === 'treehole'" />
       <MusicView v-if="tab === 'music'" />
       <SrsNodesView v-if="tab === 'srs'" />

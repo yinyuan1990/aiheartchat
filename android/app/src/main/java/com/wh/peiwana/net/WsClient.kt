@@ -29,7 +29,24 @@ data class MessagePayload(
     /** 机器人发的消息才有 */
     val senderIsBot: Boolean = false,
     val markup: InlineMarkup? = null,
+    val replyTo: ReplyPreview? = null,
+    val fwdFrom: String? = null,
+    val reactions: List<MsgReaction> = emptyList(),
 )
+
+/** 被回复的消息预览：文字取前 100 字、图片是 url；deleted=原消息已删除 */
+@Serializable
+data class ReplyPreview(
+    val id: String,
+    val senderId: String = "",
+    val senderNickname: String = "",
+    val type: String = "",
+    val content: String = "",
+    val deleted: Boolean = false,
+)
+
+@Serializable
+data class MsgReaction(val emoji: String, val count: Int, val userIds: List<String> = emptyList())
 
 /** IM WebSocket：自动重连 + 心跳 + 帧分发（协议见后端 im.types.ts） */
 object WsClient {
@@ -94,7 +111,7 @@ object WsClient {
     }
 
     /** 发送消息，返回 tempId */
-    fun send(convType: Int, targetId: String, msgType: String, content: String): String {
+    fun send(convType: Int, targetId: String, msgType: String, content: String, replyToId: String? = null): String {
         val tempId = "t_${System.currentTimeMillis()}_${(1000..9999).random()}"
         val frame = buildJsonObject {
             put("op", "send")
@@ -103,6 +120,7 @@ object WsClient {
             put("targetId", targetId)
             put("msgType", msgType)
             put("content", content)
+            if (replyToId != null) put("replyToId", replyToId)
         }
         ws?.send(frame.toString())
         return tempId

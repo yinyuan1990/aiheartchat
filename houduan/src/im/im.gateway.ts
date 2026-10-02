@@ -86,6 +86,7 @@ export class ImGateway implements OnGatewayConnection, OnGatewayDisconnect {
           break;
         case 'send': {
           const f = frame as SendFrame;
+          delete f.fwdFrom;
           if (!f.targetId || !f.msgType || typeof f.content !== 'string') return;
           if (f.content.length > ImGateway.MAX_CONTENT_LEN) return;
           const payload = await this.im.sendMessage(userId, f);

@@ -4,7 +4,7 @@ import { CryptoService } from '../common/crypto.service';
 import { WalletService } from '../wallet/wallet.service';
 import { ConnectionRegistry } from './connection.registry';
 import { IntimacyService } from '../intimacy/intimacy.service';
-import { MessagePayload, SendFrame } from './im.types';
+import { MessagePayload, ReactionView, ReplyPreview, SendFrame } from './im.types';
 import { resolveInviteUser } from '../invite/invite.service';
 import { BotService } from './bot.service';
 
@@ -44,6 +44,7 @@ export class ImService {
 
     const conv = await this.getOrCreateSingleConversation(sender.id, peerId);
     const key = this.crypto.unwrapKey(conv.wrappedKey);
+    const reply = await this.resolveReply(conv.id, key, frame.replyToId);
 
     // 男→女消息按条扣费（后台设价，收入归女方）；同性之间免费
     let msgFee = 0n;
@@ -60,6 +61,8 @@ export class ImService {
           receiverId: peerId,
           type: frame.msgType,
           cipherContent: this.crypto.encrypt(key, frame.content),
+          replyToId: reply ? BigInt(reply.id) : null,
+          fwdFrom: frame.fwdFrom || null,
         },
       });
       if (msgFee > 0n) {
@@ -76,7 +79,7 @@ export class ImService {
       return created;
     });
 
-    const payload = this.toPayload(msg, conv, sender, frame.content);
+    const payload = this.toPayload(msg, conv, sender, frame.content, reply);
     if (peer.isBot) {
       void this.bots.onPrivateMessage(peer, sender, msg, frame.msgType, frame.content).catch(() => {});
       return payload;
@@ -142,6 +145,7 @@ export class ImService {
     if (!conv) throw new NotFoundException('群会话不存在');
 
     const key = this.crypto.unwrapKey(conv.wrappedKey);
+    const reply = await this.resolveReply(conv.id, key, frame.replyToId);
     const msg = await this.prisma.message.create({
       data: {
         conversationId: conv.id,
@@ -149,13 +153,15 @@ export class ImService {
         receiverId: null,
         type: frame.msgType,
         cipherContent: this.crypto.encrypt(key, frame.content),
+        replyToId: reply ? BigInt(reply.id) : null,
+        fwdFrom: frame.fwdFrom || null,
       },
     });
     await this.prisma.conversation.update({ where: { id: conv.id }, data: { lastMsgAt: msg.createdAt } });
     // 频道阅读数按 lastReadMsgId 统计，发帖人自己算已读
     await this.prisma.groupMember.update({ where: { groupId_userId: { groupId, userId: sender.id } }, data: { lastReadMsgId: msg.id } });
 
-    const payload = this.toPayload(msg, conv, sender, frame.content);
+    const payload = this.toPayload(msg, conv, sender, frame.content, reply);
     const members = await this.prisma.groupMember.findMany({ where: { groupId }, select: { userId: true } });
     const targets = members.map((m) => m.userId).filter((id) => id !== sender.id);
     await this.registry.deliver(targets, { op: 'msg', data: payload });
@@ -197,7 +203,7 @@ export class ImService {
       if (conv.userAId !== userId && conv.userBId !== userId) return;
       await this.prisma.message.updateMany({
         where: { conversationId, receiverId: userId, isRead: false, id: { lte: msgId } },
-        data: { isRead: true },
+        data: { isRead: true, readAt: new Date() },
       });
       const peer = conv.userAId === userId ? conv.userBId : conv.userAId;
       await this.registry.deliver([peer!], {
@@ -234,13 +240,19 @@ export class ImService {
       take: 100,
     });
 
+    // 「只删自己这边」的消息不当会话预览
+    const hiddenRows = await this.prisma.messageHide.findMany({ where: { userId }, select: { messageId: true }, orderBy: { createdAt: 'desc' }, take: 2000 });
+    const hidden = new Set(hiddenRows.map((h) => h.messageId.toString()));
+
     const result = [] as any[];
     for (const conv of convs) {
       const key = this.crypto.unwrapKey(conv.wrappedKey);
-      const lastMsg = await this.prisma.message.findFirst({
+      const recent = await this.prisma.message.findMany({
         where: { conversationId: conv.id },
         orderBy: { id: 'desc' },
+        take: hidden.size ? 10 : 1,
       });
+      const lastMsg = recent.find((m) => !hidden.has(m.id.toString())) ?? null;
 
       if (conv.type === 1) {
         const peerId = conv.userAId === userId ? conv.userBId! : conv.userAId!;
@@ -438,10 +450,19 @@ export class ImService {
     await this.assertMember(userId, conv);
 
     if (conv.type === 1) {
+      await this.prisma.messagePin.deleteMany({ where: { conversationId } });
+      await this.prisma.messageHide.deleteMany({ where: { conversationId } });
       await this.prisma.message.deleteMany({ where: { conversationId } });
       const peers = [conv.userAId, conv.userBId].filter((id): id is bigint => id != null);
       await this.registry.deliver(peers, { op: 'conv_cleared', data: { conversationId: conversationId.toString() } });
     } else if (conv.groupId) {
+      const own = await this.prisma.message.findMany({ where: { conversationId, senderId: userId }, select: { id: true } });
+      const ids = own.map((m) => m.id);
+      if (ids.length) {
+        await this.prisma.messagePin.deleteMany({ where: { messageId: { in: ids } } });
+        await this.prisma.messageHide.deleteMany({ where: { messageId: { in: ids } } });
+        await this.prisma.channelReaction.deleteMany({ where: { messageId: { in: ids } } });
+      }
       await this.prisma.message.deleteMany({ where: { conversationId, senderId: userId } });
       const members = await this.prisma.groupMember.findMany({
         where: { groupId: conv.groupId },
@@ -465,16 +486,18 @@ export class ImService {
     await this.assertMember(userId, conv);
 
     const key = this.crypto.unwrapKey(conv.wrappedKey);
+    const hiddenRows = await this.prisma.messageHide.findMany({ where: { userId, conversationId }, select: { messageId: true } });
+    const notHidden = hiddenRows.length ? { id: { notIn: hiddenRows.map((h) => h.messageId) } } : {};
     let messages;
     if (aroundId) {
       const [older, newer] = await Promise.all([
         this.prisma.message.findMany({
-          where: { conversationId, id: { lt: aroundId } },
+          where: { conversationId, AND: [{ id: { lt: aroundId } }, notHidden] },
           orderBy: { id: 'desc' },
           take: 20,
         }),
         this.prisma.message.findMany({
-          where: { conversationId, id: { gte: aroundId } },
+          where: { conversationId, AND: [{ id: { gte: aroundId } }, notHidden] },
           orderBy: { id: 'asc' },
           take: 1000,
         }),
@@ -482,7 +505,7 @@ export class ImService {
       messages = [...newer.reverse(), ...older];
     } else {
       messages = await this.prisma.message.findMany({
-        where: { conversationId, ...(beforeId ? { id: { lt: beforeId } } : {}) },
+        where: { conversationId, AND: [beforeId ? { id: { lt: beforeId } } : {}, notHidden] },
         orderBy: { id: 'desc' },
         take: Math.min(limit, 50),
       });
@@ -491,7 +514,12 @@ export class ImService {
     const senderIds = [...new Set(messages.map((m) => m.senderId.toString()))];
     const senders = await this.prisma.user.findMany({ where: { id: { in: senderIds.map(BigInt) } } });
     const senderMap = new Map(senders.map((s) => [s.id.toString(), s]));
-    const markups = await this.markupsOf(messages.filter((m) => senderMap.get(m.senderId.toString())?.isBot).map((m) => m.id));
+    const ids = messages.map((m) => m.id);
+    const [markups, replies, reactions] = await Promise.all([
+      this.markupsOf(messages.filter((m) => senderMap.get(m.senderId.toString())?.isBot).map((m) => m.id)),
+      this.replyPreviewsOf(key, messages.map((m) => m.replyToId).filter((x): x is bigint => x != null)),
+      this.reactionsOf(ids),
+    ]);
 
     return messages.reverse().map((m) => {
       const sender = senderMap.get(m.senderId.toString());
@@ -506,9 +534,78 @@ export class ImService {
         type: m.type,
         content: this.crypto.decrypt(key, m.cipherContent),
         isRead: m.isRead,
+        readAt: m.readAt,
         createdAt: m.createdAt,
+        replyTo: m.replyToId ? replies.get(m.replyToId.toString()) ?? { id: m.replyToId.toString(), senderId: '', senderNickname: '', type: '', content: '', deleted: true } : null,
+        fwdFrom: m.fwdFrom,
+        reactions: reactions.get(m.id.toString()) ?? [],
       };
     });
+  }
+
+  /** 发送时校验 replyToId 属于同一会话，返回引用预览；不合法就当没回复 */
+  async resolveReply(conversationId: bigint, key: Buffer, replyToId?: string): Promise<ReplyPreview | null> {
+    if (!replyToId || !/^\d+$/.test(replyToId)) return null;
+    const m = await this.prisma.message.findUnique({ where: { id: BigInt(replyToId) } });
+    if (!m || m.conversationId !== conversationId) return null;
+    return (await this.replyPreviewsOf(key, [m.id])).get(m.id.toString()) ?? null;
+  }
+
+  async replyPreviewsOf(key: Buffer, ids: bigint[]) {
+    const map = new Map<string, ReplyPreview>();
+    if (!ids.length) return map;
+    const rows = await this.prisma.message.findMany({ where: { id: { in: [...new Set(ids)] } } });
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: [...new Set(rows.map((r) => r.senderId))] } },
+      select: { id: true, nickname: true },
+    });
+    const names = new Map(users.map((u) => [u.id.toString(), u.nickname]));
+    for (const r of rows) {
+      let content = '';
+      try {
+        const plain = this.crypto.decrypt(key, r.cipherContent);
+        if (r.type === 'text') content = plain.slice(0, 100);
+        else if (r.type === 'image') content = plain;
+      } catch {
+        /* ignore */
+      }
+      map.set(r.id.toString(), {
+        id: r.id.toString(),
+        senderId: r.senderId.toString(),
+        senderNickname: names.get(r.senderId.toString()) ?? '',
+        type: r.type,
+        content,
+      });
+    }
+    return map;
+  }
+
+  /** messageId → [{emoji,count,userIds}]，按数量降序 */
+  async reactionsOf(ids: bigint[]) {
+    const map = new Map<string, ReactionView[]>();
+    if (!ids.length) return map;
+    const rows = await this.prisma.channelReaction.findMany({
+      where: { messageId: { in: ids } },
+      orderBy: { createdAt: 'asc' },
+      select: { messageId: true, userId: true, emoji: true },
+    });
+    const byMsg = new Map<string, Map<string, string[]>>();
+    for (const r of rows) {
+      const k = r.messageId.toString();
+      if (!byMsg.has(k)) byMsg.set(k, new Map());
+      const e = byMsg.get(k)!;
+      if (!e.has(r.emoji)) e.set(r.emoji, []);
+      e.get(r.emoji)!.push(r.userId.toString());
+    }
+    for (const [k, e] of byMsg) {
+      map.set(
+        k,
+        [...e.entries()]
+          .map(([emoji, users]) => ({ emoji, count: users.length, userIds: users.slice(0, 20) }))
+          .sort((a, b) => b.count - a.count),
+      );
+    }
+    return map;
   }
 
   /** 机器人消息的按钮（inline_keyboard），messageId → markup */
@@ -526,7 +623,7 @@ export class ImService {
     return map;
   }
 
-  private async assertMember(userId: bigint, conv: any) {
+  async assertMember(userId: bigint, conv: any) {
     if (conv.type === 1) {
       if (conv.userAId !== userId && conv.userBId !== userId) throw new ForbiddenException('无权访问该会话');
     } else if (conv.groupId) {
@@ -547,8 +644,10 @@ export class ImService {
     return { id: msg.id, senderId: msg.senderId, type: msg.type, content, createdAt: msg.createdAt };
   }
 
-  private toPayload(msg: any, conv: any, sender: any, plainContent: string): MessagePayload {
+  private toPayload(msg: any, conv: any, sender: any, plainContent: string, reply?: ReplyPreview | null): MessagePayload {
     return {
+      ...(reply ? { replyTo: reply } : {}),
+      ...(msg.fwdFrom ? { fwdFrom: msg.fwdFrom } : {}),
       id: msg.id.toString(),
       conversationId: conv.id.toString(),
       convType: conv.type,

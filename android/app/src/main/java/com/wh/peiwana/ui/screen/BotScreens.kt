@@ -121,10 +121,6 @@ private object BotCallbacks {
     }
 }
 
-private fun openUrl(ctx: Context, url: String) {
-    runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
-}
-
 @Composable
 fun BotTag() {
     Text(
@@ -155,7 +151,7 @@ fun InlineKeyboard(markup: InlineMarkup?, messageId: String, modifier: Modifier 
                 val r = Api.request("/im/bot/callback", "POST", buildJsonObject { put("messageId", JsonPrimitive(messageId)); put("data", JsonPrimitive(data)) })
                 val queryId = r?.jsonObject?.get("queryId")?.jsonPrimitive?.content ?: return@runCatching
                 val a = BotCallbacks.await(queryId) ?: return@runCatching
-                if (a.url.isNotEmpty()) openUrl(ctx, a.url)
+                if (a.url.isNotEmpty()) confirmUrl = a.url
                 if (a.text.isNotEmpty()) { if (a.showAlert) alertText = a.text else Toast.makeText(ctx, a.text, Toast.LENGTH_SHORT).show() }
             }.onFailure { Toast.makeText(ctx, it.message ?: "机器人没有响应", Toast.LENGTH_SHORT).show() }
             busy = null
@@ -180,14 +176,7 @@ fun InlineKeyboard(markup: InlineMarkup?, messageId: String, modifier: Modifier 
         }
     }
     confirmUrl?.let { url ->
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { confirmUrl = null },
-            containerColor = Bg2,
-            title = { Text("打开链接？", color = TextMain) },
-            text = { Text(url, color = TextSub, fontSize = 13.sp) },
-            confirmButton = { Text("打开", color = Accent, modifier = Modifier.noRippleClick { confirmUrl = null; openUrl(ctx, url) }.padding(8.dp)) },
-            dismissButton = { Text("取消", color = TextSub, modifier = Modifier.noRippleClick { confirmUrl = null }.padding(8.dp)) },
-        )
+        WebPreviewDialog(url = url, title = runCatching { Uri.parse(url).host }.getOrNull() ?: url) { confirmUrl = null }
     }
     alertText?.let { t ->
         androidx.compose.material3.AlertDialog(

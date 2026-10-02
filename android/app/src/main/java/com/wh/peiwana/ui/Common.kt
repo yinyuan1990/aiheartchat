@@ -69,6 +69,17 @@ fun WebPreviewDialog(html: String? = null, url: String? = null, title: String = 
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(title, color = TextMain, fontSize = 14.sp, maxLines = 1, modifier = Modifier.weight(1f))
+                if (url != null) {
+                    val ctx = androidx.compose.ui.platform.LocalContext.current
+                    Text("浏览器打开", color = TextSub, fontSize = 14.sp, modifier = Modifier.padding(end = 14.dp).noRippleClick {
+                        runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+                    })
+                    Text("复制链接", color = TextSub, fontSize = 14.sp, modifier = Modifier.padding(end = 14.dp).noRippleClick {
+                        val cm = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        cm.setPrimaryClip(android.content.ClipData.newPlainText("link", url))
+                        android.widget.Toast.makeText(ctx, "已复制", android.widget.Toast.LENGTH_SHORT).show()
+                    })
+                }
                 Text("关闭", color = Accent, fontSize = 14.sp, modifier = Modifier.noRippleClick(onClose))
             }
             androidx.compose.ui.viewinterop.AndroidView(

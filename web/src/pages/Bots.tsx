@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api, uploadFile } from '../api';
 import { openNativeChat } from '../bridge';
 import { wsManager } from '../ws';
+import { openLink } from '../components/LinkText';
 
 /** 机器人（Telegram 式）：用户创建，第三方程序用兼容 Telegram 的 Bot API 收发消息 */
 
@@ -54,7 +55,7 @@ wsManager.on((f) => {
 });
 
 function showAnswer(a: CallbackAnswer) {
-  if (a.url) window.open(a.url, '_blank', 'noopener');
+  if (a.url) openLink(a.url);
   if (a.text) a.showAlert ? alert(a.text) : flashToast(a.text);
 }
 
@@ -77,7 +78,7 @@ export function InlineKeyboard({ markup, messageId }: { markup?: InlineMarkup | 
 
   const press = async (b: InlineButton, key: string) => {
     if (b.url) {
-      if (confirm(`打开链接？\n${b.url}`)) window.open(b.url, '_blank', 'noopener');
+      openLink(b.url);
       return;
     }
     if (!b.callback_data || busy) return;

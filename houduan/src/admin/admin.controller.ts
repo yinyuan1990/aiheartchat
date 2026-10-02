@@ -20,6 +20,7 @@ import { PublishService } from '../publish/publish.service';
 import { XPicsService } from '../publish/x-pics.service';
 import { ChannelService } from '../im/channel.service';
 import { BotService } from '../im/bot.service';
+import { MessageService } from '../im/message.service';
 
 @Controller('admin')
 export class AdminController {
@@ -42,6 +43,7 @@ export class AdminController {
     private readonly tgForward: TgForwardService,
     private readonly channels: ChannelService,
     private readonly bots: BotService,
+    private readonly msgs: MessageService,
   ) {}
 
   // ---------- 机器人（用户建的 Bot API 机器人：查看 / 封禁 / 删除） ----------
@@ -62,6 +64,20 @@ export class AdminController {
   @UseGuards(AdminGuard)
   botDelete(@Param('id') id: string) {
     return this.bots.adminDelete(BigInt(id));
+  }
+
+  // ---------- 举报（聊天消息长按举报） ----------
+
+  @Get('reports')
+  @UseGuards(AdminGuard)
+  reportList(@Query('status') status?: string, @Query('beforeId') beforeId?: string) {
+    return this.msgs.adminReports(status === '0' || status === '1' ? Number(status) : undefined, beforeId ? BigInt(beforeId) : undefined);
+  }
+
+  @Post('reports/:id/handle')
+  @UseGuards(AdminGuard)
+  reportHandle(@Param('id') id: string, @Body() body: { action?: string }) {
+    return this.msgs.adminHandleReport(BigInt(id), String(body?.action ?? ''));
   }
 
   // ---------- 频道（用户开的频道：查看 / 封禁 / 删帖 / 删评论） ----------

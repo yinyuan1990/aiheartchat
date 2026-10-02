@@ -35,6 +35,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -203,7 +204,7 @@ private fun PostBody(p: ChannelPost, onMedia: () -> Unit) {
                 PinIcon(Accent, 16.dp); Spacer(Modifier.width(6.dp)); Text(name, color = TextMain, fontSize = 15.sp)
             }
         }
-        else -> Text(p.content, color = TextMain, fontSize = 15.sp, lineHeight = 22.sp, modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp))
+        else -> LinkText(p.content, color = TextMain, fontSize = 15.sp, lineHeight = 22.sp, modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp))
     }
 }
 
@@ -720,6 +721,7 @@ fun ChannelCommentsScreen(msgId: String, canAdmin: Boolean, myUserId: String, on
                                     }
                                 }
                                 if (c.content.isNotEmpty() || c.replyToNickname.isNotEmpty()) {
+                                    var linkUrl by remember { mutableStateOf<String?>(null) }
                                     Text(
                                         androidx.compose.ui.text.buildAnnotatedString {
                                             if (c.replyToNickname.isNotEmpty()) {
@@ -727,10 +729,19 @@ fun ChannelCommentsScreen(msgId: String, canAdmin: Boolean, myUserId: String, on
                                                 append("@${c.replyToNickname} ")
                                                 pop()
                                             }
-                                            append(c.content)
+                                            splitLinks(c.content).forEach { (t, url) ->
+                                                if (url == null) append(t)
+                                                else withLink(
+                                                    androidx.compose.ui.text.LinkAnnotation.Clickable(
+                                                        url,
+                                                        androidx.compose.ui.text.TextLinkStyles(androidx.compose.ui.text.SpanStyle(color = BotBlue, textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline)),
+                                                    ) { linkUrl = url },
+                                                ) { append(t) }
+                                            }
                                         },
                                         color = TextMain, fontSize = 14.sp, lineHeight = 21.sp, modifier = Modifier.padding(top = 3.dp),
                                     )
+                                    linkUrl?.let { u -> WebPreviewDialog(url = u, title = hostOf(u)) { linkUrl = null } }
                                 }
                                 c.sticker?.let { Box(Modifier.padding(top = 4.dp)) { StickerImage(it, 96.dp) } }
                             }

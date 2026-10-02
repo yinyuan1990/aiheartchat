@@ -204,9 +204,10 @@ private struct ChannelPostCard: View {
         case "location":
             locationRow
         default:
-            Text(content)
+            LinkText(text: content)
                 .font(.system(size: 15)).foregroundStyle(Theme.text).lineSpacing(4)
                 .textSelection(.enabled)
+                .inAppLinks()
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 12).padding(.top, 8)
         }
@@ -945,9 +946,11 @@ struct ChannelCommentsView: View {
                 if !text.isEmpty || !reply.isEmpty {
                     (
                         Text(reply.isEmpty ? "" : "@\(reply) ").foregroundColor(Theme.accent)
-                        + Text(text).foregroundColor(Theme.text)
+                        + Text(linkified(text)).foregroundColor(Theme.text)
                     )
                     .font(.system(size: 14)).lineSpacing(3)
+                    .tint(botBlue)
+                    .inAppLinks()
                     .padding(.top, 3)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }

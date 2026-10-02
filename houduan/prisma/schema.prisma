@@ -160,6 +160,12 @@ model Message {
   cipherContent  String   @map("cipher_content") @db.Text
   /// 单聊已读标记（群聊已读靠 group_member.last_read_msg_id）
   isRead         Boolean  @default(false) @map("is_read")
+  /// 单聊对方读到的时间（长按菜单显示「已读 时间」）
+  readAt         DateTime? @map("read_at")
+  /// 回复的消息 id（同会话）
+  replyToId      BigInt?  @map("reply_to_id")
+  /// 转发来源：原消息发送者昵称 / 频道名；null = 不是转发
+  fwdFrom        String?  @map("fwd_from") @db.VarChar(60)
   createdAt      DateTime @default(now()) @map("created_at")
 
   @@index([conversationId, id])
@@ -249,7 +255,31 @@ model BotMessageMarkup {
   @@map("bot_message_markup")
 }
 
-/// 频道帖子的表情回应：每人每帖一个（Telegram 免费用户同款），再点同一个 = 取消
+/// 「只删自己这边」的消息：对本人隐藏，其他人照常看到
+model MessageHide {
+  userId         BigInt   @map("user_id")
+  messageId      BigInt   @map("message_id")
+  conversationId BigInt   @map("conversation_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@id([userId, messageId])
+  @@index([userId, conversationId])
+  @@map("message_hide")
+}
+
+/// 会话置顶消息（可置顶多条，顶部栏显示最新一条，点一下轮换）
+model MessagePin {
+  id             BigInt   @id @default(autoincrement())
+  conversationId BigInt   @map("conversation_id")
+  messageId      BigInt   @map("message_id")
+  pinnedBy       BigInt   @map("pinned_by")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@unique([conversationId, messageId])
+  @@map("message_pin")
+}
+
+/// 消息 / 频道帖子的表情回应（表名沿用 channel_reaction，私聊 / 群聊消息也用它）：每人每条一个，再点同一个 = 取消
 model ChannelReaction {
   id        BigInt   @id @default(autoincrement())
   messageId BigInt   @map("message_id")
@@ -1116,10 +1146,15 @@ model Report {
   targetType String   @map("target_type") @db.VarChar(10)
   targetId   BigInt   @default(0) @map("target_id")
   reason     String   @db.VarChar(500)
+  /// 举报消息时的快照 JSON {conversationId, type, cipher}（cipher 用会话密钥加密，后台查看时解密；消息被删了也能看）
+  extra      String?  @db.Text
   /// 0=待处理 1=已处理
   status     Int      @default(0) @db.TinyInt
+  /// 处理结果：ignore | delete | ban
+  result     String   @default("") @db.VarChar(20)
   createdAt  DateTime @default(now()) @map("created_at")
 
   @@index([status])
+  @@index([reporterId, targetType, targetId])
   @@map("report")
 }

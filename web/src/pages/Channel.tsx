@@ -9,6 +9,7 @@ import { dropLastGrapheme } from '../emojis';
 import { EmojiPanel } from '../components/EmojiPanel';
 import { StickerView } from '../components/StickerView';
 import { AttachSheet, AttachAction } from '../components/AttachSheet';
+import { LinkText } from '../components/LinkText';
 import { AudioBubble, GroupShareView } from './ChatRoom';
 import { AddBotSheet, InlineKeyboard, InlineMarkup } from './Bots';
 
@@ -80,7 +81,7 @@ function PostBody({ p, onImage }: { p: Post; onImage: (url: string) => void }) {
       );
     }
     default:
-      return <div className="ch-text">{p.content}</div>;
+      return <div className="ch-text"><LinkText text={p.content} /></div>;
   }
 }
 
@@ -557,7 +558,7 @@ export function ChannelCommentsPage() {
               {(c.content || c.replyToNickname) && (
                 <div style={{ fontSize: 14, marginTop: 3, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
                   {c.replyToNickname && <span className="accent">@{c.replyToNickname} </span>}
-                  {c.content}
+                  <LinkText text={c.content ?? ''} />
                 </div>
               )}
               {c.sticker && <StickerView p={c.sticker} size={96} style={{ marginTop: 4 }} />}

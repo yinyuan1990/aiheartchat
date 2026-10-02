@@ -133,13 +133,13 @@ struct BotTag: View {
     }
 }
 
-/// 消息下面的内联按钮：url 按钮确认后打开；回调按钮发给机器人，机器人 answerCallbackQuery 后提示 / 弹窗
+/// 消息下面的内联按钮：url 按钮在应用内 WebView 打开；回调按钮发给机器人，机器人 answerCallbackQuery 后提示 / 弹窗
 struct InlineKeyboardView: View {
     let markup: InlineMarkup?
     let messageId: String
     @State private var busy: String?
     @State private var alertText: String?
-    @State private var confirmUrl: String?
+    @State private var webTarget: LinkTarget?
     @State private var tip: String?
 
     private var rows: [[InlineButton]] { (markup?.inlineKeyboard ?? []).filter { !$0.isEmpty } }
@@ -162,11 +162,8 @@ struct InlineKeyboardView: View {
                 }
             }
             .padding(.top, 4)
-            .alert("打开链接？", isPresented: Binding(get: { confirmUrl != nil }, set: { if !$0 { confirmUrl = nil } })) {
-                Button("打开") { if let u = confirmUrl { open(u) }; confirmUrl = nil }
-                Button("取消", role: .cancel) { confirmUrl = nil }
-            } message: {
-                Text(confirmUrl ?? "")
+            .fullScreenCover(item: $webTarget) { t in
+                WebPreviewSheet(url: t.url, title: t.url.host ?? "网页")
             }
             .alert(alertText ?? "", isPresented: Binding(get: { alertText != nil }, set: { if !$0 { alertText = nil } })) {
                 Button("好", role: .cancel) { alertText = nil }
@@ -190,7 +187,8 @@ struct InlineKeyboardView: View {
     }
 
     private func open(_ s: String) {
-        if let u = URL(string: s) { UIApplication.shared.open(u) }
+        guard let u = URL(string: s) else { return }
+        if u.scheme == "http" || u.scheme == "https" { webTarget = LinkTarget(url: u) } else { UIApplication.shared.open(u) }
     }
 
     private func showTip(_ t: String) {
@@ -199,7 +197,7 @@ struct InlineKeyboardView: View {
     }
 
     private func press(_ b: InlineButton, key: String) {
-        if let u = b.url { confirmUrl = u; return }
+        if let u = b.url { open(u); return }
         guard let data = b.callbackData, busy == nil else { return }
         busy = key
         Task { @MainActor in

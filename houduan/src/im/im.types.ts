@@ -18,6 +18,11 @@
  *   { op: "msg_edit", data: { conversationId, msgId, content, markup } }   机器人编辑了自己的消息
  *   { op: "msg_delete", data: { conversationId, msgId } }                  机器人删了自己的消息
  *   { op: "bot_callback_answer", data: { queryId, text, showAlert, url } } 点回调按钮后机器人的回应
+ *   { op: "msg_delete", data: { conversationId, msgId } }                  也用于用户删除（为双方删除 / 自己其他设备上的「只删自己」）
+ *   { op: "msg_reactions", data: { conversationId, msgId, reactions } }    表情回应变了（不发给操作人，操作人以接口返回为准）
+ *   { op: "msg_pin", data: { conversationId, msgId, pinned } }             置顶 / 取消置顶
+ *
+ * send 帧可带 replyToId（回复同会话里的某条消息）。
  */
 
 export interface SendFrame {
@@ -27,6 +32,27 @@ export interface SendFrame {
   targetId: string;
   msgType: string;
   content: string;
+  replyToId?: string;
+  /** 只在服务端转发时设置，客户端帧里的会被网关丢掉 */
+  fwdFrom?: string;
+}
+
+export interface ReplyPreview {
+  id: string;
+  senderId: string;
+  senderNickname: string;
+  type: string;
+  /** 文字取前 100 字、图片是 url，其余类型为空 */
+  content: string;
+  /** 原消息已被删除 */
+  deleted?: boolean;
+}
+
+export interface ReactionView {
+  emoji: string;
+  count: number;
+  /** 点了这个表情的人（最多 20 个），客户端据此判断「我点过」 */
+  userIds: string[];
 }
 
 export interface ReadFrame {
@@ -50,6 +76,9 @@ export interface MessagePayload {
   /** 机器人发的消息才有：发送者是机器人、消息下方的按钮 */
   senderIsBot?: boolean;
   markup?: { inline_keyboard: { text: string; url?: string; callback_data?: string }[][] } | null;
+  replyTo?: ReplyPreview | null;
+  fwdFrom?: string | null;
+  reactions?: ReactionView[];
 }
 
 /** Redis 跨节点投递载荷 */

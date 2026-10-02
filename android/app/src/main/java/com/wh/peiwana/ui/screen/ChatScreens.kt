@@ -22,6 +22,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -72,6 +73,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
@@ -111,7 +113,14 @@ data class MsgItem(
     val createdAt: String,
     val senderIsBot: Boolean = false,
     val markup: InlineMarkup? = null,
-)
+    val isRead: Boolean = false,
+    val replyTo: ReplyPreview? = null,
+    val fwdFrom: String? = null,
+    val reactions: List<MsgReaction> = emptyList(),
+) {
+    /** 本地刚发、还没收到服务端 ack（id 还是 tempId） */
+    val pending: Boolean get() = id.startsWith("t_")
+}
 
 private fun parseIso(iso: String?): java.time.Instant? =
     if (iso.isNullOrEmpty()) null else runCatching { java.time.Instant.parse(iso) }.getOrNull()
@@ -479,8 +488,33 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
     var recFile by remember { mutableStateOf<File?>(null) }
     var recStart by remember { mutableLongStateOf(0L) }
 
-    fun appendLocal(type: String, content: String) {
-        messages = messages + MsgItem("local_${System.currentTimeMillis()}", convId, myUserId, myNickname, myAvatar, null, type, content, java.time.Instant.now().toString())
+    // ---------- 长按菜单相关状态 ----------
+    var menuMsg by remember { mutableStateOf<MsgItem?>(null) }
+    var replyTo by remember { mutableStateOf<MsgItem?>(null) }
+    var pins by remember { mutableStateOf<List<PinItem>>(emptyList()) }
+    var pinIdx by remember { mutableIntStateOf(0) }
+    var selecting by remember { mutableStateOf<Set<String>?>(null) }
+    var forwardIds by remember { mutableStateOf<List<String>?>(null) }
+    var reportId by remember { mutableStateOf<String?>(null) }
+    var deleteIds by remember { mutableStateOf<List<String>?>(null) }
+    var myRole by remember { mutableStateOf("member") }
+    val isGroupAdmin = convType == 2 && (myRole == "owner" || myRole == "admin")
+    val canPin = convType == 1 || isGroupAdmin
+
+    fun toast(msg: String) = android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_SHORT).show()
+
+    /** 发消息并乐观显示；正在回复的话只挂在这一条上 */
+    fun sendMsg(type: String, content: String) {
+        val r = replyTo
+        replyTo = null
+        val tempId = WsClient.send(convType, targetId, type, content, r?.id)
+        val preview = r?.let { ReplyPreview(it.id, it.senderId, it.senderNickname, it.type, if (it.type == "text") it.content.take(100) else if (it.type == "image") it.content else "") }
+        messages = messages + MsgItem(tempId, convId, myUserId, myNickname, myAvatar, null, type, content, java.time.Instant.now().toString(), replyTo = preview)
+    }
+
+    suspend fun loadPins() {
+        pins = runCatching { Api.getList<PinItem>("/im/conversations/$convId/pins") }.getOrDefault(emptyList())
+        pinIdx = 0
     }
 
     // 重新拉取消息列表（清空记录后本端及其他端同步用）
@@ -489,12 +523,23 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
     }
 
     // 从搜索结果进来：首屏定位到该消息并闪一下，之后照常滚到底
-    var focusPending by remember { mutableStateOf(focusMsgId.isNotEmpty()) }
+    var focusTarget by remember { mutableStateOf(focusMsgId) }
     var flashId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(convId) {
         val around = if (focusMsgId.isNotEmpty()) "&aroundId=$focusMsgId" else ""
-        messages = runCatching { Api.getList<MsgItem>("/im/messages?conversationId=$convId$around") }.getOrDefault(emptyList())
+        val list = runCatching { Api.getList<MsgItem>("/im/messages?conversationId=$convId$around") }.getOrDefault(emptyList())
+        // 列表回来之前就发出 / 收到的消息不能被覆盖掉
+        val ids = list.map { it.id }.toSet()
+        messages = list + messages.filterNot { it.id in ids }
         loaded = true
+        launch { loadPins() }
+        if (convType == 2) launch {
+            runCatching {
+                val g = Api.request("/im/group/$targetId")?.jsonObject
+                myRole = g?.get("members")?.jsonArray?.map { it.jsonObject }
+                    ?.firstOrNull { it["id"]?.jsonPrimitive?.content == myUserId }?.get("role")?.jsonPrimitive?.content ?: "member"
+            }
+        }
         messages.lastOrNull()?.let { WsClient.markRead(convId, it.id) }
         WsClient.connect()
         // 空会话或对方发过机器人消息：查一下对方是不是机器人（简介卡片 / 开始按钮 / 命令菜单）
@@ -507,7 +552,10 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
                     val data = frame["data"]?.jsonObject ?: return@addListener
                     val m = WsClient.json.decodeFromJsonElement(MessagePayload.serializer(), data)
                     if (m.conversationId == convId) {
-                        messages = messages + MsgItem(m.id, m.conversationId, m.senderId, m.senderNickname, m.senderAvatar, m.receiverId, m.type, m.content, m.createdAt, m.senderIsBot, m.markup)
+                        messages = messages + MsgItem(
+                            m.id, m.conversationId, m.senderId, m.senderNickname, m.senderAvatar, m.receiverId, m.type, m.content, m.createdAt, m.senderIsBot, m.markup,
+                            replyTo = m.replyTo, fwdFrom = m.fwdFrom, reactions = m.reactions,
+                        )
                         WsClient.markRead(convId, m.id)
                         if (m.senderIsBot && convType == 1 && bot == null) scope.launch { bot = BotInfoCache.get(m.senderId) }
                     }
@@ -525,12 +573,35 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
                     if (d["conversationId"]?.jsonPrimitive?.content != convId) return@addListener
                     val id = d["msgId"]?.jsonPrimitive?.content
                     messages = messages.filterNot { it.id == id }
+                    pins = pins.filterNot { it.id == id }
+                }
+                "ack" -> {
+                    val tid = frame["tempId"]?.jsonPrimitive?.content ?: return@addListener
+                    val mid = frame["msgId"]?.jsonPrimitive?.content ?: return@addListener
+                    val at = frame["createdAt"]?.jsonPrimitive?.content
+                    messages = messages.map { if (it.id == tid) it.copy(id = mid, createdAt = at ?: it.createdAt) else it }
+                }
+                "read" -> {
+                    if (frame["conversationId"]?.jsonPrimitive?.content != convId) return@addListener
+                    val upTo = frame["msgId"]?.jsonPrimitive?.content?.toLongOrNull() ?: return@addListener
+                    messages = messages.map { m -> if (m.senderId == myUserId && (m.id.toLongOrNull() ?: Long.MAX_VALUE) <= upTo) m.copy(isRead = true) else m }
+                }
+                "msg_reactions" -> {
+                    val d = frame["data"]?.jsonObject ?: return@addListener
+                    if (d["conversationId"]?.jsonPrimitive?.content != convId) return@addListener
+                    val id = d["msgId"]?.jsonPrimitive?.content
+                    val rs = runCatching { WsClient.json.decodeFromJsonElement(ListSerializer(MsgReaction.serializer()), d["reactions"]!!) }.getOrDefault(emptyList())
+                    messages = messages.map { if (it.id == id) it.copy(reactions = rs) else it }
+                }
+                "msg_pin" -> {
+                    if (frame["data"]?.jsonObject?.get("conversationId")?.jsonPrimitive?.content == convId) scope.launch { loadPins() }
                 }
                 "error" -> {
                     // 发送被后端拒绝（如积分不足）：提示并撤回乐观显示的消息
                     val msg = frame["msg"]?.jsonPrimitive?.content ?: "发送失败"
                     android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_SHORT).show()
-                    messages.lastOrNull { it.id.startsWith("local_") }?.let { last -> messages = messages - last }
+                    val tid = frame["tempId"]?.jsonPrimitive?.content
+                    (if (tid != null) messages.firstOrNull { it.id == tid } else messages.lastOrNull { it.pending })?.let { last -> messages = messages - last }
                 }
                 "conv_cleared" -> {
                     // 有人清空了记录（单聊=全部，群聊=其发送的消息）：重新拉取同步
@@ -543,13 +614,14 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
     }
     LaunchedEffect(messages.size) {
         if (messages.isEmpty()) return@LaunchedEffect
-        if (focusPending) {
-            focusPending = false
-            val idx = messages.indexOfFirst { it.id == focusMsgId }
+        if (focusTarget.isNotEmpty()) {
+            val target = focusTarget
+            focusTarget = ""
+            val idx = messages.indexOfFirst { it.id == target }
             if (idx >= 0) {
                 // 目标消息上方留两条上下文
                 listState.scrollToItem((idx - 2).coerceAtLeast(0))
-                flashId = focusMsgId
+                flashId = target
                 return@LaunchedEffect
             }
         }
@@ -565,11 +637,72 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
         if (messages.isNotEmpty()) runCatching { listState.scrollToItem(messages.size - 1) }
     }
 
+    // ---------- 长按菜单的操作 ----------
+
+    /** 跳到某条消息（引用 / 置顶）：不在当前列表就按 aroundId 重新拉一段 */
+    fun jumpTo(id: String) = scope.launch {
+        val idx = messages.indexOfFirst { it.id == id }
+        if (idx >= 0) {
+            listState.scrollToItem((idx - 2).coerceAtLeast(0))
+            flashId = id
+            return@launch
+        }
+        val list = runCatching { Api.getList<MsgItem>("/im/messages?conversationId=$convId&aroundId=$id") }.getOrDefault(emptyList())
+        if (list.none { it.id == id }) { toast("原消息已不存在"); return@launch }
+        // 交给 LaunchedEffect(messages.size) 定位（列表条数没变时它不会触发，就地滚）
+        focusTarget = id
+        val sameSize = list.size == messages.size
+        messages = list
+        if (sameSize) {
+            kotlinx.coroutines.delay(50)
+            focusTarget = ""
+            listState.scrollToItem((list.indexOfFirst { it.id == id } - 2).coerceAtLeast(0))
+            flashId = id
+        }
+    }
+
+    fun react(id: String, emoji: String) = scope.launch {
+        runCatching {
+            val r = Api.request("/im/messages/$id/react", "POST", buildJsonObject { put("emoji", JsonPrimitive(emoji)) })
+            val rs = WsClient.json.decodeFromJsonElement(ListSerializer(MsgReaction.serializer()), r!!.jsonObject["reactions"]!!)
+            messages = messages.map { if (it.id == id) it.copy(reactions = rs) else it }
+        }.onFailure { toast(it.message ?: "操作失败") }
+    }
+
+    fun togglePin(id: String, pin: Boolean) = scope.launch {
+        runCatching { Api.request("/im/messages/$id/pin", "POST", buildJsonObject { put("pin", JsonPrimitive(pin)) }) }
+            .onSuccess { loadPins(); toast(if (pin) "已置顶" else "已取消置顶") }
+            .onFailure { toast(it.message ?: "操作失败") }
+    }
+
+    fun doDelete(ids: List<String>, forAll: Boolean) = scope.launch {
+        runCatching {
+            Api.request("/im/messages/delete", "POST", buildJsonObject {
+                put("conversationId", JsonPrimitive(convId)); put("ids", jsonIds(ids)); put("forAll", JsonPrimitive(forAll))
+            })
+        }.onSuccess { messages = messages.filterNot { it.id in ids }; selecting = null }
+            .onFailure { toast(it.message ?: "删除失败") }
+    }
+
+    /** 能否「为双方删除」：自己的或群管理员，礼物不行 */
+    fun canDeleteForAll(m: MsgItem) = m.type != "gift" && (m.senderId == myUserId || isGroupAdmin)
+
+    fun menuActions(m: MsgItem) = MenuActions(
+        onReact = { react(m.id, it) },
+        onReply = { replyTo = m; showSticker = false; voiceMode = false; runCatching { inputFocus.requestFocus() } },
+        onCopy = if (m.type == "text") ({ copyToClipboard(ctx, m.content) }) else null,
+        onSave = if (m.type == "image" || m.type == "video") ({ scope.launch { saveMediaToGallery(ctx, m.content, m.type) } }) else null,
+        onPin = if (canPin) ({ togglePin(m.id, pins.none { it.id == m.id }) }) else null,
+        onForward = if (m.type in FORWARDABLE) ({ forwardIds = listOf(m.id) }) else null,
+        onReport = if (m.senderId != myUserId) ({ reportId = m.id }) else null,
+        onDelete = { deleteIds = listOf(m.id) },
+        onSelect = { selecting = setOf(m.id) },
+    )
+
     val audioPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     val locPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { g ->
         if (g.values.any { it }) sendLocation(ctx) { name, lat, lng ->
-            WsClient.send(convType, targetId, "location", buildJsonObject { put("name", JsonPrimitive(name)); put("lat", JsonPrimitive(lat)); put("lng", JsonPrimitive(lng)) }.toString())
-            appendLocal("location", "{\"name\":\"$name\"}")
+            sendMsg("location", buildJsonObject { put("name", JsonPrimitive(name)); put("lat", JsonPrimitive(lat)); put("lng", JsonPrimitive(lng)) }.toString())
         }
     }
     // 「+」弹框选的图 / 拍的照：按顺序逐张上传发送，说明文字最后单独发一条
@@ -579,11 +712,11 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
             runCatching {
                 val b = ctx.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
                 val url = Api.upload("image", b, "img.jpg", "image/jpeg")
-                WsClient.send(convType, targetId, "image", url); appendLocal("image", url)
+                sendMsg("image", url)
             }.onFailure { failed++ }
         }
         val text = caption.trim()
-        if (text.isNotEmpty()) { WsClient.send(convType, targetId, "text", text); appendLocal("text", text) }
+        if (text.isNotEmpty()) sendMsg("text", text)
         if (failed > 0) android.widget.Toast.makeText(ctx, "$failed 张图片发送失败", android.widget.Toast.LENGTH_SHORT).show()
     }
 
@@ -609,7 +742,7 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
             runCatching {
                 val url = Api.upload("audio", f.readBytes(), "a.m4a", "audio/m4a")
                 val c = buildJsonObject { put("url", JsonPrimitive(url)); put("duration", JsonPrimitive(dur)) }.toString()
-                WsClient.send(convType, targetId, "audio", c); appendLocal("audio", c)
+                sendMsg("audio", c)
             }
         }
     }
@@ -645,6 +778,14 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
                 Spacer(Modifier.width(14.dp))
                 Text("群信息", color = Accent, fontSize = 13.sp, modifier = Modifier.noRippleClick(onGroupInfo))
             }
+        }
+
+        if (pins.isNotEmpty()) {
+            PinBar(
+                pins, pinIdx, canPin,
+                onJump = { jumpTo(pins[pinIdx % pins.size].id); pinIdx = (pinIdx + 1) % pins.size },
+                onUnpin = { togglePin(pins[pinIdx % pins.size].id, false) },
+            )
         }
 
         if (showVoiceRoom) {
@@ -705,22 +846,67 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
                     if (flashId == m.id) Accent.copy(alpha = 0.14f) else Color.Transparent,
                     androidx.compose.animation.core.tween(if (flashId == m.id) 150 else 900), label = "flash",
                 )
+                val sel = selecting
                 Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(flashBg)) {
-                    Bubble(m, m.senderId == myUserId, convType, onImage = { fullImage = it })
+                    if (sel != null) {
+                        Row(
+                            Modifier.fillMaxWidth().noRippleClick { if (!m.pending) selecting = if (m.id in sel) sel - m.id else sel + m.id },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            SelectCircle(m.id in sel)
+                            Spacer(Modifier.width(10.dp))
+                            Box(Modifier.weight(1f)) {
+                                Bubble(m, m.senderId == myUserId, convType, myUserId, onImage = {}, onMenu = {}, onReact = {}, onJump = {})
+                                // 多选时盖一层，点哪都是勾选
+                                Box(Modifier.matchParentSize().noRippleClick { if (!m.pending) selecting = if (m.id in sel) sel - m.id else sel + m.id })
+                            }
+                        }
+                    } else {
+                        Bubble(
+                            m, m.senderId == myUserId, convType, myUserId,
+                            onImage = { fullImage = it },
+                            onMenu = { if (!m.pending) { focus.clearFocus(); keyboard?.hide(); menuMsg = m } },
+                            onReact = { react(m.id, it) },
+                            onJump = { jumpTo(it) },
+                        )
+                    }
                 }
             }
         }
+        val sel = selecting
+        if (sel != null) {
+            val chosen = messages.filter { it.id in sel }
+            Row(Modifier.fillMaxWidth().background(Bg2).navigationBarsPadding().padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("取消", color = TextMain, fontSize = 15.sp, modifier = Modifier.noRippleClick { selecting = null })
+                Text("已选 ${sel.size} 条", color = TextSub, fontSize = 13.sp, modifier = Modifier.weight(1f).padding(start = 14.dp))
+                val on = chosen.isNotEmpty()
+                Text("拷贝", color = if (on) TextMain else TextDim, fontSize = 15.sp, modifier = Modifier.noRippleClick {
+                    val texts = chosen.filter { it.type == "text" }
+                    if (texts.isEmpty()) toast("选中的消息里没有文字")
+                    else { copyToClipboard(ctx, texts.joinToString("\n") { if (convType == 2) "${it.senderNickname}：${it.content}" else it.content }); selecting = null }
+                })
+                Spacer(Modifier.width(18.dp))
+                Text("转发", color = if (on) TextMain else TextDim, fontSize = 15.sp, modifier = Modifier.noRippleClick {
+                    val ok = chosen.filter { it.type in FORWARDABLE }.map { it.id }
+                    if (ok.isEmpty()) toast("礼物、通话记录不能转发")
+                    else { if (ok.size < chosen.size) toast("礼物、通话记录不会被转发"); forwardIds = ok }
+                })
+                Spacer(Modifier.width(18.dp))
+                Text("删除", color = if (on) Danger else TextDim, fontSize = 15.sp, modifier = Modifier.noRippleClick { if (on) deleteIds = chosen.map { it.id } })
+            }
+        } else
         // 和机器人的空会话：底部是「开始」按钮（发 /start），同 Telegram
         if (botFresh) {
             Box(
                 Modifier.fillMaxWidth().background(Bg2).navigationBarsPadding().noRippleClick {
-                    WsClient.send(convType, targetId, "text", "/start"); appendLocal("text", "/start")
+                    sendMsg("text", "/start")
                 }.padding(vertical = 16.dp),
                 contentAlignment = Alignment.Center,
             ) { Text("开始", color = Accent, fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
         } else
         // 微信式底部区（随键盘上移）：左语音切换 / 输入框 / +面板 / 发送
         Column(modifier = Modifier.background(Bg2).imePadding().navigationBarsPadding()) {
+            replyTo?.let { r -> ReplyBar(r.senderNickname, msgSnippet(r.type, r.content)) { replyTo = null } }
             val cmds = bot?.commands.orEmpty()
             val cmdQuery = if (input.startsWith("/")) input.drop(1).substringBefore(' ') else null
             val shownCmds = when {
@@ -734,7 +920,7 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
                         Row(
                             Modifier.fillMaxWidth().noRippleClick {
                                 showCmds = false; input = ""
-                                WsClient.send(convType, targetId, "text", "/${c.command}"); appendLocal("text", "/${c.command}")
+                                sendMsg("text", "/${c.command}")
                             }.padding(horizontal = 16.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -799,7 +985,7 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
                 if (input.isNotBlank() && !voiceMode) {
                     Spacer(Modifier.width(8.dp))
                     Box(modifier = Modifier.height(40.dp).clip(RoundedCornerShape(20.dp)).background(Accent).noRippleClick {
-                        WsClient.send(convType, targetId, "text", input.trim()); appendLocal("text", input.trim()); input = ""
+                        sendMsg("text", input.trim()); input = ""
                     }.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) { Text("发送", color = Color.White, fontSize = 14.sp) }
                 }
             }
@@ -809,7 +995,7 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
                 EmojiPanel(
                     onPick = { p ->
                         val content = StickerStore.encode(p)
-                        WsClient.send(convType, targetId, "sticker", content); appendLocal("sticker", content)
+                        sendMsg("sticker", content)
                     },
                     onEmoji = { input += it },
                     onDelete = { input = dropLastGrapheme(input) },
@@ -837,6 +1023,31 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
         )
     }
     if (showGift) GiftSheet(targetId) { showGift = false }
+    menuMsg?.let { m ->
+        MsgMenuDialog(
+            msgId = m.id, mine = m.senderId == myUserId, convType = convType,
+            myReaction = m.reactions.firstOrNull { myUserId in it.userIds }?.emoji,
+            pinned = pins.any { it.id == m.id },
+            actions = menuActions(m),
+        ) { menuMsg = null }
+    }
+    deleteIds?.let { ids ->
+        DeleteMsgDialog(
+            count = ids.size,
+            canForAll = messages.filter { it.id in ids }.all { canDeleteForAll(it) },
+            convType = convType, peerName = title,
+            onConfirm = { forAll -> deleteIds = null; doDelete(ids, forAll) },
+        ) { deleteIds = null }
+    }
+    forwardIds?.let { ids ->
+        ForwardDialog(convId, ids, onDone = { tip, convIds ->
+            forwardIds = null; selecting = null; toast(tip)
+            if (convId in convIds) scope.launch { reloadMessages() }
+        }) { forwardIds = null }
+    }
+    reportId?.let { id ->
+        ReportMsgDialog(id, onDone = { tip -> reportId = null; toast(tip) }) { reportId = null }
+    }
     fullImage?.let { u ->
         androidx.compose.ui.window.Dialog(onDismissRequest = { fullImage = null }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
             val imgs = messages.filter { it.type == "image" }.map { it.content }
@@ -845,8 +1056,13 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun Bubble(m: MsgItem, mine: Boolean, convType: Int, onImage: (String) -> Unit) {
+private fun Bubble(
+    m: MsgItem, mine: Boolean, convType: Int, myId: String,
+    onImage: (String) -> Unit, onMenu: () -> Unit, onReact: (String) -> Unit, onJump: (String) -> Unit,
+) {
+    val menu by rememberUpdatedState(onMenu)
     // 微信式：对方左侧灰气泡，自己右侧主题气泡，头像顶部对齐、贴边尾角
     val bubbleShape = if (mine) RoundedCornerShape(16.dp, 4.dp, 16.dp, 16.dp) else RoundedCornerShape(4.dp, 16.dp, 16.dp, 16.dp)
     val bg = if (mine) BubbleMine else Bg3
@@ -855,13 +1071,23 @@ private fun Bubble(m: MsgItem, mine: Boolean, convType: Int, onImage: (String) -
 
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Top) {
         if (!mine) { Avatar(m.senderAvatar, 38); Spacer(Modifier.width(8.dp)) }
-        Column(horizontalAlignment = if (mine) Alignment.End else Alignment.Start, modifier = Modifier.widthIn(max = 240.dp)) {
+        // 点 / 长按气泡弹消息菜单；图片、语音、链接、按钮各自的点击优先
+        Column(
+            horizontalAlignment = if (mine) Alignment.End else Alignment.Start,
+            modifier = Modifier.widthIn(max = 240.dp).pointerInput(Unit) { detectTapGestures(onTap = { menu() }, onLongPress = { menu() }) },
+        ) {
             if (!mine) Row(Modifier.padding(bottom = 2.dp, start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(m.senderNickname, color = TextSub, fontSize = 11.sp)
                 if (m.senderIsBot && convType == 2) BotTag()
             }
+            if (m.fwdFrom != null) Text("转发自 ${m.fwdFrom}", color = BotBlue, fontSize = 11.sp, modifier = Modifier.padding(bottom = 2.dp, start = 4.dp, end = 4.dp))
+            m.replyTo?.let { r -> ReplyQuote(r) { onJump(r.id) } }
             when (m.type) {
-                "image" -> AsyncImage(model = Api.fullUrl(m.content), contentDescription = null, contentScale = ContentScale.FillWidth, modifier = Modifier.widthIn(max = 160.dp).clip(RoundedCornerShape(10.dp)).noRippleClick { onImage(m.content) })
+                "image" -> AsyncImage(
+                    model = Api.fullUrl(m.content), contentDescription = null, contentScale = ContentScale.FillWidth,
+                    modifier = Modifier.widthIn(max = 160.dp).clip(RoundedCornerShape(10.dp))
+                        .combinedClickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null, onLongClick = { menu() }) { onImage(m.content) },
+                )
                 "sticker" -> {
                     // 贴纸不画气泡底
                     val p = remember(m.content) { StickerStore.parse(m.content) }
@@ -875,7 +1101,7 @@ private fun Bubble(m: MsgItem, mine: Boolean, convType: Int, onImage: (String) -
                     val dur = (obj?.get("duration")?.jsonPrimitive?.content ?: "1").toIntOrNull() ?: 1
                     var voicePlaying by remember { mutableStateOf(false) }
                     Row(
-                        modifier = Modifier.widthIn(min = 70.dp, max = (70 + dur * 8).coerceAtMost(220).dp).clip(bubbleShape).background(bg).clickable {
+                        modifier = Modifier.widthIn(min = 70.dp, max = (70 + dur * 8).coerceAtMost(220).dp).clip(bubbleShape).background(bg).combinedClickable(onLongClick = { menu() }) {
                             runCatching {
                                 android.media.MediaPlayer().apply {
                                     setDataSource(Api.fullUrl(url))
@@ -937,9 +1163,10 @@ private fun Bubble(m: MsgItem, mine: Boolean, convType: Int, onImage: (String) -
                         Text(text, color = fg, fontSize = 14.sp)
                     }
                 }
-                else -> Box(modifier = Modifier.clip(bubbleShape).background(bg).padding(horizontal = 14.dp, vertical = 10.dp)) { Text(m.content, color = fg, fontSize = 15.sp, lineHeight = 21.sp) }
+                else -> Box(modifier = Modifier.clip(bubbleShape).background(bg).padding(horizontal = 14.dp, vertical = 10.dp)) { LinkText(m.content, color = fg, fontSize = 15.sp, lineHeight = 21.sp) }
             }
             InlineKeyboard(m.markup, m.id, Modifier.width(230.dp))
+            ReactionChips(m.reactions, myId, onReact)
         }
         if (mine) { Spacer(Modifier.width(8.dp)); Avatar(m.senderAvatar, 38) }
     }

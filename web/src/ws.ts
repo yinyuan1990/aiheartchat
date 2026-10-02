@@ -15,6 +15,24 @@ export interface MessagePayload {
   /** 机器人发的消息才有 */
   senderIsBot?: boolean;
   markup?: { inline_keyboard: { text: string; url?: string; callback_data?: string }[][] } | null;
+  replyTo?: ReplyPreview | null;
+  fwdFrom?: string | null;
+  reactions?: Reaction[];
+}
+
+export interface ReplyPreview {
+  id: string;
+  senderId: string;
+  senderNickname: string;
+  type: string;
+  content: string;
+  deleted?: boolean;
+}
+
+export interface Reaction {
+  emoji: string;
+  count: number;
+  userIds: string[];
 }
 
 type Handler = (frame: any) => void;
@@ -70,9 +88,9 @@ class WsManager {
   }
 
   /** 发送聊天消息，返回 tempId */
-  send(convType: 1 | 2, targetId: string, msgType: string, content: string): string {
+  send(convType: 1 | 2, targetId: string, msgType: string, content: string, replyToId?: string): string {
     const tempId = `t_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    this.raw({ op: 'send', tempId, convType, targetId, msgType, content });
+    this.raw({ op: 'send', tempId, convType, targetId, msgType, content, ...(replyToId ? { replyToId } : {}) });
     return tempId;
   }
 

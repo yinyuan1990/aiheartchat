@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/current-user.decorator';
 import { ImService } from './im.service';
@@ -6,7 +6,18 @@ import { GroupService } from './group.service';
 import { VoiceRoomService } from './voiceroom.service';
 import { ChannelService } from './channel.service';
 import { BotService } from './bot.service';
+import { MessageService } from './message.service';
 import { CreateGroupDto, GroupInfoDto, MemberIdsDto } from './im.dto';
+
+function toId(v: unknown): bigint {
+  const s = String(v ?? '');
+  if (!/^\d{1,19}$/.test(s)) throw new BadRequestException('参数不正确');
+  return BigInt(s);
+}
+
+function toIds(v: unknown): bigint[] {
+  return Array.isArray(v) ? [...new Set(v.map(String))].map(toId) : [];
+}
 
 @Controller('im')
 @UseGuards(JwtAuthGuard)
@@ -17,6 +28,7 @@ export class ImController {
     private readonly voiceRoom: VoiceRoomService,
     private readonly channels: ChannelService,
     private readonly bots: BotService,
+    private readonly msgs: MessageService,
   ) {}
 
   @Get('conversations')
@@ -51,6 +63,49 @@ export class ImController {
   @Post('conversations/:id/clear')
   clear(@CurrentUser() userId: bigint, @Param('id') id: string) {
     return this.im.clearMessages(userId, BigInt(id));
+  }
+
+  // ---------- 消息长按菜单 ----------
+
+  /** 删除：forAll=true 为双方删除（自己的消息 / 群管理删任何人），否则只删自己这边 */
+  @Post('messages/delete')
+  deleteMessages(@CurrentUser() userId: bigint, @Body() dto: { conversationId?: string; ids?: string[]; forAll?: boolean }) {
+    return this.msgs.deleteMessages(userId, toId(dto?.conversationId), toIds(dto?.ids), !!dto?.forAll);
+  }
+
+  /** 转发：targets=[{convType:1 单聊对方 userId | 2 群/频道 groupId, targetId}] */
+  @Post('messages/forward')
+  forward(
+    @CurrentUser() userId: bigint,
+    @Body() dto: { fromConversationId?: string; ids?: string[]; targets?: { convType: 1 | 2; targetId: string }[] },
+  ) {
+    return this.msgs.forward(userId, toId(dto?.fromConversationId), toIds(dto?.ids), Array.isArray(dto?.targets) ? dto.targets : []);
+  }
+
+  /** 表情回应：emoji 为空或与已选相同则取消 */
+  @Post('messages/:id/react')
+  reactMessage(@CurrentUser() userId: bigint, @Param('id') id: string, @Body() dto: { emoji?: string }) {
+    return this.msgs.react(userId, toId(id), String(dto?.emoji ?? ''));
+  }
+
+  @Post('messages/:id/pin')
+  pinMessage(@CurrentUser() userId: bigint, @Param('id') id: string, @Body() dto: { pin?: boolean }) {
+    return this.msgs.pin(userId, toId(id), dto?.pin !== false);
+  }
+
+  @Get('conversations/:id/pins')
+  pins(@CurrentUser() userId: bigint, @Param('id') id: string) {
+    return this.msgs.pins(userId, toId(id));
+  }
+
+  @Get('messages/:id/readers')
+  readers(@CurrentUser() userId: bigint, @Param('id') id: string) {
+    return this.msgs.readers(userId, toId(id));
+  }
+
+  @Post('messages/:id/report')
+  reportMessage(@CurrentUser() userId: bigint, @Param('id') id: string, @Body() dto: { reason?: string }) {
+    return this.msgs.report(userId, toId(id), String(dto?.reason ?? ''));
   }
 
   /** 扫邀请名片：按名片码（短号）直接打开单聊 */

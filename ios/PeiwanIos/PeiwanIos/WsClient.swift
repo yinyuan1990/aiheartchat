@@ -15,6 +15,24 @@ struct MessagePayload: Codable {
     /// 机器人发的消息才有
     var senderIsBot: Bool?
     var markup: InlineMarkup?
+    var replyTo: ReplyPreview?
+    var fwdFrom: String?
+    var reactions: [MsgReaction]?
+}
+
+struct ReplyPreview: Codable, Equatable {
+    var id: String
+    var senderId: String? = nil
+    var senderNickname: String? = nil
+    var type: String? = nil
+    var content: String? = nil
+    var deleted: Bool? = nil
+}
+
+struct MsgReaction: Codable, Equatable {
+    var emoji: String
+    var count: Int
+    var userIds: [String]
 }
 
 /// IM WebSocket：自动重连 + 心跳 + 帧分发（协议见后端 im.types.ts）
@@ -63,16 +81,18 @@ final class WsClient: NSObject {
 
     /// 发送消息，返回 tempId
     @discardableResult
-    func send(convType: Int, targetId: String, msgType: String, content: String) -> String {
+    func send(convType: Int, targetId: String, msgType: String, content: String, replyToId: String? = nil) -> String {
         let tempId = "t_\(Int(Date().timeIntervalSince1970 * 1000))_\(Int.random(in: 1000...9999))"
-        sendFrame([
+        var frame: [String: Any] = [
             "op": "send",
             "tempId": tempId,
             "convType": convType,
             "targetId": targetId,
             "msgType": msgType,
             "content": content,
-        ])
+        ]
+        if let replyToId { frame["replyToId"] = replyToId }
+        sendFrame(frame)
         return tempId
     }
 

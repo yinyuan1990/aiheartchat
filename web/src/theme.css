@@ -571,3 +571,46 @@ textarea.input { resize: none; min-height: 90px; }
 .bot-intro { margin: 40px auto 20px; max-width: 320px; text-align: center; background: var(--bg-input); border-radius: 16px; padding: 20px 16px; }
 .bot-code { background: #1e1f24; color: #e6e6e6; border-radius: 8px; padding: 10px 12px; font: 12px/1.6 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-all; margin: 6px 0 12px; }
 .bot-toast { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 300; background: rgba(0, 0, 0, 0.8); color: #fff; font-size: 14px; padding: 10px 18px; border-radius: 20px; max-width: 80vw; }
+
+/* 消息长按菜单（Telegram 式） */
+.msg-link { color: #2f7cf6; text-decoration: underline; word-break: break-all; cursor: pointer; }
+.msg-menu-mask { position: fixed; inset: 0; z-index: 150; background: rgba(0, 0, 0, 0.25); }
+.msg-menu { position: fixed; display: flex; flex-direction: column; gap: 8px; }
+.react-row { display: flex; align-items: center; gap: 2px; padding: 6px 8px; background: var(--bg); border-radius: 22px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18); }
+.react-row.expanded { flex-wrap: wrap; border-radius: 16px; }
+.react-row span { width: 31px; height: 31px; display: flex; align-items: center; justify-content: center; font-size: 21px; border-radius: 16px; cursor: pointer; user-select: none; transition: transform 0.1s; }
+.react-row span:hover { transform: scale(1.18); }
+.react-row span.on { background: rgba(47, 124, 246, 0.15); }
+.react-row span.more { font-size: 16px; color: var(--text-2); background: var(--bg-input); }
+.msg-menu-list { background: var(--bg); border-radius: 12px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18); overflow: hidden; max-height: 60vh; overflow-y: auto; }
+.msg-menu-item { padding: 11px 16px; font-size: 15px; cursor: pointer; border-top: 1px solid var(--line); }
+.msg-menu-item:first-child { border-top: none; }
+.msg-menu-item:hover { background: var(--bg-card); }
+.msg-menu-item.danger { color: var(--danger); }
+.read-line { padding: 9px 16px; font-size: 13px; color: var(--text-2); background: var(--bg-card); }
+.readers { padding: 2px 16px 6px; background: var(--bg-card); max-height: 160px; overflow-y: auto; }
+.react-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.react-chips span { padding: 2px 8px; border-radius: 12px; font-size: 13px; background: var(--bg-input); cursor: pointer; user-select: none; }
+.react-chips span.mine { background: rgba(47, 124, 246, 0.16); color: #2f7cf6; }
+.reply-quote { border-left: 3px solid #2f7cf6; background: rgba(47, 124, 246, 0.08); border-radius: 4px; padding: 3px 8px; margin-bottom: 5px; font-size: 13px; cursor: pointer; max-width: 260px; }
+.bubble.media .reply-quote { margin: 0 0 4px; }
+.reply-quote .name { color: #2f7cf6; font-weight: 600; font-size: 12px; }
+.reply-quote img { width: 28px; height: 28px; object-fit: cover; border-radius: 3px; }
+.fwd-from { font-size: 12px; color: #2f7cf6; margin-bottom: 3px; }
+.reply-bar, .pin-bar { display: flex; align-items: center; gap: 10px; padding: 6px 12px; background: var(--bg-card); border-top: 1px solid var(--line); }
+.reply-bar .bar-icon { color: #2f7cf6; font-size: 18px; }
+.reply-bar .name, .pin-bar .name { color: #2f7cf6; font-size: 13px; font-weight: 600; }
+.reply-bar .close, .pin-bar .close { font-size: 20px; color: var(--text-3); cursor: pointer; padding: 0 4px; }
+.pin-bar { border-top: none; border-bottom: 1px solid var(--line); cursor: pointer; }
+.pin-ticks { display: flex; flex-direction: column; gap: 2px; align-self: stretch; justify-content: center; }
+.pin-ticks i { width: 2px; flex: 1; max-height: 12px; background: rgba(47, 124, 246, 0.3); border-radius: 1px; }
+.pin-ticks i.on { background: #2f7cf6; }
+.sel-circle { width: 22px; height: 22px; border-radius: 11px; border: 2px solid var(--text-3); display: flex; align-items: center; justify-content: center; font-size: 13px; color: #fff; flex-shrink: 0; }
+.sel-circle.on { background: #2f7cf6; border-color: #2f7cf6; }
+.sel-row { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.sel-row > .bubble-row { flex: 1; min-width: 0; pointer-events: none; }
+.sel-bar { display: flex; align-items: center; gap: 18px; padding: 12px 16px; background: var(--bg-card); border-top: 1px solid var(--line); font-size: 15px; }
+.sel-bar span { cursor: pointer; }
+.sel-bar span.off { color: var(--text-3); cursor: default; }
+.sheet-item { padding: 13px 4px; border-bottom: 1px solid var(--line); font-size: 15px; cursor: pointer; }
+.fwd-item { padding: 8px 0; gap: 10px; cursor: pointer; }

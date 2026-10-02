@@ -53,6 +53,12 @@ struct MsgItem: Codable, Identifiable {
     var createdAt: String? = ""
     var senderIsBot: Bool? = nil
     var markup: InlineMarkup? = nil
+    var isRead: Bool? = nil
+    var replyTo: ReplyPreview? = nil
+    var fwdFrom: String? = nil
+    var reactions: [MsgReaction]? = nil
+
+    var pending: Bool { id.hasPrefix("t_") || id.hasPrefix("local_") }
 }
 
 func previewOf(_ msg: LastMsg?) -> String {
@@ -524,9 +530,33 @@ struct ChatRoomView: View {
     @ObservedObject private var vroom = VoiceRoomManager.shared
     private let recorderBox = VoiceRecorder()
     @FocusState private var inputFocused: Bool
+    // 长按菜单及其衍生操作
+    @State private var menuMsg: MsgItem?
+    @State private var replyTo: MsgItem?
+    @State private var pins: [PinItem] = []
+    @State private var pinIdx = 0
+    @State private var selecting: Set<String>?
+    @State private var deleteIds: [String]?
+    @State private var forwardIds: IdList?
+    @State private var reportId: String?
+    @State private var myRole = "member"
+    @State private var jumpReq: String?
+
+    private var myId: String { state.user?.id ?? "" }
+    private var isGroupAdmin: Bool { convType == 2 && (myRole == "owner" || myRole == "admin") }
+    private var canPin: Bool { convType == 1 || isGroupAdmin }
 
     var body: some View {
-        VStack(spacing: 0) {
+        msgActionLayers(VStack(spacing: 0) {
+            if !pins.isEmpty && selecting == nil {
+                PinBar(pins: pins, index: pinIdx, canUnpin: canPin, onJump: {
+                    let p = pins[pinIdx % pins.count]
+                    pinIdx += 1
+                    jumpTo(p.id)
+                }, onUnpin: {
+                    togglePin(pins[pinIdx % pins.count].id, pin: false)
+                })
+            }
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 0) {
@@ -539,17 +569,24 @@ struct ChatRoomView: View {
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 8)
                             }
-                            MsgBubble(m: m, mine: m.senderId == (state.user?.id ?? ""), convType: convType,
-                                      fallbackAvatar: m.senderId == (state.user?.id ?? "") ? (state.user?.avatar ?? "") : peerAvatarGuess) { img in
-                                fullImage = img
-                            }
+                            messageRow(m)
                             .background(RoundedRectangle(cornerRadius: 8).fill(flashId == m.id ? Theme.accent.opacity(0.14) : Color.clear))
                             .id(m.id)
                         }
                     }
                     .padding(.horizontal, 12).padding(.vertical, 8)
                 }
-                .onTapGesture { showSticker = false; showCmds = false; inputFocused = false }
+                .simultaneousGesture(TapGesture().onEnded { showSticker = false; showCmds = false; inputFocused = false })
+                .inAppLinks()
+                .onChange(of: jumpReq) { id in
+                    guard let id else { return }
+                    jumpReq = nil
+                    DispatchQueue.main.async { withAnimation { proxy.scrollTo(id, anchor: .center) } }
+                    withAnimation(.easeOut(duration: 0.15)) { flashId = id }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+                        withAnimation(.easeOut(duration: 0.9)) { if flashId == id { flashId = nil } }
+                    }
+                }
                 // 进入聊天默认停在最底部（最新消息）；defaultScrollAnchor 是 iOS 17 API，改用 scrollTo
                 .onAppear {
                     if let last = messages.last {
@@ -583,7 +620,9 @@ struct ChatRoomView: View {
                 }
             }
 
-            if botFresh {
+            if let sel = selecting {
+                selectBar(sel)
+            } else if botFresh {
                 // 和机器人的空会话：底部是「开始」按钮（发 /start），同 Telegram
                 Button { sendMsg("text", "/start") } label: {
                     Text("开始").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.accent)
@@ -595,7 +634,7 @@ struct ChatRoomView: View {
             } else {
                 bottomBar
             }
-        }
+        })
         .overlay {
             if recording {
                 RecordingOverlay(recorder: recorderBox)
@@ -689,8 +728,19 @@ struct ChatRoomView: View {
         }
         .task {
             let around = focusPending ? focusMsgId.map { "&aroundId=\($0)" } ?? "" : ""
-            messages = (try? await Api.request("/im/messages?conversationId=\(convId)\(around)")) ?? []
+            let first: [MsgItem] = (try? await Api.request("/im/messages?conversationId=\(convId)\(around)")) ?? []
+            // 列表回来前已发出去的消息别被覆盖
+            messages = first + messages.filter { m in m.pending && !first.contains(where: { $0.id == m.id }) }
             loaded = true
+            Task { @MainActor in
+                await loadPins()
+                guard convType == 2 else { return }
+                struct RoleMember: Codable { var id: String; var role: String? }
+                struct RoleResp: Codable { var members: [RoleMember]? }
+                if let g: RoleResp = try? await Api.request("/im/group/\(targetId)") {
+                    myRole = g.members?.first(where: { $0.id == myId })?.role ?? "member"
+                }
+            }
             if let last = messages.last { WsClient.shared.markRead(conversationId: convId, msgId: last.id) }
             WsClient.shared.connect()
             // 空会话或对方发过机器人消息：查一下对方是不是机器人
@@ -704,9 +754,40 @@ struct ChatRoomView: View {
                 if op == "error" {
                     // 发送被后端拒绝（如积分不足）：提示并撤回乐观显示的消息
                     toastMsg = frame["msg"] as? String ?? "发送失败"
-                    if let idx = messages.lastIndex(where: { $0.id.hasPrefix("local_") }) {
+                    let tid = frame["tempId"] as? String
+                    let idx = tid != nil ? messages.firstIndex(where: { $0.id == tid }) : messages.lastIndex(where: { $0.pending })
+                    if let idx {
                         messages.remove(at: idx)
                     }
+                    return
+                }
+                if op == "ack" {
+                    // 乐观消息换成正式 id，菜单 / 回复 / 置顶才能用
+                    guard botFrameStr(frame["conversationId"]) == convId,
+                          let tid = frame["tempId"] as? String,
+                          let mid = botFrameStr(frame["msgId"]),
+                          let idx = messages.firstIndex(where: { $0.id == tid }) else { return }
+                    if messages.contains(where: { $0.id == mid }) { messages.remove(at: idx); return }
+                    messages[idx].id = mid
+                    if let c = frame["createdAt"] as? String { messages[idx].createdAt = c }
+                    return
+                }
+                if op == "read" {
+                    guard botFrameStr(frame["conversationId"]) == convId,
+                          (botFrameStr(frame["userId"]) ?? "") != myId else { return }
+                    for i in messages.indices where messages[i].senderId == myId { messages[i].isRead = true }
+                    return
+                }
+                if op == "msg_reactions" || op == "msg_pin" {
+                    guard let data = frame["data"] as? [String: Any],
+                          botFrameStr(data["conversationId"]) == convId else { return }
+                    if op == "msg_pin" { Task { await loadPins() }; return }
+                    guard let id = botFrameStr(data["msgId"]),
+                          let idx = messages.firstIndex(where: { $0.id == id }),
+                          let raw = data["reactions"],
+                          let json = try? JSONSerialization.data(withJSONObject: raw),
+                          let rs = try? JSONDecoder().decode([MsgReaction].self, from: json) else { return }
+                    messages[idx].reactions = rs
                     return
                 }
                 if op == "conv_cleared" {
@@ -724,6 +805,8 @@ struct ChatRoomView: View {
                           let id = botFrameStr(data["msgId"]) else { return }
                     if op == "msg_delete" {
                         messages.removeAll { $0.id == id }
+                        if replyTo?.id == id { replyTo = nil }
+                        if pins.contains(where: { $0.id == id }) { Task { await loadPins() } }
                     } else if let idx = messages.firstIndex(where: { $0.id == id }) {
                         if let c = data["content"] as? String { messages[idx].content = c }
                         messages[idx].markup = InlineMarkup.from(data["markup"])
@@ -734,11 +817,13 @@ struct ChatRoomView: View {
                       let data = frame["data"] as? [String: Any],
                       let json = try? JSONSerialization.data(withJSONObject: data),
                       let m = try? JSONDecoder().decode(MessagePayload.self, from: json),
-                      m.conversationId == convId else { return }
+                      m.conversationId == convId,
+                      !messages.contains(where: { $0.id == m.id }) else { return }
                 messages.append(MsgItem(id: m.id, conversationId: m.conversationId, senderId: m.senderId,
                                         senderNickname: m.senderNickname, senderAvatar: m.senderAvatar,
                                         receiverId: m.receiverId, type: m.type, content: m.content, createdAt: m.createdAt,
-                                        senderIsBot: m.senderIsBot, markup: m.markup))
+                                        senderIsBot: m.senderIsBot, markup: m.markup,
+                                        replyTo: m.replyTo, fwdFrom: m.fwdFrom, reactions: m.reactions))
                 WsClient.shared.markRead(conversationId: convId, msgId: m.id)
                 if m.senderIsBot == true && convType == 1 && bot == nil {
                     Task { bot = await BotInfoCache.shared.get(m.senderId) }
@@ -783,6 +868,9 @@ struct ChatRoomView: View {
 
     private var bottomBar: some View {
         VStack(spacing: 0) {
+            if let r = replyTo {
+                ReplyBar(nickname: r.senderNickname ?? "", snippet: msgSnippet(r.type, r.content)) { replyTo = nil }
+            }
             if !shownCmds.isEmpty {
                 ScrollView {
                     VStack(spacing: 0) {
@@ -967,15 +1055,221 @@ struct ChatRoomView: View {
 
     // MARK: - 发送
 
+    /// 发消息并乐观显示（tempId 等 ack 换成正式 id）；正在回复的话只挂在这一条上
     private func sendMsg(_ type: String, _ content: String) {
-        WsClient.shared.send(convType: convType, targetId: targetId, msgType: type, content: content)
+        let r = replyTo
+        replyTo = nil
+        let tempId = WsClient.shared.send(convType: convType, targetId: targetId, msgType: type, content: content, replyToId: r?.id)
+        let preview = r.map {
+            ReplyPreview(id: $0.id, senderId: $0.senderId, senderNickname: $0.senderNickname, type: $0.type,
+                         content: $0.type == "text" ? String($0.content.prefix(100)) : ($0.type == "image" ? $0.content : ""))
+        }
         messages.append(MsgItem(
-            id: "local_\(Int(Date().timeIntervalSince1970 * 1000))",
-            conversationId: convId, senderId: state.user?.id ?? "",
+            id: tempId,
+            conversationId: convId, senderId: myId,
             senderNickname: state.user?.nickname ?? "", senderAvatar: state.user?.avatar ?? "",
             receiverId: nil, type: type, content: content,
-            createdAt: ISO8601DateFormatter().string(from: Date())
+            createdAt: ISO8601DateFormatter().string(from: Date()),
+            replyTo: preview
         ))
+    }
+
+    // MARK: - 长按菜单
+
+    @ViewBuilder
+    private func messageRow(_ m: MsgItem) -> some View {
+        let mine = m.senderId == myId
+        let bubble = MsgBubble(
+            m: m, mine: mine, convType: convType,
+            fallbackAvatar: mine ? (state.user?.avatar ?? "") : peerAvatarGuess,
+            myId: myId,
+            onMenu: { inputFocused = false; showSticker = false; menuMsg = m },
+            onReact: { react(m.id, $0) },
+            onJump: { jumpTo($0) },
+            onImage: { fullImage = $0 }
+        )
+        if let sel = selecting {
+            HStack(spacing: 6) {
+                Image(systemName: sel.contains(m.id) ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 20))
+                    .foregroundStyle(sel.contains(m.id) ? botBlue : Theme.textDim)
+                bubble.allowsHitTesting(false)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                guard !m.pending else { return }
+                var s = sel
+                if s.contains(m.id) { s.remove(m.id) } else { s.insert(m.id) }
+                selecting = s
+            }
+        } else {
+            bubble
+        }
+    }
+
+    private func selectBar(_ sel: Set<String>) -> some View {
+        let chosen = messages.filter { sel.contains($0.id) }
+        return HStack {
+            Button("取消") { selecting = nil }
+                .font(.system(size: 15)).foregroundStyle(Theme.textSub)
+            Spacer()
+            Text("已选 \(sel.count) 条").font(.system(size: 14)).foregroundStyle(Theme.text)
+            Spacer()
+            Button {
+                let ok = chosen.filter { FORWARDABLE.contains($0.type) }.map(\.id)
+                if ok.isEmpty { toastMsg = "礼物、通话记录不能转发"; return }
+                if ok.count < chosen.count { toastMsg = "礼物、通话记录不会被转发" }
+                forwardIds = IdList(ids: ok)
+            } label: {
+                Image(systemName: "arrowshape.turn.up.right").font(.system(size: 18))
+            }
+            .foregroundStyle(sel.isEmpty ? Theme.textDim : botBlue)
+            .disabled(sel.isEmpty)
+            .padding(.trailing, 18)
+            Button {
+                deleteIds = chosen.map(\.id)
+            } label: {
+                Image(systemName: "trash").font(.system(size: 18))
+            }
+            .foregroundStyle(sel.isEmpty ? Theme.textDim : Color.red)
+            .disabled(sel.isEmpty)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 16).padding(.vertical, 14)
+        .background(Theme.bg2)
+    }
+
+    private func canDeleteForAll(_ m: MsgItem) -> Bool {
+        m.type != "gift" && (m.senderId == myId || isGroupAdmin)
+    }
+
+    private func menuActions(_ m: MsgItem) -> MenuActions {
+        let mine = m.senderId == myId
+        let pinned = pins.contains(where: { $0.id == m.id })
+        return MenuActions(
+            onReact: { react(m.id, $0) },
+            onReply: { replyTo = m; inputFocused = true },
+            onCopy: m.type == "text" ? { UIPasteboard.general.string = m.content; toastMsg = "已复制" } : nil,
+            onSave: (m.type == "image" || m.type == "video") ? {
+                Task { @MainActor in toastMsg = await saveMediaToPhotos(type: m.type, url: m.content) }
+            } : nil,
+            onPin: canPin ? { togglePin(m.id, pin: !pinned) } : nil,
+            onForward: FORWARDABLE.contains(m.type) ? { forwardIds = IdList(ids: [m.id]) } : nil,
+            onReport: mine ? nil : { reportId = m.id },
+            onDelete: { deleteIds = [m.id] },
+            onSelect: { selecting = [m.id] }
+        )
+    }
+
+    private func msgActionLayers<V: View>(_ content: V) -> some View {
+        let delCanForAll = (deleteIds ?? []).allSatisfy { id in
+            messages.first(where: { $0.id == id }).map { canDeleteForAll($0) } ?? false
+        }
+        let delCount = deleteIds?.count ?? 0
+        return content
+            .overlay {
+                if let m = menuMsg {
+                    MsgMenuOverlay(
+                        msgId: m.id, mine: m.senderId == myId, convType: convType,
+                        myReaction: m.reactions?.first(where: { $0.userIds.contains(myId) })?.emoji,
+                        pinned: pins.contains(where: { $0.id == m.id }),
+                        actions: menuActions(m),
+                        onDismiss: { menuMsg = nil }
+                    )
+                    .transition(.opacity)
+                }
+            }
+            .animation(.easeOut(duration: 0.15), value: menuMsg?.id)
+            .confirmationDialog(
+                delCount > 1 ? "删除 \(delCount) 条消息？" : "删除消息？",
+                isPresented: Binding(get: { deleteIds != nil }, set: { if !$0 { deleteIds = nil } }),
+                titleVisibility: .visible
+            ) {
+                if delCanForAll {
+                    Button(convType == 1 ? "为我和 \(title) 删除" : "为所有人删除", role: .destructive) {
+                        if let ids = deleteIds { doDelete(ids, forAll: true) }
+                    }
+                    Button("只为我删除", role: .destructive) {
+                        if let ids = deleteIds { doDelete(ids, forAll: false) }
+                    }
+                } else {
+                    Button("删除", role: .destructive) {
+                        if let ids = deleteIds { doDelete(ids, forAll: false) }
+                    }
+                }
+                Button("取消", role: .cancel) { deleteIds = nil }
+            } message: {
+                if !delCanForAll { Text("只会在你这边删除，对方仍能看到。") }
+            }
+            .sheet(item: $reportId) { id in
+                ReportSheet(msgId: id) { toastMsg = $0 }
+                    .compatDetents(height: 420)
+            }
+            .sheet(item: $forwardIds) { list in
+                ForwardSheet(fromConvId: convId, ids: list.ids) { tip in
+                    toastMsg = tip
+                    if tip == "已转发" { selecting = nil }
+                }
+            }
+    }
+
+    private func loadPins() async {
+        pins = (try? await Api.request("/im/conversations/\(convId)/pins")) ?? []
+        pinIdx = 0
+    }
+
+    private func react(_ id: String, _ emoji: String) {
+        Task { @MainActor in
+            struct ReactResp: Codable { var reactions: [MsgReaction] }
+            do {
+                let r: ReactResp = try await Api.request("/im/messages/\(id)/react", method: "POST", body: ["emoji": emoji])
+                if let idx = messages.firstIndex(where: { $0.id == id }) { messages[idx].reactions = r.reactions }
+            } catch {
+                toastMsg = error.localizedDescription
+            }
+        }
+    }
+
+    private func togglePin(_ id: String, pin: Bool) {
+        Task { @MainActor in
+            struct OkResp: Codable { var ok: Bool? }
+            do {
+                let _: OkResp = try await Api.request("/im/messages/\(id)/pin", method: "POST", body: ["pin": pin])
+                await loadPins()
+                toastMsg = pin ? "已置顶" : "已取消置顶"
+            } catch {
+                toastMsg = error.localizedDescription
+            }
+        }
+    }
+
+    private func doDelete(_ ids: [String], forAll: Bool) {
+        deleteIds = nil
+        Task { @MainActor in
+            struct DelResp: Codable { var deleted: Int? }
+            do {
+                let _: DelResp = try await Api.request("/im/messages/delete", method: "POST", body: [
+                    "conversationId": convId, "ids": ids, "forAll": forAll,
+                ])
+                messages.removeAll { ids.contains($0.id) }
+                if let r = replyTo, ids.contains(r.id) { replyTo = nil }
+                selecting = nil
+                if pins.contains(where: { ids.contains($0.id) }) { await loadPins() }
+            } catch {
+                toastMsg = error.localizedDescription
+            }
+        }
+    }
+
+    /// 跳到某条消息（回复引用 / 置顶条）；不在当前列表就按 aroundId 重新拉一段
+    private func jumpTo(_ id: String) {
+        if messages.contains(where: { $0.id == id }) { jumpReq = id; return }
+        Task { @MainActor in
+            let list: [MsgItem] = (try? await Api.request("/im/messages?conversationId=\(convId)&aroundId=\(id)")) ?? []
+            guard list.contains(where: { $0.id == id }) else { toastMsg = "原消息已不存在"; return }
+            messages = list
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { jumpReq = id }
+        }
     }
 
     private func finishRecording() {
@@ -1042,6 +1336,10 @@ struct MsgBubble: View {
     let convType: Int
     /// 消息本身头像缺失时的兜底
     var fallbackAvatar: String = ""
+    var myId: String = ""
+    var onMenu: (() -> Void)? = nil
+    var onReact: ((String) -> Void)? = nil
+    var onJump: ((String) -> Void)? = nil
     var onImage: (String) -> Void
 
     @State private var voicePlaying = false
@@ -1067,7 +1365,19 @@ struct MsgBubble: View {
                     }
                     .padding(.leading, 4)
                 }
+                if let f = m.fwdFrom, !f.isEmpty {
+                    Text("转发自 \(f)").font(.system(size: 11)).foregroundStyle(botBlue).padding(.horizontal, 4)
+                }
+                if let r = m.replyTo {
+                    ReplyQuote(r: r) { onJump?(r.id) }
+                }
                 content
+                    .simultaneousGesture(LongPressGesture(minimumDuration: 0.35).onEnded { _ in
+                        if !m.pending { onMenu?() }
+                    })
+                if let rs = m.reactions, !rs.isEmpty {
+                    ReactionChips(reactions: rs, myId: myId) { onReact?($0) }
+                }
                 if !(m.markup?.inlineKeyboard ?? []).isEmpty {
                     InlineKeyboardView(markup: m.markup, messageId: m.id).frame(width: 230)
                 }
@@ -1170,11 +1480,12 @@ struct MsgBubble: View {
             .padding(.horizontal, 14).padding(.vertical, 10)
             .background(bubbleShape.fill(bg))
         default:
-            Text(m.content)
+            LinkText(text: m.content)
                 .font(.system(size: 15)).foregroundStyle(fg)
                 .lineSpacing(4)
                 .padding(.horizontal, 14).padding(.vertical, 10)
                 .background(bubbleShape.fill(bg))
+                .contentShape(Rectangle())
         }
     }
 
@@ -1651,6 +1962,15 @@ struct WebPreviewSheet: View {
             HStack {
                 Text(title).font(.system(size: 14)).foregroundStyle(Theme.text).lineLimit(1)
                 Spacer()
+                if let url, html == nil {
+                    Menu {
+                        Button("浏览器打开") { UIApplication.shared.open(url) }
+                        Button("复制链接") { UIPasteboard.general.string = url.absoluteString }
+                    } label: {
+                        Image(systemName: "ellipsis.circle").font(.system(size: 17)).foregroundStyle(Theme.textSub)
+                    }
+                    .padding(.trailing, 10)
+                }
                 Button("关闭") { dismiss() }
                     .font(.system(size: 14)).foregroundStyle(Theme.accent)
             }
