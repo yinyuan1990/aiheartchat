@@ -139,6 +139,7 @@ const dict = {
   "scan.recent": ["最近几单", "Latest trades"],
   "scan.radar": ["实时雷达", "Live radar"],
   "scan.onlyBusy": ["只看有人买的", "Only coins with buyers"],
+  "scan.devOnly": ["已隐藏 {n} 个只有开发者自己买过的新池子（没有第二个人买，不算机会）", "Hid {n} new pools where only the creator has bought (nobody else, so no signal)"],
   "scan.empty": ["24 小时内没有符合条件的新币", "No matching new coins in the last 24h"],
   "scan.age": ["{t} 前", "{t} ago"],
   "scan.ticker": ["发现新池 {sym} · {n} 人买 · {v}", "new pool {sym} · {n} buyers · {v}"],

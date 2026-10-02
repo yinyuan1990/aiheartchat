@@ -352,7 +352,7 @@ export type ScanState =
   | {
       status: "ready"; updatedAt: number;
       rules: { stake: number; start: number; cost: number; tp: number; sl: number; holdHours: number; days: number; filter: { buyers: number; volume: number; bundle: number; top3: number } };
-      stats: { scanned: number; passed: number; skipped: number; skippedDead: number; alive: number; smartWallets: number };
+      stats: { scanned: number; passed: number; skipped: number; skippedDead: number; alive: number; smartWallets: number; devOnly?: number };
       bots: ScanBot[]; radar: RadarItem[];
     };
 export const useScanner = () =>

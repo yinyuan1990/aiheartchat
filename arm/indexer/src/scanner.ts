@@ -44,7 +44,8 @@ export type ScanState =
   | {
       status: "ready"; updatedAt: number;
       rules: { stake: number; start: number; cost: number; tp: number; sl: number; holdHours: number; days: number; filter: typeof FILTER };
-      stats: { scanned: number; passed: number; skipped: number; skippedDead: number; alive: number; smartWallets: number };
+      /** devOnly: pools in the radar window where nobody but the creator has bought; counted, not listed */
+      stats: { scanned: number; passed: number; skipped: number; skippedDead: number; alive: number; smartWallets: number; devOnly: number };
       bots: ScanBot[]; radar: RadarItem[];
     };
 
@@ -226,7 +227,7 @@ async function compute(): Promise<ScanState> {
   const book: Record<BotId, ScanTrade[]> = { sniper: [], filter: [], smart: [], random: [] };
   const radar: RadarItem[] = [];
   const radarFrom = head - blocks(RADAR_SEC);
-  let scanned = 0, passed = 0, skipped = 0, skippedDead = 0, alive = 0;
+  let scanned = 0, passed = 0, skipped = 0, skippedDead = 0, alive = 0, devOnly = 0;
 
   for (const p of pools) {
     const s = swaps.get(p.address);
@@ -266,6 +267,7 @@ async function compute(): Promise<ScanState> {
     if (j?.verdict === "buy") passed++;
     if (j?.verdict === "skip") { skipped++; if (dead) skippedDead++; }
     if (!dead) alive++;
+    if (now.buyers <= 1) { devOnly++; continue; }
     radar.push({
       pool: p.address, token: p.token, symbol: p.symbol, bornAt: tsOf(b0), buyers: now.buyers, swaps: now.swaps, volume: now.volume,
       price: lastPx, signalPx, peakX: signalPx ? peak / signalPx : 0, nowX: signalPx ? lastPx / signalPx : 0, score: j?.score ?? null,
@@ -280,7 +282,7 @@ async function compute(): Promise<ScanState> {
   return {
     status: "ready", updatedAt: Date.now(),
     rules: { stake: STAKE, start: START_EQUITY, cost: COST, tp: TP, sl: SL, holdHours: HOLD_SEC / 3600, days: DAYS, filter: FILTER },
-    stats: { scanned, passed, skipped, skippedDead, alive, smartWallets: smart.set.size },
+    stats: { scanned, passed, skipped, skippedDead, alive, smartWallets: smart.set.size, devOnly },
     bots, radar: shown,
   };
 }

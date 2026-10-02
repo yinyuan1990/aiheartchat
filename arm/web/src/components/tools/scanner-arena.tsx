@@ -168,7 +168,7 @@ export function ScannerArena() {
   const { stats, rules, bots, radar } = data;
   const fill = (s: string) => s.replace("{start}", String(rules.start)).replace("{stake}", String(rules.stake))
     .replace("{cost}", String(Math.round(rules.cost * 100))).replace("{tp}", String(rules.tp)).replace("{hold}", String(rules.holdHours));
-  const rows = busyOnly ? radar.filter((r) => r.buyers >= 3 || now - r.bornAt < 600_000) : radar;
+  const rows = busyOnly ? radar.filter((r) => r.buyers >= 3 || (r.buyers >= 2 && now - r.bornAt < 600_000)) : radar;
   const deadRate = stats.skipped ? stats.skippedDead / stats.skipped : 0;
 
   return (
@@ -217,6 +217,7 @@ export function ScannerArena() {
               {t("scan.onlyBusy")}
             </label>
           </div>
+          {!!stats.devOnly && <p className="text-[11px] text-muted-foreground">{t("scan.devOnly").replace("{n}", String(stats.devOnly))}</p>}
           {rows.length === 0 ? (
             <p className="text-xs text-muted-foreground">{t("scan.empty")}</p>
           ) : (
