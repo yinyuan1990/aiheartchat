@@ -19,7 +19,19 @@ import type { DictKey } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { pct, personaOf, shareGrid, times } from "./format";
+import { pct, personaOf, shareGrid, strip, times } from "./format";
+
+/** The share strip drawn as blocks: emoji squares render inconsistently across fonts (tweets still use them). */
+function Squares({ r, big }: { r: Pick<GameResult, "up" | "capture">; big?: boolean }) {
+  const s = strip(r);
+  return (
+    <span className={cn("inline-flex", big ? "gap-1" : "gap-0.5")}>
+      {Array.from({ length: 10 }, (_, i) => (
+        <span key={i} className={cn(big ? "size-5 rounded" : "size-2.5 rounded-[2px]", i < s.filled ? (s.up ? "bg-up" : "bg-down") : "bg-muted-foreground/25")} />
+      ))}
+    </span>
+  );
+}
 
 const POLL_MS = 400;
 
@@ -289,7 +301,7 @@ function Result({ r, onAgain }: { r: GameResult; onAgain: () => void }) {
         <div className="mt-0.5 text-xs text-muted-foreground">
           {(r.held ? t("game.result.topHeld") : t("game.result.top")).replace("{x}", times(peak.x)).replace("{t}", clock(peak.t, zh)).replace("{s}", clock(soldT, zh))}
         </div>
-        <div className="mt-2 text-2xl tracking-tight">{grid}</div>
+        <div className="mt-2 flex justify-center"><Squares r={r} big /></div>
         <div className="text-xs text-muted-foreground">
           {r.up ? t("game.result.capture").replace("{p}", pct(r.capture)) : t("game.result.loss").replace("{p}", pct(1 - x))}
           {" · "}
@@ -346,7 +358,7 @@ function Board() {
                 <span className="w-5 text-right text-muted-foreground">{i + 1}</span>
                 <span className="flex-1 truncate">{shortAddr(w.wallet)}</span>
                 {w.x === null
-                  ? <span className="tracking-tighter">{shareGrid(w)}</span>
+                  ? <Squares r={w} />
                   : <span className={w.up ? "text-up" : "text-down"}>{times(w.x)}</span>}
               </li>
             ))}
@@ -424,7 +436,7 @@ export function SellTop({ shared }: { shared?: string }) {
               : fr.beat !== null && fr.others > 0
                 ? t("game.shared").replace("{persona}", t(`game.persona.${personaOf(fr)}` as DictKey)).replace("{beat}", pct(fr.beat))
                 : t("game.sharedFirst").replace("{persona}", t(`game.persona.${personaOf(fr)}` as DictKey))}
-            <div className="mt-1 text-lg">{shareGrid(fr)}</div>
+            <div className="mt-1.5"><Squares r={fr} big /></div>
           </CardContent>
         </Card>
       )}
