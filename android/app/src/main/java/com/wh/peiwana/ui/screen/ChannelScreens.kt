@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -232,8 +233,12 @@ private fun PostBody(p: ChannelPost, onMedia: () -> Unit) {
 @Composable
 private fun PostCard(ch: ChannelInfo, p: ChannelPost, onReact: (String) -> Unit, onComments: () -> Unit, onMedia: () -> Unit, onDelete: (() -> Unit)?) {
     var picker by remember { mutableStateOf(false) }
+    // 气泡按内容宽度（Telegram 式）；图片 / 视频 / 贴纸 / 带按钮的固定宽
+    val maxW = (LocalConfiguration.current.screenWidthDp * 0.85f).dp.coerceAtMost(480.dp)
+    val fixed = p.type == "image" || p.type == "video" || p.type == "sticker" || p.markup != null
+    val sizeMod = if (fixed) Modifier.width(maxW) else Modifier.widthIn(min = 220.dp, max = maxW).width(IntrinsicSize.Max)
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp)
+        Modifier.padding(horizontal = 12.dp, vertical = 5.dp).then(sizeMod)
             .clip(RoundedCornerShape(14.dp)).background(Bg).alpha(if (p.pending) 0.6f else 1f),
     ) {
         // 频道主 / 机器人发的算频道发帖；订阅者（和其他管理员）发的显示作者

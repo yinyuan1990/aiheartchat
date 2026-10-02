@@ -106,12 +106,30 @@ private struct ChannelPostCard: View {
         p.senderId != ch.ownerId && p.senderIsBot != true && !(p.senderNickname ?? "").isEmpty
     }
 
-    var body: some View {
+    /// 气泡最大宽度；文字类按内容收缩（Telegram 式），图片 / 视频 / 贴纸 / 带按钮的固定宽
+    private var maxW: CGFloat { min(UIScreen.main.bounds.width * 0.85, 480) }
+    private var innerW: CGFloat { maxW - 24 }
+    private var fixedWidth: Bool {
+        let t = p.type ?? "text"
+        return t == "image" || t == "video" || t == "sticker" || !(p.markup?.inlineKeyboard ?? []).isEmpty
+    }
+
+    @ViewBuilder var body: some View {
+        if fixedWidth {
+            card.frame(width: maxW)
+        } else {
+            card.fixedSize(horizontal: true, vertical: false)
+        }
+    }
+
+    private var card: some View {
         VStack(alignment: .leading, spacing: 0) {
+            Color.clear.frame(width: 200, height: 0)
             HStack(spacing: 8) {
                 AvatarView(url: byAuthor ? (p.senderAvatar ?? "") : (ch.avatar ?? ""), size: 26)
                 Text(byAuthor ? (p.senderNickname ?? "") : (ch.name ?? "")).font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
-                Spacer(minLength: 0)
+                    .frame(maxWidth: innerW - 80, alignment: .leading)
+                Spacer(minLength: 8)
                 if canDelete && !pending {
                     Button("删除", action: onDelete)
                         .font(.system(size: 12)).foregroundStyle(Theme.textDim)
@@ -126,15 +144,9 @@ private struct ChannelPostCard: View {
                 InlineKeyboardView(markup: p.markup, messageId: p.id).padding(.horizontal, 12)
             }
 
-            HStack(spacing: 8) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(p.reactions ?? [], id: \.emoji) { r in
-                            chip("\(r.emoji) \(fmtCount(r.count ?? 0))", on: p.myReaction == r.emoji) { onReact(r.emoji) }
-                        }
-                        if !pending { chip("☺+", on: false) { picker.toggle() } }
-                    }
-                }
+            HStack(alignment: .bottom, spacing: 8) {
+                reactionRows
+                Spacer(minLength: 0)
                 if pending {
                     Text("发送中…").font(.system(size: 11)).foregroundStyle(Theme.textDim)
                 } else {
@@ -156,9 +168,9 @@ private struct ChannelPostCard: View {
                             onReact(e)
                         } label: {
                             Text(e).font(.system(size: 20))
-                                .frame(width: 34, height: 34)
+                                .frame(width: 30, height: 30)
                                 .background(Circle().fill(p.myReaction == e ? Theme.bubbleMine : Color.clear))
-                                .frame(maxWidth: .infinity)
+                                .frame(minWidth: 30, maxWidth: .infinity)
                         }
                         .buttonStyle(.plain)
                     }
@@ -222,8 +234,25 @@ private struct ChannelPostCard: View {
                 .font(.system(size: 15)).foregroundStyle(Theme.text).lineSpacing(4)
                 .textSelection(.enabled)
                 .inAppLinks()
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: innerW, alignment: .leading)
                 .padding(.horizontal, 12).padding(.top, 8)
+        }
+    }
+
+    /// 表情回应 chip，每行最多 4 个，避免把气泡撑宽
+    private var reactionRows: some View {
+        let rs = p.reactions ?? []
+        let rows = stride(from: 0, to: rs.count, by: 4).map { Array(rs[$0..<min($0 + 4, rs.count)]) }
+        return VStack(alignment: .leading, spacing: 6) {
+            ForEach(rows.indices, id: \.self) { i in
+                HStack(spacing: 6) {
+                    ForEach(rows[i], id: \.emoji) { r in
+                        chip("\(r.emoji) \(fmtCount(r.count ?? 0))", on: p.myReaction == r.emoji) { onReact(r.emoji) }
+                    }
+                    if i == rows.count - 1 && !pending { chip("☺+", on: false) { picker.toggle() } }
+                }
+            }
+            if rows.isEmpty && !pending { chip("☺+", on: false) { picker.toggle() } }
         }
     }
 
@@ -395,6 +424,7 @@ struct ChannelView: View {
                                 onMedia: { openMedia(p) },
                                 onDelete: { deleteTarget = p; showDelete = true }
                             )
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .id(p.key)
                         }
                     }

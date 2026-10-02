@@ -107,7 +107,7 @@ function PostCard({ ch, p, onReact, onComments, onImage, onDelete }: {
   const byAuthor = p.senderId !== ch.ownerId && !p.senderIsBot && !!p.senderNickname;
   const headAvatar = byAuthor ? p.senderAvatar : ch.avatar;
   return (
-    <div className="ch-post" style={{ opacity: p.pending ? 0.6 : 1 }}>
+    <div className={`ch-post${p.type === 'image' || p.type === 'video' || p.markup ? ' media' : ''}`} style={{ opacity: p.pending ? 0.6 : 1 }}>
       <div className="ch-post-head">
         <div className="avatar" style={{ width: 28, height: 28 }}>{headAvatar && <img src={headAvatar} alt="" />}</div>
         <span className="ellipsis" style={{ fontWeight: 600, fontSize: 14 }}>{byAuthor ? p.senderNickname : ch.name}</span>

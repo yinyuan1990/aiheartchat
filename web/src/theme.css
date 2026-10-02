@@ -533,7 +533,9 @@ textarea.input { resize: none; min-height: 90px; }
 
 /* 频道 */
 .ch-page { background: var(--bg-card); padding: 8px 12px; }
-.ch-post { background: #fff; border-radius: 14px; margin: 8px auto; max-width: 560px; overflow: hidden; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06); }
+/* 帖子气泡按内容宽度（Telegram 式），图片 / 视频固定宽 */
+.ch-post { background: #fff; border-radius: 14px; margin: 8px 0; width: fit-content; min-width: 200px; max-width: min(85%, 480px); box-sizing: border-box; overflow: hidden; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06); }
+.ch-post.media { width: min(85%, 420px); }
 .ch-post-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px 0; }
 .ch-text { padding: 8px 12px 0; font-size: 15px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
 .ch-media { display: block; width: 100%; max-height: 520px; object-fit: cover; margin-top: 8px; cursor: pointer; }
