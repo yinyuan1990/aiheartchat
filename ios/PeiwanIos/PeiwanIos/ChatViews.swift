@@ -675,12 +675,11 @@ struct ChatRoomView: View {
 
     @ToolbarContentBuilder
     private var toolbarItems: some ToolbarContent {
-        if bot != nil {
-            ToolbarItem(placement: .principal) {
-                HStack(spacing: 6) {
-                    Text(title).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
-                    BotTag()
-                }
+        // ToolbarContentBuilder 里的 if 要 iOS 16，所以 principal 一直放，分支写在里面
+        ToolbarItem(placement: .principal) {
+            HStack(spacing: 6) {
+                Text(title).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
+                if bot != nil { BotTag() }
             }
         }
         ToolbarItem(placement: .navigationBarTrailing) {
@@ -718,16 +717,7 @@ struct ChatRoomView: View {
             isPresented: $showClearConfirm,
             titleVisibility: .visible
         ) {
-            Button("清空聊天记录", role: .destructive) {
-                Task {
-                    struct OkResp: Codable { var ok: Bool? }
-                    if let _: OkResp = try? await Api.request("/im/conversations/\(convId)/clear", method: "POST") {
-                        await reloadMessages()
-                    } else {
-                        toastMsg = "清空失败"
-                    }
-                }
-            }
+            Button("清空聊天记录", role: .destructive) { clearChat() }
             Button("取消", role: .cancel) {}
         }
         .sheet(isPresented: $showAttach) {
@@ -754,6 +744,17 @@ struct ChatRoomView: View {
             let imgs = messages.filter { $0.type == "image" }.map(\.content)
             ImageViewerView(images: imgs.isEmpty ? [img] : imgs, initial: max(0, imgs.firstIndex(of: img) ?? 0)) {
                 fullImage = nil
+            }
+        }
+    }
+
+    private func clearChat() {
+        Task {
+            struct OkResp: Codable { var ok: Bool? }
+            if let _: OkResp = try? await Api.request("/im/conversations/\(convId)/clear", method: "POST") {
+                await reloadMessages()
+            } else {
+                toastMsg = "清空失败"
             }
         }
     }
