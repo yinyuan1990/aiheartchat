@@ -82,6 +82,18 @@ export class AdminController {
 
   // ---------- 频道（用户开的频道：查看 / 封禁 / 删帖 / 删评论） ----------
 
+  @Get('channels/config')
+  @UseGuards(AdminGuard)
+  channelConfig() {
+    return this.channels.adminGetConfig();
+  }
+
+  @Post('channels/config')
+  @UseGuards(AdminGuard)
+  setChannelConfig(@Body() body: { defaultLimit?: number }) {
+    return this.channels.adminSetDefaultLimit(Number(body?.defaultLimit));
+  }
+
   @Get('channels')
   @UseGuards(AdminGuard)
   channelList(@Query('q') q?: string) {
@@ -700,8 +712,18 @@ export class AdminController {
 
   @Get('users')
   @UseGuards(AdminGuard)
-  users(@Query('keyword') keyword?: string, @Query('beforeId') beforeId?: string) {
-    return this.admin.listUsers(keyword, beforeId ? BigInt(beforeId) : undefined);
+  async users(@Query('keyword') keyword?: string, @Query('beforeId') beforeId?: string) {
+    const list = await this.admin.listUsers(keyword, beforeId ? BigInt(beforeId) : undefined);
+    const owned = await this.channels.ownedCounts(list.map((u) => u.id));
+    return list.map((u) => ({ ...u, ownedChannels: owned.get(u.id) ?? 0 }));
+  }
+
+  /** 单独设置某用户最多能创建几个频道；limit 为 null = 跟随全局默认 */
+  @Post('users/:id/channel-limit')
+  @UseGuards(AdminGuard)
+  setChannelLimit(@Param('id') id: string, @Body() body: { limit?: number | null }) {
+    const v = body?.limit;
+    return this.channels.adminSetUserLimit(BigInt(id), v === null || v === undefined || (v as unknown) === '' ? null : Number(v));
   }
 
   @Post('users/:id/status')

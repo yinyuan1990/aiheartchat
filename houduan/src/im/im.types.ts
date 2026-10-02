@@ -79,6 +79,8 @@ export interface MessagePayload {
   replyTo?: ReplyPreview | null;
   fwdFrom?: string | null;
   reactions?: ReactionView[];
+  /** 频道里订阅者（非频道主 / 管理员 / 机器人）发的：客户端当普通聊天消息显示，不带评论 / 浏览数 */
+  memberMsg?: boolean;
 }
 
 /** Redis 跨节点投递载荷 */

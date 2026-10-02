@@ -11,6 +11,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -112,6 +114,8 @@ private data class ChannelPost(
     val senderNickname: String = "",
     val senderAvatar: String = "",
     val senderIsBot: Boolean = false,
+    /** 订阅者发的：普通聊天气泡，不带评论 / 浏览数 / 表情回应 */
+    val memberMsg: Boolean = false,
 )
 
 @Serializable
@@ -231,6 +235,42 @@ private fun PostBody(p: ChannelPost, onMedia: () -> Unit) {
 }
 
 /** 一条帖子：频道头 + 内容 + 表情回应 + 浏览数 / 时间 + 评论入口 */
+/** 订阅者发的消息：普通聊天气泡，自己的在右边；长按删除 */
+@Composable
+private fun MemberBubble(p: ChannelPost, mine: Boolean, onMedia: () -> Unit, onDelete: (() -> Unit)?) {
+    val maxW = (LocalConfiguration.current.screenWidthDp * 0.72f).dp.coerceAtMost(400.dp)
+    val media = p.type == "image" || p.type == "video"
+    val sizeMod = if (media) Modifier.width(maxW * 0.9f) else Modifier.widthIn(min = 64.dp, max = maxW).width(IntrinsicSize.Max)
+    val shape = RoundedCornerShape(16.dp, 16.dp, if (mine) 4.dp else 16.dp, if (mine) 16.dp else 4.dp)
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+        horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        if (!mine) {
+            Avatar(p.senderAvatar, 32)
+            Spacer(Modifier.width(8.dp))
+        }
+        Column(
+            sizeMod.clip(shape).background(if (mine) BubbleMine else Bg).alpha(if (p.pending) 0.6f else 1f)
+                .pointerInput(onDelete, p.pending) {
+                    detectTapGestures(onLongPress = { if (onDelete != null && !p.pending) onDelete() })
+                },
+        ) {
+            if (!mine) Text(
+                p.senderNickname, color = Accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 7.dp),
+            )
+            PostBody(p, onMedia)
+            Text(
+                if (p.pending) "发送中…" else fmtChatTime(p.createdAt), color = TextDim, fontSize = 11.sp,
+                modifier = Modifier.align(Alignment.End).padding(start = 10.dp, end = 10.dp, top = 2.dp, bottom = 6.dp),
+            )
+        }
+    }
+}
+
 @Composable
 private fun PostCard(ch: ChannelInfo, p: ChannelPost, onReact: (String) -> Unit, onComments: () -> Unit, onMedia: () -> Unit, onDelete: (() -> Unit)?) {
     var picker by remember { mutableStateOf(false) }
@@ -345,6 +385,7 @@ fun ChannelScreen(groupId: String, myUserId: String, onBack: () -> Unit, onExit:
                         posts = posts + ChannelPost(
                             m.id, m.senderId, m.type, m.content, m.createdAt, views = 1, markup = m.markup,
                             senderNickname = m.senderNickname, senderAvatar = m.senderAvatar, senderIsBot = m.senderIsBot,
+                            memberMsg = m.memberMsg,
                         )
                     } else {
                         // 自己发的：ack 先到时本地那条没有昵称头像，用推送补上
@@ -416,7 +457,7 @@ fun ChannelScreen(groupId: String, myUserId: String, onBack: () -> Unit, onExit:
         val c = ch ?: return
         stickBottom = true
         val tempId = WsClient.send(2, c.id, type, content)
-        posts = posts + ChannelPost(tempId, myUserId, type, content, java.time.Instant.now().toString(), views = 1, tempId = tempId, pending = true)
+        posts = posts + ChannelPost(tempId, myUserId, type, content, java.time.Instant.now().toString(), views = 1, tempId = tempId, pending = true, memberMsg = !c.canPost)
     }
 
     fun sendImages(uris: List<Uri>, caption: String) = scope.launch {
@@ -503,7 +544,11 @@ fun ChannelScreen(groupId: String, myUserId: String, onBack: () -> Unit, onExit:
                 )
             }
             items(posts, key = { it.tempId ?: it.id }) { p ->
-                PostCard(
+                if (p.memberMsg) MemberBubble(
+                    p, mine = p.senderId == myUserId,
+                    onMedia = { openMedia(p) },
+                    onDelete = if (c.canPost || p.senderId == myUserId) ({ confirmDelete = p }) else null,
+                ) else PostCard(
                     ch = c, p = p,
                     onReact = { react(p, it) },
                     onComments = { onOpenComments(p.id, c.canPost) },
@@ -862,6 +907,9 @@ fun ChannelCommentsScreen(msgId: String, canAdmin: Boolean, myUserId: String, on
 
 private val GroupBg = Color(0xFFF2F2F7)
 
+@Serializable
+private data class ChannelQuota(val owned: Int = 0, val limit: Int = 0)
+
 /** 白色分组卡片里的无边框输入框，右上角字数 */
 @Composable
 private fun GroupField(value: String, hint: String, max: Int, singleLine: Boolean, onChange: (String) -> Unit) {
@@ -921,6 +969,9 @@ fun CreateChannelScreen(onBack: () -> Unit, onCreated: (groupId: String) -> Unit
     var avatar by remember { mutableStateOf("") }
     var memberPost by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
+    var quota by remember { mutableStateOf<ChannelQuota?>(null) }
+    LaunchedEffect(Unit) { quota = runCatching { Api.getObj<ChannelQuota>("/im/channel/quota") }.getOrNull() }
+    val left = quota?.let { (it.limit - it.owned).coerceAtLeast(0) }
 
     val pickAvatar = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) scope.launch {
@@ -986,7 +1037,14 @@ fun CreateChannelScreen(onBack: () -> Unit, onCreated: (groupId: String) -> Unit
                     "创建后也能在频道资料里修改。",
             )
 
-            AccentButton(if (busy) "请稍候…" else "创建频道", enabled = !busy && name.isNotBlank()) {
+            quota?.let { q ->
+                Text(
+                    if (left == 0) "已达到创建上限（最多 ${q.limit} 个频道）" else "还能创建 $left 个频道（共 ${q.limit} 个）",
+                    color = TextSub, fontSize = 12.sp, textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                )
+            }
+            AccentButton(if (busy) "请稍候…" else "创建频道", enabled = !busy && name.isNotBlank() && left != 0) {
                 if (name.isBlank()) { toast(ctx, "请填写频道名称"); return@AccentButton }
                 busy = true
                 scope.launch {

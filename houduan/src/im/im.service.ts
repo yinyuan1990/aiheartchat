@@ -162,6 +162,7 @@ export class ImService {
     await this.prisma.groupMember.update({ where: { groupId_userId: { groupId, userId: sender.id } }, data: { lastReadMsgId: msg.id } });
 
     const payload = this.toPayload(msg, conv, sender, frame.content, reply);
+    if (group.kind === 2 && member.role !== 'owner' && member.role !== 'admin' && !sender.isBot) payload.memberMsg = true;
     const members = await this.prisma.groupMember.findMany({ where: { groupId }, select: { userId: true } });
     const targets = members.map((m) => m.userId).filter((id) => id !== sender.id);
     await this.registry.deliver(targets, { op: 'msg', data: payload });

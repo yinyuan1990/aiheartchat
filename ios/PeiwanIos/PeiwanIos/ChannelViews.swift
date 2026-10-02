@@ -57,6 +57,8 @@ struct ChannelPost: Codable {
     var senderNickname: String? = nil
     var senderAvatar: String? = nil
     var senderIsBot: Bool? = nil
+    /// 订阅者发的：普通聊天气泡，不带评论 / 浏览数 / 表情回应
+    var memberMsg: Bool? = nil
 
     var key: String { tempId ?? id }
 }
@@ -106,16 +108,26 @@ private struct ChannelPostCard: View {
         p.senderId != ch.ownerId && p.senderIsBot != true && !(p.senderNickname ?? "").isEmpty
     }
 
+    /// 订阅者自己发的（靠右、粉色气泡）
+    var mine: Bool = false
+
+    private var isMemberMsg: Bool { p.memberMsg == true }
     /// 气泡最大宽度；文字类按内容收缩（Telegram 式），图片 / 视频 / 贴纸 / 带按钮的固定宽
-    private var maxW: CGFloat { min(UIScreen.main.bounds.width * 0.85, 480) }
+    private var maxW: CGFloat {
+        isMemberMsg ? min(UIScreen.main.bounds.width * 0.72, 400) : min(UIScreen.main.bounds.width * 0.85, 480)
+    }
     private var innerW: CGFloat { maxW - 24 }
     private var fixedWidth: Bool {
         let t = p.type ?? "text"
+        if isMemberMsg { return t == "image" || t == "video" }
         return t == "image" || t == "video" || t == "sticker" || !(p.markup?.inlineKeyboard ?? []).isEmpty
     }
+    private var bubbleTime: String { pending ? "发送中…" : fmtTime(p.createdAt) }
 
     @ViewBuilder var body: some View {
-        if fixedWidth {
+        if isMemberMsg {
+            memberBubble
+        } else if fixedWidth {
             card.frame(width: maxW)
         } else {
             card.fixedSize(horizontal: true, vertical: false)
@@ -236,6 +248,51 @@ private struct ChannelPostCard: View {
                 .inAppLinks()
                 .frame(maxWidth: innerW, alignment: .leading)
                 .padding(.horizontal, 12).padding(.top, 8)
+        }
+    }
+
+    /// 订阅者的消息：普通聊天气泡，别人的带头像和名字；长按删除
+    private var memberBubble: some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            if !mine {
+                AvatarView(url: p.senderAvatar ?? "", size: 32)
+            }
+            sizedBubble
+        }
+    }
+
+    @ViewBuilder private var sizedBubble: some View {
+        if fixedWidth {
+            bubbleContent.frame(width: maxW)
+        } else {
+            bubbleContent.fixedSize(horizontal: true, vertical: false)
+        }
+    }
+
+    private var bubbleContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if !mine {
+                Text(p.senderNickname ?? "")
+                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.accent).lineLimit(1)
+                    .frame(maxWidth: innerW, alignment: .leading)
+                    .padding(.horizontal, 12).padding(.top, 7)
+            }
+            postBody
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                Text(bubbleTime).font(.system(size: 11)).foregroundStyle(Theme.textDim)
+            }
+            .padding(.horizontal, 10).padding(.top, 2).padding(.bottom, 6)
+        }
+        .background(mine ? Theme.bubbleMine : Theme.bg)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .opacity(pending ? 0.6 : 1)
+        .contextMenu {
+            if canDelete && !pending {
+                Button(role: .destructive, action: onDelete) {
+                    Label("删除", systemImage: "trash")
+                }
+            }
         }
     }
 
@@ -422,9 +479,10 @@ struct ChannelView: View {
                                 onReact: { react(p, $0) },
                                 onComments: { route = .channelComments(p.id, c.canPost == true) },
                                 onMedia: { openMedia(p) },
-                                onDelete: { deleteTarget = p; showDelete = true }
+                                onDelete: { deleteTarget = p; showDelete = true },
+                                mine: isMine(p)
                             )
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .frame(maxWidth: .infinity, alignment: postAlignment(p))
                             .id(p.key)
                         }
                     }
@@ -546,7 +604,8 @@ struct ChannelView: View {
             if !posts.contains(where: { $0.id == m.id }) {
                 stickBottom = true
                 posts.append(ChannelPost(id: m.id, senderId: m.senderId, type: m.type, content: m.content, createdAt: m.createdAt, views: 1, markup: m.markup,
-                                         senderNickname: m.senderNickname, senderAvatar: m.senderAvatar, senderIsBot: m.senderIsBot))
+                                         senderNickname: m.senderNickname, senderAvatar: m.senderAvatar, senderIsBot: m.senderIsBot,
+                                         memberMsg: m.memberMsg))
             }
             WsClient.shared.markRead(conversationId: conv, msgId: m.id)
         case "ack":
@@ -599,6 +658,16 @@ struct ChannelView: View {
         }
     }
 
+    private func isMine(_ p: ChannelPost) -> Bool {
+        p.senderId == state.user?.id
+    }
+
+    /// 订阅者自己发的消息靠右，其余（频道帖子、别人的消息）靠左
+    private func postAlignment(_ p: ChannelPost) -> Alignment {
+        if p.memberMsg == true && isMine(p) { return .trailing }
+        return .leading
+    }
+
     private func sendRaw(_ type: String, _ content: String) {
         guard let c = ch else { return }
         stickBottom = true
@@ -606,7 +675,8 @@ struct ChannelView: View {
         posts.append(ChannelPost(
             id: tempId, senderId: state.user?.id ?? "", type: type, content: content,
             createdAt: ISO8601DateFormatter().string(from: Date()), views: 1, tempId: tempId, pending: true,
-            senderNickname: state.user?.nickname, senderAvatar: state.user?.avatar
+            senderNickname: state.user?.nickname, senderAvatar: state.user?.avatar,
+            memberMsg: c.canPost != true
         ))
     }
 
@@ -1072,6 +1142,11 @@ struct ChannelCommentsView: View {
 
 // MARK: - 创建
 
+private struct ChannelQuota: Decodable {
+    var owned: Int
+    var limit: Int
+}
+
 /// 创建频道
 struct CreateChannelView: View {
     @Environment(\.dismiss) private var dismiss
@@ -1086,6 +1161,13 @@ struct CreateChannelView: View {
             : "只有你能发帖，订阅者可以看、点表情、评论。创建后也能在频道资料里修改。"
     }
     private var avatarTip: String { avatar.isEmpty ? "设置频道头像" : "更换头像" }
+    @State private var quota: ChannelQuota?
+    private var left: Int? { quota.map { max(0, $0.limit - $0.owned) } }
+    private var quotaText: String {
+        guard let q = quota else { return "" }
+        if left == 0 { return "已达到创建上限（最多 \(q.limit) 个频道）" }
+        return "还能创建 \(left ?? 0) 个频道（共 \(q.limit) 个）"
+    }
     private var submitTitle: String { busy ? "请稍候…" : "创建频道" }
     private static let groupBg = Color(red: 0.949, green: 0.949, blue: 0.969)
     @State private var busy = false
@@ -1101,13 +1183,20 @@ struct CreateChannelView: View {
                 caption("简介会显示在频道资料页，告诉别人这个频道发什么。")
                 memberPostGroup
                 caption(createHint)
-                AccentButton(title: submitTitle, enabled: !busy && !name.trimmingCharacters(in: .whitespaces).isEmpty) {
+                if quota != nil {
+                    Text(quotaText)
+                        .font(.system(size: 12)).foregroundStyle(Theme.textSub)
+                        .frame(maxWidth: .infinity)
+                        .padding(.bottom, 10)
+                }
+                AccentButton(title: submitTitle, enabled: !busy && !name.trimmingCharacters(in: .whitespaces).isEmpty && left != 0) {
                     create()
                 }
                 .padding(.top, 4)
             }
             .padding(16)
         }
+        .task { quota = try? await Api.request("/im/channel/quota") }
         .background(Self.groupBg.ignoresSafeArea())
         .navigationTitle("新建频道")
         .navigationBarTitleDisplayMode(.inline)

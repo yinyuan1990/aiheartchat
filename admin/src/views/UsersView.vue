@@ -58,10 +58,37 @@ function showToast(t: string) {
   setTimeout(() => (toast.value = ''), 1800);
 }
 
+const defaultChannelLimit = ref(5);
+const limitFor = ref<any>(null);
+const limitInput = ref('');
+
 async function load() {
   users.value = await api<any[]>(`/admin/users${keyword.value ? `?keyword=${encodeURIComponent(keyword.value)}` : ''}`);
 }
-onMounted(load);
+onMounted(async () => {
+  load();
+  defaultChannelLimit.value = (await api<{ defaultLimit: number }>('/admin/channels/config')).defaultLimit;
+});
+
+function openLimit(u: any) {
+  limitFor.value = u;
+  limitInput.value = u.channelLimit == null ? '' : String(u.channelLimit);
+}
+
+async function saveLimit() {
+  if (!limitFor.value) return;
+  const raw = limitInput.value.trim();
+  const n = raw === '' ? null : Number(raw);
+  if (n !== null && (!Number.isInteger(n) || n < 0 || n > 1000)) return showToast('请填写 0 ~ 1000 的整数，留空为跟随默认');
+  try {
+    await api(`/admin/users/${limitFor.value.id}/channel-limit`, { method: 'POST', body: { limit: n } });
+    limitFor.value.channelLimit = n;
+    showToast(n === null ? `已恢复跟随默认（${defaultChannelLimit.value} 个）` : `已设为最多 ${n} 个频道`);
+    limitFor.value = null;
+  } catch (e: any) {
+    showToast(e.message);
+  }
+}
 
 async function grant() {
   if (!grantFor.value || !amount.value) return;
@@ -97,7 +124,7 @@ async function toggleBan(u: any) {
       </div>
       <table>
         <thead>
-          <tr><th>ID</th><th>昵称</th><th>性别</th><th>年纪</th><th>地址</th><th>地陪</th><th>状态</th><th>操作</th></tr>
+          <tr><th>ID</th><th>昵称</th><th>性别</th><th>年纪</th><th>地址</th><th>地陪</th><th>频道</th><th>状态</th><th>操作</th></tr>
         </thead>
         <tbody>
           <tr v-for="u in users" :key="u.id">
@@ -107,11 +134,16 @@ async function toggleBan(u: any) {
             <td>{{ u.age }}</td>
             <td class="muted">{{ u.address.slice(0, 8) }}…{{ u.address.slice(-4) }}</td>
             <td>{{ u.isGuide ? '是' : '-' }}</td>
+            <td :title="u.channelLimit == null ? '跟随全局默认' : '单独设置'">
+              {{ u.ownedChannels ?? 0 }} / {{ u.channelLimit ?? defaultChannelLimit }}
+              <span v-if="u.channelLimit != null" class="tag ok" style="margin-left: 4px">单独</span>
+            </td>
             <td><span class="tag" :class="u.status === 0 ? 'ok' : 'off'">{{ u.status === 0 ? '正常' : '封禁' }}</span></td>
             <td>
               <div class="row">
                 <button class="small" @click="grantFor = u">发积分</button>
                 <button class="small ghost" @click="openTxs(u)">积分明细</button>
+                <button class="small ghost" @click="openLimit(u)">频道额度</button>
                 <button class="small ghost" @click="toggleBan(u)">{{ u.status === 0 ? '封禁' : '解封' }}</button>
               </div>
             </td>
@@ -127,6 +159,19 @@ async function toggleBan(u: any) {
         <input v-model="remark" placeholder="备注（可选）" style="width: 220px" />
         <button @click="grant">发放</button>
         <button class="ghost" @click="grantFor = null">取消</button>
+      </div>
+    </div>
+
+    <div v-if="limitFor" class="card">
+      <div class="page-title" style="font-size: 15px">
+        「{{ limitFor.nickname }}」最多能创建几个频道（已建 {{ limitFor.ownedChannels ?? 0 }} 个）
+      </div>
+      <div class="row">
+        <input v-model="limitInput" type="number" min="0" max="1000" :placeholder="`留空 = 跟随默认 ${defaultChannelLimit} 个`" style="width: 200px" @keydown.enter="saveLimit" />
+        <button @click="saveLimit">保存</button>
+        <button class="ghost" @click="limitInput = ''">恢复默认</button>
+        <button class="ghost" @click="limitFor = null">取消</button>
+        <span class="muted">填 0 = 不能再创建；已建的频道不受影响</span>
       </div>
     </div>
 

@@ -24,8 +24,29 @@ const posts = ref<Post[]>([]);
 const openComments = ref<string | null>(null);
 const comments = ref<Comment[]>([]);
 
+const defaultLimit = ref<number | null>(null);
+const limitInput = ref('');
+const limitSaved = ref(false);
+
 async function load() {
   list.value = await api<Channel[]>(`/admin/channels${q.value.trim() ? `?q=${encodeURIComponent(q.value.trim())}` : ''}`);
+}
+async function loadConfig() {
+  const c = await api<{ defaultLimit: number }>('/admin/channels/config');
+  defaultLimit.value = c.defaultLimit;
+  limitInput.value = String(c.defaultLimit);
+}
+async function saveLimit() {
+  const n = Number(limitInput.value);
+  if (!Number.isInteger(n) || n < 0 || n > 1000) return alert('请填写 0 ~ 1000 的整数');
+  try {
+    const c = await api<{ defaultLimit: number }>('/admin/channels/config', { method: 'POST', body: { defaultLimit: n } });
+    defaultLimit.value = c.defaultLimit;
+    limitSaved.value = true;
+    setTimeout(() => (limitSaved.value = false), 1500);
+  } catch (e: any) {
+    alert(e.message);
+  }
 }
 async function open(c: Channel) {
   current.value = c;
@@ -69,18 +90,31 @@ function postText(p: Post) {
   return '';
 }
 
-onMounted(load);
+onMounted(() => {
+  load();
+  loadConfig();
+});
 </script>
 
 <template>
   <div>
     <div class="page-title">频道</div>
+    <div class="card" style="margin-bottom: 16px">
+      <div class="row">
+        <div style="font-weight: 600">每人默认最多创建</div>
+        <input v-model="limitInput" type="number" min="0" max="1000" style="width: 90px" data-testid="channel-default-limit" @keydown.enter="saveLimit" />
+        <span>个频道</span>
+        <button class="small" :disabled="limitInput === String(defaultLimit)" @click="saveLimit">保存</button>
+        <span v-if="limitSaved" style="color: #2e9e5b">已保存</span>
+        <span class="muted">填 0 = 默认不能创建。个别用户可在「用户管理」里单独设置额度，单独设置的优先。已经建了的频道不受影响，只是超出后不能再建；被封禁的频道也占名额。</span>
+      </div>
+    </div>
     <div class="card">
       <div class="row" style="margin-bottom: 12px">
         <div style="font-weight: 600">全部频道（{{ list.length }}）</div>
         <input v-model="q" placeholder="搜频道名 / 简介" style="width: 200px" @keydown.enter="load" />
         <button class="small ghost" @click="load">搜索 / 刷新</button>
-        <span class="muted">所有用户都能开频道（每人最多 10 个），只有频道主能发帖；订阅者可以表情回应和评论。封禁后订阅者的会话列表里不再显示，解封恢复</span>
+        <span class="muted">所有用户都能开频道（数量见上面的额度），频道主和管理员发帖，开了「订阅者可发消息」的频道订阅者也能发；订阅者可以表情回应和评论。封禁后订阅者的会话列表里不再显示，解封恢复</span>
       </div>
       <table>
         <thead><tr><th></th><th style="min-width: 200px">频道</th><th>频道主</th><th>订阅</th><th>帖子</th><th>最近发帖</th><th>状态</th><th>操作</th></tr></thead>

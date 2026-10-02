@@ -18,6 +18,8 @@ struct MessagePayload: Codable {
     var replyTo: ReplyPreview?
     var fwdFrom: String?
     var reactions: [MsgReaction]?
+    /// 频道里订阅者发的：当普通聊天消息显示
+    var memberMsg: Bool?
 }
 
 struct ReplyPreview: Codable, Equatable {

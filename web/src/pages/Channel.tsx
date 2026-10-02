@@ -53,6 +53,7 @@ interface Post {
   pending?: boolean;
   tempId?: string;
   markup?: InlineMarkup | null;
+  memberMsg?: boolean;
 }
 
 const fmtCount = (n: number) => (n >= 10000 ? `${(n / 10000).toFixed(1)}万` : String(n));
@@ -142,6 +143,31 @@ function PostCard({ ch, p, onReact, onComments, onImage, onDelete }: {
           <span>›</span>
         </div>
       )}
+    </div>
+  );
+}
+
+/** 订阅者发的消息：普通聊天气泡（我的在右边），没有评论 / 浏览数 / 表情回应；长按或右键删除 */
+function MemberBubble({ p, mine, onImage, onDelete }: { p: Post; mine: boolean; onImage: (url: string) => void; onDelete?: () => void }) {
+  const timer = useRef<number>();
+  const media = p.type === 'image' || p.type === 'video';
+  const askDelete = () => {
+    if (onDelete && !p.pending && confirm('删除这条消息？')) onDelete();
+  };
+  return (
+    <div className={`ch-msg${mine ? ' mine' : ''}`} style={{ opacity: p.pending ? 0.6 : 1 }} data-testid="member-msg">
+      {!mine && <div className="avatar" style={{ width: 32, height: 32, flexShrink: 0 }}>{p.senderAvatar && <img src={p.senderAvatar} alt="" />}</div>}
+      <div
+        className={`ch-msg-bubble${media ? ' media' : ''}`}
+        onContextMenu={(e) => { if (onDelete) { e.preventDefault(); askDelete(); } }}
+        onTouchStart={() => { timer.current = window.setTimeout(askDelete, 550); }}
+        onTouchEnd={() => window.clearTimeout(timer.current)}
+        onTouchMove={() => window.clearTimeout(timer.current)}
+      >
+        {!mine && <div className="ch-msg-name">{p.senderNickname}</div>}
+        <PostBody p={p} onImage={onImage} />
+        <div className="ch-msg-time">{p.pending ? '发送中…' : postTime(p.createdAt)}</div>
+      </div>
     </div>
   );
 }
@@ -366,7 +392,7 @@ export function ChannelPage() {
     if (!me || !ch) return;
     stickBottom.current = true;
     const tempId = wsManager.send(2, ch.id, type, content);
-    setPosts((prev) => [...prev, { id: tempId, tempId, senderId: me.id, senderNickname: me.nickname, senderAvatar: me.avatar, type, content, createdAt: new Date().toISOString(), views: 1, reactions: [], myReaction: null, commentCount: 0, pending: true }]);
+    setPosts((prev) => [...prev, { id: tempId, tempId, senderId: me.id, senderNickname: me.nickname, senderAvatar: me.avatar, type, content, createdAt: new Date().toISOString(), views: 1, reactions: [], myReaction: null, commentCount: 0, pending: true, memberMsg: !ch.canPost }]);
   };
   const send = () => {
     const t = input.trim();
@@ -426,7 +452,15 @@ export function ChannelPage() {
         {posts.length === 0 && (
           <div className="empty">{canSend ? '发第一条帖子吧，订阅者都会收到' : '频道还没有发帖'}</div>
         )}
-        {posts.map((p) => (
+        {posts.map((p) => p.memberMsg ? (
+          <MemberBubble
+            key={p.tempId ?? p.id}
+            p={p}
+            mine={p.senderId === me?.id}
+            onImage={setFullImage}
+            onDelete={ch.canPost || p.senderId === me?.id ? () => deletePost(p) : undefined}
+          />
+        ) : (
           <PostCard
             key={p.tempId ?? p.id}
             ch={ch}
@@ -648,7 +682,13 @@ export function CreateChannelSheet({ onClose, onCreated }: { onClose: () => void
   const [avatar, setAvatar] = useState('');
   const [memberPost, setMemberPost] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [quota, setQuota] = useState<{ owned: number; limit: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const left = quota ? Math.max(0, quota.limit - quota.owned) : null;
+
+  useEffect(() => {
+    api<{ owned: number; limit: number }>('/im/channel/quota').then(setQuota).catch(() => {});
+  }, []);
 
   const pick = async (f?: File) => {
     if (!f) return;
@@ -719,7 +759,12 @@ export function CreateChannelSheet({ onClose, onCreated }: { onClose: () => void
           创建后也能在频道资料里修改。
         </div>
 
-        <button className="btn cc-submit" disabled={busy || !name.trim()} onClick={create}>创建频道</button>
+        <button className="btn cc-submit" disabled={busy || !name.trim() || left === 0} onClick={create}>创建频道</button>
+        {quota && (
+          <div className="cc-quota" data-testid="channel-quota">
+            {left === 0 ? `已达到创建上限（最多 ${quota.limit} 个频道）` : `还能创建 ${left} 个频道（共 ${quota.limit} 个）`}
+          </div>
+        )}
       </div>
     </div>
   );

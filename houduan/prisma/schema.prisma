@@ -48,6 +48,8 @@ model User {
   stickerInited Boolean @default(false) @map("sticker_inited")
   /// 机器人账号（资料见 bot 表）：gender=0、没有短号，不能登录、不出现在遇见 / 搜索昵称里
   isBot        Boolean  @default(false) @map("is_bot")
+  /// 最多能创建几个频道；null = 用后台全局默认（sys_setting.channel_limit_default，未设为 5）
+  channelLimit Int?     @map("channel_limit")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 

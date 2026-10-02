@@ -32,6 +32,8 @@ data class MessagePayload(
     val replyTo: ReplyPreview? = null,
     val fwdFrom: String? = null,
     val reactions: List<MsgReaction> = emptyList(),
+    /** 频道里订阅者发的：当普通聊天消息显示 */
+    val memberMsg: Boolean = false,
 )
 
 /** 被回复的消息预览：文字取前 100 字、图片是 url；deleted=原消息已删除 */

@@ -8,6 +8,9 @@ import { ConnectionRegistry } from './connection.registry';
 export const CHANNEL_KIND = 2;
 /** 订阅人数上限（复用 memberLimit） */
 const CHANNEL_LIMIT = 1_000_000;
+/** 每人能创建的频道数：后台可改全局默认，也可在用户管理里单独设（user.channel_limit） */
+const DEFAULT_CHANNEL_LIMIT = 5;
+const KEY_DEFAULT_LIMIT = 'channel_limit_default';
 /** 可用的表情回应 */
 export const REACTIONS = ['❤️', '👍', '🔥', '😂', '😮', '😢', '🎉', '👎'];
 
@@ -30,8 +33,8 @@ export class ChannelService {
     if (name.length > 50) throw new BadRequestException('频道名称最长 50 字');
     const description = (dto.description ?? '').trim();
     if (description.length > 500) throw new BadRequestException('简介最长 500 字');
-    const owned = await this.prisma.chatGroup.count({ where: { ownerId, kind: CHANNEL_KIND, status: 0 } });
-    if (owned >= 10) throw new BadRequestException('每人最多创建 10 个频道');
+    const [owned, limit] = await Promise.all([this.ownedCount(ownerId), this.limitFor(ownerId)]);
+    if (owned >= limit) throw new BadRequestException(limit > 0 ? `最多只能创建 ${limit} 个频道` : '暂时不能创建频道');
 
     const group = await this.prisma.chatGroup.create({
       data: { name, avatar: dto.avatar ?? '', notice: description, ownerId, kind: CHANNEL_KIND, memberLimit: CHANNEL_LIMIT, memberPost: dto.memberPost === true },
@@ -215,6 +218,14 @@ export class ChannelService {
       select: { id: true, nickname: true, avatar: true, isBot: true },
     });
     const senderMap = new Map(senders.map((s) => [s.id.toString(), s]));
+    const admins = new Set(
+      (await this.prisma.groupMember.findMany({
+        where: { groupId, userId: { in: senders.map((s) => s.id) }, role: { in: ['owner', 'admin'] } },
+        select: { userId: true },
+      })).map((m) => m.userId.toString()),
+    );
+    const ownerId = (await this.prisma.chatGroup.findUnique({ where: { id: groupId }, select: { ownerId: true } }))?.ownerId;
+    const isMemberMsg = (sid: bigint) => !senderMap.get(sid.toString())?.isBot && sid !== ownerId && !admins.has(sid.toString());
     const botMsgIds = rows.filter((m) => senderMap.get(m.senderId.toString())?.isBot).map((m) => m.id);
     const markupRows = botMsgIds.length ? await this.prisma.botMessageMarkup.findMany({ where: { messageId: { in: botMsgIds } } }) : [];
     const markupMap = new Map(markupRows.map((r) => [r.messageId.toString(), r.markup]));
@@ -241,6 +252,7 @@ export class ChannelService {
         reactions: r?.list ?? [],
         myReaction: r?.mine ?? null,
         commentCount: comments.get(m.id.toString()) ?? 0,
+        ...(isMemberMsg(m.senderId) ? { memberMsg: true } : {}),
         ...(markup ? { markup: JSON.parse(markup) } : {}),
       };
     });
@@ -394,6 +406,59 @@ export class ChannelService {
   }
 
   /** 后台封禁（status=2）/ 解封（status=0）；已被频道主删除的（status=1）也能恢复 */
+  /** 占名额的频道：正常 + 被封禁的（封禁不退名额），频道主自己删的不算 */
+  ownedCount(ownerId: bigint) {
+    return this.prisma.chatGroup.count({ where: { ownerId, kind: CHANNEL_KIND, status: { in: [0, 2] } } });
+  }
+
+  async ownedCounts(userIds: bigint[]) {
+    if (!userIds.length) return new Map<bigint, number>();
+    const rows = await this.prisma.chatGroup.groupBy({
+      by: ['ownerId'],
+      where: { ownerId: { in: userIds }, kind: CHANNEL_KIND, status: { in: [0, 2] } },
+      _count: { _all: true },
+    });
+    return new Map(rows.map((r) => [r.ownerId, r._count._all]));
+  }
+
+  async defaultLimit() {
+    const row = await this.prisma.sysSetting.findUnique({ where: { key: KEY_DEFAULT_LIMIT } });
+    const n = row ? parseInt(row.value, 10) : NaN;
+    return Number.isFinite(n) && n >= 0 ? n : DEFAULT_CHANNEL_LIMIT;
+  }
+
+  async limitFor(userId: bigint) {
+    const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { channelLimit: true } });
+    return u?.channelLimit ?? (await this.defaultLimit());
+  }
+
+  /** 我的创建额度：客户端在新建频道页显示「还能创建 N 个」 */
+  async quota(userId: bigint) {
+    const [owned, limit] = await Promise.all([this.ownedCount(userId), this.limitFor(userId)]);
+    return { owned, limit };
+  }
+
+  async adminGetConfig() {
+    return { defaultLimit: await this.defaultLimit() };
+  }
+
+  async adminSetDefaultLimit(n: number) {
+    if (!Number.isInteger(n) || n < 0 || n > 1000) throw new BadRequestException('请填写 0 ~ 1000 的整数');
+    await this.prisma.sysSetting.upsert({
+      where: { key: KEY_DEFAULT_LIMIT },
+      update: { value: String(n) },
+      create: { key: KEY_DEFAULT_LIMIT, value: String(n) },
+    });
+    return { defaultLimit: n };
+  }
+
+  /** 单独给某个用户设额度；null = 恢复跟随全局默认 */
+  async adminSetUserLimit(userId: bigint, n: number | null) {
+    if (n !== null && (!Number.isInteger(n) || n < 0 || n > 1000)) throw new BadRequestException('请填写 0 ~ 1000 的整数，留空为跟随默认');
+    await this.prisma.user.update({ where: { id: userId }, data: { channelLimit: n } });
+    return { channelLimit: n };
+  }
+
   async adminSetStatus(groupId: bigint, status: 0 | 2) {
     const g = await this.prisma.chatGroup.findUnique({ where: { id: groupId } });
     if (!g || g.kind !== CHANNEL_KIND) throw new NotFoundException('频道不存在');

@@ -208,6 +208,11 @@ export class ImController {
   }
 
   /** 发现频道：按订阅数倒序，q 搜名称 / 简介 */
+  @Get('channel/quota')
+  channelQuota(@CurrentUser() userId: bigint) {
+    return this.channels.quota(userId);
+  }
+
   @Get('channel/list')
   listChannels(@CurrentUser() userId: bigint, @Query('q') q?: string) {
     return this.channels.list(userId, q);
