@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
+import dynamic from "next/dynamic";
 import { Activity, ExternalLink, Flame, Gauge, Loader2 } from "lucide-react";
 import { useApp } from "@/components/providers";
 import { useAiMarket, usePerpMarket, usePerpWhales, type PerpCoin, type Whale, type WhaleEvent, type WhalePosition } from "@/lib/api";
@@ -14,6 +15,23 @@ const HEAT_N = 48;
 const MAP_SPAN = 0.3;
 const BUCKETS = 40;
 const NEAR = 0.1;
+
+const LiqMountains = dynamic(() => import("./liq-mountains"), {
+  ssr: false,
+  loading: () => <div className="flex h-72 items-center justify-center"><Loader2 className="size-4 animate-spin text-muted-foreground" /></div>,
+});
+let webglCache: boolean | null = null;
+const hasWebGL = () => {
+  if (webglCache === null) {
+    try {
+      webglCache = !!document.createElement("canvas").getContext("webgl2");
+    } catch {
+      webglCache = false;
+    }
+  }
+  return webglCache;
+};
+const noSubscribe = () => () => {};
 
 const big = (v: number) => {
   const a = Math.abs(v), s = v < 0 ? "-" : "";
@@ -165,7 +183,6 @@ function Sentiment() {
 type Pos = WhalePosition & { address: string; name: string };
 
 function LiqMap({ coin, positions, mark, closes }: { coin: string; positions: Pos[]; mark: number; closes: number[] }) {
-  const { t } = useApp();
   const lo = mark * (1 - MAP_SPAN), hi = mark * (1 + MAP_SPAN);
   const step = (hi - lo) / BUCKETS;
   const buckets = useMemo(() => {
@@ -182,9 +199,6 @@ function LiqMap({ coin, positions, mark, closes }: { coin: string; positions: Po
   const line = closes.length > 1
     ? closes.map((c, i) => `${i ? "L" : "M"}${((i / (closes.length - 1)) * (split - 20)).toFixed(1)},${Y(Math.min(hi, Math.max(lo, c))).toFixed(1)}`).join("")
     : "";
-  const near = (dir: 1 | -1) => positions
-    .filter((p) => p.liqPx !== null && (dir < 0 ? p.side === "long" && p.liqPx >= mark * (1 - NEAR) && p.liqPx < mark : p.side === "short" && p.liqPx <= mark * (1 + NEAR) && p.liqPx > mark))
-    .reduce((s, p) => s + p.ntl, 0);
   const top = buckets.map((b, i) => ({ i, v: b.long + b.short })).sort((a, b) => b.v - a.v).slice(0, 3).filter((x) => x.v > 0);
   return (
     <div className="space-y-2">
@@ -215,15 +229,25 @@ function LiqMap({ coin, positions, mark, closes }: { coin: string; positions: Po
         })}
         <line x1={split} x2={split} y1={0} y2={H} stroke="currentColor" opacity={0.15} />
       </svg>
-      <div className="grid grid-cols-2 gap-1.5 text-[11px]">
-        <div className="rounded-lg bg-down/10 px-2.5 py-1.5">
-          {t("perp.liq.down").replace("{px}", price(mark * (1 - NEAR)))}
-          <div className="font-mono text-sm font-bold text-down tabular-nums">{big(near(-1))}</div>
-        </div>
-        <div className="rounded-lg bg-up/10 px-2.5 py-1.5">
-          {t("perp.liq.up").replace("{px}", price(mark * (1 + NEAR)))}
-          <div className="font-mono text-sm font-bold text-up tabular-nums">{big(near(1))}</div>
-        </div>
+      <NearCards positions={positions} mark={mark} />
+    </div>
+  );
+}
+
+function NearCards({ positions, mark }: { positions: Pos[]; mark: number }) {
+  const { t } = useApp();
+  const near = (dir: 1 | -1) => positions
+    .filter((p) => p.liqPx !== null && (dir < 0 ? p.side === "long" && p.liqPx >= mark * (1 - NEAR) && p.liqPx < mark : p.side === "short" && p.liqPx <= mark * (1 + NEAR) && p.liqPx > mark))
+    .reduce((s, p) => s + p.ntl, 0);
+  return (
+    <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+      <div className="rounded-lg bg-down/10 px-2.5 py-1.5">
+        {t("perp.liq.down").replace("{px}", price(mark * (1 - NEAR)))}
+        <div className="font-mono text-sm font-bold text-down tabular-nums">{big(near(-1))}</div>
+      </div>
+      <div className="rounded-lg bg-up/10 px-2.5 py-1.5">
+        {t("perp.liq.up").replace("{px}", price(mark * (1 + NEAR)))}
+        <div className="font-mono text-sm font-bold text-up tabular-nums">{big(near(1))}</div>
       </div>
     </div>
   );
@@ -253,6 +277,7 @@ function Whales() {
   const { data } = usePerpWhales();
   const market = useAiMarket();
   const [coin, setCoin] = useState<(typeof MAP_COINS)[number]>("BTC");
+  const webgl = useSyncExternalStore(noSubscribe, hasWebGL, () => false);
   if (!data || data.status === "loading")
     return <p className="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-3 text-xs text-muted-foreground"><Loader2 className="size-4 animate-spin" /> {t("perp.whales.loading")}</p>;
 
@@ -264,6 +289,11 @@ function Whales() {
   const mark = m?.mid || data.mids[coin] || 0;
   const closes = (m?.candles ?? []).map((k) => k[4]);
   const coinPos = all.filter((p) => p.coin === coin);
+  const rows = MAP_COINS.map((c) => ({
+    coin: c,
+    mark: market.data?.coins.find((x) => x.coin === c)?.mid || data.mids[c] || 0,
+    positions: all.filter((p) => p.coin === c),
+  })).filter((r) => r.mark > 0);
   const cl = coinPos.filter((p) => p.side === "long").reduce((s, p) => s + p.ntl, 0);
   const cs = coinPos.filter((p) => p.side === "short").reduce((s, p) => s + p.ntl, 0);
   const ranked = [...data.whales]
@@ -305,11 +335,20 @@ function Whales() {
               ))}
             </div>
           </div>
-          {mark ? <LiqMap key={coin} coin={coin} positions={coinPos} mark={mark} closes={closes} /> : <div className="h-40" />}
+          {!mark ? (
+            <div className="h-40" />
+          ) : webgl ? (
+            <>
+              <LiqMountains rows={rows} active={coin} onPick={(c) => setCoin(c as (typeof MAP_COINS)[number])} />
+              <NearCards positions={coinPos} mark={mark} />
+            </>
+          ) : (
+            <LiqMap key={coin} coin={coin} positions={coinPos} mark={mark} closes={closes} />
+          )}
           <p className="text-[11px] text-muted-foreground tabular-nums">
             {t("perp.liq.whalesOn").replace("{coin}", coin).replace("{n}", String(coinPos.length))} <span className="text-up">{t("perp.long")} {big(cl)}</span> · <span className="text-down">{t("perp.short")} {big(cs)}</span>
           </p>
-          <p className="text-[11px] leading-relaxed text-muted-foreground">{t("perp.liq.hint")}</p>
+          <p className="text-[11px] leading-relaxed text-muted-foreground">{t(webgl ? "perp.liq.hint3d" : "perp.liq.hint")}</p>
         </CardContent>
       </Card>
 

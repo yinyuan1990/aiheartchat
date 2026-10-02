@@ -245,6 +245,7 @@ const dict = {
   "perp.liq.title": ["巨鲸清算地图", "Whale liquidation map"],
   "perp.liq.down": ["跌到 {px}（-10%）会爆仓的多单", "Longs liquidated by {px} (-10%)"],
   "perp.liq.up": ["涨到 {px}（+10%）会爆仓的空单", "Shorts liquidated by {px} (+10%)"],
+  "perp.liq.hint3d": ["清算山脉：中间发光的墙是当前价，往左是下跌、往右是上涨（±30%）。山越高，这个价位上会被强平的巨鲸仓位越多：红色是多单（跌到这里爆），绿色是空单（涨到这里爆）。价格常常会被吸向最高的山峰「插针」。左右拖动可以转视角，点一排切换币种。", "Liquidation mountains: the glowing wall is the current price, left is down and right is up (±30%). The taller the peak, the more whale positions get liquidated at that price — red = longs (hit on the way down), green = shorts (hit on the way up). Price often gets pulled to the tallest peaks for a wick. Drag sideways to turn the view, tap a row to switch coins."],
   "perp.liq.whalesOn": ["{n} 个巨鲸仓位在 {coin} 上：", "{n} whale positions on {coin}:"],
   "perp.liq.hint": ["左边是 12 小时走势，右边每一条是这个价位上会被强平的巨鲸仓位金额：红色是多单（价格跌到这里爆），绿色是空单（涨到这里爆）。黄色横带是清算最密集的价位，价格常常会被吸过去「插针」。", "Left: the last 12h. Right: whale positions that get liquidated at each price, red = longs (hit on the way down), green = shorts (hit on the way up). Yellow bands are the densest levels; price often gets pulled there for a wick."],
   "perp.feed": ["巨鲸动态", "Whale moves"],
