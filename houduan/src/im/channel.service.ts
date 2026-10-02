@@ -243,7 +243,8 @@ export class ChannelService {
     }
     const [reactions] = await this.stats([messageId], userId);
     const r = reactions.get(messageId.toString());
-    void this.broadcastStats(groupId, messageId);
+    // 操作人以接口返回为准：推送和接口返回可能乱序，连点时旧推送会盖掉新结果
+    void this.broadcastStats(groupId, messageId, userId);
     return { reactions: r?.list ?? [], myReaction: r?.mine ?? null };
   }
 
@@ -463,13 +464,13 @@ export class ChannelService {
   }
 
   /** 回应 / 评论数变了：推给在线订阅者（不含「我的回应」，客户端保留自己的） */
-  private async broadcastStats(groupId: bigint, messageId: bigint) {
+  private async broadcastStats(groupId: bigint, messageId: bigint, exceptUserId?: bigint) {
     try {
       const [reactions, comments] = await this.stats([messageId]);
       const conv = await this.prisma.conversation.findUnique({ where: { groupId }, select: { id: true } });
       const members = await this.prisma.groupMember.findMany({ where: { groupId }, select: { userId: true } });
       await this.registry.deliver(
-        members.map((m) => m.userId),
+        members.map((m) => m.userId).filter((id) => id !== exceptUserId),
         {
           op: 'channel_stats',
           data: {

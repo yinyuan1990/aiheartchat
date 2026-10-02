@@ -146,6 +146,8 @@ export class ImService {
       },
     });
     await this.prisma.conversation.update({ where: { id: conv.id }, data: { lastMsgAt: msg.createdAt } });
+    // 频道阅读数按 lastReadMsgId 统计，发帖人自己算已读
+    await this.prisma.groupMember.update({ where: { groupId_userId: { groupId, userId: sender.id } }, data: { lastReadMsgId: msg.id } });
 
     const payload = this.toPayload(msg, conv, sender, frame.content);
     const members = await this.prisma.groupMember.findMany({ where: { groupId }, select: { userId: true } });

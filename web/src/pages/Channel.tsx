@@ -247,7 +247,7 @@ export function ChannelPage() {
         setCh(c);
         return api<Post[]>(`/im/channel/${id}/posts`).then((list) => {
           if (!alive) return;
-          setPosts(list);
+          setPosts((prev) => [...list, ...prev.filter((p) => !list.some((x) => x.id === p.id))]);
           setHasMore(list.length >= 30);
           const last = list[list.length - 1];
           if (c.isMember && last && c.conversationId) wsManager.markRead(c.conversationId, last.id);

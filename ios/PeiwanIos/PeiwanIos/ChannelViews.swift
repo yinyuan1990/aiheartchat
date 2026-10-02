@@ -470,7 +470,7 @@ struct ChannelView: View {
             ch = c
             let list: [ChannelPost] = (try? await Api.request("/im/channel/\(groupId)/posts")) ?? []
             stickBottom = true
-            posts = list
+            posts = list + posts.filter { p in !list.contains { $0.id == p.id } }
             hasMore = list.count >= 30
             if c.isMember == true, let conv = c.conversationId, let last = list.last {
                 WsClient.shared.markRead(conversationId: conv, msgId: last.id)

@@ -23,6 +23,7 @@ class WsManager {
   private heartbeat: number | null = null;
   private reconnectTimer: number | null = null;
   private manualClose = false;
+  private queue: string[] = [];
 
   connect() {
     const token = getToken();
@@ -33,6 +34,9 @@ class WsManager {
 
     this.ws.onopen = () => {
       this.heartbeat = window.setInterval(() => this.raw({ op: 'ping' }), 25000);
+      const pending = this.queue;
+      this.queue = [];
+      pending.forEach((f) => this.ws?.send(f));
     };
     this.ws.onmessage = (e) => {
       try {
@@ -52,6 +56,7 @@ class WsManager {
 
   close() {
     this.manualClose = true;
+    this.queue = [];
     if (this.reconnectTimer) window.clearTimeout(this.reconnectTimer);
     this.ws?.close();
   }
@@ -72,9 +77,13 @@ class WsManager {
     this.raw({ op: 'read', conversationId, msgId });
   }
 
-  private raw(frame: unknown) {
+  /** 没连上时 send / read 先排队，连上后补发（刚打开页面就发消息不会丢） */
+  private raw(frame: { op: string; [k: string]: unknown }) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(frame));
+    } else if (frame.op !== 'ping' && this.queue.length < 50) {
+      this.queue.push(JSON.stringify(frame));
+      this.connect();
     }
   }
 }

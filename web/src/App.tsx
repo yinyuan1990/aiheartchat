@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { HashRouter, Navigate, NavLink, Outlet, Route, Routes, useNavigate, useSearchParams } from 'react-router-dom';
-import { api, getDeviceId, setToken, UserProfile } from './api';
+import { api, getDeviceId, getToken, setToken, UserProfile } from './api';
 import { useApp } from './store';
 import { wsManager } from './ws';
 import { EnterPage } from './pages/Enter';
@@ -157,6 +157,13 @@ function Boot() {
 }
 
 export function App() {
+  // 子页面直接刷新 / 打开分享链接时不经过 Boot，有 token 就补拉一次当前用户
+  useEffect(() => {
+    if (getToken() && !useApp.getState().user) {
+      api<UserProfile>('/user/me').then((u) => !useApp.getState().user && useApp.getState().setUser(u)).catch(() => {});
+    }
+  }, []);
+
   return (
     <HashRouter>
       <Routes>

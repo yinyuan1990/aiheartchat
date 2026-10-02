@@ -291,7 +291,7 @@ fun ChannelScreen(groupId: String, myUserId: String, onBack: () -> Unit, onExit:
             .onSuccess { c ->
                 ch = c
                 val list = runCatching { Api.getList<ChannelPost>("/im/channel/$groupId/posts") }.getOrDefault(emptyList())
-                posts = list
+                posts = list + posts.filter { p -> list.none { it.id == p.id } }
                 hasMore = list.size >= 30
                 val last = list.lastOrNull()
                 val conv = c.conversationId
