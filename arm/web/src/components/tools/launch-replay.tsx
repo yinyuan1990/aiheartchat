@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 const ROLES: ReplayRole[] = ["dev", "bundle", "bot", "smart", "retail"];
-const COLOR: Record<ReplayRole, string> = { dev: "#a855f7", bundle: "#f97316", bot: "#ef4444", smart: "#eab308", retail: "#38bdf8" };
+export const COLOR: Record<ReplayRole, string> = { dev: "#a855f7", bundle: "#f97316", bot: "#ef4444", smart: "#eab308", retail: "#38bdf8" };
 const EMOJI: Record<ReplayRole, string> = { dev: "👨‍💻", bundle: "📦", bot: "🤖", smart: "🐋", retail: "🧑" };
 const SPEEDS = [60_000, 30_000, 15_000];
 const TICKS = [15, 60, 300, 900, 3600];

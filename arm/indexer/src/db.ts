@@ -476,6 +476,33 @@ export async function migrate() {
   await sql`create index if not exists dex_swaps_trader on dex_swaps (trader)`;
   await sql`create index if not exists dex_swaps_pool on dex_swaps (pool, block)`;
 
+  // Sell the Top (10.2, game.ts): one launch per UTC+8 day; a play is one round. counted = first round of that IP that
+  // day (the stats), ranked = counted and signed by a wallet that has no other ranked round that day (the board).
+  await sql`create table if not exists game_days (
+    day text primary key,
+    pool text not null unique,
+    n int not null,
+    created_at timestamptz not null default now()
+  )`;
+  await sql`create table if not exists game_plays (
+    id text primary key,
+    day text not null,
+    ip text not null,
+    wallet text,
+    counted boolean not null,
+    ranked boolean not null,
+    started_at timestamptz not null,
+    sold_t double precision,
+    x double precision,
+    finished_at timestamptz
+  )`;
+  await sql`create index if not exists game_plays_day on game_plays (day, ip)`;
+  await sql`create unique index if not exists game_plays_counted on game_plays (day, ip) where counted`;
+  await sql`create unique index if not exists game_plays_ranked on game_plays (day, wallet) where ranked`;
+  // `id` is the player's private session key (it can stream the chart); share links only ever carry `pub`
+  await sql`alter table game_plays add column if not exists pub text`;
+  await sql`create unique index if not exists game_plays_pub on game_plays (pub)`;
+
   // Multi-domain (9.9): uploads are referenced host-relatively so a dead domain never breaks pictures. Fold any
   // absolute "https://<old host>/api/uploads/x" left from earlier domains into "/api/uploads/x". For `tokens` this is
   // display-only — the on-chain string cannot change — but that is exactly what the UI reads.

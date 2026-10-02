@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { BookOpen, Languages, Menu, ShieldAlert, Wallet, Zap } from "lucide-react";
-import { ArrowsLeftRight, BookOpenText, ChartBar, Compass, Crown, Images, Megaphone, RocketLaunch, Trophy, UserCircle, type Icon as PhosphorIcon } from "@phosphor-icons/react";
+import { ArrowsLeftRight, BookOpenText, ChartBar, Compass, Crown, Images, Megaphone, Mountains, RocketLaunch, Trophy, UserCircle, type Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { useApp } from "@/components/providers";
 import { useDomains, useHealth, useSite } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -27,6 +27,7 @@ import type { DictKey } from "@/lib/i18n";
 const NAV: Array<{ href: string; key: DictKey; icon: PhosphorIcon }> = [
   { href: "/", key: "nav.explore", icon: Compass },
   { href: "/gallery", key: "nav.gallery", icon: Images },
+  { href: "/game", key: "nav.game", icon: Mountains },
   { href: "/rank", key: "nav.rank", icon: Trophy },
   { href: "/analytics", key: "nav.analytics", icon: ChartBar },
   { href: "/create", key: "nav.create", icon: RocketLaunch },

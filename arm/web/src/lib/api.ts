@@ -1,6 +1,7 @@
 "use client";
 
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { getAddress } from "viem";
 
 /** Base URL: same-origin `/api` in production (nginx → indexer); override for local dev. */
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "/api";
@@ -373,6 +374,46 @@ export type ReplayList = { status: "syncing"; progress: number } | { status: "re
 export const useReplayList = () => useQuery({ queryKey: ["replay"], queryFn: () => get<ReplayList>("/replay"), staleTime: 120_000, retry: 1 });
 export const useReplay = (pool?: string) =>
   useQuery({ queryKey: ["replay", pool], queryFn: () => get<ReplayDetail>(`/replay/${pool}`), enabled: !!pool, staleTime: 120_000, retry: 1 });
+
+// ---------- Sell the Top (indexer/src/game.ts) ----------
+export type GameEvent = { t: number; side: 1 | -1; usdc: number; x: number | null; role: ReplayRole };
+export type GameEntry = { t: number; rank: number; ahead: number; xOpen?: number };
+export type GameToday =
+  | { status: "syncing"; progress: number }
+  | { status: "none" }
+  | {
+      status: "ready"; day: string; n: number; nextAt: number; durMs: number; players: number; avgX: number | null; entry: GameEntry;
+      yesterday: { n: number; symbol: string; token: string; peakX: number; players: number; avgX: number | null } | null;
+    };
+export type GameSession = {
+  id: string; day: string; n: number; startAt: number; serverNow: number; durMs: number; T: number;
+  entry: Required<GameEntry>; pre: GameEvent[]; counted: boolean; ranked: boolean; sold: boolean;
+};
+export type GameTick = { now: number; done: boolean; sold: boolean; from: number; events: GameEvent[] };
+/** Someone else's result for a live day comes masked: no x / timing / peak (they would give the top away). */
+export type GameResult = {
+  id: string; day: string; n: number; live: boolean; up: boolean; held: boolean; T: number; capture: number;
+  x: number | null; soldT: number | null; peak: { x: number; t: number } | null; finalX: number | null;
+  counted: boolean; ranked: boolean; wallet: string | null;
+  others: number; beat: number | null; entry: Required<GameEntry>;
+  reveal: {
+    path: [number, number][]; insidersPnl: number; retailPnl: number;
+    coin: { symbol: string; token: string; pool: string; bornAt: number; nowX: number } | null;
+  } | null;
+};
+export type GameBoard = {
+  day: string; n: number | null; live: boolean; players: number; avgX: number | null;
+  top: { id: string; wallet: string; up: boolean; capture: number; x: number | null; soldT: number | null }[];
+};
+export const gameSignMessage = (wallet: string, day: string, ts: number) => `Arm · Sell the Top\nDay: ${day}\nWallet: ${getAddress(wallet)}\nTime: ${ts}`;
+export const useGameToday = () => useQuery({ queryKey: ["game", "today"], queryFn: () => get<GameToday>("/game/today"), refetchInterval: 60_000, retry: 1 });
+export const useGameBoard = () => useQuery({ queryKey: ["game", "board"], queryFn: () => get<GameBoard>("/game/board"), refetchInterval: 30_000, retry: 1 });
+export const useGamePlay = (id?: string) =>
+  useQuery({ queryKey: ["game", "play", id], queryFn: () => get<GameResult>(`/game/play/${id}`), enabled: !!id, staleTime: 30_000, retry: false });
+export const gameStart = (body: { wallet?: string; ts?: number; sig?: string }) => post<GameSession>("/game/start", body);
+export const gameSession = (id: string) => get<GameSession>(`/game/session/${id}`);
+export const gameTick = (id: string, from: number) => get<GameTick>(`/game/tick/${id}?from=${from}`);
+export const gameSell = (id: string) => post<GameResult>(`/game/sell/${id}`, {});
 
 // ---------- perp radar (indexer/src/perp.ts, Hyperliquid public data) ----------
 export type PerpCoin = {

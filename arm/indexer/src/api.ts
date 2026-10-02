@@ -19,6 +19,7 @@ import { aiArena, aiMarket } from "./ai-arena.js";
 import { scanner } from "./scanner.js";
 import { replayDetail, replayList } from "./replay.js";
 import { perpMarket, perpWhales } from "./perp.js";
+import { gameBoard, gamePlay, gameSell, gameSession, gameStart, gameTick, gameToday } from "./game.js";
 
 export const app = new Hono();
 // paged list endpoints report the full row count in X-Total-Count; expose it so the browser can read it
@@ -538,6 +539,39 @@ app.get("/api/replay/:pool", async (c) => {
   if (!/^0x[0-9a-f]{40}$/.test(pool)) return c.json({ error: "bad pool" }, 400);
   const d = await replayDetail(pool);
   return d ? c.json(d) : c.json({ error: "not found" }, 404);
+});
+
+// Sell the Top (10.2): daily one-sell game on a real Arc launch; the server owns the clock (game.ts).
+const playId = (s: string) => (/^[\w-]{8,16}$/.test(s) ? s : null);
+app.get("/api/game/today", async (c) => c.json(await gameToday()));
+app.get("/api/game/board", async (c) => {
+  const day = c.req.query("day");
+  return c.json(await gameBoard(day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : undefined));
+});
+app.post("/api/game/start", async (c) => {
+  const body = await c.req.json<{ wallet?: string; ts?: number; sig?: string }>().catch(() => ({}));
+  const r = await gameStart(clientIp(c) || "?", body);
+  return "error" in r ? c.json(r, 400) : c.json(r);
+});
+app.get("/api/game/session/:id", async (c) => {
+  const id = playId(c.req.param("id"));
+  const r = id ? await gameSession(id) : null;
+  return r ? c.json(r) : c.json({ error: "not found" }, 404);
+});
+app.get("/api/game/tick/:id", async (c) => {
+  const id = playId(c.req.param("id"));
+  const r = id ? await gameTick(id, Number(c.req.query("from")) || 0) : null;
+  return r ? c.json(r) : c.json({ error: "not found" }, 404);
+});
+app.post("/api/game/sell/:id", async (c) => {
+  const id = playId(c.req.param("id"));
+  const r = id ? await gameSell(id) : null;
+  return r ? c.json(r) : c.json({ error: "not found" }, 404);
+});
+app.get("/api/game/play/:id", async (c) => {
+  const id = playId(c.req.param("id"));
+  const r = id ? await gamePlay(id) : null;
+  return r ? c.json(r) : c.json({ error: "not found" }, 404);
 });
 
 // Perp radar (10.2): Hyperliquid funding / OI dashboard + whale positions and liquidation map.
