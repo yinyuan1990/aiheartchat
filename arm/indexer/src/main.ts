@@ -9,6 +9,8 @@ import { startTelegram } from "./telegram/bot.js";
 import { startBuyback } from "./buyback.js";
 import { startGallery } from "./gallery.js";
 import { startDexSync } from "./dex.js";
+import { startMarketWarmer } from "./markets.js";
+import { warmMarkets } from "./markets.js";
 import { bus } from "./bus.js";
 import { config } from "./config.js";
 import { loadQuotePrices, refreshQuotePrices } from "./quotes.js";
@@ -46,3 +48,7 @@ void startBuyback();
 startGallery();
 // Chain-wide USDC-pair swap tape for the wallet trading card
 void startDexSync();
+// Wallet 交易 tab: keep the EVM 热门 lists cached (GeckoTerminal budget is tiny)
+startMarketWarmer();
+// EVM market lists for the wallet's 交易 tab (GeckoTerminal budget is tight; start warm)
+warmMarkets();

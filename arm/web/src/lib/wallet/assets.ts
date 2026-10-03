@@ -1,10 +1,11 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { erc20Abi, formatUnits, type Address } from "viem";
+import { erc20Abi, formatUnits, getAddress, type Address } from "viem";
 import { API_BASE, useWallet } from "@/lib/api";
 import { useBoatInfo } from "@/lib/boat";
 import { SOL_CHAIN, chainByKey, isSolana, publicClientFor, rpcOf, useNodes, type WalletChain } from "./chains";
+import { useHeldTokens, useMarketPrices } from "./market";
 import { LAMPORTS, WSOL_MINT, getTokenAccounts, solRpc } from "./sol";
 
 export type Asset = {
@@ -34,6 +35,8 @@ export type Asset = {
   solAccountRaw?: bigint;
   /** launched on pump.fun → pump-style detail / trade page */
   pump?: boolean;
+  /** EVM token bought through the 交易 tab → /wallet/market */
+  market?: boolean;
   spark?: number[];
 };
 
@@ -92,7 +95,7 @@ function useSolAssets(owner?: string, enabled = true): { assets: Asset[]; loadin
         id: mint,
         symbol: t?.symbol ?? `${mint.slice(0, 4)}…`,
         name: t?.name ?? "未知代币",
-        logo: mint === USDC_SOL_MINT ? USDC_LOGO : (t?.icon ?? undefined),
+        logo: mint === USDC_SOL_MINT ? USDC_LOGO : iconUrl(t?.icon),
         seed: mint,
         decimals: h.decimals,
         raw: h.raw,
@@ -120,6 +123,19 @@ export function absUrl(u?: string | null): string | undefined {
   if (!u) return undefined;
   if (u.startsWith("/api/") && API_BASE.startsWith("http")) return new URL(API_BASE).origin + u;
   return u;
+}
+
+// keep in sync with the indexer's /api/img host list
+const PROXIED = /(^|\.)(coingecko\.com|geckoterminal\.com|dexscreener\.com|pump\.fun|ipfs\.io|cf-ipfs\.com|dweb\.link|nftstorage\.link|mypinata\.cloud|pinata\.cloud|arweave\.net|irys\.xyz|axiom-cdn\.io|j7tracker\.io|githubusercontent\.com|defined\.fi|jup\.ag)$/i;
+/** Token icons from hosts that hang in mainland China go through the indexer's image relay. */
+export function iconUrl(u?: string | null): string | undefined {
+  if (!u) return undefined;
+  try {
+    const h = new URL(u);
+    return h.protocol === "https:" && PROXIED.test(h.hostname) ? `${API_BASE}/img?u=${encodeURIComponent(u)}` : u;
+  } catch {
+    return absUrl(u);
+  }
 }
 
 const COINGECKO: Record<string, string> = { eth: "ethereum", base: "ethereum", arb: "ethereum", bsc: "binancecoin", polygon: "polygon-ecosystem-token" };
@@ -183,19 +199,24 @@ function useArcAssets(address?: Address, enabled = true): { assets: Asset[]; loa
 
 function useEvmAssets(chain: WalletChain, address?: Address, enabled = true) {
   const prices = useNativePrices();
+  const held = useHeldTokens(chain.key);
   const q = useQuery({
-    queryKey: ["wallet", "evm-balances", chain.key, address],
+    queryKey: ["wallet", "evm-balances", chain.key, address, held.map((t) => t.address).join(",")],
     enabled: enabled && !!address,
     queryFn: async () => {
       const pc = publicClientFor(chain);
-      const [native, ...stables] = await Promise.all([
-        pc.getBalance({ address: address! }),
-        ...chain.stables.map((s) => pc.readContract({ address: s.address, abi: erc20Abi, functionName: "balanceOf", args: [address!] }).catch(() => 0n)),
-      ]);
-      return { native, stables };
+      const bal = (t: Address) => pc.readContract({ address: t, abi: erc20Abi, functionName: "balanceOf", args: [address!] }).catch(() => 0n);
+      const [native, stables, tokens] = await Promise.all([pc.getBalance({ address: address! }), Promise.all(chain.stables.map((s) => bal(s.address))), Promise.all(held.map((t) => bal(t.address as Address)))]);
+      return { native, stables, tokens };
     },
     refetchInterval: 20_000,
   });
+  const owned = held.filter((_, i) => (q.data?.tokens[i] ?? 0n) > 0n);
+  const mp = useMarketPrices(
+    chain.key,
+    owned.map((t) => t.address),
+    enabled,
+  );
   const assets: Asset[] = [];
   if (q.data) {
     const nc = chain.chain.nativeCurrency;
@@ -206,6 +227,14 @@ function useEvmAssets(chain: WalletChain, address?: Address, enabled = true) {
       const raw = q.data!.stables[i];
       const amount = Number(formatUnits(raw, s.decimals));
       assets.push({ id: s.address, symbol: s.symbol, name: s.symbol, logo: s.symbol === "USDC" ? USDC_LOGO : undefined, seed: s.address, decimals: s.decimals, raw, amount, priceUsd: 1, valueUsd: amount, change24h: 0, token: s.address });
+    });
+    held.forEach((t, i) => {
+      const raw = q.data!.tokens[i] ?? 0n;
+      if (raw === 0n) return;
+      const amount = Number(formatUnits(raw, t.decimals));
+      const p = mp.data?.[t.address];
+      const price = p?.priceUsd ?? null;
+      assets.push({ id: t.address, symbol: t.symbol, name: t.name, logo: iconUrl(p?.image ?? t.image), seed: t.address, decimals: t.decimals, raw, amount, priceUsd: price, valueUsd: price != null ? amount * price : null, change24h: p?.change24h ?? null, token: getAddress(t.address), market: true });
     });
   }
   return { assets, loading: q.isLoading, error: q.isError };

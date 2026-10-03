@@ -5,14 +5,14 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatUnits, parseUnits } from "viem";
-import { ArrowSquareOut, CircleNotch, Info, Lightning, ShareNetwork } from "@phosphor-icons/react";
+import { ArrowSquareOut, CircleNotch, Info, Lightning } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import type { Candle as ChartCandle } from "@/components/token/price-chart";
 import { TokenAvatar } from "@/components/shared";
 import { fmtNum, shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { SOL_CHAIN, explorerAddr, explorerToken, explorerTx, rpcOf, useNodes } from "@/lib/wallet/chains";
-import { SOL_LOGO, useAssets } from "@/lib/wallet/assets";
+import { SOL_LOGO, iconUrl, useAssets } from "@/lib/wallet/assets";
 import { copyText, shareText } from "@/lib/wallet/native";
 import { LAMPORTS, TOKEN_2022_PROGRAM, TOKEN_ACCOUNT_RENT, WSOL_MINT, isSolAddress } from "@/lib/wallet/sol";
 import {
@@ -32,12 +32,13 @@ import {
   type SolSwapStep,
 } from "@/lib/wallet/pump";
 import { useVault } from "@/components/wallet/wallet-context";
-import { ActionBar, AboutCard, CoinChart, CoinHero, CoinTabs, CoinTitle, CommentBox, CurveCard, KingBadge, PositionCard, HolderRows, TradeRows, compactUsd, usd } from "@/components/wallet/coin";
-import { BottomSheet, IconButton, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
+import { costBasis, useStar, useViewers } from "@/lib/wallet/positions";
+import { AboutCard, CoinChartPanel, CoinFrame, CoinHeader, CoinTabs, CoinTopBar, CommentBox, CurveCard, HolderRows, KingBadge, MarkerSheet, PositionCard, StatsCard, TradeBar, TradeRows, allInterval, compactUsd, quickAmount, setQuickAmount, usd, useMarkers, type MarkTrade } from "@/components/wallet/coin";
+import { BottomSheet, PrimaryButton, TopBar } from "@/components/wallet/ui";
 
 export default function CoinRoute() {
   return (
-    <Suspense fallback={<WalletFrame>{null}</WalletFrame>}>
+    <Suspense fallback={<CoinFrame>{null}</CoinFrame>}>
       <CoinRouteInner />
     </Suspense>
   );
@@ -47,24 +48,17 @@ function CoinRouteInner() {
   const mint = useSearchParams().get("mint") ?? "";
   if (!isSolAddress(mint)) {
     return (
-      <WalletFrame>
+      <CoinFrame>
         <TopBar back="/wallet/token" title="代币" />
         <div className="flex flex-1 items-center justify-center text-[14px] text-muted-foreground">代币地址不对</div>
-      </WalletFrame>
+      </CoinFrame>
     );
   }
   return <SolCoin mint={mint} />;
 }
 
-const INTERVALS = [
-  { key: "1m", label: "1分" },
-  { key: "5m", label: "5分" },
-  { key: "15m", label: "15分" },
-  { key: "1h", label: "1时" },
-  { key: "4h", label: "4时" },
-  { key: "1d", label: "1天" },
-];
 const VENUE: Record<PumpCoin["venue"], string> = { curve: "pump 曲线", pumpswap: "PumpSwap", raydium: "Raydium" };
+const PUMP_SUPPLY = 1e9;
 
 function SolCoin({ mint }: { mint: string }) {
   const { active, solKeypair } = useVault();
@@ -72,16 +66,21 @@ function SolCoin({ mint }: { mint: string }) {
   const qc = useQueryClient();
   const cq = usePumpCoin(mint);
   const coin = cq.data;
-  const [interval, setInterval_] = useState("5m");
+  const [iv, setIv] = useState("5m");
+  const interval = iv === "all" ? allInterval(coin?.createdAt) : iv;
   const day = usePumpCandles(mint, "5m", 300);
   const candles = usePumpCandles(mint, interval, 300);
   const trades = usePumpTrades(mint);
+  const mine = usePumpTrades(mint, !!me, me);
+  const dev = usePumpTrades(mint, !!coin?.creator, coin?.creator);
   const holders = usePumpHolders(mint);
   const comments = useSolComments(mint);
   const { assets } = useAssets(SOL_CHAIN, me);
+  const viewers = useViewers(`sol:${mint}`);
+  const [starred, toggleStar] = useStar(`sol:${mint}`);
   const sol = assets.find((a) => a.id === "native");
   const held = assets.find((a) => a.mint === mint);
-  const [sheet, setSheet] = useState<"buy" | "sell" | null>(null);
+  const [sheet, setSheet] = useState<{ side: "buy" | "sell"; quick?: boolean } | null>(null);
   const chart = useMemo<ChartCandle[]>(() => candles.data ?? [], [candles.data]);
   const changes = useMemo(() => {
     const c = day.data ?? [];
@@ -92,18 +91,42 @@ function SolCoin({ mint }: { mint: string }) {
       { label: "24小时", value: changeOver(c, 86_400) },
     ];
   }, [day.data]);
+  const top10 = useMemo(() => new Set((holders.data ?? []).filter((h) => !h.isPool).slice(0, 10).map((h) => h.address)), [holders.data]);
+  const markTrades = useMemo<MarkTrade[]>(() => {
+    const all = new Map<string, MarkTrade>();
+    for (const t of [...(trades.data ?? []), ...(dev.data ?? []), ...(mine.data ?? [])]) {
+      all.set(t.sig, {
+        id: t.sig,
+        at: t.at,
+        side: t.side,
+        priceUsd: t.priceUsd,
+        usd: t.usd,
+        who: t.trader,
+        mine: t.trader === me,
+        tag: t.trader === coin?.creator ? "创建者" : top10.has(t.trader) ? "前十持有人" : undefined,
+        href: explorerTx(SOL_CHAIN, t.sig),
+      });
+    }
+    return [...all.values()];
+  }, [trades.data, dev.data, mine.data, me, coin?.creator, top10]);
+  const mk = useMarkers(chart, markTrades);
+  const basis = useMemo(() => costBasis((mine.data ?? []).map((t) => ({ side: t.side, tokens: t.tokens, usd: t.usd, at: t.at }))), [mine.data]);
 
   if (!coin) {
     return (
-      <WalletFrame>
+      <CoinFrame>
         <TopBar back="/wallet/token" title="代币" />
         <div className="flex flex-1 items-center justify-center px-8 text-center text-[14px] text-muted-foreground">{cq.isError ? (cq.error as Error).message || "加载失败" : <CircleNotch size={28} className="animate-spin" />}</div>
-      </WalletFrame>
+      </CoinFrame>
     );
   }
 
   const tokAmount = held?.amount ?? 0;
   const posValue = tokAmount * coin.priceUsd;
+  // full history from pump, so the cost basis is exact unless tokens came in by transfer
+  const cost = basis.qty > 0 ? basis.cost * Math.min(1, tokAmount / basis.qty) : null;
+  const avg = cost != null && tokAmount > 0 ? cost / tokAmount : null;
+  const share = () => void shareText(`${coin.name} ($${coin.symbol}) · https://pump.fun/coin/${mint}`);
   const lines = coin.complete
     ? [`已从联合曲线毕业，现在在 ${VENUE[coin.venue]} 交易，买卖经 Jupiter 聚合路由。`]
     : [
@@ -119,22 +142,35 @@ function SolCoin({ mint }: { mint: string }) {
   ].filter((s): s is string => !!s);
 
   return (
-    <WalletFrame>
-      <TopBar
-        back="/wallet/token"
-        title={<CoinTitle symbol={coin.symbol} name={coin.name} image={coin.image ?? undefined} seed={mint} address={mint} />}
-        right={
-          <IconButton label="分享" onClick={() => void shareText(`${coin.name} ($${coin.symbol}) · https://pump.fun/coin/${mint}`)}>
-            <ShareNetwork size={20} />
-          </IconButton>
-        }
-      />
+    <CoinFrame>
+      <CoinTopBar back="/wallet/token" symbol={coin.symbol} createdAt={coin.createdAt} viewers={viewers} starred={starred} onStar={toggleStar} onShare={share} />
 
       <div className="flex-1 pb-28">
-        <CoinHero mcapUsd={coin.mcapUsd} priceUsd={coin.priceUsd} athMcapUsd={coin.athMcapUsd} changes={changes} badge={coin.live ? <span className="shrink-0 rounded-full bg-down/12 px-2.5 py-1 text-[11px] font-semibold text-down">● 直播中</span> : !coin.complete && coin.kingAt ? <KingBadge /> : undefined} />
-        <CoinChart intervals={INTERVALS} interval={interval} onInterval={setInterval_} candles={chart} loading={candles.isLoading} />
+        <CoinHeader
+          image={coin.image}
+          seed={mint}
+          symbol={coin.symbol}
+          name={coin.name}
+          chain={SOL_CHAIN}
+          address={mint}
+          twitter={coin.socials.twitter}
+          priceUsd={coin.priceUsd}
+          change={changes[3].value ?? changes[2].value}
+          holders={hs?.total}
+          extra={coin.live ? <span className="shrink-0 rounded-full bg-down/12 px-2.5 py-1 text-[11px] font-semibold text-down">● 直播中</span> : !coin.complete && coin.kingAt ? <KingBadge /> : <span className="shrink-0 text-[12px]">{coin.complete ? `已毕业 · ${VENUE[coin.venue]}` : `曲线 ${coin.progress.toFixed(1)}%`}</span>}
+        />
+        <CoinChartPanel alertKey={`sol:${mint}`} candles={chart} loading={candles.isLoading} interval={iv} onInterval={setIv} priceUsd={coin.priceUsd} avg={avg} markers={mk.markers} onMarker={mk.onMarker} />
+        {me && tokAmount > 0 && <PositionCard valueUsd={posValue} costUsd={cost} amount={tokAmount} symbol={coin.symbol} supply={PUMP_SUPPLY} avg={avg} onShare={share} />}
+        <StatsCard
+          changes={changes}
+          stats={[
+            ["市值", compactUsd(coin.mcapUsd)],
+            ["历史最高", coin.athMcapUsd ? compactUsd(Math.max(coin.athMcapUsd, coin.mcapUsd)) : "—"],
+            ["前十持有", hs?.top10Pct != null ? `${hs.top10Pct.toFixed(1)}%` : "—"],
+            ["创建者持有", hs?.devPct != null ? `${hs.devPct.toFixed(2)}%` : "—"],
+          ]}
+        />
         <CurveCard progress={coin.progress} complete={coin.complete} venue={VENUE[coin.venue]} lines={lines} />
-        {me && tokAmount > 0 && <PositionCard amount={fmtNum(tokAmount, 2)} value={`$${posValue.toFixed(2)}`} />}
 
         <CoinTabs
           tabs={[
@@ -161,13 +197,13 @@ function SolCoin({ mint }: { mint: string }) {
               render: () => (
                 <TradeRows
                   loading={trades.isLoading}
-                  items={(trades.data ?? []).map((t) => ({ id: t.sig, side: t.side, who: t.trader, amount: `${fmtNum(t.tokens, 1)} · ◎${t.sol < 0.01 ? t.sol.toFixed(4) : t.sol.toFixed(3)}`, value: compactUsd(t.usd), at: t.at, href: explorerTx(SOL_CHAIN, t.sig) }))}
+                  items={(trades.data ?? []).map((t) => ({ id: t.sig, side: t.side, who: t.trader, mine: t.trader === me, amount: `${fmtNum(t.tokens, 1)} · ◎${t.sol < 0.01 ? t.sol.toFixed(4) : t.sol.toFixed(3)}`, value: compactUsd(t.usd), at: t.at, href: explorerTx(SOL_CHAIN, t.sig) }))}
                 />
               ),
             },
             {
               key: "holders",
-              label: "持有人",
+              label: "持有者",
               count: hs?.total,
               render: () => (
                 <HolderRows
@@ -183,10 +219,54 @@ function SolCoin({ mint }: { mint: string }) {
                 />
               ),
             },
+            {
+              key: "about",
+              label: "简介",
+              render: () => <PumpAbout coin={coin} mint={mint} />,
+            },
           ]}
         />
+      </div>
 
+      <TradeBar
+        symbol={coin.symbol}
+        onBuy={() => setSheet({ side: "buy" })}
+        onSell={() => setSheet({ side: "sell" })}
+        onQuick={() => setSheet({ side: "buy", quick: true })}
+        sellDisabled={!held || held.raw === 0n}
+        extra={!me && <p className="mb-2 text-center text-[12px] text-muted-foreground">当前钱包没有 Solana 地址（私钥导入的钱包），换一个助记词钱包才能买卖</p>}
+      />
+      <MarkerSheet trades={mk.open} onClose={mk.close} />
+
+      <BottomSheet open={sheet !== null} onClose={() => setSheet(null)}>
+        {sheet && me && (
+          <SolTradeSheet
+            key={`${sheet.side}${sheet.quick ? "q" : ""}`}
+            coin={coin}
+            side={sheet.side}
+            quick={!!sheet.quick}
+            onSide={(s) => setSheet({ side: s })}
+            lamports={sol?.raw ?? 0n}
+            tokRaw={held?.raw ?? 0n}
+            decimals={held?.decimals ?? PUMP_DECIMALS}
+            hasAccount={!!held}
+            onDone={() => {
+              setSheet(null);
+              void qc.invalidateQueries({ queryKey: ["wallet"] });
+              void qc.invalidateQueries({ queryKey: ["pump", "trades", mint] });
+              void qc.invalidateQueries({ queryKey: ["pump", "holders", mint] });
+            }}
+          />
+        )}
+      </BottomSheet>
+    </CoinFrame>
+  );
+}
+
+function PumpAbout({ coin, mint }: { coin: PumpCoin; mint: string }) {
+  return (
         <AboutCard
+          flat
           description={coin.description}
           socials={coin.socials}
           creator={{ address: coin.creator, name: coin.creatorName, href: explorerAddr(SOL_CHAIN, coin.creator) }}
@@ -212,36 +292,6 @@ function SolCoin({ mint }: { mint: string }) {
             ],
           ]}
         />
-      </div>
-
-      <ActionBar
-        onBuy={() => setSheet("buy")}
-        onSell={() => setSheet("sell")}
-        sellDisabled={!held || held.raw === 0n}
-        extra={!me && <p className="mb-2 text-center text-[12px] text-muted-foreground">当前钱包没有 Solana 地址（私钥导入的钱包），换一个助记词钱包才能买卖</p>}
-      />
-
-      <BottomSheet open={sheet !== null} onClose={() => setSheet(null)}>
-        {sheet && me && (
-          <SolTradeSheet
-            key={sheet}
-            coin={coin}
-            side={sheet}
-            onSide={setSheet}
-            lamports={sol?.raw ?? 0n}
-            tokRaw={held?.raw ?? 0n}
-            decimals={held?.decimals ?? PUMP_DECIMALS}
-            hasAccount={!!held}
-            onDone={() => {
-              setSheet(null);
-              void qc.invalidateQueries({ queryKey: ["wallet"] });
-              void qc.invalidateQueries({ queryKey: ["pump", "trades", mint] });
-              void qc.invalidateQueries({ queryKey: ["pump", "holders", mint] });
-            }}
-          />
-        )}
-      </BottomSheet>
-    </WalletFrame>
   );
 }
 
@@ -256,11 +306,11 @@ const PRIORITY = [
 const FEE_RESERVE = 3_000_000n;
 const STEP_LABEL: Record<SolSwapStep, string> = { building: "生成交易…", confirming: "等待链上确认…" };
 
-function SolTradeSheet({ coin, side, onSide, lamports, tokRaw, decimals, hasAccount, onDone }: { coin: PumpCoin; side: "buy" | "sell"; onSide: (s: "buy" | "sell") => void; lamports: bigint; tokRaw: bigint; decimals: number; hasAccount: boolean; onDone: () => void }) {
+function SolTradeSheet({ coin, side, quick, onSide, lamports, tokRaw, decimals, hasAccount, onDone }: { coin: PumpCoin; side: "buy" | "sell"; quick: boolean; onSide: (s: "buy" | "sell") => void; lamports: bigint; tokRaw: bigint; decimals: number; hasAccount: boolean; onDone: () => void }) {
   useNodes();
   const { solKeypair } = useVault();
   const buy = side === "buy";
-  const [amount, setAmount] = useState(buy ? "0.1" : "");
+  const [amount, setAmount] = useState(buy ? (quick ? quickAmount("sol", "0.1") : "0.1") : "");
   const [slip, setSlip] = useState<(typeof SLIPS)[number]>(coin.complete ? 5 : 10);
   const [priority, setPriority] = useState<(typeof PRIORITY)[number]["key"]>("high");
   const [step, setStep] = useState<SolSwapStep | null>(null);
@@ -302,6 +352,7 @@ function SolTradeSheet({ coin, side, onSide, lamports, tokRaw, decimals, hasAcco
     if (!view) return;
     setErr("");
     try {
+      if (quick && buy) setQuickAmount("sol", amount);
       const sig = await executeSolSwap(solKeypair(), view, rpcOf(SOL_CHAIN), priority, setStep);
       toast.success(`${buy ? "买入" : "卖出"} ${coin.symbol} 成功`, { action: { label: "查看", onClick: () => window.open(explorerTx(SOL_CHAIN, sig), "_blank") } });
       onDone();
@@ -316,11 +367,12 @@ function SolTradeSheet({ coin, side, onSide, lamports, tokRaw, decimals, hasAcco
     <>
       <div className="grid grid-cols-2 rounded-2xl bg-muted p-1">
         {(["buy", "sell"] as const).map((s) => (
-          <button key={s} type="button" disabled={!!step} onClick={() => onSide(s)} className={cn("h-10 rounded-xl text-[15px] font-semibold transition", side === s ? (s === "buy" ? "bg-up text-white shadow" : "bg-down text-white shadow") : "text-muted-foreground")}>
+          <button key={s} type="button" disabled={!!step} onClick={() => onSide(s)} className={cn("h-10 rounded-xl text-[15px] font-semibold transition", side === s ? (s === "buy" ? "bg-up text-black shadow" : "bg-down text-white shadow") : "text-muted-foreground")}>
             {s === "buy" ? "买入" : "卖出"}
           </button>
         ))}
       </div>
+      {quick && buy && <p className="mt-2 text-center text-[12px] text-up">⚡ 快速买入：金额会记住，作为下次的默认值</p>}
 
       <div className="mt-4 rounded-[20px] bg-muted/60 p-4">
         <div className="flex items-center justify-between text-[12px] text-muted-foreground">
@@ -330,7 +382,7 @@ function SolTradeSheet({ coin, side, onSide, lamports, tokRaw, decimals, hasAcco
         <div className="mt-1 flex items-baseline gap-2">
           <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" className={cn("w-0 flex-1 bg-transparent font-mono text-[32px] font-semibold tracking-tight outline-none", insufficient && amountIn > 0n && "text-down")} />
           <span className="flex items-center gap-1.5 text-[15px] font-semibold">
-            <TokenAvatar symbol={buy ? "SOL" : coin.symbol} seed={buy ? "sol-native" : coin.mint} logo={buy ? SOL_LOGO : (coin.image ?? undefined)} size={22} className="rounded-full" />
+            <TokenAvatar symbol={buy ? "SOL" : coin.symbol} seed={buy ? "sol-native" : coin.mint} logo={buy ? SOL_LOGO : iconUrl(coin.image)} size={22} className="rounded-full" />
             {buy ? "SOL" : coin.symbol}
           </span>
         </div>

@@ -93,7 +93,8 @@ export function TokenAvatar({ logo, symbol, seed, size = 40, fontScale, classNam
         width: size,
         height: size,
         fontSize: size * (fontScale ?? (emoji ? 0.5 : 0.36)),
-        background: showImg ? undefined : `linear-gradient(135deg, hsl(${hue} 70% 45%), hsl(${(hue + 40) % 360} 70% 30%))`,
+        // painted under the image too, so a slow / hanging icon never leaves a blank hole
+        background: `linear-gradient(135deg, hsl(${hue} 70% 45%), hsl(${(hue + 40) % 360} 70% 30%))`,
         boxShadow: "inset 0 1px 0 rgba(255,255,255,.2)",
       }}
     >

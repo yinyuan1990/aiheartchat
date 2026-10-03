@@ -5,7 +5,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { erc20Abi, formatUnits, parseUnits, type Address } from "viem";
-import { ArrowSquareOut, CircleNotch, Info, Lightning, LockSimple, MagnifyingGlass, SealCheck, ShareNetwork, Warning } from "@phosphor-icons/react";
+import { ArrowSquareOut, Check, CircleNotch, Info, Lightning, LockSimple, MagnifyingGlass, SealCheck, Warning } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import type { Candle as ChartCandle } from "@/components/token/price-chart";
 import { TokenAvatar } from "@/components/shared";
@@ -14,15 +14,17 @@ import { fmtNum, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ADDR } from "@/lib/web3";
 import { useBoatInfo } from "@/lib/boat";
-import { SOL_CHAIN, chainByKey, explorerAddr, explorerTx, isSolana, publicClientFor } from "@/lib/wallet/chains";
+import { chainByKey, explorerAddr, explorerTx, publicClientFor } from "@/lib/wallet/chains";
 import { executeTrade, quote, sellableOf, shapeQuote, type Side, type TradeStep } from "@/lib/wallet/arm-trade";
 import { shareText } from "@/lib/wallet/native";
-import { USDC_LOGO, absUrl } from "@/lib/wallet/assets";
+import { USDC_LOGO, absUrl, iconUrl } from "@/lib/wallet/assets";
 import { isSolAddress } from "@/lib/wallet/sol";
 import { changeOver, usePumpList, type PumpTab } from "@/lib/wallet/pump";
 import { useVault } from "@/components/wallet/wallet-context";
-import { AboutCard, ActionBar, CoinChart, CoinHero, CoinTabs, CoinTitle, CommentBox, CurveCard, HolderRows, PositionCard, TradeRows, compactUsd, usd } from "@/components/wallet/coin";
-import { BottomNav, BottomSheet, ChainGlyph, IconButton, Num, Pct, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
+import { AboutCard, CoinChartPanel, CoinFrame, CoinHeader, CoinTabs, CoinTopBar, CommentBox, CurveCard, HolderRows, MarkerSheet, PositionCard, StatsCard, TradeBar, TradeRows, allInterval, compactUsd, quickAmount, setQuickAmount, usd, useMarkers, type MarkTrade } from "@/components/wallet/coin";
+import { costBasis, useStar, useViewers } from "@/lib/wallet/positions";
+import { BottomNav, BottomSheet, ChainGlyph, ChainPill, Num, Pct, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
+import { MARKET_CHAINS, isMarketChain, useMarketList, type MarketChainKey, type MarketTab } from "@/lib/wallet/market";
 
 export default function TokenRoute() {
   return (
@@ -39,50 +41,130 @@ function TokenRouteInner() {
 
 /* ───────────── list ───────────── */
 
-type Market = "arm" | "pump";
+type Market = "arm" | "pump" | MarketChainKey;
 const MARKET_KEY = "arm.wallet.market";
+const MARKETS: { key: Market; chain: string; label: string; sub: string }[] = [
+  { key: "arm", chain: "arc", label: "Arm", sub: "Arc 上的 Arm 发射币" },
+  { key: "pump", chain: "sol", label: "pump", sub: "Solana 上的 pump.fun 币" },
+  ...MARKET_CHAINS.map((k) => ({ key: k, chain: k, label: chainByKey(k).name, sub: "DEX 行情 · KyberSwap 成交" })),
+];
+const isMarket = (m: string | null): m is Market => !!m && MARKETS.some((x) => x.key === m);
+const marketOfChain = (chainKey: string): Market => (chainKey === "sol" ? "pump" : isMarketChain(chainKey) ? chainKey : "arm");
 
-/** "交易" tab: Arm coins on Arc, or pump.fun coins on Solana (defaults to the chain the wallet is on). */
+/** "交易" tab: Arm coins on Arc, pump.fun coins on Solana, or DEX tokens on the EVM chains (defaults to the wallet's chain). */
 function Markets() {
   const { chain } = useVault();
   // rendered client-side only (inside the useSearchParams Suspense boundary), so sessionStorage is safe here
   const [market, setMarket] = useState<Market | null>(() => {
     try {
       const m = sessionStorage.getItem(MARKET_KEY);
-      return m === "arm" || m === "pump" ? m : null;
+      return isMarket(m) ? m : null;
     } catch {
       return null;
     }
   });
-  const cur: Market = market ?? (isSolana(chain) ? "pump" : "arm");
+  const [picker, setPicker] = useState(false);
+  const cur: Market = market ?? marketOfChain(chain.key);
+  const info = MARKETS.find((m) => m.key === cur)!;
   const pick = (m: Market) => {
     setMarket(m);
+    setPicker(false);
     try {
       sessionStorage.setItem(MARKET_KEY, m);
     } catch {}
   };
-  const arc = chainByKey("arc");
-  const toggle = (
-    <div className="flex rounded-full bg-muted p-0.5 text-[12px] font-medium">
-      {(
-        [
-          ["arm", arc, "Arm"],
-          ["pump", SOL_CHAIN, "pump"],
-        ] as const
-      ).map(([k, c, label]) => (
-        <button key={k} type="button" onClick={() => pick(k)} className={cn("flex h-7 items-center gap-1 rounded-full px-2.5 transition", cur === k ? "bg-background shadow-sm" : "text-muted-foreground")}>
-          <ChainGlyph chain={c} size={15} />
-          {label}
-        </button>
-      ))}
-    </div>
-  );
   return (
     <WalletFrame>
-      <TopBar title="交易" right={toggle} />
-      {cur === "pump" ? <PumpList /> : <TokenList />}
+      <TopBar title="交易" right={<ChainPill chain={{ ...chainByKey(info.chain), name: info.label }} onClick={() => setPicker(true)} />} />
+      {cur === "pump" ? <PumpList /> : cur === "arm" ? <TokenList /> : <EvmList key={cur} chain={cur} />}
       <BottomNav />
+      <BottomSheet open={picker} onClose={() => setPicker(false)}>
+        <div className="mb-2 text-[16px] font-semibold">选择市场</div>
+        <ul className="space-y-1">
+          {MARKETS.map((m) => (
+            <li key={m.key}>
+              <button type="button" onClick={() => pick(m.key)} className={cn("flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition active:bg-muted", cur === m.key && "bg-muted")}>
+                <ChainGlyph chain={chainByKey(m.chain)} size={30} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[15px] font-semibold">{m.label}</div>
+                  <div className="truncate text-[12px] text-muted-foreground">{m.sub}</div>
+                </div>
+                {cur === m.key && <Check size={18} weight="bold" className="text-up" />}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </BottomSheet>
     </WalletFrame>
+  );
+}
+
+const EVM_TABS: { key: MarketTab; label: string }[] = [
+  { key: "hot", label: "热门" },
+  { key: "new", label: "新币" },
+  { key: "gainers", label: "涨幅" },
+];
+
+function EvmList({ chain }: { chain: MarketChainKey }) {
+  const [tab, setTab] = useState<MarketTab>("hot");
+  const [q, setQ] = useState("");
+  const [term, setTerm] = useState("");
+  useEffect(() => {
+    const id = setTimeout(() => setTerm(q.trim()), 350);
+    return () => clearTimeout(id);
+  }, [q]);
+  const list = useMarketList(chain, tab, term);
+  const rows = list.data ?? [];
+  const c = chainByKey(chain);
+  return (
+    <>
+      <div className="px-4">
+        <div className="flex h-11 items-center gap-2 rounded-2xl bg-card px-3 ring-1 ring-border/60">
+          <MagnifyingGlass size={18} className="text-muted-foreground" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`搜索 ${c.name} 代币 / 粘贴合约地址`} className="flex-1 bg-transparent text-[15px] outline-none" />
+        </div>
+        {!term && (
+          <div className="mt-3 flex gap-1">
+            {EVM_TABS.map((s) => (
+              <button key={s.key} type="button" onClick={() => setTab(s.key)} className={cn("h-8 rounded-full px-3.5 text-[13px] font-medium transition", tab === s.key ? "bg-foreground text-background" : "text-muted-foreground")}>
+                {s.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <ul className="mt-2 flex-1 divide-y divide-border/50 px-4">
+        {list.isLoading &&
+          [0, 1, 2, 3, 4].map((i) => (
+            <li key={i} className="flex items-center gap-3 py-3">
+              <span className="size-[42px] animate-pulse rounded-full bg-muted" />
+              <span className="h-4 flex-1 animate-pulse rounded bg-muted" />
+            </li>
+          ))}
+        {rows.map((t) => (
+          <li key={t.address}>
+            <Link href={`/wallet/market?chain=${chain}&address=${t.address}`} className="-mx-2 flex items-center gap-3 rounded-2xl px-2 py-3 transition active:bg-muted">
+              <TokenAvatar symbol={t.symbol} seed={t.address} logo={iconUrl(t.image)} size={42} className="rounded-full" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="truncate text-[15px] font-semibold">{t.symbol}</span>
+                  <span className="truncate text-[12px] text-muted-foreground">{t.name}</span>
+                </div>
+                <div className="mt-0.5 truncate text-[12px] text-muted-foreground">
+                  市值 {t.mcapUsd != null ? compactUsd(t.mcapUsd) : "—"} · {tab === "new" && !term && t.createdAt ? timeAgo(t.createdAt) : `成交 ${t.volume24hUsd != null ? compactUsd(t.volume24hUsd) : "—"}`}
+                </div>
+              </div>
+              <div className="text-right">
+                <Num value={t.priceUsd != null ? usd(t.priceUsd) : "—"} className="text-[14px] font-medium" />
+                <div>{t.change24h != null ? <Pct value={t.change24h} className="text-[12px]" /> : <span className="text-[12px] text-muted-foreground">—</span>}</div>
+              </div>
+            </Link>
+          </li>
+        ))}
+        {list.isError && <li className="py-10 text-center text-[13px] text-muted-foreground">行情数据暂时拿不到，稍后再试</li>}
+        {!list.isLoading && !list.isError && rows.length === 0 && <li className="py-10 text-center text-[13px] text-muted-foreground">没有找到</li>}
+      </ul>
+    </>
   );
 }
 
@@ -145,7 +227,7 @@ function PumpList() {
           rows.map((c) => (
             <li key={c.mint}>
               <Link href={`/wallet/coin?mint=${c.mint}`} className="-mx-2 flex items-center gap-3 rounded-2xl px-2 py-3 transition active:bg-muted">
-                <TokenAvatar symbol={c.symbol} seed={c.mint} logo={c.image ?? undefined} size={42} className="rounded-full" />
+                <TokenAvatar symbol={c.symbol} seed={c.mint} logo={iconUrl(c.image)} size={42} className="rounded-full" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <span className="truncate text-[15px] font-semibold">{c.symbol}</span>
@@ -256,13 +338,7 @@ function TokenList() {
 
 /* ───────────── detail ───────────── */
 
-const RANGES = [
-  { key: "1m", label: "1分" },
-  { key: "15m", label: "15分" },
-  { key: "1h", label: "1时" },
-  { key: "4h", label: "4时" },
-  { key: "1d", label: "1天" },
-];
+const ARM_SUPPLY = 1e9;
 
 function useBalances(token?: TokenView, me?: Address) {
   return useQuery({
@@ -286,7 +362,8 @@ function TokenDetail({ address }: { address: string }) {
   const qc = useQueryClient();
   const tq = useToken(address);
   const token = tq.data;
-  const [range, setRange] = useState("15m");
+  const [iv, setIv] = useState("15m");
+  const range = iv === "all" ? allInterval(token ? new Date(token.launchTs).getTime() : null) : iv;
   const candles = useCandles(address, range);
   const minute = useCandles(address, "1m");
   const quarter = useCandles(address, "15m");
@@ -295,9 +372,28 @@ function TokenDetail({ address }: { address: string }) {
   const comments = useComments(address, me);
   const bal = useBalances(token, me);
   const wallet = useWallet(me);
-  const [sheet, setSheet] = useState<Side | null>(null);
+  const [sheet, setSheet] = useState<{ side: Side; quick?: boolean } | null>(null);
+  const viewers = useViewers(`arc:${address}`);
+  const [starred, toggleStar] = useStar(`arc:${address}`);
   const chart = useMemo<ChartCandle[]>(() => (candles.data ?? []).map((c) => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close, volume: Number(c.volumeUsdc) / 1e6 })), [candles.data]);
   const arc = chainByKey("arc");
+  const mine = useMemo(() => (wallet.data?.trades ?? []).filter((t) => t.token.toLowerCase() === address), [wallet.data?.trades, address]);
+  const top10 = useMemo(() => new Set((holders.data ?? []).slice(0, 10).map((h) => h.wallet.toLowerCase())), [holders.data]);
+  const markTrades = useMemo<MarkTrade[]>(() => {
+    const deployer = token?.deployer.toLowerCase();
+    const me_ = me?.toLowerCase();
+    const all = new Map<string, MarkTrade>();
+    const add = (hash: string, time: string, side: "buy" | "sell", who: string, usdc: string, tokens: string) => {
+      const u = Number(usdc) / 1e6;
+      const n = Number(tokens) / 1e18;
+      const w = who.toLowerCase();
+      all.set(hash, { id: hash, at: new Date(time).getTime(), side, priceUsd: n > 0 ? u / n : 0, usd: u, who, mine: w === me_, tag: w === deployer ? "创建者" : top10.has(w) ? "前十持有人" : undefined, href: explorerTx(arc, hash) });
+    };
+    for (const t of trades.data?.items ?? []) add(t.hash, t.time, t.side, t.wallet, t.usdc, t.tokens);
+    for (const t of mine) if (me) add(t.hash, t.time, t.side, me, t.usdc, t.tokens);
+    return [...all.values()];
+  }, [trades.data, mine, me, token?.deployer, top10, arc]);
+  const mk = useMarkers(chart, markTrades);
   const changes = useMemo(() => {
     const m = minute.data ?? [];
     const q = quarter.data ?? [];
@@ -311,48 +407,53 @@ function TokenDetail({ address }: { address: string }) {
 
   if (!token) {
     return (
-      <WalletFrame>
+      <CoinFrame>
         <TopBar back="/wallet/token" title="代币" />
         <div className="flex flex-1 items-center justify-center text-[14px] text-muted-foreground">{tq.isError ? "没找到这个代币" : <CircleNotch size={28} className="animate-spin" />}</div>
-      </WalletFrame>
+      </CoinFrame>
     );
   }
 
   const tokBal = bal.data ? Number(formatUnits(bal.data.tok, 18)) : 0;
   const posValue = tokBal * token.price;
-  const mine = (wallet.data?.trades ?? []).filter((t) => t.token.toLowerCase() === address);
-  const netCost = mine.reduce((s, t) => s + (t.side === "buy" ? 1 : -1) * (Number(t.usdc) / 1e6), 0);
-  const pnl = posValue - netCost;
+  const basis = costBasis(mine.map((t) => ({ side: t.side, tokens: Number(t.tokens) / 1e18, usd: Number(t.usdc) / 1e6, at: new Date(t.time).getTime() })));
+  const cost = basis.qty > 0 ? basis.cost * Math.min(1, tokBal / basis.qty) : null;
+  const avg = cost != null && tokBal > 0 ? cost / tokBal : null;
   const taxed = isTaxToken(token);
   const progress = progressOf(token);
   const paired = Number(token.pairedUsdc) / 1e6;
   const threshold = Number(token.graduationThreshold) / 1e6;
+  const share = () => void shareText(`${token.name} ($${token.symbol}) · https://arm.yyheart.com/token/${token.address}`);
 
   return (
-    <WalletFrame>
-      <TopBar
-        back="/wallet/token"
-        title={<CoinTitle symbol={token.symbol} name={token.name} image={absUrl(token.logo)} seed={token.address} address={token.address} />}
-        right={
-          <IconButton label="分享" onClick={() => void shareText(`${token.name} ($${token.symbol}) · https://arm.yyheart.com/token/${token.address}`)}>
-            <ShareNetwork size={20} />
-          </IconButton>
-        }
-      />
+    <CoinFrame>
+      <CoinTopBar back="/wallet/token" symbol={token.symbol} createdAt={new Date(token.launchTs).getTime()} viewers={viewers} starred={starred} onStar={toggleStar} onShare={share} />
 
       <div className="flex-1 pb-28">
-        <CoinHero
-          mcapUsd={token.mcapUsd}
+        <CoinHeader
+          image={absUrl(token.logo)}
+          seed={token.address}
+          symbol={token.symbol}
+          name={token.name}
+          chain={arc}
+          address={token.address}
+          twitter={token.socials.twitter}
           priceUsd={token.price}
-          changes={changes}
-          badge={
-            <span className="flex shrink-0 items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[12px] font-medium">
-              <ChainGlyph chain={arc} size={16} />
-              Arc
-            </span>
-          }
+          change={changes[3].value}
+          holders={token.holders}
+          extra={<span className="shrink-0 text-[12px]">{token.graduated ? "已毕业 · Uniswap V4" : `毕业进度 ${progress.toFixed(1)}%`}</span>}
         />
-        <CoinChart intervals={RANGES} interval={range} onInterval={setRange} candles={chart} loading={candles.isLoading} />
+        <CoinChartPanel alertKey={`arc:${address}`} candles={chart} loading={candles.isLoading} interval={iv} onInterval={setIv} priceUsd={token.price} avg={avg} markers={mk.markers} onMarker={mk.onMarker} />
+        {tokBal > 0 && <PositionCard valueUsd={posValue} costUsd={cost} amount={tokBal} symbol={token.symbol} supply={ARM_SUPPLY} avg={avg} onShare={share} />}
+        <StatsCard
+          changes={changes}
+          stats={[
+            ["市值", compactUsd(token.mcapUsd)],
+            ["24h 成交", compactUsd(Number(token.volume24hUsdc ?? 0) / 1e6)],
+            ["持有者", fmtNum(token.holders ?? 0)],
+            ["买卖税", taxed ? `${token.buyTaxBps / 100}% / ${token.sellTaxBps / 100}%` : "0%"],
+          ]}
+        />
         <CurveCard
           progress={progress}
           complete={token.graduated}
@@ -364,7 +465,7 @@ function TokenDetail({ address }: { address: string }) {
           }
         />
 
-        <section className="mx-4 mt-3 rounded-[22px] bg-card p-4 ring-1 ring-border/60">
+        <section className="mx-4 mt-3 rounded-[22px] bg-card p-4 ring-1 ring-border">
           <div className="flex items-center justify-between">
             <span className="text-[14px] font-semibold">合约检查</span>
             <span className="flex items-center gap-1 text-[12px] text-up">
@@ -378,8 +479,6 @@ function TokenDetail({ address }: { address: string }) {
             <Chip ok={!taxed} label={taxed ? `买税 ${token.buyTaxBps / 100}% · 卖税 ${token.sellTaxBps / 100}%` : "买卖税 0%"} />
           </div>
         </section>
-
-        {tokBal > 0 && <PositionCard amount={fmtNum(tokBal, 2)} value={`$${posValue.toFixed(2)}`} pnl={mine.length ? pnl : null} />}
 
         <CoinTabs
           tabs={[
@@ -409,13 +508,13 @@ function TokenDetail({ address }: { address: string }) {
               render: () => (
                 <TradeRows
                   loading={trades.isLoading}
-                  items={(trades.data?.items ?? []).map((t) => ({ id: t.hash, side: t.side, who: t.wallet, amount: fmtNum(Number(t.tokens) / 1e18, 1), value: `$${(Number(t.usdc) / 1e6).toFixed(2)}`, at: new Date(t.time).getTime(), href: explorerTx(arc, t.hash) }))}
+                  items={(trades.data?.items ?? []).map((t) => ({ id: t.hash, side: t.side, who: t.wallet, mine: !!me && t.wallet.toLowerCase() === me.toLowerCase(), amount: fmtNum(Number(t.tokens) / 1e18, 1), value: `$${(Number(t.usdc) / 1e6).toFixed(2)}`, at: new Date(t.time).getTime(), href: explorerTx(arc, t.hash) }))}
                 />
               ),
             },
             {
               key: "holders",
-              label: "持有人",
+              label: "持有者",
               count: token.holders,
               render: () => (
                 <HolderRows
@@ -430,31 +529,38 @@ function TokenDetail({ address }: { address: string }) {
                 />
               ),
             },
-          ]}
-        />
-
-        <AboutCard
-          description={token.description}
-          socials={token.socials}
-          creator={{ address: token.deployer, href: explorerAddr(arc, token.deployer) }}
-          createdAt={new Date(token.launchTs).getTime()}
-          rows={[
-            [
-              "网页版",
-              <a key="web" href={`https://arm.yyheart.com/token/${token.address}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5">
-                arm.yyheart.com <ArrowSquareOut size={12} />
-              </a>,
-            ],
+            {
+              key: "about",
+              label: "简介",
+              render: () => (
+                <AboutCard
+                  flat
+                  description={token.description}
+                  socials={token.socials}
+                  creator={{ address: token.deployer, href: explorerAddr(arc, token.deployer) }}
+                  createdAt={new Date(token.launchTs).getTime()}
+                  rows={[
+                    [
+                      "网页版",
+                      <a key="web" href={`https://arm.yyheart.com/token/${token.address}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5">
+                        arm.yyheart.com <ArrowSquareOut size={12} />
+                      </a>,
+                    ],
+                  ]}
+                />
+              ),
+            },
           ]}
         />
       </div>
 
-      <ActionBar onBuy={() => setSheet("buy")} onSell={() => setSheet("sell")} sellDisabled={!bal.data || bal.data.tok === 0n} />
+      <TradeBar symbol={token.symbol} onBuy={() => setSheet({ side: "buy" })} onSell={() => setSheet({ side: "sell" })} onQuick={() => setSheet({ side: "buy", quick: true })} sellDisabled={!bal.data || bal.data.tok === 0n} />
+      <MarkerSheet trades={mk.open} onClose={mk.close} />
 
       <BottomSheet open={sheet !== null} onClose={() => setSheet(null)}>
-        {sheet && <TradeSheet key={sheet} token={token} side={sheet} onSide={setSheet} usdc={bal.data?.usdc ?? 0n} tok={bal.data?.tok ?? 0n} onDone={() => setSheet(null)} />}
+        {sheet && <TradeSheet key={`${sheet.side}${sheet.quick ? "q" : ""}`} token={token} side={sheet.side} quick={!!sheet.quick} onSide={(s) => setSheet({ side: s })} usdc={bal.data?.usdc ?? 0n} tok={bal.data?.tok ?? 0n} onDone={() => setSheet(null)} />}
       </BottomSheet>
-    </WalletFrame>
+    </CoinFrame>
   );
 }
 
@@ -471,11 +577,11 @@ const SLIPS = [2, 5, 10] as const;
 const QUICK_BUY = ["1", "5", "10", "50"];
 const STEP_LABEL: Record<TradeStep, string> = { approving: "首次交易，正在授权…", swapping: "签名发送中…", confirming: "等待链上确认…" };
 
-function TradeSheet({ token, side, onSide, usdc, tok, onDone }: { token: TokenView; side: Side; onSide: (s: Side) => void; usdc: bigint; tok: bigint; onDone: () => void }) {
+function TradeSheet({ token, side, quick, onSide, usdc, tok, onDone }: { token: TokenView; side: Side; quick: boolean; onSide: (s: Side) => void; usdc: bigint; tok: bigint; onDone: () => void }) {
   const { account } = useVault();
   const qc = useQueryClient();
   const buy = side === "buy";
-  const [amount, setAmount] = useState(buy ? "5" : "");
+  const [amount, setAmount] = useState(buy ? (quick ? quickAmount("arc", "5") : "5") : "");
   const [slip, setSlip] = useState<(typeof SLIPS)[number]>(token.buyTaxBps || token.sellTaxBps ? 5 : 2);
   const [step, setStep] = useState<TradeStep | null>(null);
   const [err, setErr] = useState("");
@@ -506,6 +612,7 @@ function TradeSheet({ token, side, onSide, usdc, tok, onDone }: { token: TokenVi
     if (!view) return;
     setErr("");
     try {
+      if (quick && buy) setQuickAmount("arc", amount);
       const rc = await executeTrade(account(), token, side, amountIn, view.minOut, setStep);
       toast.success(`${buy ? "买入" : "卖出"} ${token.symbol} 成功`, { action: { label: "查看", onClick: () => window.open(explorerTx(chainByKey("arc"), rc.transactionHash), "_blank") } });
       void qc.invalidateQueries({ queryKey: ["wallet"] });

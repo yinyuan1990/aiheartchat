@@ -45,6 +45,8 @@
   *{outline-color:rgb(var(--wc-ring) / calc(var(--wa-ring, 1) * 0.5))}
   :where(.divide-border\/50>:not(:last-child)){border-color:rgb(var(--wc-border) / calc(var(--wa-border, 1) * 0.5))}
   :where(.divide-border\/60>:not(:last-child)){border-color:rgb(var(--wc-border) / calc(var(--wa-border, 1) * 0.6))}
+  .border-black\/50{border-color:rgb(0 0 0 / 0.5)}
+  .border-black\/60{border-color:rgb(0 0 0 / 0.6)}
   .border-border\/60{border-color:rgb(var(--wc-border) / calc(var(--wa-border, 1) * 0.6))}
   .border-down\/30{border-color:rgb(var(--wc-down) / calc(var(--wa-down, 1) * 0.3))}
   .border-down\/40{border-color:rgb(var(--wc-down) / calc(var(--wa-down, 1) * 0.4))}
@@ -63,6 +65,7 @@
   .bg-background\/80{background-color:rgb(var(--wc-background) / calc(var(--wa-background, 1) * 0.8))}
   .bg-background\/85{background-color:rgb(var(--wc-background) / calc(var(--wa-background, 1) * 0.85))}
   .bg-background\/90{background-color:rgb(var(--wc-background) / calc(var(--wa-background, 1) * 0.9))}
+  .bg-background\/95{background-color:rgb(var(--wc-background) / calc(var(--wa-background, 1) * 0.95))}
   .bg-black\/10{background-color:rgb(0 0 0 / 0.1)}
   .bg-black\/25{background-color:rgb(0 0 0 / 0.25)}
   .bg-black\/35{background-color:rgb(0 0 0 / 0.35)}
@@ -136,6 +139,7 @@
   .ring-primary\/30{--tw-ring-color:rgb(var(--wc-primary) / calc(var(--wa-primary, 1) * 0.3))}
   .ring-up\/30{--tw-ring-color:rgb(var(--wc-up) / calc(var(--wa-up, 1) * 0.3))}
   .ring-up\/40{--tw-ring-color:rgb(var(--wc-up) / calc(var(--wa-up, 1) * 0.4))}
+  .ring-up\/70{--tw-ring-color:rgb(var(--wc-up) / calc(var(--wa-up, 1) * 0.7))}
   @media (hover:hover){.group-hover\:border-primary\/60:is(:where(.group):hover *){border-color:rgb(var(--wc-primary) / calc(var(--wa-primary, 1) * 0.6))}}
   @media (hover:hover){.group-hover\:bg-foreground\/\[0\.08\]:is(:where(.group):hover *){background-color:rgb(var(--wc-foreground) / calc(var(--wa-foreground, 1) * 0.08))}}
   .placeholder\:text-muted-foreground\/40::placeholder{color:rgb(var(--wc-muted-foreground) / calc(var(--wa-muted-foreground, 1) * 0.4))}

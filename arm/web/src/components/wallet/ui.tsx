@@ -15,9 +15,9 @@ export function useQueryParam(key: string): string | null {
 }
 
 /** Phone-width column; on desktop the wallet stays a centred phone-sized card. */
-export function WalletFrame({ children, className }: { children: React.ReactNode; className?: string }) {
+export function WalletFrame({ children, className, theme, style }: { children: React.ReactNode; className?: string; /** force a theme for this page ("terminal" = black) */ theme?: "terminal"; style?: React.CSSProperties }) {
   return (
-    <div className="min-h-dvh bg-background sm:bg-muted/60 sm:py-6">
+    <div data-theme={theme} style={style} className="min-h-dvh bg-background text-foreground sm:bg-muted/60 sm:py-6">
       <div className={cn("relative mx-auto flex min-h-dvh w-full max-w-[430px] flex-col bg-background sm:min-h-[860px] sm:overflow-hidden sm:rounded-[32px] sm:shadow-xl", className)}>
         {children}
       </div>

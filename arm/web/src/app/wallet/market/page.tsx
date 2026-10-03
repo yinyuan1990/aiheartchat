@@ -1,0 +1,375 @@
+"use client";
+
+import Link from "next/link";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { erc20Abi, formatUnits, parseUnits, type Address } from "viem";
+import { ArrowSquareOut, CircleNotch, Info, Lightning } from "@phosphor-icons/react";
+import { toast } from "sonner";
+import { TokenAvatar } from "@/components/shared";
+import { fmtNum, shortAddr } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import { chainByKey, explorerToken, explorerTx, publicClientFor, type WalletChain } from "@/lib/wallet/chains";
+import { copyText, shareText } from "@/lib/wallet/native";
+import { iconUrl } from "@/lib/wallet/assets";
+import { NATIVE, executeKyberSwap, isMarketChain, kyberDexes, kyberImpact, kyberQuote, MarketQuoteError, rememberToken, useMarketCandles, useMarketToken, useMarketTrades, type MarketStep, type MarketToken } from "@/lib/wallet/market";
+import { costBasis, logFill, useFills, useStar, useViewers } from "@/lib/wallet/positions";
+import { useVault } from "@/components/wallet/wallet-context";
+import { AboutCard, CoinChartPanel, CoinFrame, CoinHeader, CoinTabs, CoinTopBar, HolderRows, MarkerSheet, PositionCard, StatsCard, TradeBar, TradeRows, allInterval, compactUsd, quickAmount, setQuickAmount, usd, useMarkers, type MarkTrade } from "@/components/wallet/coin";
+import { BottomSheet, PrimaryButton, TopBar } from "@/components/wallet/ui";
+
+export default function MarketRoute() {
+  return (
+    <Suspense fallback={<CoinFrame>{null}</CoinFrame>}>
+      <MarketRouteInner />
+    </Suspense>
+  );
+}
+
+function MarketRouteInner() {
+  const sp = useSearchParams();
+  const chain = sp.get("chain") ?? "";
+  const address = (sp.get("address") ?? "").toLowerCase();
+  if (!isMarketChain(chain) || !/^0x[0-9a-f]{40}$/.test(address)) {
+    return (
+      <CoinFrame>
+        <TopBar back="/wallet/token" title="代币" />
+        <div className="flex flex-1 items-center justify-center text-[14px] text-muted-foreground">链或代币地址不对</div>
+      </CoinFrame>
+    );
+  }
+  return <EvmCoin chainKey={chain} address={address} />;
+}
+
+/** what a buy keeps back for gas, per chain (native units) */
+const GAS_RESERVE: Record<string, string> = { eth: "0.004", base: "0.0003", arb: "0.0003", bsc: "0.002", polygon: "0.5" };
+const QUICK: Record<string, string[]> = { eth: ["0.005", "0.01", "0.05", "0.1"], base: ["0.002", "0.005", "0.01", "0.05"], arb: ["0.002", "0.005", "0.01", "0.05"], bsc: ["0.01", "0.05", "0.1", "0.5"], polygon: ["5", "10", "50", "100"] };
+
+function useBalances(chain: WalletChain, token: string, me?: string) {
+  return useQuery({
+    queryKey: ["wallet", "mkt-balances", chain.key, token, me],
+    enabled: !!me,
+    refetchInterval: 10_000,
+    queryFn: async () => {
+      const pc = publicClientFor(chain);
+      const t = token as Address;
+      const [native, bal, decimals, supply] = await Promise.all([
+        pc.getBalance({ address: me as Address }),
+        pc.readContract({ address: t, abi: erc20Abi, functionName: "balanceOf", args: [me as Address] }),
+        pc.readContract({ address: t, abi: erc20Abi, functionName: "decimals" }),
+        pc.readContract({ address: t, abi: erc20Abi, functionName: "totalSupply" }).catch(() => 0n),
+      ]);
+      return { native, bal, decimals, supply };
+    },
+  });
+}
+
+function EvmCoin({ chainKey, address }: { chainKey: string; address: string }) {
+  const chain = chainByKey(chainKey);
+  const { active } = useVault();
+  const me = active?.address;
+  const tq = useMarketToken(chainKey, address);
+  const t = tq.data;
+  const [iv, setIv] = useState("15m");
+  const interval = iv === "all" ? allInterval(t?.pairCreatedAt) : iv;
+  const candles = useMarketCandles(chainKey, t?.pool, interval, address);
+  const trades = useMarketTrades(chainKey, t?.pool, address);
+  const bal = useBalances(chain, address, me);
+  const fills = useFills(chainKey, address, me);
+  const viewers = useViewers(`${chainKey}:${address}`);
+  const [starred, toggleStar] = useStar(`${chainKey}:${address}`);
+  const [sheet, setSheet] = useState<{ side: "buy" | "sell"; quick?: boolean } | null>(null);
+
+  const chart = candles.data ?? [];
+  const markTrades = useMemo<MarkTrade[]>(() => {
+    const mine = me?.toLowerCase();
+    const feed = (trades.data ?? []).map((x) => ({ id: x.hash, at: x.at, side: x.side, priceUsd: x.priceUsd, usd: x.usd, who: x.trader, mine: x.trader.toLowerCase() === mine, href: explorerTx(chain, x.hash) }));
+    const seen = new Set(feed.map((x) => x.id));
+    const local = fills.filter((f) => f.hash && !seen.has(f.hash) && f.tokens > 0).map((f) => ({ id: f.hash!, at: f.at, side: f.side, priceUsd: f.usd / f.tokens, usd: f.usd, who: me ?? "me", mine: true, href: explorerTx(chain, f.hash!) }));
+    return [...feed, ...local];
+  }, [trades.data, fills, me, chain]);
+  const mk = useMarkers(chart, markTrades);
+
+  if (!t) {
+    return (
+      <CoinFrame>
+        <TopBar back="/wallet/token" title="代币" />
+        <div className="flex flex-1 items-center justify-center px-8 text-center text-[14px] text-muted-foreground">{tq.isError ? (tq.error as Error).message || "加载失败" : <CircleNotch size={28} className="animate-spin" />}</div>
+      </CoinFrame>
+    );
+  }
+
+  const decimals = bal.data?.decimals ?? 18;
+  const amount = bal.data ? Number(formatUnits(bal.data.bal, decimals)) : 0;
+  const supply = bal.data?.supply ? Number(formatUnits(bal.data.supply, decimals)) : null;
+  const price = t.priceUsd ?? chart.at(-1)?.close ?? null;
+  const basis = costBasis(fills);
+  // the log only knows trades made here; if the wallet holds more than that, the cost basis is incomplete
+  const knownCost = basis.qty > 0 && amount <= basis.qty * 1.02 ? basis.cost * Math.min(1, amount / basis.qty) : null;
+  const share = () => void shareText(`${t.name} ($${t.symbol}) · ${chain.name} · https://dexscreener.com/${chainKey === "polygon" ? "polygon" : chainKey === "arb" ? "arbitrum" : chainKey === "eth" ? "ethereum" : chainKey}/${t.pool}`);
+
+  return (
+    <CoinFrame>
+      <CoinTopBar back="/wallet/token" symbol={t.symbol} createdAt={t.pairCreatedAt} viewers={viewers} starred={starred} onStar={toggleStar} onShare={share} />
+      <div className="flex-1 pb-28">
+        <CoinHeader image={t.image} seed={address} symbol={t.symbol} name={t.name} chain={chain} address={address} twitter={t.socials.twitter} priceUsd={price} change={t.changes.h24} holders={t.holders} extra={<span className="truncate text-[12px]">{t.dex}{t.dexLabel ? ` ${t.dexLabel}` : ""} · {t.symbol}/{t.quote.symbol}</span>} />
+        <CoinChartPanel alertKey={`${chainKey}:${address}`} candles={chart} loading={candles.isLoading} interval={iv} onInterval={setIv} priceUsd={price} avg={knownCost != null && amount > 0 ? knownCost / amount : null} markers={mk.markers} onMarker={mk.onMarker} />
+        {me && amount > 0 && price != null && <PositionCard valueUsd={amount * price} costUsd={knownCost} amount={amount} symbol={t.symbol} supply={supply} avg={knownCost != null ? knownCost / amount : null} onShare={share} />}
+        <StatsCard
+          changes={[
+            { label: "5分钟", value: t.changes.m5 },
+            { label: "1小时", value: t.changes.h1 },
+            { label: "6小时", value: t.changes.h6 },
+            { label: "24小时", value: t.changes.h24 },
+          ]}
+          stats={[
+            ["市值", t.mcapUsd != null ? compactUsd(t.mcapUsd) : "—"],
+            ["流动性", t.liquidityUsd != null ? compactUsd(t.liquidityUsd) : "—"],
+            ["24h 成交", t.volume.h24 != null ? compactUsd(t.volume.h24) : "—"],
+            ["24h 买 / 卖", t.txns24h ? `${fmtNum(t.txns24h.buys)} / ${fmtNum(t.txns24h.sells)}` : "—"],
+          ]}
+        />
+        <CoinTabs
+          tabs={[
+            {
+              key: "trades",
+              label: "成交",
+              render: () => (
+                <TradeRows
+                  loading={trades.isLoading}
+                  note={trades.isError ? "成交数据暂时拿不到" : undefined}
+                  items={(trades.data ?? []).map((x) => ({ id: x.hash + x.at, side: x.side, who: x.trader, mine: x.trader.toLowerCase() === me?.toLowerCase(), amount: fmtNum(x.tokens, 1), value: compactUsd(x.usd), at: x.at, href: explorerTx(chain, x.hash) }))}
+                />
+              ),
+            },
+            {
+              key: "holders",
+              label: "持有者",
+              count: t.holders ?? undefined,
+              render: () => (
+                <HolderRows
+                  items={[]}
+                  summary={[t.holders != null ? `持有者 ${fmtNum(t.holders)}` : null, t.top10Pct != null ? `前十 ${t.top10Pct.toFixed(1)}%` : null].filter((s): s is string => !!s)}
+                  empty={
+                    <p className="py-6 text-center text-[13px] text-muted-foreground">
+                      {chain.name} 上的持有人明细暂时拿不到，
+                      <a href={`${explorerToken(chain, address)}#balances`} target="_blank" rel="noreferrer" className="text-foreground underline">
+                        去浏览器查看
+                      </a>
+                    </p>
+                  }
+                />
+              ),
+            },
+            {
+              key: "about",
+              label: "简介",
+              render: () => (
+                <AboutCard
+                  flat
+                  description={t.description}
+                  socials={t.socials}
+                  createdAt={t.pairCreatedAt ?? undefined}
+                  rows={[
+                    [
+                      "合约",
+                      <button key="ca" type="button" className="font-mono" onClick={async () => (await copyText(address)) && toast.success("合约地址已复制")}>
+                        {shortAddr(address, 6, 6)}
+                      </button>,
+                    ],
+                    ["交易池", `${t.dex}${t.dexLabel ? ` ${t.dexLabel}` : ""} · ${t.symbol}/${t.quote.symbol}`],
+                    ["全部发行量", supply ? fmtNum(supply, 0) : "—"],
+                    [
+                      "浏览器",
+                      <a key="ex" href={explorerToken(chain, address)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5">
+                        {chain.explorer.replace(/^https:\/\//, "")} <ArrowSquareOut size={12} />
+                      </a>,
+                    ],
+                  ]}
+                />
+              ),
+            },
+          ]}
+        />
+      </div>
+
+      <TradeBar symbol={t.symbol} onBuy={() => setSheet({ side: "buy" })} onSell={() => setSheet({ side: "sell" })} onQuick={() => setSheet({ side: "buy", quick: true })} sellDisabled={!bal.data || bal.data.bal === 0n} extra={!me && <p className="mb-2 text-center text-[12px] text-muted-foreground">解锁钱包后才能买卖</p>} />
+      <MarkerSheet trades={mk.open} onClose={mk.close} />
+      <BottomSheet open={sheet !== null} onClose={() => setSheet(null)}>
+        {sheet && me && (
+          <EvmTradeSheet
+            key={`${sheet.side}${sheet.quick ? "q" : ""}`}
+            chain={chain}
+            token={t}
+            side={sheet.side}
+            quick={!!sheet.quick}
+            onSide={(s) => setSheet({ side: s })}
+            native={bal.data?.native ?? 0n}
+            tokRaw={bal.data?.bal ?? 0n}
+            decimals={decimals}
+            onDone={() => setSheet(null)}
+          />
+        )}
+      </BottomSheet>
+    </CoinFrame>
+  );
+}
+
+const SLIPS = [1, 3, 5, 10] as const;
+const STEP_LABEL: Record<MarketStep, string> = { approving: "首次卖出，正在授权…", building: "生成交易…", swapping: "签名发送中…", confirming: "等待链上确认…" };
+
+function EvmTradeSheet({ chain, token, side, quick, onSide, native, tokRaw, decimals, onDone }: { chain: WalletChain; token: MarketToken; side: "buy" | "sell"; quick: boolean; onSide: (s: "buy" | "sell") => void; native: bigint; tokRaw: bigint; decimals: number; onDone: () => void }) {
+  const { account, active } = useVault();
+  const qc = useQueryClient();
+  const buy = side === "buy";
+  const nc = chain.chain.nativeCurrency;
+  const presets = QUICK[chain.key] ?? QUICK.eth;
+  const [amount, setAmount] = useState(buy ? (quick ? quickAmount(chain.key, presets[1]) : presets[1]) : "");
+  const [slip, setSlip] = useState<(typeof SLIPS)[number]>(5);
+  const [step, setStep] = useState<MarketStep | null>(null);
+  const [err, setErr] = useState("");
+
+  let amountIn = 0n;
+  try {
+    amountIn = amount && Number(amount) > 0 ? parseUnits(amount, buy ? nc.decimals : decimals) : 0n;
+  } catch {
+    amountIn = 0n;
+  }
+  const [debounced, setDebounced] = useState(0n);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(amountIn), 300);
+    return () => clearTimeout(id);
+  }, [amountIn]);
+
+  const [tin, tout] = buy ? [NATIVE, token.address] : [token.address, NATIVE];
+  const q = useQuery({
+    queryKey: ["mkt", "quote", chain.key, tin, tout, debounced.toString()],
+    enabled: debounced > 0n,
+    refetchInterval: 10_000,
+    retry: false,
+    queryFn: () => kyberQuote(chain.key, tin, tout, debounced),
+  });
+  const view = q.data && debounced === amountIn ? q.data : null;
+  const reserve = parseUnits(GAS_RESERVE[chain.key] ?? "0.001", nc.decimals);
+  const insufficient = buy ? amountIn + reserve > native : amountIn > tokRaw;
+  const maxBuy = native > reserve ? native - reserve : 0n;
+
+  const outDec = buy ? decimals : nc.decimals;
+  const outSym = buy ? token.symbol : nc.symbol;
+  const out = view ? BigInt(view.routeSummary.amountOut) : null;
+  const minOut = out != null ? (out * BigInt(10_000 - slip * 100)) / 10_000n : null;
+  const impact = view ? kyberImpact(view) : null;
+
+  const go = async () => {
+    if (!view || !active) return;
+    setErr("");
+    try {
+      if (quick && buy) setQuickAmount(chain.key, amount);
+      const hash = await executeKyberSwap(account(), chain, view, slip * 100, setStep);
+      const tokens = Number(formatUnits(buy ? BigInt(view.routeSummary.amountOut) : amountIn, decimals));
+      const usdValue = Number(buy ? view.routeSummary.amountInUsd : view.routeSummary.amountOutUsd);
+      logFill(chain.key, token.address, active.address, { side, tokens, usd: usdValue, at: Date.now(), hash });
+      rememberToken(chain.key, { address: token.address, symbol: token.symbol, name: token.name, image: token.image, decimals });
+      toast.success(`${buy ? "买入" : "卖出"} ${token.symbol} 成功`, { action: { label: "查看", onClick: () => window.open(explorerTx(chain, hash), "_blank") } });
+      void qc.invalidateQueries({ queryKey: ["wallet"] });
+      void qc.invalidateQueries({ queryKey: ["mkt", chain.key, "trades"] });
+      onDone();
+    } catch (e) {
+      setErr(((e as { shortMessage?: string }).shortMessage ?? (e as Error).message ?? "交易失败").split("\n")[0]);
+    } finally {
+      setStep(null);
+    }
+  };
+
+  return (
+    <>
+      <div className="grid grid-cols-2 rounded-2xl bg-muted p-1">
+        {(["buy", "sell"] as const).map((s) => (
+          <button key={s} type="button" disabled={!!step} onClick={() => onSide(s)} className={cn("h-10 rounded-xl text-[15px] font-semibold transition", side === s ? (s === "buy" ? "bg-up text-black shadow" : "bg-down text-white shadow") : "text-muted-foreground")}>
+            {s === "buy" ? "买入" : "卖出"}
+          </button>
+        ))}
+      </div>
+      {quick && buy && <p className="mt-2 text-center text-[12px] text-up">⚡ 快速买入：确认后直接成交，金额会记住作为下次的默认值</p>}
+
+      <div className="mt-4 rounded-[20px] bg-muted/60 p-4">
+        <div className="flex items-center justify-between text-[12px] text-muted-foreground">
+          <span>{buy ? "支付" : "卖出数量"}</span>
+          <span className="font-mono">余额 {buy ? `${Number(formatUnits(native, nc.decimals)).toFixed(4)} ${nc.symbol}` : `${fmtNum(Number(formatUnits(tokRaw, decimals)), 2)} ${token.symbol}`}</span>
+        </div>
+        <div className="mt-1 flex items-baseline gap-2">
+          <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" className={cn("w-0 flex-1 bg-transparent font-mono text-[32px] font-semibold tracking-tight outline-none", insufficient && amountIn > 0n && "text-down")} />
+          <span className="flex items-center gap-1.5 text-[15px] font-semibold">
+            <TokenAvatar symbol={buy ? nc.symbol : token.symbol} seed={buy ? `${chain.key}-native` : token.address} logo={buy ? undefined : iconUrl(token.image)} size={22} className="rounded-full" />
+            {buy ? nc.symbol : token.symbol}
+          </span>
+        </div>
+        <div className="text-[12px] text-muted-foreground">{view ? `≈ ${usd(Number(view.routeSummary.amountInUsd))}` : " "}</div>
+        <div className="mt-3 grid grid-cols-5 gap-2">
+          {(buy
+            ? [...presets.map((v) => ({ v, l: v })), { v: formatUnits(maxBuy, nc.decimals), l: "最大" }]
+            : [10, 25, 50, 75, 100].map((p) => ({ v: formatUnits((tokRaw * BigInt(p)) / 100n, decimals), l: p === 100 ? "全部" : `${p}%` }))
+          ).map(({ v, l }) => (
+            <button key={l} type="button" onClick={() => setAmount(v)} className={cn("h-9 rounded-xl text-[13px] font-semibold transition active:scale-95", amount === v ? "bg-foreground text-background" : "bg-card ring-1 ring-border")}>
+              {l}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <dl className="mt-3 space-y-2 px-1 text-[13px]">
+        <div className="flex justify-between">
+          <dt className="text-muted-foreground">预计得到</dt>
+          <dd className="font-mono font-semibold">{out != null ? `${fmtNum(Number(formatUnits(out, outDec)), buy ? 2 : 5)} ${outSym}` : q.isFetching ? "报价中…" : "—"}</dd>
+        </div>
+        <div className="flex justify-between">
+          <dt className="text-muted-foreground">最少得到</dt>
+          <dd className="font-mono">{minOut != null ? `${fmtNum(Number(formatUnits(minOut, outDec)), buy ? 2 : 5)} ${outSym}` : "—"}</dd>
+        </div>
+        <div className="flex justify-between">
+          <dt className="text-muted-foreground">价格影响（含池费）</dt>
+          <dd className={cn("font-mono", impact != null && impact > 5 ? "text-down" : "")}>{impact != null ? `${impact.toFixed(2)}%` : "—"}</dd>
+        </div>
+        <div className="flex justify-between">
+          <dt className="text-muted-foreground">路线</dt>
+          <dd className="truncate pl-4 text-right">{view ? kyberDexes(view) : "—"}</dd>
+        </div>
+        <div className="flex items-center justify-between">
+          <dt className="flex items-center gap-1 text-muted-foreground">
+            滑点
+            <Info size={13} />
+          </dt>
+          <dd className="flex gap-1">
+            {SLIPS.map((s) => (
+              <button key={s} type="button" onClick={() => setSlip(s)} className={cn("h-7 rounded-lg px-2 font-mono text-[12px]", slip === s ? "bg-foreground text-background" : "bg-muted text-muted-foreground")}>
+                {s}%
+              </button>
+            ))}
+          </dd>
+        </div>
+        <div className="flex justify-between">
+          <dt className="text-muted-foreground">网络费</dt>
+          <dd className="font-mono text-[12px] text-muted-foreground">{view?.routeSummary.gasUsd ? `≈ ${usd(Number(view.routeSummary.gasUsd))}` : "—"}{!buy ? " · 首次卖出要先授权" : ""}</dd>
+        </div>
+      </dl>
+
+      {q.isError && <p className="mt-2 text-[12px] text-down">{q.error instanceof MarketQuoteError ? q.error.message : "报价失败，稍后再试"}</p>}
+      {err && <p className="mt-2 text-[12px] break-words text-down">{err}</p>}
+
+      {insufficient && amountIn > 0n ? (
+        <Link href="/wallet/receive" className="mt-4 flex h-14 w-full items-center justify-center rounded-2xl bg-muted text-[16px] font-semibold">
+          {buy ? `${nc.symbol} 不够（要留网络费），去充值` : "余额不足"}
+        </Link>
+      ) : (
+        <PrimaryButton tone={buy ? "up" : "down"} className={cn("mt-4", buy && "text-black")} disabled={!view || !!step} onClick={go}>
+          <span className="flex items-center justify-center gap-1.5">
+            {step ? <CircleNotch size={18} className="animate-spin" /> : <Lightning size={18} weight="fill" />}
+            {step ? STEP_LABEL[step] : buy ? `买入 ${token.symbol}` : `卖出 ${token.symbol}`}
+          </span>
+        </PrimaryButton>
+      )}
+      <p className="mt-2 text-center text-[11px] text-muted-foreground">经 KyberSwap 聚合路由，在你的钱包里签名，不经过平台托管，平台不收手续费</p>
+    </>
+  );
+}

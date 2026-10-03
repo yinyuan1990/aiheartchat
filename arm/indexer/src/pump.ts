@@ -217,12 +217,14 @@ export async function pumpCoin(mint: string): Promise<PumpCoin> {
 
 export type PumpTrade = { sig: string; at: number; side: "buy" | "sell"; trader: string; tokens: number; sol: number; usd: number; priceUsd: number; venue: string };
 
-/** swap-api keeps the full history; the frontend-api feed only covers a recent window (empty for quiet coins). */
-export async function pumpTrades(mint: string, limit = 50): Promise<PumpTrade[]> {
+/** swap-api keeps the full history; the frontend-api feed only covers a recent window (empty for quiet coins).
+ *  `user` narrows it to one wallet (my trades for the cost basis, the creator's for chart bubbles). */
+export async function pumpTrades(mint: string, limit = 50, user?: string): Promise<PumpTrade[]> {
   const n = Math.max(1, Math.min(100, limit | 0));
-  return cached(`trades:${mint}:${n}`, 4_000, async () => {
+  const who = user && isMint(user) ? user : "";
+  return cached(`trades:${mint}:${n}:${who}`, who ? 10_000 : 4_000, async () => {
     type T = { tx: string; timestamp: string; type: "buy" | "sell"; userAddress: string; program: string; priceUsd: string; amountUsd: string; amountSol: string; baseAmount: string };
-    const j = await getJson<{ trades: T[] }>(`${SWAP}/v2/coins/${mint}/trades?limit=${n}`);
+    const j = await getJson<{ trades: T[] }>(`${SWAP}/v2/coins/${mint}/trades?limit=${n}${who ? `&userAddress=${who}` : ""}`);
     return j.trades.map((t) => ({
       sig: t.tx,
       at: Date.parse(t.timestamp),

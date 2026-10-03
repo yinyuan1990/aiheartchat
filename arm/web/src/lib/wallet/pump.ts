@@ -50,8 +50,9 @@ export const usePumpList = (tab: PumpTab, q: string) =>
 export const usePumpCoin = (mint: string) =>
   useQuery({ queryKey: ["pump", "coin", mint], queryFn: () => get<PumpCoin>(`/pump/coin/${mint}`), refetchInterval: 8_000, retry: (n, e) => (e as { status?: number }).status !== 404 && n < 2 });
 
-export const usePumpTrades = (mint: string, enabled = true) =>
-  useQuery({ queryKey: ["pump", "trades", mint], enabled, queryFn: () => get<PumpTrade[]>(`/pump/coin/${mint}/trades?limit=50`), refetchInterval: 5_000 });
+/** `user`: only that wallet's trades (full history, newest 100) — mine for the cost basis, the creator's for bubbles. */
+export const usePumpTrades = (mint: string, enabled = true, user?: string) =>
+  useQuery({ queryKey: ["pump", "trades", mint, user ?? ""], enabled, queryFn: () => get<PumpTrade[]>(`/pump/coin/${mint}/trades?limit=100${user ? `&user=${user}` : ""}`), refetchInterval: user ? 20_000 : 5_000 });
 
 export const usePumpCandles = (mint: string, interval: string, limit = 300) =>
   useQuery({ queryKey: ["pump", "candles", mint, interval, limit], queryFn: () => get<PumpCandle[]>(`/pump/coin/${mint}/candles?interval=${interval}&limit=${limit}`), refetchInterval: interval === "1m" ? 10_000 : 20_000 });

@@ -24,6 +24,7 @@ import { gameBoard, gamePlay, gameSell, gameSession, gameStart, gameTick, gameTo
 import { boatBoard, boatInfo, boatLogin, boatMe, boatRunEnd, boatRunStart, boatWithdraw } from "./boat.js";
 import { addSolComment, jupQuote, jupSwap, solComments, solRelay, solTokens } from "./solana.js";
 import { isMint, pumpCandles, pumpCoin, pumpHolders, pumpList, pumpTrades } from "./pump.js";
+import { isEvmAddr, isMarketChain, kyberBuild, kyberQuote, marketCandles, marketList, marketPrices, marketSearch, marketToken, marketTrades } from "./markets.js";
 
 export const app = new Hono();
 // paged list endpoints report the full row count in X-Total-Count; expose it so the browser can read it
@@ -643,7 +644,7 @@ app.get("/api/pump/coin/:mint", async (c) => {
 app.get("/api/pump/coin/:mint/trades", async (c) => {
   const mint = c.req.param("mint");
   if (!isMint(mint)) return c.json({ error: "bad mint" }, 400);
-  const r = await pumpRoute(() => pumpTrades(mint, Number(c.req.query("limit") ?? 50)));
+  const r = await pumpRoute(() => pumpTrades(mint, Number(c.req.query("limit") ?? 50), c.req.query("user")));
   return r.ok ? c.json(r.v) : c.json({ error: r.error }, r.status);
 });
 app.get("/api/pump/coin/:mint/candles", async (c) => {
@@ -657,6 +658,93 @@ app.get("/api/pump/coin/:mint/holders", async (c) => {
   if (!isMint(mint)) return c.json({ error: "bad mint" }, 400);
   const r = await pumpRoute(() => pumpHolders(mint));
   return r.ok ? c.json(r.v) : c.json({ error: r.error }, r.status);
+});
+
+// Token icons for the wallet: CoinGecko / GeckoTerminal / IPFS hosts hang from mainland China, so the wallet loads them
+// through here. Known image hosts only; small ones stay in memory for a day.
+const IMG_HOSTS = /(^|\.)(coingecko\.com|geckoterminal\.com|dexscreener\.com|pump\.fun|ipfs\.io|cf-ipfs\.com|dweb\.link|nftstorage\.link|mypinata\.cloud|pinata\.cloud|arweave\.net|irys\.xyz|axiom-cdn\.io|j7tracker\.io|githubusercontent\.com|defined\.fi|jup\.ag)$/i;
+const imgCache = new Map<string, { at: number; type: string; body: ArrayBuffer }>();
+app.get("/api/img", async (c) => {
+  let u: URL;
+  try {
+    u = new URL(c.req.query("u") ?? "");
+  } catch {
+    return c.json({ error: "bad url" }, 400);
+  }
+  if (u.protocol !== "https:" || !IMG_HOSTS.test(u.hostname)) return c.json({ error: "host not allowed" }, 400);
+  const key = u.toString();
+  const send = (e: { type: string; body: ArrayBuffer }) => new Response(e.body, { headers: { "content-type": e.type, "cache-control": "public, max-age=86400" } });
+  const hit = imgCache.get(key);
+  if (hit && Date.now() - hit.at < 86_400_000) return send(hit);
+  try {
+    const r = await fetch(key, { signal: AbortSignal.timeout(10_000), headers: { accept: "image/*" } });
+    const type = r.headers.get("content-type") ?? "";
+    if (!r.ok || !/^image\//.test(type)) return c.json({ error: `upstream ${r.status}` }, 502);
+    const body = await r.arrayBuffer();
+    if (body.byteLength > 3_000_000) return c.json({ error: "too large" }, 502);
+    const e = { at: Date.now(), type, body };
+    if (body.byteLength <= 400_000) {
+      imgCache.set(key, e);
+      if (imgCache.size > 600) imgCache.delete(imgCache.keys().next().value!);
+    }
+    return send(e);
+  } catch {
+    return c.json({ error: "fetch failed" }, 502);
+  }
+});
+
+// "N 人在看" on the wallet coin page: each open page pings every 20 s with a random session id; count the last 60 s
+const viewers = new Map<string, Map<string, number>>();
+app.post("/api/view", async (c) => {
+  const b = (await c.req.json().catch(() => ({}))) as { key?: string; id?: string };
+  if (typeof b.key !== "string" || !/^[a-z]{2,8}:[0-9A-Za-z]{20,64}$/.test(b.key) || typeof b.id !== "string" || !/^[0-9a-z]{8,32}$/.test(b.id)) return c.json({ error: "bad request" }, 400);
+  const now = Date.now();
+  let m = viewers.get(b.key);
+  if (!m) {
+    if (viewers.size > 50_000) for (const [k, v] of viewers) if ([...v.values()].every((t) => now - t > 60_000)) viewers.delete(k);
+    viewers.set(b.key, (m = new Map()));
+  }
+  m.set(b.id, now);
+  for (const [id, t] of m) if (now - t > 60_000) m.delete(id);
+  return c.json({ count: m.size });
+});
+
+// EVM token markets for the wallet (markets.ts): GeckoTerminal lists / candles / trades, DexScreener details, Kyber routes
+const mktRoute = <T>(load: () => Promise<T>) => load().then((v) => ({ ok: true as const, v })).catch((e: { status?: number; message?: string }) => ({ ok: false as const, status: (e.status === 404 ? 404 : 502) as 404 | 502, error: e.message ?? "upstream error" }));
+app.use("/api/mkt/:chain/*", async (c, next) => (isMarketChain(c.req.param("chain")) ? next() : c.json({ error: "unknown chain" }, 400)));
+app.get("/api/mkt/:chain/coins", async (c) => {
+  const chain = c.req.param("chain");
+  const q = c.req.query("q") ?? "";
+  const r = await mktRoute(() => (q.trim() ? marketSearch(chain, q) : marketList(chain, c.req.query("tab") ?? "hot")));
+  return r.ok ? c.json(r.v) : c.json({ error: r.error }, r.status);
+});
+app.get("/api/mkt/:chain/token/:addr", async (c) => {
+  const addr = c.req.param("addr");
+  if (!isEvmAddr(addr)) return c.json({ error: "bad address" }, 400);
+  const r = await mktRoute(() => marketToken(c.req.param("chain"), addr));
+  return r.ok ? c.json(r.v) : c.json({ error: r.error }, r.status);
+});
+app.get("/api/mkt/:chain/candles", async (c) => {
+  const pool = c.req.query("pool") ?? "";
+  if (!isEvmAddr(pool) && !/^0x[0-9a-fA-F]{64}$/.test(pool)) return c.json({ error: "bad pool" }, 400);
+  const r = await mktRoute(() => marketCandles(c.req.param("chain"), pool, c.req.query("interval") ?? "5m", c.req.query("token")));
+  return r.ok ? c.json(r.v) : c.json({ error: r.error }, r.status);
+});
+app.get("/api/mkt/:chain/trades", async (c) => {
+  const pool = c.req.query("pool") ?? "";
+  const token = c.req.query("token") ?? "";
+  if ((!isEvmAddr(pool) && !/^0x[0-9a-fA-F]{64}$/.test(pool)) || !isEvmAddr(token)) return c.json({ error: "bad pool / token" }, 400);
+  const r = await mktRoute(() => marketTrades(c.req.param("chain"), pool, token));
+  return r.ok ? c.json(r.v) : c.json({ error: r.error }, r.status);
+});
+app.get("/api/mkt/:chain/prices", async (c) => c.json(await marketPrices(c.req.param("chain"), (c.req.query("addrs") ?? "").split(","))));
+app.get("/api/mkt/:chain/quote", async (c) => {
+  const r = await kyberQuote(c.req.param("chain"), c.req.query());
+  return c.json(r.json as object, r.status as 200);
+});
+app.post("/api/mkt/:chain/build", async (c) => {
+  const r = await kyberBuild(c.req.param("chain"), await c.req.json().catch(() => null));
+  return c.json(r.json as object, r.status as 200);
 });
 
 // Perp radar (10.2): Hyperliquid funding / OI dashboard + whale positions and liquidation map.
