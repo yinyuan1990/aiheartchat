@@ -25,6 +25,7 @@ import { boatBoard, boatInfo, boatLogin, boatMe, boatRunEnd, boatRunStart, boatW
 import { addSolComment, jupQuote, jupSwap, solComments, solRelay, solTokens } from "./solana.js";
 import { isAvatarAddress, walletAvatar } from "./avatars.js";
 import { claimOf, verifyTransfer } from "./verify.js";
+import { tronRelay } from "./tron.js";
 import { calloutCaller, calloutCallers, calloutFeed, pinCaller } from "./callouts.js";
 import { isMint, pumpCandles, pumpCoin, pumpHolders, pumpList, pumpTrades } from "./pump.js";
 import { isEvmAddr, isMarketChain, kyberBuild, kyberQuote, marketCandles, marketList, marketPrices, marketSearch, marketToken, marketTrades } from "./markets.js";
@@ -711,6 +712,14 @@ app.get("/api/img", async (c) => {
   } catch {
     return c.json({ error: "fetch failed" }, 502);
   }
+});
+
+// TRON relay for the wallet (tron.ts): allow-listed reads + broadcasthex of transactions signed in the wallet
+app.all("/api/trx/*", async (c) => {
+  const path = c.req.path.replace(/^\/api\/trx\//, "");
+  const body = c.req.method === "POST" ? await c.req.json().catch(() => ({})) : undefined;
+  const r = await tronRelay(path, c.req.method, body, clientIp(c) || "?");
+  return c.json(r.json as object, r.status as 200);
 });
 
 // 心之音 chat transfer cards: is this transaction really `amount` of `token` from → to? (verify.ts)

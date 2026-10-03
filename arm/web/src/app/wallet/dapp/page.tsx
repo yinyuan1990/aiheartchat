@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { WalletDot } from "@/components/shared";
 import { shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { SOL_CHAIN, WALLET_CHAINS, chainById, chainByKey, isSolana } from "@/lib/wallet/chains";
+import { SOL_CHAIN, WALLET_CHAINS, chainById, chainByKey, isSolana, isTron } from "@/lib/wallet/chains";
 import { hasFeature, nativeBridge } from "@/lib/wallet/native";
 import { ackOrigin, clearRecents, hostOf, isAcked, isTrusted, originOf, revokePerm, revokeSolPerm, setLaunchChain, useDappStore } from "@/lib/wallet/dapp-store";
 import { catalogFor, isListed, useDappCatalog, type DappItem } from "@/lib/wallet/dapp-catalog";
@@ -208,7 +208,7 @@ function Discover({ onOpen }: { onOpen: (url: string, chainId?: number) => void 
   const catalog = useDappCatalog();
   const [chainKey, setChainKey] = useState<string | null>(null);
   const [catId, setCatId] = useState<string | null>(null);
-  const key = chainKey ?? chain.key;
+  const key = chainKey ?? (isTron(chain) ? "arc" : chain.key);
   const cats = useMemo(() => catalogFor(catalog, key), [catalog, key]);
   const cat = cats.find((c) => c.id === catId) ?? cats[0];
   const target = chainByKey(key);
@@ -220,7 +220,7 @@ function Discover({ onOpen }: { onOpen: (url: string, chainId?: number) => void 
         常用 DApp
       </div>
       <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
-        {WALLET_CHAINS.map((c) => (
+        {WALLET_CHAINS.filter((c) => !isTron(c)).map((c) => (
           <button
             key={c.key}
             type="button"

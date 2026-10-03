@@ -10,7 +10,7 @@ import { TokenAvatar, WalletDot } from "@/components/shared";
 import { useWallet } from "@/lib/api";
 import { fmtSmall, shortAddr, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { WALLET_CHAINS, explorerAddr, explorerTx, isSolana, probeChainNode, probeNode, publicClientFor, rpcOf, useNodes, type WalletChain } from "@/lib/wallet/chains";
+import { WALLET_CHAINS, explorerAddr, explorerTx, isEvm, isSolana, isTron, probeChainNode, probeNode, publicClientFor, rpcOf, useNodes, type WalletChain } from "@/lib/wallet/chains";
 import { absUrl, useAssets, type Asset } from "@/lib/wallet/assets";
 import { copyText } from "@/lib/wallet/native";
 import { useVault } from "@/components/wallet/wallet-context";
@@ -217,7 +217,7 @@ export default function WalletHome() {
                 <span className="min-w-0 flex-1 text-left">
                   <span className="block truncate text-[15px] font-semibold">{w.name}</span>
                   <span className="block font-mono text-[12px] text-muted-foreground">
-                    {isSolana(chain) ? (w.sol ? shortAddr(w.sol, 6, 4) : "无 Solana 账户") : shortAddr(w.address, 6, 4)} · {w.kind === "mnemonic" ? "助记词" : "私钥"}
+                    {isSolana(chain) ? (w.sol ? shortAddr(w.sol, 6, 4) : "无 Solana 账户") : isTron(chain) ? (w.trx ? shortAddr(w.trx, 6, 4) : "解锁后显示") : shortAddr(w.address, 6, 4)} · {w.kind === "mnemonic" ? "助记词" : "私钥"}
                   </span>
                 </span>
                 {w.id === active?.id && <CheckCircle size={22} weight="fill" />}
@@ -237,7 +237,7 @@ export default function WalletHome() {
         </div>
       </BottomSheet>
 
-      {!isSolana(chain) && <AddTokenSheet chain={chain} open={sheet === "add"} onClose={() => setSheet(null)} known={assets.flatMap((a) => (a.token ? [a.token] : []))} />}
+      {!isSolana(chain) && <AddTokenSheet chain={chain} open={sheet === "add"} onClose={() => setSheet(null)} known={assets.flatMap((a) => (a.token ? [a.token] : a.trc20 ? [a.trc20] : []))} />}
     </WalletFrame>
   );
 }
@@ -254,7 +254,7 @@ function NetStatus({ chain }: { chain: WalletChain }) {
     queryKey: ["wallet", "net-status", chain.key, rpcOf(chain)],
     // gas price first: it opens the connection, so the probe measures a round trip rather than DNS + TLS setup
     queryFn: async () => {
-      if (isSolana(chain)) {
+      if (!isEvm(chain)) {
         await probeChainNode(chain, rpcOf(chain));
         const probe = await probeChainNode(chain, rpcOf(chain));
         return { ms: probe.error ? null : probe.ms, gas: null };

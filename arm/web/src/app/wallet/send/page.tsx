@@ -9,16 +9,18 @@ import { toast } from "sonner";
 import { TokenAvatar, WalletDot } from "@/components/shared";
 import { shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { SOL_CHAIN, WALLET_CHAINS, chainById, explorerTx, isSolana, publicClientFor, rpcOf } from "@/lib/wallet/chains";
+import { SOL_CHAIN, TRON_CHAIN, WALLET_CHAINS, chainById, explorerTx, isSolana, isTron, publicClientFor, rpcOf } from "@/lib/wallet/chains";
+import { isTronAddress } from "@/lib/wallet/tron";
 import { hasFeature, reportResult, returnsToApp, scanQr } from "@/lib/wallet/native";
 import { transferMessage } from "@/lib/wallet/payee";
 import { parseScanned } from "@/lib/wallet/scan";
-import { isSolEntry, pushRecent, useAddressBook } from "@/lib/wallet/address-book";
+import { familyOf, pushRecent, useAddressBook } from "@/lib/wallet/address-book";
 import { useAssets, type Asset } from "@/lib/wallet/assets";
 import { isSolAddress } from "@/lib/wallet/sol";
 import { useVault } from "@/components/wallet/wallet-context";
 import { BookPicker, Result, Row, useSendLink, type Sent } from "@/components/wallet/send-parts";
 import { SolSend } from "@/components/wallet/sol-send";
+import { TronSend } from "@/components/wallet/tron-send";
 import { BottomSheet, ChainGlyph, ChainPill, GhostButton, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
 
 const SPEEDS = [
@@ -81,12 +83,13 @@ function LinkedSend() {
   // "转账" from an address-book entry: open the chain family the address belongs to
   useEffect(() => {
     if (!wantedTo || wantedChain) return;
-    const want = isSolAddress(wantedTo) ? "sol" : isAddress(wantedTo) ? "evm" : null;
-    if (!want || (want === "sol") === isSolana(chain)) return;
-    const t = setTimeout(() => setChain(want === "sol" ? SOL_CHAIN.key : "arc"), 0);
+    const want = isTronAddress(wantedTo) ? "trx" : isSolAddress(wantedTo) ? "sol" : isAddress(wantedTo) ? "evm" : null;
+    const have = isSolana(chain) ? "sol" : isTron(chain) ? "trx" : "evm";
+    if (!want || want === have) return;
+    const t = setTimeout(() => setChain(want === "sol" ? SOL_CHAIN.key : want === "trx" ? TRON_CHAIN.key : "arc"), 0);
     return () => clearTimeout(t);
   }, [wantedTo, wantedChain, chain, setChain]);
-  return isSolana(chain) ? <SolSend /> : <EvmSend />;
+  return isSolana(chain) ? <SolSend /> : isTron(chain) ? <TronSend /> : <EvmSend />;
 }
 
 function EvmSend() {
@@ -108,7 +111,7 @@ function EvmSend() {
   const [sheet, setSheet] = useState<null | "asset" | "confirm" | "book" | "gas">(null);
   const [sent, setSent] = useState<Sent | null>(null);
   const fullBook = useAddressBook();
-  const book = { contacts: fullBook.contacts.filter((c) => !isSolEntry(c.address)), recent: fullBook.recent.filter((a) => !isSolEntry(a)) };
+  const book = { contacts: fullBook.contacts.filter((c) => familyOf(c.address) === "evm"), recent: fullBook.recent.filter((a) => familyOf(a) === "evm") };
   const recent = book.recent;
   const canScan = useSyncExternalStore(noSubscribe, () => hasFeature("scan"), () => false);
   // coin / amount from a scanned EIP-681 link, applied once that chain's asset list is in

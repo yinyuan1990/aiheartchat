@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 
 /** 链上钱包支持的链（和 Arm 钱包的 WALLET_CHAINS key 一致） */
-export const CARD_CHAINS = ['arc', 'eth', 'bsc', 'base', 'arb', 'polygon', 'sol'] as const;
+export const CARD_CHAINS = ['arc', 'eth', 'bsc', 'base', 'arb', 'polygon', 'sol', 'trx'] as const;
 export const isCardChain = (c: string) => (CARD_CHAINS as readonly string[]).includes(c);
 
 export const cleanText = (s: unknown, max: number) => String(s ?? '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, max);

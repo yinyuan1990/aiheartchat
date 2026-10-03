@@ -13,8 +13,9 @@ import {
   type Unlocked,
   type WalletMeta,
 } from "@/lib/wallet/vault";
-import { chainByKey, isSolana, type WalletChain } from "@/lib/wallet/chains";
+import { chainByKey, isSolana, isTron, type WalletChain } from "@/lib/wallet/chains";
 import { solAddressOf, solKeypairOf, type SolKeypair } from "@/lib/wallet/sol";
+import { tronAddressOf, tronKeyOf, type TronKey } from "@/lib/wallet/tron";
 
 type Status = "loading" | "empty" | "locked" | "unlocked";
 
@@ -37,6 +38,8 @@ type Ctx = {
   account: () => ReturnType<typeof accountOf>;
   /** Solana signer of the active wallet; throws while locked or for private-key wallets. */
   solKeypair: () => SolKeypair;
+  /** TRON signer of the active wallet; throws while locked. */
+  tronKey: () => TronKey;
   secretOf: (id: string) => Secret | null;
 };
 
@@ -91,12 +94,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const unlock = useCallback(async (password: string) => {
     const r = await unlockVault(password);
     unlocked.current = r.unlocked;
-    // vaults from before Solana support: derive each mnemonic wallet's Solana address once and keep it in the metadata
+    // vaults from before Solana / TRON support: derive the missing addresses once and keep them in the metadata
     let list = r.wallets;
-    if (list.some((w) => w.kind === "mnemonic" && !w.sol)) {
+    if (list.some((w) => (w.kind === "mnemonic" && !w.sol) || !w.trx)) {
       list = list.map((w) => {
         const s = r.unlocked.plain.secrets[w.id];
-        return w.sol || !s ? w : { ...w, sol: solAddressOf(s) ?? undefined };
+        return !s ? w : { ...w, sol: w.sol ?? solAddressOf(s) ?? undefined, trx: w.trx ?? tronAddressOf(s) };
       });
       await saveMeta(r.unlocked, list, r.active).catch(() => {});
     }
@@ -168,7 +171,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       switchTo,
       rename,
       remove,
-      address: active ? (isSolana(chainByKey(chainKey)) ? active.sol : active.address) : undefined,
+      address: active ? (isSolana(chainByKey(chainKey)) ? active.sol : isTron(chainByKey(chainKey)) ? active.trx : active.address) : undefined,
       account: () => {
         const s = active && unlocked.current?.plain.secrets[active.id];
         if (!s) throw new Error("locked");
@@ -180,6 +183,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const kp = solKeypairOf(s);
         if (!kp) throw new Error("私钥导入的钱包没有 Solana 账户，请用助记词钱包");
         return kp;
+      },
+      tronKey: () => {
+        const s = active && unlocked.current?.plain.secrets[active.id];
+        if (!s) throw new Error("locked");
+        return tronKeyOf(s);
       },
       secretOf: (id) => unlocked.current?.plain.secrets[id] ?? null,
     };

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ArrowsClockwise, CheckCircle, Circle, Lightning, Plus, ShieldWarning, Trash } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { WALLET_CHAINS, addNode, chainByKey, isCustomNode, isSolana, nodeLabel, nodesOf, probeChainNode, removeNode, rpcOf, selectNode, useNodes, type NodeProbe, type WalletChain } from "@/lib/wallet/chains";
+import { WALLET_CHAINS, addNode, chainByKey, isCustomNode, isEvm, isSolana, isTron, nodeLabel, nodesOf, probeChainNode, removeNode, rpcOf, selectNode, useNodes, type NodeProbe, type WalletChain } from "@/lib/wallet/chains";
 import { useVault } from "@/components/wallet/wallet-context";
 import { BottomSheet, ChainGlyph, GhostButton, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
 
@@ -89,7 +89,7 @@ export default function NodesPage() {
         <section className="rounded-[22px] bg-card ring-1 ring-border/60">
           <div className="flex items-center justify-between px-4 pt-3.5 pb-1">
             <span className="text-[13px] font-medium text-muted-foreground">
-              {chain.name} · {isSolana(chain) ? "主网" : `链 ID ${chain.chain.id}`}
+              {chain.name} · {isEvm(chain) ? `链 ID ${chain.chain.id}` : "主网"}
             </span>
             <span className="flex items-center gap-1">
               <button type="button" onClick={() => void probeAll(chain)} className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[12px] font-medium">
@@ -190,7 +190,7 @@ function AddNode({ chain, onDone, onAdded }: { chain: WalletChain; onDone: () =>
         className="mt-5 h-12 w-full rounded-2xl bg-muted px-4 font-mono text-[14px] outline-none placeholder:text-muted-foreground/70"
       />
       {err && <div className="mt-2 text-[12px] text-down">{err}</div>}
-      <p className="mt-2 text-[12px] leading-5 text-muted-foreground">{isSolana(chain) ? "添加前会先连一次，核对是 Solana 主网。" : `添加前会先连一次，核对链 ID 是 ${chain.chain.id}。`}</p>
+      <p className="mt-2 text-[12px] leading-5 text-muted-foreground">{isSolana(chain) ? "添加前会先连一次，核对是 Solana 主网。" : isTron(chain) ? "填 TronGrid 风格的 HTTP 地址（如 https://api.trongrid.io），添加前会先连一次。" : `添加前会先连一次，核对链 ID 是 ${chain.chain.id}。`}</p>
       <div className="mt-4 grid grid-cols-[1fr_2fr] gap-2">
         <GhostButton onClick={onDone}>取消</GhostButton>
         <PrimaryButton disabled={busy || !url.trim()} onClick={submit}>

@@ -566,10 +566,10 @@ struct ChatRoomView: View {
             }
             .sheet(isPresented: $showTransferChain) {
                 if let a = transferAddr {
-                    TransferChainSheet(addr: a) { addr, sol in
-                        walletRoute = .chainWalletPath(ChainCards.transferPath(address: addr, sol: sol, name: title))
+                    TransferChainSheet(addr: a) { addr, chain in
+                        walletRoute = .chainWalletPath(ChainCards.transferPath(address: addr, chain: chain, name: title))
                     }
-                    .compatDetents(height: 300)
+                    .compatDetents(height: 370)
                 }
             }
     }
@@ -579,13 +579,14 @@ struct ChatRoomView: View {
         Task { @MainActor in
             do {
                 let a: ChainAddr = try await Api.request("/user/\(targetId)/chain-address")
-                if a.evm == nil && a.sol == nil {
+                let opts = a.options
+                if opts.isEmpty {
                     toastMsg = "对方还没在钱包里打开「允许好友给我转账」"
-                } else if a.evm != nil && a.sol != nil {
+                } else if opts.count > 1 {
                     transferAddr = a
                     showTransferChain = true
                 } else {
-                    walletRoute = .chainWalletPath(ChainCards.transferPath(address: a.evm ?? a.sol!, sol: a.evm == nil, name: title))
+                    walletRoute = .chainWalletPath(ChainCards.transferPath(address: opts[0].address, chain: opts[0].chain, name: title))
                 }
             } catch {
                 toastMsg = error.localizedDescription

@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { createPublicKey, verify } from 'crypto';
+import { createHash, createPublicKey, verify } from 'crypto';
 import { getAddress, isAddress, verifyMessage } from 'ethers';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -8,8 +8,9 @@ import { PrismaService } from '../prisma/prisma.service';
  * App 壳带着登录态交上来。要签名是防止登录态被盗后有人把收款地址换成自己的（好友的钱就转给了他）。
  * 只有和他聊过天（单聊会话）或在同一个群里的人能查到他的地址。
  */
-export const addressMessage = (userId: string, evm: string | null, sol: string | null, ts: number) =>
-  `心之音收款地址\nuser: ${userId}\nevm: ${evm ?? '-'}\nsol: ${sol ?? '-'}\nts: ${ts}`;
+export const addressMessage = (userId: string, evm: string | null, sol: string | null, trx: string | null | undefined, ts: number) =>
+  // 没有 trx 那一行的是加波场之前的钱包页
+  `心之音收款地址\nuser: ${userId}\nevm: ${evm ?? '-'}\nsol: ${sol ?? '-'}\n${trx === undefined ? '' : `trx: ${trx ?? '-'}\n`}ts: ${ts}`;
 
 const MAX_SKEW_MS = 10 * 60_000;
 const ED25519_SPKI = Buffer.from('302a300506032b6570032100', 'hex');
@@ -34,6 +35,19 @@ function base58(s: string): Buffer | null {
   return Buffer.from(bytes);
 }
 
+/**
+ * 波场地址：0x41 + 20 字节账户 id 的 base58check。波场私钥和以太坊一样是 secp256k1，钱包用波场私钥按 EVM 方式签名，
+ * 恢复出的 0x 地址和波场地址是同一个 20 字节 id。
+ */
+const sha256 = (b: Buffer) => createHash('sha256').update(b).digest();
+export function tronToEvm(addr: string): string | null {
+  if (!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(addr)) return null;
+  const raw = base58(addr);
+  if (!raw || raw.length !== 25 || raw[0] !== 0x41) return null;
+  const sum = sha256(sha256(raw.subarray(0, 21))).subarray(0, 4);
+  return sum.equals(raw.subarray(21)) ? getAddress(`0x${raw.subarray(1, 21).toString('hex')}`) : null;
+}
+
 export const solKey = (address: string) => {
   const raw = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address) ? base58(address) : null;
   return raw?.length === 32 ? createPublicKey({ key: Buffer.concat([ED25519_SPKI, raw]), format: 'der', type: 'spki' }) : null;
@@ -54,31 +68,33 @@ export function verifyTransferProof(chain: string, hash: string, from: string, t
     return !!key && sig.length === 64 && verify(null, Buffer.from(msg, 'utf8'), key, sig);
   }
   try {
-    return isAddress(from) && verifyMessage(msg, proof) === getAddress(from);
+    const signer = chain === 'trx' ? tronToEvm(from) : isAddress(from) ? getAddress(from) : null;
+    return !!signer && verifyMessage(msg, proof) === signer;
   } catch {
     return false;
   }
 }
 
-export type ChainAddressBody = { evm?: string | null; sol?: string | null; ts?: number; evmSig?: string; solSig?: string; off?: boolean };
+export type ChainAddressBody = { evm?: string | null; sol?: string | null; trx?: string | null; ts?: number; evmSig?: string; solSig?: string; trxSig?: string; off?: boolean };
 
 /** userId 给钱包页拼签名内容用（钱包页本身不知道心之音账号） */
 export async function myChainAddress(prisma: PrismaService, userId: bigint) {
   const row = await prisma.userChainAddress.findUnique({ where: { userId } });
-  return { userId: String(userId), evm: row?.evm ?? null, sol: row?.sol ?? null };
+  return { userId: String(userId), evm: row?.evm ?? null, sol: row?.sol ?? null, trx: row?.trx ?? null };
 }
 
 export async function setChainAddress(prisma: PrismaService, userId: bigint, body: ChainAddressBody) {
   if (body?.off) {
     await prisma.userChainAddress.deleteMany({ where: { userId } });
-    return { userId: String(userId), evm: null, sol: null };
+    return { userId: String(userId), evm: null, sol: null, trx: null };
   }
   const ts = Number(body?.ts);
   if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > MAX_SKEW_MS) throw new BadRequestException('签名已过期，请重试');
   const evm = body.evm ? String(body.evm) : null;
   const sol = body.sol ? String(body.sol) : null;
-  if (!evm && !sol) throw new BadRequestException('没有地址');
-  const msg = addressMessage(String(userId), evm, sol, ts);
+  const trx = body.trx ? String(body.trx) : null;
+  if (!evm && !sol && !trx) throw new BadRequestException('没有地址');
+  const msg = addressMessage(String(userId), evm, sol, 'trx' in body ? trx : undefined, ts);
 
   let evmOut: string | null = null;
   if (evm) {
@@ -95,8 +111,16 @@ export async function setChainAddress(prisma: PrismaService, userId: bigint, bod
     const sig = typeof body.solSig === 'string' ? Buffer.from(body.solSig, 'base64') : null;
     if (!key || !sig || sig.length !== 64 || !verify(null, Buffer.from(msg, 'utf8'), key, sig)) throw new BadRequestException('Solana 签名对不上地址');
   }
+  if (trx) {
+    const want = tronToEvm(trx);
+    let signer = '';
+    try {
+      signer = typeof body.trxSig === 'string' ? verifyMessage(msg, body.trxSig) : '';
+    } catch {}
+    if (!want || signer !== want) throw new BadRequestException('波场签名对不上地址');
+  }
 
-  const data = { evm: evmOut, sol };
+  const data = { evm: evmOut, sol, trx };
   await prisma.userChainAddress.upsert({ where: { userId }, update: data, create: { userId, ...data } });
   return { userId: String(userId), ...data };
 }
@@ -115,5 +139,5 @@ export async function peerChainAddress(prisma: PrismaService, me: bigint, peerId
   if (!peer || peer.status !== 0) throw new NotFoundException('对方不存在');
   if (peerId !== me && !(await related(prisma, me, peerId))) throw new ForbiddenException('只能查看聊过天的人');
   const row = await prisma.userChainAddress.findUnique({ where: { userId: peerId } });
-  return { evm: row?.evm ?? null, sol: row?.sol ?? null };
+  return { evm: row?.evm ?? null, sol: row?.sol ?? null, trx: row?.trx ?? null };
 }

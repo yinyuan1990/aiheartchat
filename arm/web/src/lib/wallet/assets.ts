@@ -4,9 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import { erc20Abi, formatUnits, getAddress, type Address } from "viem";
 import { API_BASE, useWallet } from "@/lib/api";
 import { useBoatInfo } from "@/lib/boat";
-import { SOL_CHAIN, chainByKey, isSolana, nativeIcon, publicClientFor, rpcOf, useNodes, type WalletChain } from "./chains";
+import { SOL_CHAIN, TRON_CHAIN, chainByKey, isEvm, isSolana, isTron, nativeIcon, publicClientFor, rpcOf, useNodes, type WalletChain } from "./chains";
 import { useHeldTokens, useMarketPrices } from "./market";
 import { LAMPORTS, WSOL_MINT, getTokenAccounts, solRpc } from "./sol";
+import { SUN, USDT_TRC20, tronAccount } from "./tron";
 
 export type Asset = {
   id: string;
@@ -37,6 +38,8 @@ export type Asset = {
   pump?: boolean;
   /** EVM token bought through the 交易 tab → /wallet/market */
   market?: boolean;
+  /** TRON: TRC20 contract ("T…"); undefined = TRX */
+  trc20?: string;
   spark?: number[];
 };
 
@@ -138,7 +141,7 @@ export function iconUrl(u?: string | null): string | undefined {
   }
 }
 
-const COINGECKO: Record<string, string> = { eth: "ethereum", base: "ethereum", arb: "ethereum", bsc: "binancecoin", polygon: "polygon-ecosystem-token" };
+const COINGECKO: Record<string, string> = { eth: "ethereum", base: "ethereum", arb: "ethereum", bsc: "binancecoin", polygon: "polygon-ecosystem-token", trx: "tron" };
 
 function useNativePrices() {
   return useQuery({
@@ -254,13 +257,44 @@ function useEvmAssets(chain: WalletChain, address?: Address, enabled = true) {
   return { assets, loading: q.isLoading, error: q.isError };
 }
 
+export const USDT_LOGO = "/wallet/usdt.svg";
+
+/** TRX, USDT and the TRC20s the user added (TRON addresses get spam tokens, so others are not listed). */
+function useTronAssets(owner?: string, enabled = true): { assets: Asset[]; loading: boolean; error: boolean } {
+  useNodes();
+  const prices = useNativePrices();
+  const added = useHeldTokens(TRON_CHAIN.key);
+  const tokens = [{ address: USDT_TRC20, symbol: "USDT", name: "Tether USD", image: USDT_LOGO as string | null, decimals: 6 }, ...added.filter((t) => t.address !== USDT_TRC20)];
+  const q = useQuery({
+    queryKey: ["wallet", "tron-balances", owner, rpcOf(TRON_CHAIN), tokens.map((t) => t.address).join(",")],
+    enabled: enabled && !!owner,
+    queryFn: () => tronAccount(owner!, tokens.map((t) => t.address)),
+    refetchInterval: 30_000,
+  });
+  const assets: Asset[] = [];
+  if (q.data) {
+    const p = prices.data?.tron;
+    const amount = Number(q.data.trx) / SUN;
+    assets.push({ id: "native", symbol: "TRX", name: "TRON", logo: TRON_CHAIN.icon, seed: "trx-native", decimals: 6, raw: q.data.trx, amount, priceUsd: p?.usd ?? null, valueUsd: p ? amount * p.usd : null, change24h: p?.usd_24h_change ?? null, gas: true });
+    for (const t of tokens) {
+      const raw = q.data.trc20[t.address] ?? 0n;
+      const amount = Number(formatUnits(raw, t.decimals));
+      const usd = t.address === USDT_TRC20 ? 1 : null;
+      assets.push({ id: t.address, symbol: t.symbol, name: t.name, logo: t.image ?? undefined, seed: t.address, decimals: t.decimals, raw, amount, priceUsd: usd, valueUsd: usd != null ? amount : null, change24h: usd != null ? 0 : null, trc20: t.address });
+    }
+  }
+  return { assets, loading: q.isLoading, error: q.isError };
+}
+
 /** Balances of `address` on `chain`, highest value first (gas coin pinned on top). */
 export function useAssets(chain: WalletChain, address?: string) {
   const sol = isSolana(chain);
+  const tron = isTron(chain);
   const arc = useArcAssets(address as Address | undefined, chain.key === "arc");
-  const evm = useEvmAssets(chain, address as Address | undefined, chain.key !== "arc" && !sol);
+  const evm = useEvmAssets(chain, address as Address | undefined, chain.key !== "arc" && isEvm(chain));
   const solana = useSolAssets(address, sol);
-  const r = sol ? solana : chain.key === "arc" ? arc : evm;
+  const tronR = useTronAssets(address, tron);
+  const r = sol ? solana : tron ? tronR : chain.key === "arc" ? arc : evm;
   const assets = [...r.assets].sort((a, b) => Number(!!b.gas) - Number(!!a.gas) || (b.valueUsd ?? 0) - (a.valueUsd ?? 0));
   const total = assets.reduce((s, a) => s + (a.valueUsd ?? 0), 0);
   const change = assets.reduce((s, a) => s + (a.valueUsd && a.change24h ? a.valueUsd - a.valueUsd / (1 + a.change24h / 100) : 0), 0);

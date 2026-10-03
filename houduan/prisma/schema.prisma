@@ -1170,6 +1170,7 @@ model UserChainAddress {
   userId    BigInt   @id @map("user_id")
   evm       String?  @db.VarChar(42)
   sol       String?  @db.VarChar(44)
+  trx       String?  @db.VarChar(34)
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("user_chain_address")

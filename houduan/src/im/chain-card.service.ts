@@ -45,8 +45,9 @@ export class ChainCardService {
 
     // 卡片只发给收款的那个人：to 必须是对方公开的收款地址
     const peer = await this.prisma.userChainAddress.findUnique({ where: { userId: BigInt(targetId) } });
-    const expected = chain === 'sol' ? peer?.sol : peer?.evm;
-    if (!expected || (chain === 'sol' ? expected !== to : expected.toLowerCase() !== to.toLowerCase())) throw new BadRequestException('收款地址不是对方公开的地址');
+    const base58 = chain === 'sol' || chain === 'trx';
+    const expected = chain === 'sol' ? peer?.sol : chain === 'trx' ? peer?.trx : peer?.evm;
+    if (!expected || (base58 ? expected !== to : expected.toLowerCase() !== to.toLowerCase())) throw new BadRequestException('收款地址不是对方公开的地址');
 
     // 先占住这笔交易，防止同一笔交易重复发卡
     try {

@@ -5,7 +5,7 @@ import QRCode from "qrcode";
 import { Copy, ShareNetwork, Warning } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { WalletDot } from "@/components/shared";
-import { WALLET_CHAINS, isSolana } from "@/lib/wallet/chains";
+import { WALLET_CHAINS, isSolana, isTron } from "@/lib/wallet/chains";
 import { copyText, shareText } from "@/lib/wallet/native";
 import { cn } from "@/lib/utils";
 import { useVault } from "@/components/wallet/wallet-context";
@@ -16,6 +16,7 @@ export default function ReceivePage() {
   const deposit = useQueryParam("deposit") !== null;
   const address = chainAddress ?? "";
   const sol = isSolana(chain);
+  const tron = isTron(chain);
   const [qr, setQr] = useState("");
 
   useEffect(() => {
@@ -58,6 +59,8 @@ export default function ReceivePage() {
             <br />
             请切换到助记词钱包收 SOL。
           </div>
+        ) : tron && !address ? (
+          <div className="mt-4 rounded-[28px] bg-card p-6 text-center text-[14px] leading-7 text-muted-foreground ring-1 ring-border/60">解锁一次钱包后显示波场地址。</div>
         ) : (
         <div className="mt-4 rounded-[28px] bg-card p-6 text-center ring-1 ring-border/60">
           <div className="flex items-center justify-center gap-2 text-[15px] font-semibold">
@@ -93,7 +96,9 @@ export default function ReceivePage() {
               ? " Arc 上的 USDC 同时用来付网络费，先充一点 USDC 就能开始交易。"
               : sol
                 ? " 这个地址收 SOL 和 Solana 上的代币（USDC、pump 币等）。和 EVM 的 0x 地址不通用，别从以太坊 / BNB 链往这里转。"
-                : " 其它链的资产转到这里会丢失或需要跨链找回。"}
+                : tron
+                  ? " 这个 T 开头的地址收 TRX 和 TRC20 代币（USDT 等）。交易所提 USDT 时网络选 TRC20 / TRON，选错（ERC20、BEP20）会丢。"
+                  : " 其它链的资产转到这里会丢失或需要跨链找回。"}
             {deposit && <div className="mt-1">从交易所提现时，提现网络选「{chain.name}」，地址填上面这个。</div>}
           </div>
         </div>

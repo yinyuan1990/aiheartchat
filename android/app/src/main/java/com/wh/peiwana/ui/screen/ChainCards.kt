@@ -46,12 +46,15 @@ import java.math.BigDecimal
  */
 
 @Serializable
-data class ChainAddr(val evm: String? = null, val sol: String? = null)
+data class ChainAddr(val evm: String? = null, val sol: String? = null, val trx: String? = null) {
+    /** 对方公开了的链：(钱包 chain 参数，null 是 EVM) → 地址 */
+    fun options(): List<Pair<String?, String>> = listOfNotNull(evm?.let { null to it }, sol?.let { "sol" to it }, trx?.let { "trx" to it })
+}
 
-private val CHAIN_NAMES = mapOf("arc" to "Arc", "eth" to "Ethereum", "bsc" to "BNB Chain", "base" to "Base", "arb" to "Arbitrum", "polygon" to "Polygon", "sol" to "Solana")
+private val CHAIN_NAMES = mapOf("arc" to "Arc", "eth" to "Ethereum", "bsc" to "BNB Chain", "base" to "Base", "arb" to "Arbitrum", "polygon" to "Polygon", "sol" to "Solana", "trx" to "TRON")
 private val EXPLORERS = mapOf(
     "arc" to "https://arc-scan.org/tx/", "eth" to "https://etherscan.io/tx/", "bsc" to "https://bscscan.com/tx/", "base" to "https://basescan.org/tx/",
-    "arb" to "https://arbiscan.io/tx/", "polygon" to "https://polygonscan.com/tx/", "sol" to "https://solscan.io/tx/",
+    "arb" to "https://arbiscan.io/tx/", "polygon" to "https://polygonscan.com/tx/", "sol" to "https://solscan.io/tx/", "trx" to "https://tronscan.org/#/transaction/",
 )
 private val TransferOrange = Color(0xFFF59E0B)
 private val TransferTint = Color(0xFFFFF4DE)
@@ -114,8 +117,8 @@ private fun calloutWebUrl(o: JsonObject): String {
 fun chainWalletRoute(path: String) = "chain-wallet?path=" + Uri.encode(path)
 
 /** 聊天里点「转账」：打开钱包转账页，收款人已填好，转完把结果交回聊天（ret=1） */
-fun transferPath(address: String, sol: Boolean, name: String) =
-    "/wallet/send?to=$address&name=${Uri.encode(name.take(24))}&ret=1" + if (sol) "&chain=sol" else ""
+fun transferPath(address: String, chain: String?, name: String) =
+    "/wallet/send?to=$address&name=${Uri.encode(name.take(24))}&ret=1" + if (chain != null) "&chain=$chain" else ""
 
 /** 钱包交回的转账结果 → 服务端核对链上交易后发转账卡片，返回那条消息 */
 suspend fun postTransferCard(targetId: String, resultJson: String): MsgItem? {
@@ -249,15 +252,16 @@ fun ShareCardDialog(card: JsonObject, onDone: (String) -> Unit, onDismiss: () ->
     }
 }
 
-/** 选好友收款地址的链（对方 EVM / Solana 都开了时问一下） */
+/** 选好友收款地址的链（对方开了不止一种链时问一下） */
 @Composable
-fun TransferChainDialog(addr: ChainAddr, onPick: (address: String, sol: Boolean) -> Unit, onDismiss: () -> Unit) {
+fun TransferChainDialog(addr: ChainAddr, onPick: (address: String, chain: String?) -> Unit, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Bg2).padding(16.dp)) {
             Text("转账到哪条链", color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.align(Alignment.CenterHorizontally))
             Spacer(Modifier.height(12.dp))
-            addr.evm?.let { a -> ChainChoice("EVM 链", "Arc / Ethereum / BNB / Base / Arbitrum / Polygon", a) { onPick(a, false) } }
-            addr.sol?.let { a -> ChainChoice("Solana", "SOL、USDC、pump 币等", a) { onPick(a, true) } }
+            addr.evm?.let { a -> ChainChoice("EVM 链", "Arc / Ethereum / BNB / Base / Arbitrum / Polygon", a) { onPick(a, null) } }
+            addr.sol?.let { a -> ChainChoice("Solana", "SOL、USDC、pump 币等", a) { onPick(a, "sol") } }
+            addr.trx?.let { a -> ChainChoice("TRON 波场", "TRX、USDT（TRC20）", a) { onPick(a, "trx") } }
             Text("转账页里可以选币种和网络；转完会在聊天里发一张转账卡片。", color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
         }
     }

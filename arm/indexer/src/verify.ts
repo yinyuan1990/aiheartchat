@@ -1,6 +1,7 @@
 import { createPublicClient, decodeEventLog, erc20Abi, fallback, getAddress, http, isAddress, type Hex, type PublicClient } from "viem";
 import { client as arcClient } from "./chain.js";
 import { solRelay } from "./solana.js";
+import { tronRelay } from "./tron.js";
 
 /**
  * Checks a transfer someone claims to have made, for 心之音's chat transfer cards: the transaction succeeded, came from
@@ -40,7 +41,53 @@ export function claimOf(q: Record<string, string | undefined>): TransferClaim | 
 }
 
 export async function verifyTransfer(c: TransferClaim): Promise<TransferCheck> {
-  return c.chain === "sol" ? verifySol(c) : verifyEvm(c);
+  return c.chain === "sol" ? verifySol(c) : c.chain === "trx" ? verifyTron(c) : verifyEvm(c);
+}
+
+// ---------- TRON ----------
+
+const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+/** "T…" → the 20-byte account id as lower-case hex (no 41 prefix); null when malformed */
+function tronHex20(addr: string): string | null {
+  if (!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(addr)) return null;
+  let n = 0n;
+  for (const ch of addr) n = n * 58n + BigInt(B58.indexOf(ch));
+  const hex = n.toString(16).padStart(50, "0");
+  return hex.startsWith("41") ? hex.slice(2, 42) : null;
+}
+const TRANSFER_TOPIC = "ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+
+type TronTx = { ret?: { contractRet?: string }[]; raw_data?: { contract?: { type?: string; parameter?: { value?: Record<string, unknown> } }[] } };
+type TronInfo = { id?: string; result?: string; receipt?: { result?: string }; log?: { address?: string; topics?: string[]; data?: string }[] };
+
+async function verifyTron(c: TransferClaim): Promise<TransferCheck> {
+  if (!/^[0-9a-fA-F]{64}$/.test(c.hash)) return fail("bad tx id");
+  const from = tronHex20(c.from);
+  const to = tronHex20(c.to);
+  if (!from || !to) return fail("bad address");
+  const info = (await tronRelay("wallet/gettransactioninfobyid", "POST", { value: c.hash }, "verify-transfer")).json as TronInfo;
+  if (!info?.id) return fail("not found yet", true);
+  const tx = (await tronRelay("wallet/gettransactionbyid", "POST", { value: c.hash }, "verify-transfer")).json as TronTx;
+  if (tx.ret?.[0]?.contractRet !== "SUCCESS" || info.result === "FAILED") return fail("transaction failed");
+  const k = tx.raw_data?.contract?.[0];
+  const v = k?.parameter?.value ?? {};
+  const hex20 = (x: unknown) => (typeof x === "string" ? x.toLowerCase().replace(/^41/, "") : "");
+  if (hex20(v.owner_address) !== from) return fail("sent from another address");
+  if (c.token === "native") {
+    return k?.type === "TransferContract" && hex20(v.to_address) === to && String(v.amount) === c.amount ? { ok: true } : fail("amount or recipient does not match");
+  }
+  const token = tronHex20(c.token);
+  if (!token || k?.type !== "TriggerSmartContract" || hex20(v.contract_address) !== token) return fail("not a call to this token");
+  const hit = (info.log ?? []).some(
+    (l) =>
+      l.address?.toLowerCase() === token &&
+      l.topics?.[0] === TRANSFER_TOPIC &&
+      l.topics?.[1]?.slice(-40).toLowerCase() === from &&
+      l.topics?.[2]?.slice(-40).toLowerCase() === to &&
+      l.data != null &&
+      BigInt(`0x${l.data}`).toString() === c.amount,
+  );
+  return hit ? { ok: true } : fail("no matching token transfer");
 }
 
 async function verifyEvm(c: TransferClaim): Promise<TransferCheck> {

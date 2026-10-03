@@ -5,6 +5,7 @@ import { arbitrum, base, bsc, mainnet, polygon } from "viem/chains";
 import { arcMainnet } from "@/lib/web3";
 import { API_BASE } from "@/lib/api";
 import { probeSolNode } from "./sol";
+import { probeTronNode } from "./tron";
 
 export type StableToken = { symbol: string; address: Address; decimals: number };
 
@@ -12,7 +13,7 @@ export type WalletChain = {
   key: string;
   name: string;
   /** Solana has no EVM chain; `chain` then only carries the node list and the native coin (id 0 never matches a chainId). */
-  kind?: "solana";
+  kind?: "solana" | "tron";
   chain: Chain;
   color: string;
   /** fallback letter when the logo can't load */
@@ -119,17 +120,37 @@ export const WALLET_CHAINS: WalletChain[] = [
     stables: [],
     explorer: "https://solscan.io",
   },
+  {
+    key: "trx",
+    name: "TRON",
+    kind: "tron",
+    chain: defineChain({
+      id: 728126428,
+      name: "TRON",
+      nativeCurrency: { name: "TRON", symbol: "TRX", decimals: 6 },
+      // a TronGrid-style HTTP API base (…/wallet/*, …/v1/accounts/*): our relay, or a custom TronGrid / own node
+      rpcUrls: { default: { http: [`${API_BASE}/trx`] } },
+    }),
+    color: "#EB0029",
+    glyph: "T",
+    icon: "/wallet/chains/trx.png",
+    stables: [],
+    explorer: "https://tronscan.org/#",
+  },
 ];
 
 export const isSolana = (c: WalletChain) => c.kind === "solana";
+export const isTron = (c: WalletChain) => c.kind === "tron";
+export const isEvm = (c: WalletChain) => !c.kind;
 /** Logo of the chain's gas coin: ETH on the L2s, otherwise the chain's own. */
 export const nativeIcon = (c: WalletChain) => (c.key === "base" || c.key === "arb" ? "/wallet/chains/eth.png" : c.icon);
-export const EVM_CHAINS = WALLET_CHAINS.filter((c) => !isSolana(c));
+export const EVM_CHAINS = WALLET_CHAINS.filter(isEvm);
 export const SOL_CHAIN = WALLET_CHAINS.find(isSolana)!;
+export const TRON_CHAIN = WALLET_CHAINS.find(isTron)!;
 export const chainByKey = (key?: string | null) => WALLET_CHAINS.find((c) => c.key === key) ?? WALLET_CHAINS[0];
 export const chainById = (id?: number | null) => EVM_CHAINS.find((c) => c.chain.id === id);
 /** Built-in relay URLs are host-relative; show them by name. */
-export const nodeLabel = (url: string) => (url === `${API_BASE}/sol/rpc` ? "心之音加速节点" : url.replace(/^https?:\/\//, ""));
+export const nodeLabel = (url: string) => (url === `${API_BASE}/sol/rpc` || url === `${API_BASE}/trx` ? "心之音加速节点" : url.replace(/^https?:\/\//, ""));
 
 // ---------- RPC nodes: built-in list + user-added, one selected per chain (kept in the shell's native store) ----------
 type NodeState = { selected: Record<string, string>; custom: Record<string, string[]> };
@@ -215,6 +236,10 @@ export async function probeNode(url: string, timeoutMs = 6000): Promise<NodeProb
 
 /** Same as probeNode for the chain's own RPC dialect; `chainId` is the chain's id when a Solana node is on mainnet. */
 export async function probeChainNode(c: WalletChain, url: string, timeoutMs = 6000): Promise<NodeProbe> {
+  if (isTron(c)) {
+    const t = await probeTronNode(url, timeoutMs);
+    return { ms: t.ms, block: t.block != null ? BigInt(t.block) : undefined, chainId: t.block != null ? c.chain.id : undefined, error: t.error ?? (t.block == null ? "不是波场节点" : undefined) };
+  }
   if (!isSolana(c)) return probeNode(url, timeoutMs);
   const p = await probeSolNode(url, timeoutMs);
   return { ms: p.ms, block: p.slot != null ? BigInt(p.slot) : undefined, chainId: p.mainnet ? c.chain.id : p.slot != null ? -1 : undefined, error: p.error };
@@ -222,7 +247,7 @@ export async function probeChainNode(c: WalletChain, url: string, timeoutMs = 60
 
 const clients = new Map<string, PublicClient>();
 export function publicClientFor(c: WalletChain): PublicClient {
-  if (isSolana(c)) throw new Error("Solana has no EVM client");
+  if (!isEvm(c)) throw new Error(`${c.name} has no EVM client`);
   void loadNodes();
   let pc = clients.get(c.key);
   if (!pc) {
@@ -236,6 +261,6 @@ export function publicClientFor(c: WalletChain): PublicClient {
   return pc;
 }
 
-export const explorerTx = (c: WalletChain, hash: string) => `${c.explorer}/tx/${hash}`;
+export const explorerTx = (c: WalletChain, hash: string) => `${c.explorer}/${isTron(c) ? "transaction" : "tx"}/${hash}`;
 export const explorerAddr = (c: WalletChain, a: string) => `${c.explorer}/${isSolana(c) ? "account" : "address"}/${a}`;
 export const explorerToken = (c: WalletChain, t: string) => `${c.explorer}/token/${t}`;

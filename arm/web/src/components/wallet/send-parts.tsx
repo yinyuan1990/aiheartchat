@@ -9,7 +9,8 @@ import { shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { MAX_NAME, saveContact, type Contact } from "@/lib/wallet/address-book";
 import { closeWallet, returnsToApp } from "@/lib/wallet/native";
-import { isSolana, type WalletChain } from "@/lib/wallet/chains";
+import { isEvm, isSolana, isTron, type WalletChain } from "@/lib/wallet/chains";
+import { isTronAddress, trc20Meta } from "@/lib/wallet/tron";
 import type { Asset } from "@/lib/wallet/assets";
 import { rememberToken } from "@/lib/wallet/market";
 import { lookupToken } from "@/lib/wallet/swap";
@@ -118,15 +119,16 @@ export function useSendLink(chain: WalletChain, assets: Asset[], loading: boolea
   const match = (a: Asset) => {
     if (!token) return false;
     if (token === "native") return a.id === "native" || (!!chain.nativeIsUsdc && a.gas === true);
-    const id = a.token ?? a.mint;
-    return !!id && (sol ? id === token : id.toLowerCase() === token.toLowerCase());
+    const id = a.token ?? a.mint ?? a.trc20;
+    return !!id && (isEvm(chain) ? id.toLowerCase() === token.toLowerCase() : id === token);
   };
   const wantedId = assetParam ?? assets.find(match)?.id ?? null;
   const missing = !!token && token !== "native" && !loading && assets.length > 0 && !assets.some(match);
   useEffect(() => {
     if (!missing || sol || !token) return;
     let alive = true;
-    void lookupToken(chain, token).then((t) => {
+    const look = isTron(chain) ? (isTronAddress(token) ? trc20Meta(token).then((m) => m && { address: token, ...m }) : Promise.resolve(null)) : lookupToken(chain, token);
+    void look.then((t) => {
       if (alive && t) rememberToken(chain.key, { address: t.address, symbol: t.symbol, name: t.name, image: null, decimals: t.decimals, added: true });
     });
     return () => {

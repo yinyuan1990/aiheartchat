@@ -4,10 +4,10 @@
  * - callout：喊单卡片，点开去网页看这个币的行情（App 里会在钱包打开、能直接买）。
  */
 
-const CHAIN_NAMES: Record<string, string> = { arc: 'Arc', eth: 'Ethereum', bsc: 'BNB Chain', base: 'Base', arb: 'Arbitrum', polygon: 'Polygon', sol: 'Solana' };
+const CHAIN_NAMES: Record<string, string> = { arc: 'Arc', eth: 'Ethereum', bsc: 'BNB Chain', base: 'Base', arb: 'Arbitrum', polygon: 'Polygon', sol: 'Solana', trx: 'TRON' };
 const EXPLORERS: Record<string, string> = {
   arc: 'https://arc-scan.org/tx/', eth: 'https://etherscan.io/tx/', bsc: 'https://bscscan.com/tx/', base: 'https://basescan.org/tx/',
-  arb: 'https://arbiscan.io/tx/', polygon: 'https://polygonscan.com/tx/', sol: 'https://solscan.io/tx/',
+  arb: 'https://arbiscan.io/tx/', polygon: 'https://polygonscan.com/tx/', sol: 'https://solscan.io/tx/', trx: 'https://tronscan.org/#/transaction/',
 };
 
 const parse = (s: string): Record<string, any> => {

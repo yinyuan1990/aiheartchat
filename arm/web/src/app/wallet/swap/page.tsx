@@ -109,7 +109,13 @@ function Swap({ chain }: { chain: WalletChain }) {
   return (
     <WalletFrame>
       <TopBar title="兑换" back="/wallet" right={<ChainPill chain={chain} onClick={() => setPicker("chain")} />} />
-      {noSol ? (
+      {!engine ? (
+        <p className="px-6 py-10 text-center text-[13px] leading-6 text-muted-foreground">
+          {chain.name} 上暂时不能在钱包里兑换，点右上角换个网络。
+          <br />
+          收到的 TRX / USDT 可以直接转账，或转到交易所兑换。
+        </p>
+      ) : noSol ? (
         <p className="px-6 py-10 text-center text-[13px] leading-6 text-muted-foreground">私钥导入的钱包没有 Solana 账户，换到助记词钱包或别的网络再兑换。</p>
       ) : (
         <div className="flex-1 px-4 pb-6">

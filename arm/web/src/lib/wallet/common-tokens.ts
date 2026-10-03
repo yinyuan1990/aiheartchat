@@ -43,4 +43,15 @@ export const COMMON_TOKENS: Record<string, CommonToken[]> = {
     { symbol: "DAI", name: "Dai Stablecoin", address: "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063" },
     { symbol: "LINK", name: "Chainlink", address: "0x53E0bca35eC356BD5ddDFebbD1Fc0fD03FaBad39" },
   ],
+  trx: [
+    { symbol: "USDC", name: "USD Coin", address: "TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8" },
+    { symbol: "WTRX", name: "Wrapped TRX", address: "TNUC9Qb1rRpS5CbWLmNMxXBjyFoydXjWFR" },
+    { symbol: "USDD", name: "Decentralized USD", address: "TXDk8mbtRbXeYuMNS83CfKPaYYT8XWv9Hz" },
+    { symbol: "TUSD", name: "TrueUSD", address: "TUpMhErZL2fhh4sVNULAbNKLokS4GjC1F4" },
+    { symbol: "BTT", name: "BitTorrent", address: "TAFjULxiVgT4qWk6UZwjqwZXTSaGaqnVp4" },
+    { symbol: "JST", name: "JUST", address: "TCFLL5dx5ZJdKnWuesXxi1VPwjLVmWZZy9" },
+    { symbol: "SUN", name: "SUN", address: "TSSMHYeV2uE9qYH95DqyoCuNCzEL1NvU3S" },
+    { symbol: "WIN", name: "WINkLink", address: "TLa2f6VPqDgRE67v1736s7bJ8Ray5wYjU7" },
+    { symbol: "SUNDOG", name: "Sundog", address: "TXL6rJbvmjD46zeN1JssfgxvSo99qC8MRT" },
+  ],
 };

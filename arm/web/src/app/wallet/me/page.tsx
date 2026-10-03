@@ -76,6 +76,13 @@ export default function MePage() {
                       <Copy size={12} />
                     </button>
                   )}
+                  {w.trx && (
+                    <button type="button" onClick={async () => (await copyText(w.trx!)) && toast.success("波场地址已复制")} className="flex items-center gap-1 font-mono text-[12px] text-muted-foreground">
+                      <span className="font-sans text-[10px]">TRON</span>
+                      {shortAddr(w.trx, 6, 4)}
+                      <Copy size={12} />
+                    </button>
+                  )}
                 </div>
                 <button type="button" aria-label="改名" onClick={() => setSheet({ kind: "rename", wallet: w })} className="flex size-9 items-center justify-center rounded-full hover:bg-muted">
                   <PencilSimple size={18} />
@@ -222,7 +229,7 @@ function PayeeRow() {
         <span className="min-w-0 flex-1">
           <span className="block text-[15px]">允许好友给我转账</span>
           <span className="block text-[12px] text-muted-foreground">
-            {on ? `聊过天的人能看到：${[payee?.evm && shortAddr(payee.evm, 6, 4), payee?.sol && `◎ ${shortAddr(payee.sol, 4, 4)}`].filter(Boolean).join(" · ")}` : "打开后，聊过天的人在聊天里点「转账」就能直接给你转"}
+            {on ? `聊过天的人能看到：${[payee?.evm && shortAddr(payee.evm, 6, 4), payee?.sol && `◎ ${shortAddr(payee.sol, 4, 4)}`, payee?.trx && `TRON ${shortAddr(payee.trx, 4, 4)}`].filter(Boolean).join(" · ")}` : "打开后，聊过天的人在聊天里点「转账」就能直接给你转"}
           </span>
         </span>
         <span className={cn("flex h-7 w-12 shrink-0 items-center rounded-full p-0.5 transition-colors", on ? "justify-end bg-up" : "justify-start bg-border")}>

@@ -536,10 +536,11 @@ fun ChatRoomScreen(
         val open = onOpenWallet ?: return
         scope.launch {
             val a = runCatching { Api.getObj<ChainAddr>("/user/$targetId/chain-address") }.getOrElse { toast(it.message ?: "没取到对方的收款地址"); return@launch }
-            when {
-                a.evm == null && a.sol == null -> toast("对方还没在钱包里打开「允许好友给我转账」")
-                a.evm != null && a.sol != null -> transferAddr = a
-                else -> open(transferPath(a.evm ?: a.sol!!, a.evm == null, title))
+            val opts = a.options()
+            when (opts.size) {
+                0 -> toast("对方还没在钱包里打开「允许好友给我转账」")
+                1 -> open(transferPath(opts[0].second, opts[0].first, title))
+                else -> transferAddr = a
             }
         }
     }
@@ -1080,7 +1081,7 @@ fun ChatRoomScreen(
     }
     if (showGift) GiftSheet(targetId) { showGift = false }
     transferAddr?.let { a ->
-        TransferChainDialog(a, onPick = { addr, sol -> transferAddr = null; onOpenWallet?.invoke(transferPath(addr, sol, title)) }, onDismiss = { transferAddr = null })
+        TransferChainDialog(a, onPick = { addr, chain -> transferAddr = null; onOpenWallet?.invoke(transferPath(addr, chain, title)) }, onDismiss = { transferAddr = null })
     }
     menuMsg?.let { m ->
         MsgMenuDialog(

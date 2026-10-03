@@ -6,13 +6,23 @@ import SwiftUI
 struct ChainAddr: Codable {
     var evm: String?
     var sol: String?
+    var trx: String?
+
+    /// 对方公开了的链：(钱包 chain 参数，nil 是 EVM, 地址)
+    var options: [(chain: String?, address: String)] {
+        var out: [(chain: String?, address: String)] = []
+        if let a = evm { out.append((nil, a)) }
+        if let a = sol { out.append(("sol", a)) }
+        if let a = trx { out.append(("trx", a)) }
+        return out
+    }
 }
 
 enum ChainCards {
-    static let chainNames = ["arc": "Arc", "eth": "Ethereum", "bsc": "BNB Chain", "base": "Base", "arb": "Arbitrum", "polygon": "Polygon", "sol": "Solana"]
+    static let chainNames = ["arc": "Arc", "eth": "Ethereum", "bsc": "BNB Chain", "base": "Base", "arb": "Arbitrum", "polygon": "Polygon", "sol": "Solana", "trx": "TRON"]
     static let explorers = [
         "arc": "https://arc-scan.org/tx/", "eth": "https://etherscan.io/tx/", "bsc": "https://bscscan.com/tx/", "base": "https://basescan.org/tx/",
-        "arb": "https://arbiscan.io/tx/", "polygon": "https://polygonscan.com/tx/", "sol": "https://solscan.io/tx/",
+        "arb": "https://arbiscan.io/tx/", "polygon": "https://polygonscan.com/tx/", "sol": "https://solscan.io/tx/", "trx": "https://tronscan.org/#/transaction/",
     ]
 
     static func obj(_ s: String) -> [String: Any] {
@@ -80,9 +90,9 @@ enum ChainCards {
     }
 
     /// 聊天里点「转账」：打开钱包转账页，收款人已填好，转完把结果交回聊天（ret=1）
-    static func transferPath(address: String, sol: Bool, name: String) -> String {
+    static func transferPath(address: String, chain: String?, name: String) -> String {
         let n = String(name.prefix(24)).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&=+#"))) ?? ""
-        return "/wallet/send?to=\(address)&name=\(n)&ret=1" + (sol ? "&chain=sol" : "")
+        return "/wallet/send?to=\(address)&name=\(n)&ret=1" + (chain.map { "&chain=\($0)" } ?? "")
     }
 
     /// 钱包交回的转账结果 → 服务端核对链上交易后发转账卡片，返回那条消息
@@ -264,17 +274,18 @@ struct ShareCardSheet: View {
     }
 }
 
-/// 对方 EVM / Solana 收款地址都开了时，问转到哪条链
+/// 对方开了不止一种链的收款地址时，问转到哪条链
 struct TransferChainSheet: View {
     let addr: ChainAddr
-    let onPick: (String, Bool) -> Void
+    let onPick: (String, String?) -> Void
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 10) {
             Text("转账到哪条链").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text).padding(.top, 18)
-            if let a = addr.evm { choice("EVM 链", "Arc / Ethereum / BNB / Base / Arbitrum / Polygon", a) { onPick(a, false) } }
-            if let a = addr.sol { choice("Solana", "SOL、USDC、pump 币等", a) { onPick(a, true) } }
+            if let a = addr.evm { choice("EVM 链", "Arc / Ethereum / BNB / Base / Arbitrum / Polygon", a) { onPick(a, nil) } }
+            if let a = addr.sol { choice("Solana", "SOL、USDC、pump 币等", a) { onPick(a, "sol") } }
+            if let a = addr.trx { choice("TRON 波场", "TRX、USDT（TRC20）", a) { onPick(a, "trx") } }
             Text("转账页里可以选币种和网络；转完会在聊天里发一张转账卡片。").font(.system(size: 12)).foregroundStyle(Theme.textSub)
             Spacer(minLength: 0)
         }
