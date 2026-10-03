@@ -42,6 +42,15 @@ data class UserProfile(
     val fans: Int = 0,
     /** 照片墙（最多 8 张） */
     val albums: List<AlbumItem> = emptyList(),
+    /** 只有 /user/me 返回；后台开关决定的功能入口 */
+    val features: UserFeatures = UserFeatures(),
+)
+
+@Serializable
+data class UserFeatures(
+    /** 链上钱包入口（后台「用户管理」按人开，或全局开放） */
+    val wallet: Boolean = false,
+    val walletUrl: String = "",
 )
 
 /** 分 → 积分 显示 */

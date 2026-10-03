@@ -4,6 +4,7 @@ import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { WalletService } from '../wallet/wallet.service';
+import { adminChainWalletConfig, adminSetChainWalletConfig } from '../user/chain-wallet';
 
 @Injectable()
 export class AdminService {
@@ -52,6 +53,19 @@ export class AdminService {
   async setUserStatus(userId: bigint, status: number) {
     await this.prisma.user.update({ where: { id: userId }, data: { status } });
     return { ok: true };
+  }
+
+  async setUserWallet(userId: bigint, enabled: boolean) {
+    await this.prisma.user.update({ where: { id: userId }, data: { walletEnabled: enabled } });
+    return { walletEnabled: enabled };
+  }
+
+  chainWalletConfig() {
+    return adminChainWalletConfig(this.prisma);
+  }
+
+  setChainWalletConfig(body: { mode?: unknown; url?: unknown }) {
+    return adminSetChainWalletConfig(this.prisma, body);
   }
 
   /** 后台发放/调整积分（唯一积分来源）：正数=发放 admin_grant，负数=扣减 adjust */

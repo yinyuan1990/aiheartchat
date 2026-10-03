@@ -19,6 +19,7 @@ zxingEmbedded = "4.3.0"
 zxingCore = "3.5.3"
 lottie = "6.7.1"
 camerax = "1.4.2"
+webkit = "1.12.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -51,6 +52,7 @@ zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxingCo
 camerax-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camerax" }
 camerax-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
 camerax-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
+androidx-webkit = { group = "androidx.webkit", name = "webkit", version.ref = "webkit" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

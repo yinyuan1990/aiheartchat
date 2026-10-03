@@ -17,6 +17,9 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // 链上钱包入口只放在官网下载的安装包里；上应用商店的包用 `-PwalletAllowed=false` 构建，代码里整块不出现
+        buildConfigField("boolean", "WALLET_ALLOWED", (project.findProperty("walletAllowed")?.toString() ?: "true"))
     }
 
     buildTypes {
@@ -45,6 +48,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -75,6 +79,7 @@ dependencies {
     implementation(libs.camerax.camera2)
     implementation(libs.camerax.lifecycle)
     implementation(libs.camerax.view)
+    implementation(libs.androidx.webkit)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

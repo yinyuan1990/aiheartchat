@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from '../auth/auth.service';
 import { ConnectionRegistry } from '../im/connection.registry';
 import { UpdateProfileDto } from './user.dto';
+import { chainWalletFeature } from './chain-wallet';
 
 /** 18 位身份证号校验（GB 11643-1999 校验位算法），无需第三方接口 */
 export function validIdCard(id: string): boolean {
@@ -34,9 +35,10 @@ export class UserService {
       include: { wallet: true, albums: { orderBy: { sort: 'asc' } } },
     });
     if (!user) throw new NotFoundException('用户不存在');
-    const [following, fans] = await Promise.all([
+    const [following, fans, chainWallet] = await Promise.all([
       this.prisma.follow.count({ where: { followerId: userId } }),
       this.prisma.follow.count({ where: { targetId: userId } }),
+      chainWalletFeature(this.prisma, user),
     ]);
     return {
       ...this.auth.toProfile(user),
@@ -45,6 +47,7 @@ export class UserService {
       following,
       fans,
       albums: user.albums,
+      features: { wallet: chainWallet.enabled, walletUrl: chainWallet.url },
     };
   }
 

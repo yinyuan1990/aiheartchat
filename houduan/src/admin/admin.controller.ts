@@ -726,6 +726,25 @@ export class AdminController {
     return this.channels.adminSetUserLimit(BigInt(id), v === null || v === undefined || (v as unknown) === '' ? null : Number(v));
   }
 
+  /** 链上钱包入口：单人开 / 关（全局模式见 chain-wallet/config） */
+  @Post('users/:id/wallet')
+  @UseGuards(AdminGuard)
+  setWalletEnabled(@Param('id') id: string, @Body() body: { enabled?: boolean }) {
+    return this.admin.setUserWallet(BigInt(id), !!body?.enabled);
+  }
+
+  @Get('chain-wallet/config')
+  @UseGuards(AdminGuard)
+  chainWalletConfig() {
+    return this.admin.chainWalletConfig();
+  }
+
+  @Post('chain-wallet/config')
+  @UseGuards(AdminGuard)
+  setChainWalletConfig(@Body() body: { mode?: string; url?: string }) {
+    return this.admin.setChainWalletConfig(body);
+  }
+
   @Post('users/:id/status')
   @UseGuards(AdminGuard)
   setStatus(@Param('id') id: string, @Body() body: { status: number }) {

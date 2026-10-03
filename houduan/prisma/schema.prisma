@@ -50,6 +50,8 @@ model User {
   isBot        Boolean  @default(false) @map("is_bot")
   /// 最多能创建几个频道；null = 用后台全局默认（sys_setting.channel_limit_default，未设为 5）
   channelLimit Int?     @map("channel_limit")
+  /// 链上钱包（自托管，钱包页面在 Arm 网站）入口：后台用户管理里单独打开；全局开关 sys_setting.chain_wallet_mode
+  walletEnabled Boolean @default(false) @map("wallet_enabled")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 

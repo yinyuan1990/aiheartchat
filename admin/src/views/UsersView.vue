@@ -68,7 +68,33 @@ async function load() {
 onMounted(async () => {
   load();
   defaultChannelLimit.value = (await api<{ defaultLimit: number }>('/admin/channels/config')).defaultLimit;
+  walletMode.value = (await api<{ mode: WalletMode }>('/admin/chain-wallet/config')).mode;
 });
+
+// 链上钱包入口（自托管网页钱包，私钥只在用户手机上；这里只控制 App 里显不显示入口）
+type WalletMode = 'off' | 'per_user' | 'all';
+const WALLET_MODES: WalletMode[] = ['off', 'per_user', 'all'];
+const WALLET_MODE_LABEL: Record<WalletMode, string> = { off: '全部关闭', per_user: '按用户开启', all: '全部开放' };
+const walletMode = ref<WalletMode>('per_user');
+
+async function saveWalletMode(mode: WalletMode) {
+  try {
+    walletMode.value = (await api<{ mode: WalletMode }>('/admin/chain-wallet/config', { method: 'POST', body: { mode } })).mode;
+    showToast(`钱包入口：${WALLET_MODE_LABEL[walletMode.value]}`);
+  } catch (e: any) {
+    showToast(e.message);
+  }
+}
+
+async function toggleWallet(u: any) {
+  try {
+    const r = await api<{ walletEnabled: boolean }>(`/admin/users/${u.id}/wallet`, { method: 'POST', body: { enabled: !u.walletEnabled } });
+    u.walletEnabled = r.walletEnabled;
+    showToast(`「${u.nickname}」钱包已${r.walletEnabled ? '开启' : '关闭'}`);
+  } catch (e: any) {
+    showToast(e.message);
+  }
+}
 
 function openLimit(u: any) {
   limitFor.value = u;
@@ -121,10 +147,23 @@ async function toggleBan(u: any) {
       <div class="row" style="margin-bottom: 14px">
         <input v-model="keyword" placeholder="昵称 / 地址搜索" style="width: 260px" @keydown.enter="load" />
         <button class="small" @click="load">搜索</button>
+        <span class="muted" style="margin-left: auto">链上钱包入口</span>
+        <button
+          v-for="m in WALLET_MODES"
+          :key="m"
+          class="small"
+          :class="{ ghost: walletMode !== m }"
+          @click="saveWalletMode(m)"
+        >
+          {{ WALLET_MODE_LABEL[m] }}
+        </button>
+      </div>
+      <div class="muted" style="margin: -6px 0 12px">
+        钱包是自托管的（私钥只在用户手机上），这里只控制 App 里显不显示钱包入口；关掉入口冻结不了用户的钱。「按用户开启」时看下表「钱包」列。
       </div>
       <table>
         <thead>
-          <tr><th>ID</th><th>昵称</th><th>性别</th><th>年纪</th><th>地址</th><th>地陪</th><th>频道</th><th>状态</th><th>操作</th></tr>
+          <tr><th>ID</th><th>昵称</th><th>性别</th><th>年纪</th><th>地址</th><th>地陪</th><th>频道</th><th>钱包</th><th>状态</th><th>操作</th></tr>
         </thead>
         <tbody>
           <tr v-for="u in users" :key="u.id">
@@ -137,6 +176,9 @@ async function toggleBan(u: any) {
             <td :title="u.channelLimit == null ? '跟随全局默认' : '单独设置'">
               {{ u.ownedChannels ?? 0 }} / {{ u.channelLimit ?? defaultChannelLimit }}
               <span v-if="u.channelLimit != null" class="tag ok" style="margin-left: 4px">单独</span>
+            </td>
+            <td :title="walletMode === 'per_user' ? '' : `全局为「${WALLET_MODE_LABEL[walletMode]}」，单人设置暂不生效`">
+              <button class="small" :class="{ ghost: !u.walletEnabled }" @click="toggleWallet(u)">{{ u.walletEnabled ? '已开' : '关' }}</button>
             </td>
             <td><span class="tag" :class="u.status === 0 ? 'ok' : 'off'">{{ u.status === 0 ? '正常' : '封禁' }}</span></td>
             <td>

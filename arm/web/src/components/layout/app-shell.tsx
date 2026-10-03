@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { BookOpen, Languages, Menu, ShieldAlert, Wallet, Zap } from "lucide-react";
-import { ArrowsLeftRight, BookOpenText, ChartBar, Compass, Crown, Images, Megaphone, Mountains, RocketLaunch, Trophy, UserCircle, type Icon as PhosphorIcon } from "@phosphor-icons/react";
+import { ArrowsLeftRight, BookOpenText, ChartBar, Compass, Crown, GameController, Images, Megaphone, Mountains, RocketLaunch, Trophy, UserCircle, type Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { useApp } from "@/components/providers";
 import { useDomains, useHealth, useSite } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -28,6 +28,7 @@ const NAV: Array<{ href: string; key: DictKey; icon: PhosphorIcon }> = [
   { href: "/", key: "nav.explore", icon: Compass },
   { href: "/gallery", key: "nav.gallery", icon: Images },
   { href: "/game", key: "nav.game", icon: Mountains },
+  { href: "/games", key: "nav.games", icon: GameController },
   { href: "/rank", key: "nav.rank", icon: Trophy },
   { href: "/analytics", key: "nav.analytics", icon: ChartBar },
   { href: "/create", key: "nav.create", icon: RocketLaunch },
@@ -77,7 +78,7 @@ function NavIcon({ icon: Icon, active, size = 18 }: { icon: PhosphorIcon; active
 }
 
 function isActive(pathname: string, href: string) {
-  return href === "/" ? pathname === "/" : pathname.startsWith(href);
+  return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
 }
 
 /** Exposes the sticky top bar's live height (ticker / banners change it) as --shell-top, so pages can stick below it. */
@@ -96,6 +97,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // One fixed-width label for every state / language (width follows the Chinese "连接钱包").
   const walletLabel = wrongChain ? t("wallet.switchShort") : connected && address ? shortAddr(address, 4, 4) : t("wallet.btn");
   const walletBtnCls = "h-9 w-[7.5rem] justify-center px-2 font-mono";
+
+  // The wallet is a phone-sized app of its own (opened inside the 心之音 App WebView), so it draws its own chrome.
+  if (pathname === "/wallet" || pathname.startsWith("/wallet/")) return <TooltipProvider>{children}</TooltipProvider>;
 
   // The admin panel lives in the same app but gets its own frame: no public nav, no ticker, a loud header.
   if (pathname.startsWith("/admin")) {
