@@ -13,6 +13,7 @@ import { isTaxToken, useCandles, useToken, useTokens, useTrades, useWallet, type
 import { fmtNum, fmtSmall, shortAddr, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ADDR } from "@/lib/web3";
+import { useBoatInfo } from "@/lib/boat";
 import { chainByKey, explorerTx, publicClientFor } from "@/lib/wallet/chains";
 import { executeTrade, quote, sellableOf, shapeQuote, type Side, type TradeStep } from "@/lib/wallet/arm-trade";
 import { copyText, shareText } from "@/lib/wallet/native";
@@ -53,6 +54,9 @@ function TokenList() {
     return (list.data ?? []).filter((t) => !s || t.symbol.toLowerCase().includes(s) || t.name.toLowerCase().includes(s) || t.address.toLowerCase() === s);
   }, [list.data, q]);
   const arc = chainByKey("arc");
+  const boat = useBoatInfo();
+  const s = q.trim().toLowerCase();
+  const showBoat = sort === "volume" && boat.data?.enabled && !!boat.data.boat && (!s || "boat speedboat".includes(s) || boat.data.boat.toLowerCase() === s);
 
   return (
     <WalletFrame>
@@ -71,6 +75,23 @@ function TokenList() {
         </div>
       </div>
       <ul className="mt-2 flex-1 divide-y divide-border/50 px-4">
+        {showBoat && boat.data && (
+          <li>
+            <Link href="/wallet/boat" className="-mx-2 flex items-center gap-3 rounded-2xl px-2 py-3 transition active:bg-muted">
+              <TokenAvatar symbol="BOAT" seed={boat.data.boat!} size={42} className="rounded-full" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="truncate text-[15px] font-semibold">BOAT</span>
+                  <span className="rounded-md bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">快艇游戏</span>
+                </div>
+                <div className="mt-0.5 truncate text-[12px] text-muted-foreground">市值 {boat.data.mcapUsdc != null ? compactUsd(boat.data.mcapUsdc) : "—"} · Uniswap V4</div>
+              </div>
+              <div className="text-right">
+                <Num value={boat.data.priceUsdc ? usd(boat.data.priceUsdc) : "—"} className="text-[14px] font-medium" />
+              </div>
+            </Link>
+          </li>
+        )}
         {list.isLoading &&
           [0, 1, 2, 3, 4].map((i) => (
             <li key={i} className="flex items-center gap-3 py-3">
@@ -95,7 +116,7 @@ function TokenList() {
             </Link>
           </li>
         ))}
-        {!list.isLoading && rows.length === 0 && <li className="py-10 text-center text-[13px] text-muted-foreground">没有找到</li>}
+        {!list.isLoading && rows.length === 0 && !showBoat && <li className="py-10 text-center text-[13px] text-muted-foreground">没有找到</li>}
       </ul>
       <BottomNav />
     </WalletFrame>

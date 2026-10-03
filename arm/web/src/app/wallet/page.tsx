@@ -220,7 +220,7 @@ export default function WalletHome() {
 }
 
 function AssetRow({ a, chain, hidden }: { a: Asset; chain: (typeof WALLET_CHAINS)[number]; hidden: boolean }) {
-  const href = a.arm ? `/wallet/token?address=${a.token}` : `/wallet/send?asset=${a.id}`;
+  const href = a.arm ? `/wallet/token?address=${a.token}` : a.boat ? "/wallet/boat" : `/wallet/send?asset=${a.id}`;
   return (
     <li>
       <Link href={href} className="-mx-2 flex items-center gap-3 rounded-2xl px-2 py-3 transition active:bg-muted">

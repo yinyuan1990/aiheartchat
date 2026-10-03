@@ -24,6 +24,8 @@ export type Asset = {
   gas?: boolean;
   /** Arm-launched token → has a detail / trade page */
   arm?: boolean;
+  /** $BOAT → /wallet/boat */
+  boat?: boolean;
   spark?: number[];
 };
 
@@ -90,7 +92,7 @@ function useArcAssets(address?: Address, enabled = true): { assets: Asset[]; loa
   if (boatBal.data && boatBal.data > 0n && boatAddr) {
     const amount = Number(formatUnits(boatBal.data, 18));
     const p = boat.data?.priceUsdc ?? null;
-    assets.push({ id: boatAddr, symbol: "BOAT", name: "Speedboat", seed: boatAddr, decimals: 18, raw: boatBal.data, amount, priceUsd: p, valueUsd: p == null ? null : amount * p, change24h: null, token: boatAddr });
+    assets.push({ id: boatAddr, symbol: "BOAT", name: "Speedboat", seed: boatAddr, decimals: 18, raw: boatBal.data, amount, priceUsd: p, valueUsd: p == null ? null : amount * p, change24h: null, token: boatAddr, boat: true });
   }
   return { assets, loading: w.isLoading, error: w.isError };
 }
