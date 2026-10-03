@@ -649,8 +649,20 @@ struct ChatRoomView: View {
                 .background(RoundedRectangle(cornerRadius: 8).fill(flashId == m.id ? Theme.accent.opacity(0.14) : Color.clear))
                 .id(m.id)
             }
+            Color.clear.frame(height: 1).id(Self.bottomId)
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
+    }
+
+    private static let bottomId = "chat-bottom"
+
+    /// 滚到底。LazyVStack 里没量过的行只是估算高度，图片 / 卡片随后才撑开，滚一次常常停在半路：
+    /// 刚进聊天时隔几下再滚，直到布局稳定
+    private func scrollToBottom(_ proxy: ScrollViewProxy, settle: Bool) {
+        let delays: [Double] = settle ? [0, 0.12, 0.3, 0.6, 1.0] : [0, 0.15]
+        for d in delays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + d) { proxy.scrollTo(Self.bottomId, anchor: .bottom) }
+        }
     }
 
     private func messageScroll(_ proxy: ScrollViewProxy) -> some View {
@@ -668,13 +680,13 @@ struct ChatRoomView: View {
         }
         // 进入聊天默认停在最底部（最新消息）；defaultScrollAnchor 是 iOS 17 API，改用 scrollTo
         .onAppear {
-            if let last = messages.last {
-                DispatchQueue.main.async { proxy.scrollTo(last.id, anchor: .bottom) }
-            }
+            if !messages.isEmpty { scrollToBottom(proxy, settle: true) }
         }
         .onChange(of: messages.count) { _ in
+            var first = false
             if focusPending, !messages.isEmpty {
                 focusPending = false
+                first = true
                 if let fid = focusMsgId, messages.contains(where: { $0.id == fid }) {
                     DispatchQueue.main.async { proxy.scrollTo(fid, anchor: .center) }
                     withAnimation(.easeOut(duration: 0.15)) { flashId = fid }
@@ -684,15 +696,15 @@ struct ChatRoomView: View {
                     return
                 }
             }
-            if let last = messages.last { proxy.scrollTo(last.id, anchor: .bottom) }
+            if !messages.isEmpty { scrollToBottom(proxy, settle: first) }
         }
         .onChange(of: inputFocused) { focused in
             if focused {
                 // 键盘弹出时收起表情面板，避免两者叠加把内容顶飞
                 showSticker = false
-                if let last = messages.last {
+                if !messages.isEmpty {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                        withAnimation { proxy.scrollTo(Self.bottomId, anchor: .bottom) }
                     }
                 }
             }

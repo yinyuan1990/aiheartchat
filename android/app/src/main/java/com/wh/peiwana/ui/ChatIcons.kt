@@ -97,6 +97,47 @@ fun PinIcon(tint: Color, size: Dp = 18.dp) {
     }
 }
 
+/** 实心路径 + 同色圆角描边（把尖角磨圆，接近 SF Symbols 的 .fill 款） */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.filledRound(path: androidx.compose.ui.graphics.Path, tint: Color) {
+    drawPath(path, tint)
+    drawPath(path, tint, style = Stroke(size.width * 0.06f, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+}
+
+/** 位置（「+」面板）：实心导航箭头，同 iOS `location.fill` */
+@Composable
+fun LocationArrowIcon(tint: Color, size: Dp = 22.dp) {
+    Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        filledRound(androidx.compose.ui.graphics.Path().apply {
+            moveTo(w * 0.88f, w * 0.12f); lineTo(w * 0.12f, w * 0.45f); lineTo(w * 0.49f, w * 0.51f); lineTo(w * 0.55f, w * 0.88f); close()
+        }, tint)
+    }
+}
+
+/** 电话听筒（「+」面板的语音通话）：实心，同 iOS `phone.fill` */
+@Composable
+fun PhoneIcon(tint: Color, size: Dp = 22.dp) {
+    Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        fun x(v: Float) = w * v / 100f
+        filledRound(androidx.compose.ui.graphics.Path().apply {
+            moveTo(x(30f), x(12f))
+            cubicTo(x(24f), x(10f), x(12f), x(16f), x(12f), x(26f))
+            cubicTo(x(12f), x(58f), x(42f), x(88f), x(74f), x(88f))
+            cubicTo(x(84f), x(88f), x(90f), x(78f), x(88f), x(70f))
+            lineTo(x(86f), x(64f))
+            cubicTo(x(85f), x(60f), x(82f), x(58f), x(78f), x(58f))
+            lineTo(x(66f), x(60f))
+            cubicTo(x(62f), x(61f), x(60f), x(62f), x(57f), x(65f))
+            cubicTo(x(47f), x(60f), x(40f), x(53f), x(35f), x(43f))
+            cubicTo(x(38f), x(40f), x(39f), x(38f), x(40f), x(34f))
+            lineTo(x(42f), x(22f))
+            cubicTo(x(42f), x(18f), x(40f), x(15f), x(36f), x(14f))
+            close()
+        }, tint)
+    }
+}
+
 /** 加号图标 */
 @Composable
 fun PlusIcon(tint: Color, size: Dp = 20.dp) {

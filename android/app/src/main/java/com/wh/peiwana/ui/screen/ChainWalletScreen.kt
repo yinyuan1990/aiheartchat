@@ -515,7 +515,8 @@ fun ChainWalletScreen(
             !chainWalletVisible(ctx, me) -> Notice("钱包功能暂未对你开放")
             webMajor in 1 until MIN_WEBVIEW_MAJOR || origin == null -> WebViewTooOld(webMajor)
             else -> AndroidView(
-                modifier = Modifier.weight(1f).fillMaxWidth().navigationBarsPadding(),
+                // edge-to-edge 下 adjustResize 不会缩 WebView：imePadding 让网页缩到键盘上面，浏览器再把输入框滚进来
+                modifier = Modifier.weight(1f).fillMaxWidth().navigationBarsPadding().imePadding(),
                 factory = { c ->
                     val box = FrameLayout(c)
                     val wallet = WebView(c).apply {

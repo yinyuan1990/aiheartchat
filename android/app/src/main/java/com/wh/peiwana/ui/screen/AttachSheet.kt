@@ -498,9 +498,9 @@ private fun AttachTabBar(isSingle: Boolean, canVideoCall: Boolean, canTransfer: 
         add(AttachTab("相册", null) { ImageIcon(it, 24.dp) })
         if (isSingle) add(AttachTab("礼物", AttachAction.Gift) { GiftIcon(it, 24.dp) })
         if (canTransfer) add(AttachTab("转账", AttachAction.Transfer) { TransferIcon(it, 24.dp) })
-        add(AttachTab("位置", AttachAction.Location) { PinIcon(it, 22.dp) })
+        add(AttachTab("位置", AttachAction.Location) { LocationArrowIcon(it, 22.dp) })
         if (isSingle) {
-            add(AttachTab("语音通话", AttachAction.VoiceCall) { MicIcon(it, 24.dp) })
+            add(AttachTab("语音通话", AttachAction.VoiceCall) { PhoneIcon(it, 22.dp) })
             if (canVideoCall) add(AttachTab("视频通话", AttachAction.VideoCall) { VideoIcon(it, 24.dp) })
         }
     }
