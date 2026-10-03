@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { createWalletClient, encodeFunctionData, erc20Abi, formatUnits, getAddress, http, isAddress, parseUnits, type Address, type Hex } from "viem";
 import { AddressBook, CaretDown, ClipboardText, Info, Lightning, Scan, ShieldCheck, SlidersHorizontal, Warning } from "@phosphor-icons/react";
@@ -17,7 +18,7 @@ import { isSolAddress } from "@/lib/wallet/sol";
 import { useVault } from "@/components/wallet/wallet-context";
 import { BookPicker, Result, Row, useSendLink, type Sent } from "@/components/wallet/send-parts";
 import { SolSend } from "@/components/wallet/sol-send";
-import { BottomSheet, ChainGlyph, ChainPill, GhostButton, PrimaryButton, TopBar, WalletFrame, useQueryParam } from "@/components/wallet/ui";
+import { BottomSheet, ChainGlyph, ChainPill, GhostButton, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
 
 const SPEEDS = [
   { key: "slow", label: "慢", mul: 0.9 },
@@ -51,15 +52,23 @@ const noSubscribe = () => () => {};
 const fmt = (n: number, max = 6) => n.toLocaleString("en-US", { maximumFractionDigits: max });
 
 export default function SendPage() {
-  // a new link (other recipient / coin) starts from a clean form
-  const search = useSyncExternalStore(noSubscribe, () => window.location.search, () => "");
-  return <LinkedSend key={search} />;
+  return (
+    <Suspense>
+      <Keyed />
+    </Suspense>
+  );
+}
+
+/** A new link (other recipient / coin) starts from a clean form. */
+function Keyed() {
+  return <LinkedSend key={useSearchParams().toString()} />;
 }
 
 function LinkedSend() {
   const { chain, setChain } = useVault();
-  const wantedTo = useQueryParam("to");
-  const chainParam = useQueryParam("chain");
+  const sp = useSearchParams();
+  const wantedTo = sp.get("to");
+  const chainParam = sp.get("chain");
   const wantedChain = WALLET_CHAINS.find((c) => c.key === chainParam);
   // `chain=` from a link (e.g. a chat transfer): switch once, the user may still pick another network afterwards
   const switched = useRef(false);
@@ -106,7 +115,7 @@ function EvmSend() {
 
   const nc = chain.chain.nativeCurrency;
 
-  const wantedTo = useQueryParam("to");
+  const wantedTo = link.to;
   useEffect(() => {
     if (!wantedTo || !isAddress(wantedTo)) return;
     const t = setTimeout(() => setTo((cur) => cur || getAddress(wantedTo)), 0);

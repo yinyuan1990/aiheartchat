@@ -13,7 +13,7 @@ import { isSolana, type WalletChain } from "@/lib/wallet/chains";
 import type { Asset } from "@/lib/wallet/assets";
 import { rememberToken } from "@/lib/wallet/market";
 import { lookupToken } from "@/lib/wallet/swap";
-import { useQueryParam } from "./ui";
+import { useSearchParams } from "next/navigation";
 
 export type Sent = { hash: string; status: "pending" | "success" | "reverted" | "error"; error?: string };
 
@@ -108,10 +108,12 @@ export function BookPicker({ contacts, recent, current, onPick }: { contacts: Co
  * held token by itself).
  */
 export function useSendLink(chain: WalletChain, assets: Asset[], loading: boolean) {
-  const assetParam = useQueryParam("asset");
-  const token = useQueryParam("token");
-  const amount = useQueryParam("amount");
-  const name = useQueryParam("name");
+  // the router's params, not location.search: right after a client-side navigation that can still be the old link
+  const sp = useSearchParams();
+  const assetParam = sp.get("asset");
+  const token = sp.get("token");
+  const amount = sp.get("amount");
+  const name = sp.get("name");
   const sol = isSolana(chain);
   const match = (a: Asset) => {
     if (!token) return false;
@@ -131,7 +133,7 @@ export function useSendLink(chain: WalletChain, assets: Asset[], loading: boolea
       alive = false;
     };
   }, [missing, sol, token, chain]);
-  return { wantedId, amount: amount && /^\d*\.?\d+$/.test(amount) ? amount : null, name: name?.slice(0, 24) || null, notHeld: missing && sol };
+  return { wantedId, to: sp.get("to"), amount: amount && /^\d*\.?\d+$/.test(amount) ? amount : null, name: name?.slice(0, 24) || null, notHeld: missing && sol };
 }
 
 export function Result({ sent, explorer, to, saved }: { sent: Sent; explorer: string; to?: string; saved: boolean }) {

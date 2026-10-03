@@ -35,7 +35,7 @@ import {
 } from "@/lib/wallet/sol";
 import { useVault } from "@/components/wallet/wallet-context";
 import { BookPicker, Result, Row, useSendLink, type Sent } from "@/components/wallet/send-parts";
-import { BottomSheet, ChainGlyph, ChainPill, GhostButton, PrimaryButton, TopBar, WalletFrame, useQueryParam } from "@/components/wallet/ui";
+import { BottomSheet, ChainGlyph, ChainPill, GhostButton, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
 
 const SPEEDS = [
   { key: "low", label: "慢" },
@@ -83,7 +83,7 @@ export function SolSend() {
   const book = { contacts: full.contacts.filter((c) => isSolEntry(c.address)), recent: full.recent.filter(isSolEntry) };
   const canScan = useSyncExternalStore(noSubscribe, () => hasFeature("scan"), () => false);
 
-  const wantedTo = useQueryParam("to");
+  const wantedTo = link.to;
   useEffect(() => {
     if (!wantedTo || !isSolAddress(wantedTo)) return;
     const t = setTimeout(() => setTo((cur) => cur || wantedTo), 0);
