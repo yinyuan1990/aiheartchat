@@ -5,7 +5,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { erc20Abi, formatUnits, parseUnits, type Address } from "viem";
-import { ArrowSquareOut, Check, CircleNotch, Info, Lightning, LockSimple, MagnifyingGlass, SealCheck, Warning } from "@phosphor-icons/react";
+import { ArrowSquareOut, Check, CircleNotch, Info, Lightning, LockSimple, MagnifyingGlass, Megaphone, SealCheck, Warning } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import type { Candle as ChartCandle } from "@/components/token/price-chart";
 import { TokenAvatar } from "@/components/shared";
@@ -201,6 +201,10 @@ function PumpList() {
                 {s.label}
               </button>
             ))}
+            <Link href="/wallet/callouts" className="flex h-8 shrink-0 items-center gap-1 rounded-full bg-up/12 px-3.5 text-[13px] font-semibold text-up">
+              <Megaphone size={14} weight="fill" />
+              喊单
+            </Link>
           </div>
         )}
       </div>

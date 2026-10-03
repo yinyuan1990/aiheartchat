@@ -25,6 +25,7 @@ import { boatBoard, boatInfo, boatLogin, boatMe, boatRunEnd, boatRunStart, boatW
 import { addSolComment, jupQuote, jupSwap, solComments, solRelay, solTokens } from "./solana.js";
 import { isAvatarAddress, walletAvatar } from "./avatars.js";
 import { claimOf, verifyTransfer } from "./verify.js";
+import { calloutCaller, calloutCallers, calloutFeed, pinCaller } from "./callouts.js";
 import { isMint, pumpCandles, pumpCoin, pumpHolders, pumpList, pumpTrades } from "./pump.js";
 import { isEvmAddr, isMarketChain, kyberBuild, kyberQuote, marketCandles, marketList, marketPrices, marketSearch, marketToken, marketTrades } from "./markets.js";
 
@@ -638,6 +639,22 @@ app.get("/api/pump/coins", async (c) => {
   const r = await pumpRoute(() => pumpList(c.req.query("tab") ?? "hot", Number(c.req.query("offset") ?? 0), c.req.query("q") ?? ""));
   return r.ok ? c.json(r.v) : c.json({ error: r.error }, r.status);
 });
+// pump callouts (喊单), polled from pump by callouts.ts
+app.get("/api/pump/callouts", async (c) => {
+  const q = c.req.query();
+  if (q.mint && !isMint(q.mint)) return c.json({ error: "bad mint" }, 400);
+  c.header("cache-control", "public, max-age=10");
+  return c.json(await calloutFeed({ caller: q.caller, mint: q.mint, before: q.before, limit: Number(q.limit) || undefined }));
+});
+app.get("/api/pump/callers", async (c) => {
+  c.header("cache-control", "public, max-age=60");
+  return c.json(await calloutCallers(c.req.query("sort") ?? "weekly"));
+});
+app.get("/api/pump/callers/:id", async (c) => {
+  const v = await calloutCaller(c.req.param("id"));
+  return v ? c.json(v) : c.json({ error: "not found" }, 404);
+});
+
 app.get("/api/pump/coin/:mint", async (c) => {
   const mint = c.req.param("mint");
   if (!isMint(mint)) return c.json({ error: "bad mint" }, 400);
@@ -1328,6 +1345,18 @@ app.post("/api/admin/dapps", async (c) => {
   if (r.payload?.reset === true) return c.json(await resetCatalog());
   try {
     return c.json(await saveCatalog(validateCatalog(r.payload?.categories)));
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+});
+
+// follow a pump caller even when they are off the leaderboards: payload {id: wallet | pump uuid, pinned: boolean}
+app.post("/api/admin/callers", async (c) => {
+  const r = await requireOwner(c, "callers");
+  if ("error" in r) return c.json({ error: r.error }, r.status);
+  try {
+    await pinCaller(String(r.payload?.id ?? ""), r.payload?.pinned !== false);
+    return c.json({ ok: true });
   } catch (e) {
     return c.json({ error: (e as Error).message }, 400);
   }

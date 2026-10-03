@@ -33,6 +33,8 @@ import {
 } from "@/lib/wallet/pump";
 import { useVault } from "@/components/wallet/wallet-context";
 import { costBasis, useStar, useViewers } from "@/lib/wallet/positions";
+import { useCallouts } from "@/lib/wallet/callouts";
+import { CalloutRow, ListState } from "@/components/wallet/callout-rows";
 import { AboutCard, CoinChartPanel, CoinFrame, CoinHeader, CoinTabs, CoinTopBar, CommentBox, CurveCard, HolderRows, KingBadge, MarkerSheet, PositionCard, StatsCard, TradeBar, TradeRows, allInterval, compactUsd, quickAmount, setQuickAmount, usd, useMarkers, type MarkTrade } from "@/components/wallet/coin";
 import { BottomSheet, PrimaryButton, TopBar } from "@/components/wallet/ui";
 
@@ -71,6 +73,7 @@ function SolCoin({ mint }: { mint: string }) {
   const day = usePumpCandles(mint, "5m", 300);
   const candles = usePumpCandles(mint, interval, 300);
   const trades = usePumpTrades(mint);
+  const callouts = useCallouts({ mint });
   const mine = usePumpTrades(mint, !!me, me);
   const dev = usePumpTrades(mint, !!coin?.creator, coin?.creator);
   const holders = usePumpHolders(mint);
@@ -208,6 +211,19 @@ function SolCoin({ mint }: { mint: string }) {
                   loading={trades.isLoading}
                   items={(trades.data ?? []).map((t) => ({ id: t.sig, side: t.side, who: t.trader, mine: t.trader === me, amount: `${fmtNum(t.tokens, 1)} · ◎${t.sol < 0.01 ? t.sol.toFixed(4) : t.sol.toFixed(3)}`, value: compactUsd(t.usd), at: t.at, href: explorerTx(SOL_CHAIN, t.sig) }))}
                 />
+              ),
+            },
+            {
+              key: "callouts",
+              label: "喊单",
+              count: callouts.data?.length || undefined,
+              render: () => (
+                <ul className="divide-y divide-border/50">
+                  <ListState loading={callouts.isLoading} error={callouts.isError} empty={!!callouts.data && callouts.data.length === 0} />
+                  {(callouts.data ?? []).map((c) => (
+                    <CalloutRow key={c.id} c={c} />
+                  ))}
+                </ul>
               ),
             },
             {
