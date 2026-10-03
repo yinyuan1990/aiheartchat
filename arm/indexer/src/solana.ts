@@ -1,3 +1,7 @@
+import { ed25519 } from "@noble/curves/ed25519";
+import { base58 } from "@scure/base";
+import { sql } from "./db.js";
+
 /**
  * Solana backend for the wallet: a JSON-RPC relay (public nodes are slow or blocked from mainland China, some refuse
  * Token-2022 scans, and a paid key must never ship in the App) plus cached Jupiter token info / quotes.
@@ -116,6 +120,46 @@ export async function solTokens(mints: string[]): Promise<Record<string, SolToke
   }
   if (tokenCache.size > 50_000) for (const [k, v] of tokenCache) if (now - v.at > 10 * TOKEN_TTL) tokenCache.delete(k);
   return Object.fromEntries(want.map((m) => [m, tokenCache.get(m)?.t ?? null]));
+}
+
+// ---------- coin comments (Solana-signed) ----------
+
+/** Must match the wallet's `solCommentMessage`. */
+export const solCommentMessage = (mint: string, text: string, ts: number, replyTo: number | null) => `Arm comment\nmint: ${mint}\nreply: ${replyTo ?? "-"}\nts: ${ts}\n${text}`;
+
+function verifySol(author: string, message: string, signature: string): boolean {
+  try {
+    const pk = base58.decode(author);
+    const sig = base58.decode(signature);
+    return pk.length === 32 && sig.length === 64 && ed25519.verify(sig, new TextEncoder().encode(message), pk);
+  } catch {
+    return false;
+  }
+}
+
+const SOL_ADDR = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+export async function solComments(mint: string) {
+  const rows = await sql`select id, author, text, reply_to, ts from sol_comments where mint = ${mint} order by ts desc limit 300`;
+  return rows.map((r) => ({ id: Number(r.id), author: r.author as string, text: r.text as string, replyTo: r.reply_to ? Number(r.reply_to) : null, time: r.ts }));
+}
+
+export async function addSolComment(mint: string, body: { author?: string; text?: string; replyTo?: number | null; ts?: number; signature?: string }): Promise<{ status: number; json: unknown }> {
+  const text = (body.text ?? "").trim();
+  if (!SOL_ADDR.test(mint)) return { status: 400, json: { error: "bad mint" } };
+  if (!text || text.length > 280) return { status: 400, json: { error: "text 1–280 chars" } };
+  if (!body.author || !SOL_ADDR.test(body.author) || !body.signature || typeof body.ts !== "number") return { status: 400, json: { error: "bad request" } };
+  if (Math.abs(Date.now() - body.ts) > 5 * 60_000) return { status: 400, json: { error: "stale timestamp" } };
+  const replyTo = body.replyTo ?? null;
+  if (replyTo) {
+    const [p] = await sql`select 1 from sol_comments where id = ${replyTo} and mint = ${mint}`;
+    if (!p) return { status: 400, json: { error: "bad replyTo" } };
+  }
+  if (!verifySol(body.author, solCommentMessage(mint, text, body.ts, replyTo), body.signature)) return { status: 401, json: { error: "bad signature" } };
+  const [recent] = await sql`select ts from sol_comments where author = ${body.author} order by ts desc limit 1`;
+  if (recent && Date.now() - new Date(recent.ts).getTime() < 10_000) return { status: 429, json: { error: "slow down" } };
+  const [row] = await sql`insert into sol_comments (mint, author, text, reply_to, signature) values (${mint}, ${body.author}, ${text}, ${replyTo}, ${body.signature}) returning id, ts`;
+  return { status: 200, json: { id: Number(row.id), time: row.ts } };
 }
 
 // ---------- Jupiter swap (quote + transaction building; the wallet signs locally) ----------

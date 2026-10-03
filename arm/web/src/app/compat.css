@@ -112,10 +112,12 @@
   .bg-\[radial-gradient\(circle\,color-mix\(in_oklch\,var\(--up\)_10\%\,transparent\)\,transparent_70\%\)\]{background-image:radial-gradient(circle,rgb(var(--wc-up) / calc(var(--wa-up, 1) * 0.1)),transparent 70%)}
   .from-black\/45{--tw-gradient-from:rgb(0 0 0 / 0.45)}
   .from-up\/15{--tw-gradient-from:rgb(var(--wc-up) / calc(var(--wa-up, 1) * 0.15))}
+  .from-up\/70{--tw-gradient-from:rgb(var(--wc-up) / calc(var(--wa-up, 1) * 0.7))}
   .via-black\/10{--tw-gradient-via:rgb(0 0 0 / 0.1)}
   .text-foreground\/50{color:rgb(var(--wc-foreground) / calc(var(--wa-foreground, 1) * 0.5))}
   .text-foreground\/60{color:rgb(var(--wc-foreground) / calc(var(--wa-foreground, 1) * 0.6))}
   .text-foreground\/80{color:rgb(var(--wc-foreground) / calc(var(--wa-foreground, 1) * 0.8))}
+  .text-foreground\/85{color:rgb(var(--wc-foreground) / calc(var(--wa-foreground, 1) * 0.85))}
   .text-foreground\/90{color:rgb(var(--wc-foreground) / calc(var(--wa-foreground, 1) * 0.9))}
   .text-muted-foreground\/60{color:rgb(var(--wc-muted-foreground) / calc(var(--wa-muted-foreground, 1) * 0.6))}
   .text-up\/70{color:rgb(var(--wc-up) / calc(var(--wa-up, 1) * 0.7))}

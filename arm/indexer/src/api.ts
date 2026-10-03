@@ -22,7 +22,8 @@ import { replayDetail, replayList } from "./replay.js";
 import { perpMarket, perpWhales } from "./perp.js";
 import { gameBoard, gamePlay, gameSell, gameSession, gameStart, gameTick, gameToday } from "./game.js";
 import { boatBoard, boatInfo, boatLogin, boatMe, boatRunEnd, boatRunStart, boatWithdraw } from "./boat.js";
-import { jupQuote, jupSwap, solRelay, solTokens } from "./solana.js";
+import { addSolComment, jupQuote, jupSwap, solComments, solRelay, solTokens } from "./solana.js";
+import { isMint, pumpCandles, pumpCoin, pumpHolders, pumpList, pumpTrades } from "./pump.js";
 
 export const app = new Hono();
 // paged list endpoints report the full row count in X-Total-Count; expose it so the browser can read it
@@ -617,6 +618,45 @@ app.get("/api/sol/quote", async (c) => {
 app.post("/api/sol/swap", async (c) => {
   const r = await jupSwap(await c.req.json().catch(() => null));
   return c.json(r.json as object, r.status as 200);
+});
+app.get("/api/sol/coins/:mint/comments", async (c) => {
+  const mint = c.req.param("mint");
+  return isMint(mint) ? c.json(await solComments(mint)) : c.json({ error: "bad mint" }, 400);
+});
+app.post("/api/sol/coins/:mint/comments", async (c) => {
+  const r = await addSolComment(c.req.param("mint"), await c.req.json().catch(() => ({})));
+  return c.json(r.json as object, r.status as 200);
+});
+
+// pump.fun coin data (pump.ts); errors from pump come back as 502 so the page can show "数据源暂时不可用"
+const pumpRoute = <T>(load: () => Promise<T>) => load().then((v) => ({ ok: true as const, v })).catch((e: { status?: number; message?: string }) => ({ ok: false as const, status: (e.status === 404 ? 404 : 502) as 404 | 502, error: e.message ?? "pump error" }));
+app.get("/api/pump/coins", async (c) => {
+  const r = await pumpRoute(() => pumpList(c.req.query("tab") ?? "hot", Number(c.req.query("offset") ?? 0), c.req.query("q") ?? ""));
+  return r.ok ? c.json(r.v) : c.json({ error: r.error }, r.status);
+});
+app.get("/api/pump/coin/:mint", async (c) => {
+  const mint = c.req.param("mint");
+  if (!isMint(mint)) return c.json({ error: "bad mint" }, 400);
+  const r = await pumpRoute(() => pumpCoin(mint));
+  return r.ok ? c.json(r.v) : c.json({ error: r.error }, r.status);
+});
+app.get("/api/pump/coin/:mint/trades", async (c) => {
+  const mint = c.req.param("mint");
+  if (!isMint(mint)) return c.json({ error: "bad mint" }, 400);
+  const r = await pumpRoute(() => pumpTrades(mint, Number(c.req.query("limit") ?? 50)));
+  return r.ok ? c.json(r.v) : c.json({ error: r.error }, r.status);
+});
+app.get("/api/pump/coin/:mint/candles", async (c) => {
+  const mint = c.req.param("mint");
+  if (!isMint(mint)) return c.json({ error: "bad mint" }, 400);
+  const r = await pumpRoute(() => pumpCandles(mint, c.req.query("interval") ?? "5m", Number(c.req.query("limit") ?? 300)));
+  return r.ok ? c.json(r.v) : c.json({ error: r.error }, r.status);
+});
+app.get("/api/pump/coin/:mint/holders", async (c) => {
+  const mint = c.req.param("mint");
+  if (!isMint(mint)) return c.json({ error: "bad mint" }, 400);
+  const r = await pumpRoute(() => pumpHolders(mint));
+  return r.ok ? c.json(r.v) : c.json({ error: r.error }, r.status);
 });
 
 // Perp radar (10.2): Hyperliquid funding / OI dashboard + whale positions and liquidation map.

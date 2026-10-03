@@ -254,6 +254,18 @@ export async function migrate() {
     primary key (comment_id, author)
   )`;
 
+  // Solana coin pages (wallet, 10.3): comments signed with the commenter's Solana key; `mint` is not a tokens row.
+  await sql`create table if not exists sol_comments (
+    id bigserial primary key,
+    mint text not null,
+    author text not null,
+    text text not null,
+    reply_to bigint references sol_comments(id),
+    signature text not null,
+    ts timestamptz not null default now()
+  )`;
+  await sql`create index if not exists sol_comments_mint_ts on sol_comments (mint, ts desc)`;
+
   // v2.9: the community-takeover request table is gone; drop it on databases created before that.
   await sql`drop table if exists cto_requests`;
 
