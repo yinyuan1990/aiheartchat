@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { TokenAvatar } from "@/components/shared";
 import { fmtNum, shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { chainByKey, explorerToken, explorerTx, publicClientFor, type WalletChain } from "@/lib/wallet/chains";
+import { chainByKey, explorerToken, explorerTx, nativeIcon, publicClientFor, type WalletChain } from "@/lib/wallet/chains";
 import { copyText, shareText } from "@/lib/wallet/native";
 import { iconUrl } from "@/lib/wallet/assets";
 import { NATIVE, executeKyberSwap, isMarketChain, kyberDexes, kyberImpact, kyberQuote, MarketQuoteError, rememberToken, useMarketCandles, useMarketToken, useMarketTrades, type MarketStep, type MarketToken } from "@/lib/wallet/market";
@@ -301,7 +301,7 @@ function EvmTradeSheet({ chain, token, side, quick, onSide, native, tokRaw, deci
         <div className="mt-1 flex items-baseline gap-2">
           <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" className={cn("w-0 flex-1 bg-transparent font-mono text-[32px] font-semibold tracking-tight outline-none", insufficient && amountIn > 0n && "text-down")} />
           <span className="flex items-center gap-1.5 text-[15px] font-semibold">
-            <TokenAvatar symbol={buy ? nc.symbol : token.symbol} seed={buy ? `${chain.key}-native` : token.address} logo={buy ? undefined : iconUrl(token.image)} size={22} className="rounded-full" />
+            <TokenAvatar symbol={buy ? nc.symbol : token.symbol} seed={buy ? `${chain.key}-native` : token.address} logo={buy ? nativeIcon(chain) : iconUrl(token.image)} size={22} className="rounded-full" />
             {buy ? nc.symbol : token.symbol}
           </span>
         </div>

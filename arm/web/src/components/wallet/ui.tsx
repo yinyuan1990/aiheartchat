@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { ArrowLeft, CaretDown, Compass, ChartLineUp, UserCircle, Wallet as WalletIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
-type ChainInfo = { name: string; color: string; glyph: string };
+type ChainInfo = { name: string; color: string; glyph: string; icon?: string };
 
 const noSubscribe = () => () => {};
 
@@ -55,12 +55,18 @@ export function IconButton({ children, label, onClick, className }: { children: 
 }
 
 export function ChainGlyph({ chain, size = 18 }: { chain: ChainInfo; size?: number }) {
+  const [broken, setBroken] = useState(false);
   return (
     <span
-      className="inline-flex shrink-0 items-center justify-center rounded-full font-bold text-white ring-2 ring-background"
+      className="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-bold text-white ring-2 ring-background"
       style={{ width: size, height: size, fontSize: size * 0.55, background: chain.color }}
     >
-      {chain.glyph}
+      {chain.icon && !broken ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={chain.icon} alt={chain.name} width={size} height={size} className="size-full object-cover" onError={() => setBroken(true)} />
+      ) : (
+        chain.glyph
+      )}
     </span>
   );
 }

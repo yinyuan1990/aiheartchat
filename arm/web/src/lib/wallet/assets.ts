@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { erc20Abi, formatUnits, getAddress, type Address } from "viem";
 import { API_BASE, useWallet } from "@/lib/api";
 import { useBoatInfo } from "@/lib/boat";
-import { SOL_CHAIN, chainByKey, isSolana, publicClientFor, rpcOf, useNodes, type WalletChain } from "./chains";
+import { SOL_CHAIN, chainByKey, isSolana, nativeIcon, publicClientFor, rpcOf, useNodes, type WalletChain } from "./chains";
 import { useHeldTokens, useMarketPrices } from "./market";
 import { LAMPORTS, WSOL_MINT, getTokenAccounts, solRpc } from "./sol";
 
@@ -222,7 +222,7 @@ function useEvmAssets(chain: WalletChain, address?: Address, enabled = true) {
     const nc = chain.chain.nativeCurrency;
     const p = prices.data?.[COINGECKO[chain.key]];
     const amount = Number(formatUnits(q.data.native, nc.decimals));
-    assets.push({ id: "native", symbol: nc.symbol, name: nc.name, seed: `${chain.key}-native`, decimals: nc.decimals, raw: q.data.native, amount, priceUsd: p?.usd ?? null, valueUsd: p ? amount * p.usd : null, change24h: p?.usd_24h_change ?? null, gas: true });
+    assets.push({ id: "native", symbol: nc.symbol, name: nc.name, logo: nativeIcon(chain), seed: `${chain.key}-native`, decimals: nc.decimals, raw: q.data.native, amount, priceUsd: p?.usd ?? null, valueUsd: p ? amount * p.usd : null, change24h: p?.usd_24h_change ?? null, gas: true });
     chain.stables.forEach((s, i) => {
       const raw = q.data!.stables[i];
       const amount = Number(formatUnits(raw, s.decimals));

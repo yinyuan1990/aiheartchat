@@ -21,7 +21,7 @@ import { BottomSheet, ChainGlyph, Num, Pct, PrimaryButton, WalletFrame } from ".
 export const usd = (n: number) => (n >= 1 ? `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `$${fmtSmall(n)}`);
 export const compactUsd = (n: number) => `$${fmtNum(n, n >= 1000 ? 1 : 2)}`;
 
-type ChainInfo = { name: string; color: string; glyph: string };
+type ChainInfo = { name: string; color: string; glyph: string; icon?: string };
 
 /** pump's palette inside the coin pages (mint green / coral red on black), whatever the wallet theme is */
 const PUMP_VARS = { "--up": "#4ade80", "--down": "#f6465d" } as React.CSSProperties;

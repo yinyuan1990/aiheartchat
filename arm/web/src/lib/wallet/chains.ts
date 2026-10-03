@@ -15,7 +15,10 @@ export type WalletChain = {
   kind?: "solana";
   chain: Chain;
   color: string;
+  /** fallback letter when the logo can't load */
   glyph: string;
+  /** chain logo bundled in /public (round badge; Trust Wallet / Ave artwork) */
+  icon: string;
   /** Arc pays gas in USDC through the 0x3600… precompile; its "native" balance is that same USDC (18 decimals natively, 6 via ERC-20). */
   nativeIsUsdc?: boolean;
   stables: StableToken[];
@@ -31,6 +34,7 @@ export const WALLET_CHAINS: WalletChain[] = [
     chain: arcMainnet,
     color: "#111111",
     glyph: "A",
+    icon: "/wallet/chains/arc.png",
     nativeIsUsdc: true,
     stables: [{ symbol: "USDC", address: "0x3600000000000000000000000000000000000000", decimals: 6 }],
     explorer: "https://arc-scan.org",
@@ -41,6 +45,7 @@ export const WALLET_CHAINS: WalletChain[] = [
     chain: withRpc(mainnet, ["https://ethereum-rpc.publicnode.com", "https://eth.llamarpc.com", "https://1rpc.io/eth", "https://eth.drpc.org"]),
     color: "#627EEA",
     glyph: "Ξ",
+    icon: "/wallet/chains/eth.png",
     stables: [
       { symbol: "USDC", address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6 },
       { symbol: "USDT", address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6 },
@@ -53,6 +58,7 @@ export const WALLET_CHAINS: WalletChain[] = [
     chain: withRpc(bsc, ["https://bsc-dataseed.bnbchain.org", "https://bsc-dataseed1.binance.org", "https://bsc-rpc.publicnode.com", "https://1rpc.io/bnb"]),
     color: "#F0B90B",
     glyph: "B",
+    icon: "/wallet/chains/bsc.png",
     stables: [
       { symbol: "USDT", address: "0x55d398326f99059fF775485246999027B3197955", decimals: 18 },
       { symbol: "USDC", address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", decimals: 18 },
@@ -65,6 +71,7 @@ export const WALLET_CHAINS: WalletChain[] = [
     chain: withRpc(base, ["https://mainnet.base.org", "https://base-rpc.publicnode.com", "https://1rpc.io/base", "https://base.drpc.org"]),
     color: "#0052FF",
     glyph: "b",
+    icon: "/wallet/chains/base.png",
     stables: [{ symbol: "USDC", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 }],
     explorer: "https://basescan.org",
   },
@@ -74,6 +81,7 @@ export const WALLET_CHAINS: WalletChain[] = [
     chain: withRpc(arbitrum, ["https://arb1.arbitrum.io/rpc", "https://arbitrum-one-rpc.publicnode.com", "https://1rpc.io/arb", "https://arbitrum.drpc.org"]),
     color: "#28A0F0",
     glyph: "A",
+    icon: "/wallet/chains/arb.png",
     stables: [
       { symbol: "USDC", address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals: 6 },
       { symbol: "USDT", address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", decimals: 6 },
@@ -86,6 +94,7 @@ export const WALLET_CHAINS: WalletChain[] = [
     chain: withRpc(polygon, ["https://polygon-rpc.com", "https://polygon-bor-rpc.publicnode.com", "https://1rpc.io/matic", "https://polygon.drpc.org"]),
     color: "#8247E5",
     glyph: "P",
+    icon: "/wallet/chains/polygon.png",
     stables: [
       { symbol: "USDC", address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6 },
       { symbol: "USDT", address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", decimals: 6 },
@@ -106,12 +115,15 @@ export const WALLET_CHAINS: WalletChain[] = [
     }),
     color: "#9945FF",
     glyph: "◎",
+    icon: "/wallet/chains/sol.png",
     stables: [],
     explorer: "https://solscan.io",
   },
 ];
 
 export const isSolana = (c: WalletChain) => c.kind === "solana";
+/** Logo of the chain's gas coin: ETH on the L2s, otherwise the chain's own. */
+export const nativeIcon = (c: WalletChain) => (c.key === "base" || c.key === "arb" ? "/wallet/chains/eth.png" : c.icon);
 export const EVM_CHAINS = WALLET_CHAINS.filter((c) => !isSolana(c));
 export const SOL_CHAIN = WALLET_CHAINS.find(isSolana)!;
 export const chainByKey = (key?: string | null) => WALLET_CHAINS.find((c) => c.key === key) ?? WALLET_CHAINS[0];
