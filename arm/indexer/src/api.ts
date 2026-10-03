@@ -20,6 +20,7 @@ import { scanner } from "./scanner.js";
 import { replayDetail, replayList } from "./replay.js";
 import { perpMarket, perpWhales } from "./perp.js";
 import { gameBoard, gamePlay, gameSell, gameSession, gameStart, gameTick, gameToday } from "./game.js";
+import { boatBoard, boatInfo, boatLogin, boatMe, boatRunEnd, boatRunStart, boatWithdraw } from "./boat.js";
 
 export const app = new Hono();
 // paged list endpoints report the full row count in X-Total-Count; expose it so the browser can read it
@@ -572,6 +573,33 @@ app.get("/api/game/play/:id", async (c) => {
   const id = playId(c.req.param("id"));
   const r = id ? await gamePlay(id) : null;
   return r ? c.json(r) : c.json({ error: "not found" }, 404);
+});
+
+// Speedboat (10.2): $BOAT game ledger, rewards withdrawn from BoatVault with a server signature (boat.ts).
+const boatToken = (c: { req: { header: (n: string) => string | undefined } }) => c.req.header("authorization")?.replace(/^Bearer /, "");
+app.get("/api/boat/info", async (c) => c.json(await boatInfo()));
+app.get("/api/boat/board", async (c) => c.json(await boatBoard()));
+app.post("/api/boat/login", async (c) => {
+  const body = await c.req.json<{ wallet?: string; ts?: number; sig?: string }>().catch(() => ({}));
+  const r = await boatLogin(clientIp(c) || "?", body);
+  return "error" in r ? c.json(r, 400) : c.json(r);
+});
+app.get("/api/boat/me", async (c) => {
+  const r = await boatMe(boatToken(c));
+  return r ? c.json(r) : c.json({ error: "login" }, 401);
+});
+app.post("/api/boat/run", async (c) => {
+  const r = await boatRunStart(boatToken(c), clientIp(c) || "?");
+  return "error" in r ? c.json(r, 401) : c.json(r);
+});
+app.post("/api/boat/run/:id/end", async (c) => {
+  const body = await c.req.json<{ meters?: number }>().catch(() => ({ meters: 0 }));
+  const r = await boatRunEnd(boatToken(c), c.req.param("id").slice(0, 32), Number(body.meters) || 0);
+  return "error" in r ? c.json(r, r.error === "login" ? 401 : 400) : c.json(r);
+});
+app.post("/api/boat/withdraw", async (c) => {
+  const r = await boatWithdraw(boatToken(c));
+  return "error" in r ? c.json(r, r.error === "login" ? 401 : 400) : c.json(r);
 });
 
 // Perp radar (10.2): Hyperliquid funding / OI dashboard + whale positions and liquidation map.

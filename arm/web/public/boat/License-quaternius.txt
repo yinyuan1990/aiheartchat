@@ -1,0 +1,9 @@
+﻿palm-a.glb / palm-b.glb / palm-c.glb
+
+"Palm Tree" models by Quaternius (https://quaternius.com), downloaded from Poly Pizza:
+  https://poly.pizza/m/A6cKJYFsIb
+  https://poly.pizza/m/DsrrAYmucG
+  https://poly.pizza/m/P0tgwyXBgr
+
+License: Creative Commons Zero (CC0) - http://creativecommons.org/publicdomain/zero/1.0/
+Free for personal and commercial use, no attribution required.

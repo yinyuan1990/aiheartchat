@@ -1,0 +1,14 @@
+{
+  "chainId": 5042,
+  "name": "Speedboat",
+  "symbol": "BOAT",
+  "vault": "0x595ae3F3c40fb4970a93D2BD3Af7DBf69a40c813",
+  "token": "0x6fceD62cdb01E141Bb0895eA9f519d8caE0160e9",
+  "launcher": "0x67f633b9de203d4d80fb40b1c2addbaf54ff860a",
+  "poolId": "0xd1f9c4696c1a6fa5a275baecea93edb37c502efc75614502b1e89394c641bf0f",
+  "poolManager": "0x8366a39CC670B4001A1121B8F6A443A643e40951",
+  "owner": "0x6D80C00F410c448b0dc705a1D104797bA1ca160d",
+  "signer": "0x15C356446e1238a75aE13AEE7f728Fc3A8a9A681",
+  "deployTx": "0x84904070c8b4aba4d92e7b0650c80a250be3919f79165b7c1fe2de3c0cce9ad5",
+  "deployBlock": 23883386
+}

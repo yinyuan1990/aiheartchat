@@ -212,6 +212,7 @@ const dict = {
   "replay.v.insiders": ["开发者 + 捆绑 + 机器人合计 {v}，散户合计 {r}。", "Dev + bundle + bots: {v}; retail: {r}."],
   "replay.truncated": ["成交太多，只回放前 {n} 笔（开盘后 {t} 内）。", "Too many trades: only the first {n} are replayed (first {t})."],
   "nav.game": ["卖在山顶", "Sell the Top"],
+  "nav.games": ["游戏探索", "Games"],
   "game.title": ["卖在山顶 #{n}", "Sell the Top #{n}"],
   "game.tagline": ["你是第 {rank} 个买家，什么时候卖？只能按一次。", "You're buyer #{rank}. When do you sell? One tap."],
   "game.rule.1": ["每天一题，所有人同一张图：一个真实 Arc 新币开盘后的第一小时，币名藏起来。", "One round a day, the same chart for everyone: the first hour of a real Arc launch, name hidden."],
