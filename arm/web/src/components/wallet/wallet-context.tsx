@@ -5,7 +5,9 @@ import {
   accountOf,
   addWallet as vaultAdd,
   createVault,
+  quickPassword,
   readStored,
+  setQuick as vaultSetQuick,
   removeWallet as vaultRemove,
   saveMeta,
   unlockVault,
@@ -41,6 +43,10 @@ type Ctx = {
   /** TRON signer of the active wallet; throws while locked. */
   tronKey: () => TronKey;
   secretOf: (id: string) => Secret | null;
+  /** 免密码使用: opens without the password and does not auto-lock in the background */
+  quick: boolean;
+  /** password (already verified) = on, null = off */
+  setQuick: (password: string | null) => Promise<void>;
 };
 
 const WalletCtx = createContext<Ctx | null>(null);
@@ -52,25 +58,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [wallets, setWallets] = useState<WalletMeta[]>([]);
   const [activeId, setActiveId] = useState<string>("");
   const [chainKey, setChainKey] = useState("arc");
+  const [quickOn, setQuickOn] = useState(false);
   const unlocked = useRef<Unlocked | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    readStored().then((s) => {
-      if (!alive) return;
-      try {
-        const k = localStorage.getItem(CHAIN_KEY);
-        if (k) setChainKey(chainByKey(k).key);
-      } catch {}
-      if (!s) return setStatus("empty");
-      setWallets(s.wallets);
-      setActiveId(s.active);
-      setStatus("locked");
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   const lock = useCallback(() => {
     unlocked.current = null;
@@ -81,7 +70,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let t: ReturnType<typeof setTimeout> | null = null;
     const onVis = () => {
-      if (document.visibilityState === "hidden") t = setTimeout(lock, AUTO_LOCK_MS);
+      if (document.visibilityState === "hidden" && !unlocked.current?.quick) t = setTimeout(lock, AUTO_LOCK_MS);
       else if (t) clearTimeout(t);
     };
     document.addEventListener("visibilitychange", onVis);
@@ -105,8 +94,38 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
     setWallets(list);
     setActiveId(r.active);
+    setQuickOn(!!r.unlocked.quick);
     setStatus("unlocked");
   }, []);
+
+  useEffect(() => {
+    let alive = true;
+    readStored().then(async (s) => {
+      if (!alive) return;
+      try {
+        const k = localStorage.getItem(CHAIN_KEY);
+        if (k) setChainKey(chainByKey(k).key);
+      } catch {}
+      if (!s) return setStatus("empty");
+      setWallets(s.wallets);
+      setActiveId(s.active);
+      // 免密码使用: stay on "loading" and open straight away instead of showing the unlock screen; a stored password
+      // that no longer opens the vault falls back to it
+      const pw = await quickPassword();
+      if (!alive) return;
+      if (!pw) return setStatus("locked");
+      unlock(pw).catch(() => alive && setStatus("locked"));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [unlock]);
+
+  const setQuick = useCallback<Ctx["setQuick"]>(async (password) => {
+    if (!unlocked.current) throw new Error("locked");
+    unlocked.current = await vaultSetQuick(unlocked.current, wallets, activeId, password);
+    setQuickOn(!!password);
+  }, [wallets, activeId]);
 
   const addSecret = useCallback<Ctx["addSecret"]>(async (name, secret, password) => {
     if (!unlocked.current) {
@@ -190,8 +209,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         return tronKeyOf(s);
       },
       secretOf: (id) => unlocked.current?.plain.secrets[id] ?? null,
+      quick: quickOn,
+      setQuick,
     };
-  }, [status, wallets, activeId, chainKey, setChain, unlock, lock, addSecret, switchTo, rename, remove]);
+  }, [status, wallets, activeId, chainKey, setChain, unlock, lock, addSecret, switchTo, rename, remove, quickOn, setQuick]);
 
   return <WalletCtx.Provider value={value}>{children}</WalletCtx.Provider>;
 }

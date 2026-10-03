@@ -13,9 +13,13 @@ export type Secret = { kind: "mnemonic"; phrase: string } | { kind: "key"; key: 
  * key itself). Both are filled in on first unlock for older vaults. */
 export type WalletMeta = { id: string; name: string; kind: Secret["kind"]; address: Address; sol?: string; trx?: string; createdAt: number };
 type VaultPlain = { secrets: Record<string, Secret> };
-type StoredVault = { v: 1; iter: number; salt: string; iv: string; ct: string; wallets: WalletMeta[]; active: string };
+/**
+ * `quick`: 「免密码使用」 — the wallet password kept next to the ciphertext so the vault opens without asking. Only allowed
+ * when the record lives in the App shell's Keystore / Keychain storage (never in a browser's localStorage).
+ */
+type StoredVault = { v: 1; iter: number; salt: string; iv: string; ct: string; wallets: WalletMeta[]; active: string; quick?: string };
 
-export type Unlocked = { key: CryptoKey; salt: Uint8Array; iter: number; plain: VaultPlain };
+export type Unlocked = { key: CryptoKey; salt: Uint8Array; iter: number; plain: VaultPlain; quick?: string };
 
 const PBKDF2_ITER = 600_000;
 const MIN_PASSWORD = 8;
@@ -55,7 +59,27 @@ async function deriveKey(password: string, salt: Uint8Array, iter: number): Prom
 async function seal(u: Unlocked, wallets: WalletMeta[], active: string): Promise<StoredVault> {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, u.key, enc.encode(JSON.stringify(u.plain))));
-  return { v: 1, iter: u.iter, salt: b64(u.salt), iv: b64(iv), ct: b64(ct), wallets, active };
+  return { v: 1, iter: u.iter, salt: b64(u.salt), iv: b64(iv), ct: b64(ct), wallets, active, ...(u.quick ? { quick: u.quick } : {}) };
+}
+
+/** The shell keeps the vault in Keystore / Keychain: the only place 免密码使用 may store the password. */
+export const quickSupported = () => {
+  const n = typeof window !== "undefined" ? (window as unknown as { ArmWalletNative?: NativeBridge }).ArmWalletNative : undefined;
+  return !!(n?.vaultGet && n.vaultSet && n.vaultClear);
+};
+
+/** Password stored by 免密码使用, or null. */
+export async function quickPassword(store = vaultStore()): Promise<string | null> {
+  const s = await readStored(store);
+  return s?.quick && quickSupported() ? s.quick : null;
+}
+
+/** Turns 免密码使用 on (the verified password) or off (null). */
+export async function setQuick(u: Unlocked, wallets: WalletMeta[], active: string, password: string | null, store = vaultStore()): Promise<Unlocked> {
+  if (password && !quickSupported()) throw new Error("只有在心之音 App 里才能开启");
+  const next: Unlocked = { ...u, quick: password ?? undefined };
+  await store.set(JSON.stringify(await seal(next, wallets, active)));
+  return next;
 }
 
 export async function readStored(store = vaultStore()): Promise<StoredVault | null> {
@@ -83,7 +107,7 @@ export async function unlockVault(password: string, store = vaultStore()): Promi
   } catch {
     throw new WrongPasswordError("wrong password");
   }
-  return { unlocked: { key, salt, iter: s.iter, plain }, wallets: s.wallets, active: s.active };
+  return { unlocked: { key, salt, iter: s.iter, plain, quick: s.quick }, wallets: s.wallets, active: s.active };
 }
 
 export function passwordProblem(pw: string): string | null {
@@ -175,7 +199,7 @@ export async function removeWallet(u: Unlocked, wallets: WalletMeta[], id: strin
 export async function changePassword(u: Unlocked, wallets: WalletMeta[], active: string, next: string, store = vaultStore()) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const key = await deriveKey(next, salt, PBKDF2_ITER);
-  const nu: Unlocked = { key, salt, iter: PBKDF2_ITER, plain: u.plain };
+  const nu: Unlocked = { key, salt, iter: PBKDF2_ITER, plain: u.plain, quick: u.quick ? next : undefined };
   await store.set(JSON.stringify(await seal(nu, wallets, active)));
   return nu;
 }

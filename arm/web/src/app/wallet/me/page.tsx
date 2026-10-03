@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { AddressBook, CaretRight, Copy, Fingerprint, HandCoins, Key, Lock, PencilSimple, Plus, ScanSmiley, ShieldWarning, Trash, TreeStructure, Wallet as WalletIcon } from "@phosphor-icons/react";
+import { AddressBook, CaretRight, Copy, Fingerprint, HandCoins, Key, Lock, LockKeyOpen, PencilSimple, Plus, ScanSmiley, ShieldWarning, Trash, TreeStructure, Wallet as WalletIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { WalletDot } from "@/components/shared";
 import { shortAddr } from "@/lib/format";
 import { toHex } from "viem";
 import type { HDAccount } from "viem/accounts";
-import { accountOf, verifyPassword, type Secret, type WalletMeta } from "@/lib/wallet/vault";
+import { accountOf, quickSupported, verifyPassword, type Secret, type WalletMeta } from "@/lib/wallet/vault";
 import { exportSolKey, solKeypairOf } from "@/lib/wallet/sol";
 import { bioDisable, bioEnable, bioName, bioStatus, copyText, setSecureScreen, type BioStatus } from "@/lib/wallet/native";
 import { cn } from "@/lib/utils";
@@ -22,8 +22,28 @@ type Sheet = { kind: "rename" | "export" | "delete"; wallet: WalletMeta } | null
 const noSubscribe = () => () => {};
 
 export default function MePage() {
-  const { wallets, active, lock } = useVault();
+  const { wallets, active, lock, quick, setQuick } = useVault();
   const [sheet, setSheet] = useState<Sheet>(null);
+  const [quickSheet, setQuickSheet] = useState(false);
+  const canQuick = useSyncExternalStore(noSubscribe, quickSupported, () => false);
+  const toggleQuick = async () => {
+    if (!quick) return setQuickSheet(true);
+    try {
+      await setQuick(null);
+      toast.success("已关闭免密码使用");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+  const enableQuick = async (pw: string) => {
+    try {
+      await setQuick(pw);
+      setQuickSheet(false);
+      toast.success("已开启免密码使用");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
   const [bio, setBio] = useState<BioStatus | null>(null);
   const [bioSheet, setBioSheet] = useState(false);
   const refreshBio = () => void bioStatus().then(setBio);
@@ -112,8 +132,20 @@ export default function MePage() {
           <button type="button" onClick={lock} className="flex w-full items-center gap-3 px-4 py-4 text-left">
             <Lock size={20} />
             <span className="flex-1 text-[15px]">立即锁定</span>
-            <span className="text-[12px] text-muted-foreground">切到后台 5 分钟自动锁定</span>
+            <span className="text-[12px] text-muted-foreground">{quick ? "免密码使用已开启，不会自动锁定" : "切到后台 5 分钟自动锁定"}</span>
           </button>
+          {canQuick && (
+            <button type="button" role="switch" aria-checked={quick} onClick={() => void toggleQuick()} className="flex w-full items-center gap-3 px-4 py-4 text-left">
+              <LockKeyOpen size={20} />
+              <span className="flex-1">
+                <span className="block text-[15px]">免密码使用</span>
+                <span className="block text-[12px] text-muted-foreground">切后台、重开 App 都不用再输密码；导出助记词 / 私钥仍要密码</span>
+              </span>
+              <span className={cn("flex h-7 w-12 shrink-0 items-center rounded-full p-0.5 transition-colors", quick ? "justify-end bg-up" : "justify-start bg-border")}>
+                <span className="size-6 rounded-full bg-white shadow-sm" />
+              </span>
+            </button>
+          )}
           {bio && (bio.available || bio.enabled) && (
             <button type="button" role="switch" aria-checked={bio.enabled} onClick={() => void toggleBio()} className="flex w-full items-center gap-3 px-4 py-4 text-left">
               {bio.kind === "face" ? <ScanSmiley size={20} /> : <Fingerprint size={20} />}
@@ -163,6 +195,17 @@ export default function MePage() {
       </BottomSheet>
       <BottomSheet open={bioSheet} onClose={() => setBioSheet(false)}>
         {bioSheet && <PasswordGate title={`开启${bioName(bio)}解锁`} onOk={(pw) => void enableBio(pw)} />}
+      </BottomSheet>
+      <BottomSheet open={quickSheet} onClose={() => setQuickSheet(false)}>
+        {quickSheet && (
+          <>
+            <p className="mb-4 flex gap-1.5 rounded-2xl bg-[#d48806]/10 px-3.5 py-3 text-[12px] leading-5 text-[#b07005]">
+              <ShieldWarning size={16} className="mt-0.5 shrink-0" />
+              开启后，任何拿到这台已解锁手机的人打开钱包就能直接转账。密码加密保存在本机安全存储里，不会上传。
+            </p>
+            <PasswordGate title="开启免密码使用" onOk={(pw) => void enableQuick(pw)} />
+          </>
+        )}
       </BottomSheet>
     </WalletFrame>
   );
