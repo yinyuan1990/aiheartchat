@@ -101,23 +101,27 @@ const NAV = [
   { href: "/wallet/me", label: "我的", icon: UserCircle },
 ];
 
+/** Pinned to the viewport on phones (sticky drifts away inside the App WebViews); the spacer keeps content clear of it. */
 export function BottomNav() {
   const pathname = usePathname();
   return (
-    <nav className="sticky bottom-0 z-20 mt-auto px-4 pt-2 pb-[max(12px,env(safe-area-inset-bottom))]">
-      <div className="flex h-16 items-center justify-around rounded-[22px] border border-border/60 bg-card/90 shadow-[0_8px_30px_rgba(0,0,0,0.08)] backdrop-blur-xl">
-        {NAV.map((n) => {
-          const active = n.href === "/wallet" ? pathname === "/wallet" : pathname.startsWith(n.href);
-          const Icon = n.icon;
-          return (
-            <Link key={n.href} href={n.href} className={cn("flex w-16 flex-col items-center gap-0.5 text-[11px] transition active:scale-90", active ? "text-foreground" : "text-muted-foreground")}>
-              <Icon size={24} weight={active ? "fill" : "regular"} />
-              {n.label}
-            </Link>
-          );
-        })}
-      </div>
-    </nav>
+    <>
+      <div aria-hidden className="mt-auto h-[calc(80px+max(12px,env(safe-area-inset-bottom)))] shrink-0 sm:hidden" />
+      <nav className="fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-[430px] px-4 pt-2 pb-[max(12px,env(safe-area-inset-bottom))] sm:sticky sm:mt-auto">
+        <div className="flex h-16 items-center justify-around rounded-[22px] border border-border/60 bg-card/90 shadow-[0_8px_30px_rgba(0,0,0,0.08)] backdrop-blur-xl">
+          {NAV.map((n) => {
+            const active = n.href === "/wallet" ? pathname === "/wallet" : pathname.startsWith(n.href);
+            const Icon = n.icon;
+            return (
+              <Link key={n.href} href={n.href} className={cn("flex w-16 flex-col items-center gap-0.5 text-[11px] transition active:scale-90", active ? "text-foreground" : "text-muted-foreground")}>
+                <Icon size={24} weight={active ? "fill" : "regular"} />
+                {n.label}
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+    </>
   );
 }
 
