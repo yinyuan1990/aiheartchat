@@ -23,14 +23,16 @@ const PALETTES = [
   "crimson and orange", "navy and cyan", "sunset orange and magenta", "pastel rainbow", "black and neon green",
   "silver and ice blue", "lavender and sky blue", "cherry red and cream", "turquoise and yellow", "chocolate and caramel",
 ];
-const STYLES = ["flat vector mascot", "3D clay render", "kawaii sticker", "low-poly geometric", "pixel art", "glossy toy figure"];
+const STYLES = ["flat vector mascot", "3D clay render", "kawaii sticker", "glossy toy figure", "soft gradient illustration"];
+/** bump to repaint every avatar after changing the prompt */
+const VERSION = "v2";
 
 const pick = <T>(list: T[], h: Buffer, i: number) => list[h.readUInt16BE(i) % list.length];
 
 export const isAvatarAddress = (a: string) => /^0x[0-9a-fA-F]{40}$/.test(a) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a);
 /** EVM addresses are case-insensitive, Solana ones are not. */
 const keyOf = (a: string) => (a.startsWith("0x") ? a.toLowerCase() : a);
-const fileOf = (a: string) => `${DIR}/${createHash("sha256").update(keyOf(a)).digest("hex").slice(0, 32)}.jpg`;
+const fileOf = (a: string) => `${DIR}/${createHash("sha256").update(`${VERSION}:${keyOf(a)}`).digest("hex").slice(0, 32)}.jpg`;
 
 function promptOf(a: string): { prompt: string; seed: number } {
   const h = createHash("sha256").update(`avatar:${keyOf(a)}`).digest();
@@ -38,7 +40,7 @@ function promptOf(a: string): { prompt: string; seed: number } {
   const palette = pick(PALETTES, h, 2);
   const style = pick(STYLES, h, 4);
   return {
-    prompt: `Cute ${subject} avatar, ${style}, ${palette} color palette, centered head and shoulders, bold shapes, high contrast, simple plain background, no text, no letters, no watermark.`,
+    prompt: `Cute ${subject} avatar, ${style}, ${palette} color palette, head and shoulders in the upper part of the picture, bold shapes, high contrast, simple plain background, no text, no letters, no watermark.`,
     seed: h.readUInt32BE(6) % 1_000_000_000,
   };
 }
@@ -49,7 +51,8 @@ let running = false;
 
 async function paint(a: string) {
   const { prompt, seed } = promptOf(a);
-  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=256&height=256&nologo=true&model=flux&seed=${seed}`;
+  // taller than wide: the free tier stamps a watermark along the bottom edge, and the client shows only the top square
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=512&height=608&nologo=true&model=flux&seed=${seed}`;
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await fetch(url, { signal: AbortSignal.timeout(90_000), headers: { "user-agent": "Arm/1.0 (+https://arm.yyheart.com)" } });
     if (res.status === 429 || res.status >= 500) {

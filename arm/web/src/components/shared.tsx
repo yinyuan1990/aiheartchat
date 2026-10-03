@@ -120,7 +120,7 @@ export function WalletDot({ address, size = 16, className }: { address: string; 
     <span className={cn("relative inline-block shrink-0 overflow-hidden rounded-full", className)} style={{ width: size, height: size, background: `linear-gradient(135deg, hsl(${h1} 70% 50%), hsl(${h2} 70% 35%))` }}>
       {missing !== address && AVATAR_ADDR.test(address) && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img key={address} src={`${API_BASE}/avatar/${address}`} alt="" loading="lazy" onError={() => setMissing(address)} className="absolute inset-0 size-full object-cover" />
+        <img key={address} src={`${API_BASE}/avatar/${address}?v=2`} alt="" loading="lazy" onError={() => setMissing(address)} className="absolute inset-0 size-full object-cover object-top" />
       )}
     </span>
   );
