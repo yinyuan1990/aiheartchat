@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -87,6 +88,7 @@ fun chainCardPreview(type: String, content: String): String? {
     return when (type) {
         "transfer" -> "[转账] ${tokenAmount(o?.str("amount"), o?.str("decimals")?.toIntOrNull() ?: 0)} ${o?.str("symbol") ?: ""}".trim()
         "callout" -> "[喊单] $${o?.str("symbol") ?: ""}"
+        "payreq" -> o?.str("amount")?.let { "[收款] ${tokenAmount(it, o.str("decimals")?.toIntOrNull() ?: 0)} ${o.str("symbol").orEmpty()}".trim() } ?: "[收款] ${chainName(o?.str("chain").orEmpty())}"
         else -> null
     }
 }
@@ -120,13 +122,24 @@ fun chainWalletRoute(path: String) = "chain-wallet?path=" + Uri.encode(path)
 fun transferPath(address: String, chain: String?, name: String) =
     "/wallet/send?to=$address&name=${Uri.encode(name.take(24))}&ret=1" + if (chain != null) "&chain=$chain" else ""
 
-/** 钱包交回的转账结果 → 服务端核对链上交易后发转账卡片，返回那条消息 */
+/** 点收款消息的「转账」：钱包转账页填好收款地址 / 币 / 金额，转完交回结果（req = 收款消息 id，服务端据此把卡片发回原聊天） */
+fun payreqPath(content: String, msgId: String, name: String): String? {
+    val o = obj(content) ?: return null
+    val chain = o.str("chain") ?: return null
+    val to = o.str("address") ?: return null
+    val token = o.str("token")
+    val amount = o.str("amount")?.let { a -> runCatching { BigDecimal(a).movePointLeft(o.str("decimals")?.toIntOrNull() ?: 0).stripTrailingZeros().toPlainString() }.getOrNull() }
+    return "/wallet/send?to=$to&chain=$chain&name=${Uri.encode(name.take(24))}&ret=1&req=$msgId" +
+        (token?.let { "&token=$it" } ?: "") + (amount?.let { "&amount=$it" } ?: "")
+}
+
+/** 钱包交回的转账结果 → 服务端核对链上交易后发转账卡片，返回那条消息（付收款消息时 targetId 可以为空） */
 suspend fun postTransferCard(targetId: String, resultJson: String): MsgItem? {
     val r = obj(resultJson) ?: return null
     if (r.str("kind") != "transfer") return null
     val body = buildJsonObject {
-        put("targetId", targetId)
-        listOf("chain", "hash", "token", "amount", "symbol", "from", "to", "proof").forEach { k -> r.str(k)?.let { put(k, it) } }
+        if (targetId.isNotEmpty()) put("targetId", targetId)
+        listOf("chain", "hash", "token", "amount", "symbol", "from", "to", "proof", "req").forEach { k -> r.str(k)?.let { put(k, it) } }
         r["decimals"]?.jsonPrimitive?.intOrNull?.let { put("decimals", it) }
     }
     val data = Api.request("/im/transfer", "POST", body) ?: return null
@@ -199,9 +212,45 @@ fun CalloutCard(content: String, canWallet: Boolean, onOpenWallet: (String) -> U
     }
 }
 
-/** 钱包代币页「喊单到聊天」：选会话（最多 10 个），每个发一张喊单卡片 */
+/** 收款消息：二维码 + 地址（可复制）+ 可选的币和金额；别人点「转账」直接进钱包转账页 */
+@Composable
+fun PayreqCard(content: String, mine: Boolean, onPay: (() -> Unit)?) {
+    val ctx = LocalContext.current
+    val o = remember(content) { obj(content) } ?: return
+    val address = o.str("address").orEmpty()
+    val chain = o.str("chain").orEmpty()
+    val qr = remember(address) { runCatching { makeQrBitmap(address, 360).asImageBitmap() }.getOrNull() }
+    val amount = o.str("amount")?.let { "${tokenAmount(it, o.str("decimals")?.toIntOrNull() ?: 0)} ${o.str("symbol").orEmpty()}" }
+    Column(Modifier.width(230.dp).clip(RoundedCornerShape(14.dp)).background(Color.White).border(1.dp, TransferOrange, RoundedCornerShape(14.dp))) {
+        Row(Modifier.fillMaxWidth().background(TransferOrange).padding(12.dp, 9.dp), verticalAlignment = Alignment.CenterVertically) {
+            TransferIcon(Color.White, 16.dp)
+            Text(" 收款 · ${chainName(chain)}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        }
+        Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(amount ?: o.str("symbol")?.let { "收 $it" } ?: "金额由付款人填写", color = Color(0xFF111111), fontSize = if (amount != null) 20.sp else 14.sp, fontWeight = FontWeight.SemiBold)
+            o.str("note")?.takeIf { it.isNotBlank() }?.let { Text(it, color = Color(0xFF555555), fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp)) }
+            qr?.let { androidx.compose.foundation.Image(it, contentDescription = "收款二维码", modifier = Modifier.padding(top = 8.dp).size(140.dp)) }
+            Text(
+                address, color = Color(0xFF333333), fontSize = 11.sp, lineHeight = 15.sp,
+                modifier = Modifier.padding(top = 6.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFFF4F4F5)).noRippleClick {
+                    val cm = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    cm.setPrimaryClip(android.content.ClipData.newPlainText("address", address))
+                    android.widget.Toast.makeText(ctx, "地址已复制", android.widget.Toast.LENGTH_SHORT).show()
+                }.padding(8.dp, 6.dp),
+            )
+            Text("点地址复制 · 只收 ${chainName(chain)} 上的币", color = Color(0xFF888888), fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp))
+            if (!mine && onPay != null) Box(
+                Modifier.padding(top = 10.dp).fillMaxWidth().height(36.dp).clip(RoundedCornerShape(18.dp)).background(TransferOrange).noRippleClick(onPay),
+                contentAlignment = Alignment.Center,
+            ) { Text("转账", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
+        }
+    }
+}
+
+/** 钱包里「喊单到聊天」/「收款发到聊天」：选会话（最多 10 个），每个发一张卡片（card.kind = "payreq" 是收款，否则喊单） */
 @Composable
 fun ShareCardDialog(card: JsonObject, onDone: (String) -> Unit, onDismiss: () -> Unit) {
+    val payreq = card["kind"]?.jsonPrimitive?.contentOrNull == "payreq"
     val scope = rememberCoroutineScope()
     var convs by remember { mutableStateOf<List<ConversationItem>>(emptyList()) }
     var q by remember { mutableStateOf("") }
@@ -213,15 +262,15 @@ fun ShareCardDialog(card: JsonObject, onDone: (String) -> Unit, onDismiss: () ->
     fun name(c: ConversationItem) = c.peer?.nickname ?: c.group?.name ?: ""
     val shown = convs.filter { q.isBlank() || name(it).contains(q.trim(), ignoreCase = true) }
     fun send() {
-        val content = card.toString()
+        val content = JsonObject(card - "kind").toString()
         picked.mapNotNull { id -> convs.find { it.id == id } }.forEach { c ->
-            WsClient.send(if (c.type == 1) 1 else 2, if (c.type == 1) c.peer!!.id else c.group!!.id, "callout", content, null)
+            WsClient.send(if (c.type == 1) 1 else 2, if (c.type == 1) c.peer!!.id else c.group!!.id, if (payreq) "payreq" else "callout", content, null)
         }
-        scope.launch { onDone("已喊单到 ${picked.size} 个聊天") }
+        scope.launch { onDone(if (payreq) "收款已发到 ${picked.size} 个聊天" else "已喊单到 ${picked.size} 个聊天") }
     }
     Dialog(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().heightIn(max = 560.dp).clip(RoundedCornerShape(16.dp)).background(Bg2).padding(16.dp)) {
-            Text("喊单 $${card["symbol"]?.jsonPrimitive?.contentOrNull.orEmpty()} 到…", color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.align(Alignment.CenterHorizontally))
+            Text(if (payreq) "把收款发到…" else "喊单 $${card["symbol"]?.jsonPrimitive?.contentOrNull.orEmpty()} 到…", color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.align(Alignment.CenterHorizontally))
             Spacer(Modifier.height(10.dp))
             Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Bg3).padding(12.dp, 9.dp)) {
                 if (q.isEmpty()) Text("搜索", color = TextDim, fontSize = 14.sp)

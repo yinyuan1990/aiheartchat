@@ -135,7 +135,8 @@ export function useSendLink(chain: WalletChain, assets: Asset[], loading: boolea
       alive = false;
     };
   }, [missing, sol, token, chain]);
-  return { wantedId, to: sp.get("to"), amount: amount && /^\d*\.?\d+$/.test(amount) ? amount : null, name: name?.slice(0, 24) || null, notHeld: missing && sol };
+  const req = sp.get("req");
+  return { wantedId, to: sp.get("to"), amount: amount && /^\d*\.?\d+$/.test(amount) ? amount : null, name: name?.slice(0, 24) || null, notHeld: missing && sol, req: req && /^\d{1,19}$/.test(req) ? req : undefined };
 }
 
 export function Result({ sent, explorer, to, saved }: { sent: Sent; explorer: string; to?: string; saved: boolean }) {

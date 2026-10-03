@@ -31,7 +31,7 @@ export default function MePage() {
     if (!quick) return setQuickSheet(true);
     try {
       await setQuick(null);
-      toast.success("已关闭免密码使用");
+      toast.success("已恢复：解锁需要密码");
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -40,7 +40,7 @@ export default function MePage() {
     try {
       await setQuick(pw);
       setQuickSheet(false);
-      toast.success("已开启免密码使用");
+      toast.success("已关闭密码：之后打开钱包不用再输");
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -125,16 +125,16 @@ export default function MePage() {
           <button type="button" onClick={lock} className="flex w-full items-center gap-3 px-4 py-4 text-left">
             <Lock size={20} />
             <span className="flex-1 text-[15px]">立即锁定</span>
-            <span className="text-[12px] text-muted-foreground">{quick ? "免密码使用已开启，不会自动锁定" : "切到后台 5 分钟自动锁定"}</span>
+            <span className="text-[12px] text-muted-foreground">{quick ? "已关闭解锁密码，不会自动锁定" : "切到后台 5 分钟自动锁定"}</span>
           </button>
           {canQuick && (
-            <button type="button" role="switch" aria-checked={quick} onClick={() => void toggleQuick()} className="flex w-full items-center gap-3 px-4 py-4 text-left">
+            <button type="button" role="switch" aria-checked={!quick} onClick={() => void toggleQuick()} className="flex w-full items-center gap-3 px-4 py-4 text-left">
               <LockKeyOpen size={20} />
               <span className="flex-1">
-                <span className="block text-[15px]">免密码使用</span>
-                <span className="block text-[12px] text-muted-foreground">切后台、重开 App 都不用再输密码；导出助记词 / 私钥仍要密码</span>
+                <span className="block text-[15px]">解锁需要密码</span>
+                <span className="block text-[12px] text-muted-foreground">{quick ? "已关闭：打开钱包、转账都不用输密码" : "关掉后，打开钱包、转账都不用再输密码"}；导出助记词 / 私钥仍要密码</span>
               </span>
-              <span className={cn("flex h-7 w-12 shrink-0 items-center rounded-full p-0.5 transition-colors", quick ? "justify-end bg-up" : "justify-start bg-border")}>
+              <span className={cn("flex h-7 w-12 shrink-0 items-center rounded-full p-0.5 transition-colors", !quick ? "justify-end bg-up" : "justify-start bg-border")}>
                 <span className="size-6 rounded-full bg-white shadow-sm" />
               </span>
             </button>
@@ -196,7 +196,7 @@ export default function MePage() {
               <ShieldWarning size={16} className="mt-0.5 shrink-0" />
               开启后，任何拿到这台已解锁手机的人打开钱包就能直接转账。密码加密保存在本机安全存储里，不会上传。
             </p>
-            <PasswordGate title="开启免密码使用" onOk={(pw) => void enableQuick(pw)} />
+            <PasswordGate title="关闭解锁密码" onOk={(pw) => void enableQuick(pw)} />
           </>
         )}
       </BottomSheet>

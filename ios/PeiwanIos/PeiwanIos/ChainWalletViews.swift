@@ -909,7 +909,7 @@ private let walletBridgeJS = #"""
   }
   window.ArmWalletNative = {
     platform: 'ios',
-    features: ['dapp', 'store', 'scan', 'bio', 'result', 'chat'],
+    features: ['dapp', 'store', 'scan', 'bio', 'result', 'chat', 'payreq'],
     walletResult: function(r){ call('walletResult', r); },
     walletClose: function(){ call('walletClose'); },
     chainAddress: function(a){ return call('chainAddress', a == null ? null : a); },

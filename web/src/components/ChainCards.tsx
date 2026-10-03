@@ -1,7 +1,11 @@
+import { useEffect, useState } from 'react';
+import QRCode from 'qrcode';
+
 /**
  * 链上钱包的聊天卡片（和 Android ChainCards.kt、iOS ChainCards.swift 同一套字段）。网页版没有钱包：
  * - transfer：服务端核对过链上交易的转账卡片，点开看区块浏览器；
- * - callout：喊单卡片，点开去网页看这个币的行情（App 里会在钱包打开、能直接买）。
+ * - callout：喊单卡片，点开去网页看这个币的行情（App 里会在钱包打开、能直接买）；
+ * - payreq：收款消息，显示二维码和地址（App 里能点「转账」）。
  */
 
 const CHAIN_NAMES: Record<string, string> = { arc: 'Arc', eth: 'Ethereum', bsc: 'BNB Chain', base: 'Base', arb: 'Arbitrum', polygon: 'Polygon', sol: 'Solana', trx: 'TRON' };
@@ -42,7 +46,42 @@ export function chainCardPreview(type: string, content: string): string | null {
   const o = parse(content);
   if (type === 'transfer') return `[转账] ${tokenAmount(o.amount, Number(o.decimals) || 0)} ${o.symbol ?? ''}`.trim();
   if (type === 'callout') return `[喊单] $${o.symbol ?? ''}`;
+  if (type === 'payreq') return o.amount ? `[收款] ${tokenAmount(o.amount, Number(o.decimals) || 0)} ${o.symbol ?? ''}`.trim() : `[收款] ${CHAIN_NAMES[o.chain] ?? o.chain ?? ''}`;
   return null;
+}
+
+/** 收款消息：二维码 + 地址（点一下复制）+ 可选的币和金额；网页版没有钱包，「转账」要在 App 里点 */
+export function PayreqCard({ content, mine }: { content: string; mine: boolean }) {
+  const o = parse(content);
+  const address = String(o.address ?? '');
+  const [qr, setQr] = useState('');
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    QRCode.toDataURL(address, { margin: 1, width: 280 }).then((u) => alive && setQr(u)).catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [address]);
+  const chain = CHAIN_NAMES[o.chain] ?? o.chain;
+  const amount = o.amount ? `${tokenAmount(o.amount, Number(o.decimals) || 0)} ${o.symbol ?? ''}` : null;
+  return (
+    <span className="no-menu" style={{ display: 'flex', flexDirection: 'column', width: 230, borderRadius: 14, overflow: 'hidden', background: '#fff', border: '1px solid #f59e0b' }}>
+      <span style={{ padding: '9px 12px', background: '#f59e0b', color: '#fff', fontSize: 13, fontWeight: 600 }}>⇄ 收款 · {chain}</span>
+      <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: 12, color: '#111' }}>
+        <span style={{ fontSize: amount ? 20 : 14, fontWeight: 600 }}>{amount ?? (o.symbol ? `收 ${o.symbol}` : '金额由付款人填写')}</span>
+        {o.note && <span style={{ fontSize: 12, color: '#555' }}>{o.note}</span>}
+        {qr && <img src={qr} alt="收款二维码" style={{ width: 140, height: 140 }} />}
+        <span
+          onClick={() => void navigator.clipboard?.writeText(address).then(() => setCopied(true))}
+          style={{ fontSize: 11, wordBreak: 'break-all', textAlign: 'center', background: '#f4f4f5', borderRadius: 8, padding: '6px 8px', cursor: 'pointer' }}
+        >
+          {address}
+        </span>
+        <span style={{ fontSize: 10, color: '#888' }}>{copied ? '地址已复制' : `点地址复制 · 只收 ${chain} 上的币${mine ? '' : ' · 在 App 里可以直接转账'}`}</span>
+      </span>
+    </span>
+  );
 }
 
 function calloutUrl(o: Record<string, any>) {

@@ -202,7 +202,7 @@ export function SolSend() {
       setSent({ hash: signature, status: "success" });
       if (returnsToApp()) {
         const proof = b64.encode(signBytes(new TextEncoder().encode(transferMessage(signature, from, toAddr)), kp));
-        reportResult({ kind: "transfer", chain: SOL_CHAIN.key, token: asset.mint ?? "native", symbol: asset.symbol, decimals: asset.decimals, amount: value.toString(), to: toAddr, from, hash: signature, proof });
+        reportResult({ kind: "transfer", chain: SOL_CHAIN.key, token: asset.mint ?? "native", symbol: asset.symbol, decimals: asset.decimals, amount: value.toString(), to: toAddr, from, hash: signature, proof, req: link.req });
       }
     } catch (e) {
       const msg = (e as Error).message.split("\n")[0];

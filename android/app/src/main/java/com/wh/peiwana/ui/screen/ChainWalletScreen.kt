@@ -150,7 +150,7 @@ private val BRIDGE_JS = """
   }
   window.ArmWalletNative = {
     platform: 'android',
-    features: ['dapp', 'store', 'scan', 'bio', 'result', 'chat'],
+    features: ['dapp', 'store', 'scan', 'bio', 'result', 'chat', 'payreq'],
     walletResult: function(r){ call('walletResult', r); },
     walletClose: function(){ call('walletClose'); },
     chainAddress: function(a){ return call('chainAddress', a == null ? null : a); },
@@ -737,7 +737,7 @@ private class SyncBridge(
     }
 
     @android.webkit.JavascriptInterface
-    fun bridgeInfo(): String = if (ok()) """{"platform":"android","features":["dapp","store","scan","bio","result","chat"]}""" else "{}"
+    fun bridgeInfo(): String = if (ok()) """{"platform":"android","features":["dapp","store","scan","bio","result","chat","payreq"]}""" else "{}"
 
     @android.webkit.JavascriptInterface
     fun chainAddress(cb: String?, json: String?) {

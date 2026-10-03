@@ -230,7 +230,7 @@ function EvmSend() {
       setSent({ hash, status: r.status === "success" ? "success" : "reverted" });
       if (r.status === "success" && from && returnsToApp()) {
         const proof = await account().signMessage({ message: transferMessage(hash, from, toAddr) });
-        reportResult({ kind: "transfer", chain: chain.key, token: asset!.token ?? "native", symbol: asset!.symbol, decimals: asset!.decimals, amount: value.toString(), to: toAddr, from, hash, proof });
+        reportResult({ kind: "transfer", chain: chain.key, token: asset!.token ?? "native", symbol: asset!.symbol, decimals: asset!.decimals, amount: value.toString(), to: toAddr, from, hash, proof, req: link.req });
       }
     } catch (e) {
       const msg = ((e as { shortMessage?: string }).shortMessage ?? (e as Error).message).split("\n")[0];

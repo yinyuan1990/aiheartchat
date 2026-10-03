@@ -232,9 +232,19 @@ private fun PostBody(p: ChannelPost, onMedia: () -> Unit) {
                 PinIcon(Accent, 16.dp); Spacer(Modifier.width(6.dp)); Text(name, color = TextMain, fontSize = 15.sp)
             }
         }
+        "payreq" -> {
+            val pay = LocalChannelPay.current
+            Box(Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp)) {
+                PayreqCard(p.content, mine = p.senderId == pay.myId, onPay = pay.open?.let { f -> { f(p) } })
+            }
+        }
         else -> LinkText(p.content, color = TextMain, fontSize = 15.sp, lineHeight = 22.sp, modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp))
     }
 }
+
+/** 频道里收款消息的「转账」：打开钱包（没有钱包入口时 open = null） */
+private class ChannelPay(val myId: String, val open: ((ChannelPost) -> Unit)?)
+private val LocalChannelPay = staticCompositionLocalOf { ChannelPay("", null) }
 
 /** 一条帖子：频道头 + 内容 + 表情回应 + 浏览数 / 时间 + 评论入口 */
 /** 订阅者发的消息：普通聊天气泡，自己的在右边；长按删除 */
@@ -340,7 +350,32 @@ private fun PostCard(ch: ChannelInfo, p: ChannelPost, onReact: (String) -> Unit,
 
 /** 频道页：订阅前也能预览；频道主底部是发帖栏，订阅者是静音开关，没订阅是「订阅」 */
 @Composable
-fun ChannelScreen(groupId: String, myUserId: String, onBack: () -> Unit, onExit: () -> Unit, onOpenComments: (msgId: String, canAdmin: Boolean) -> Unit) {
+fun ChannelScreen(
+    groupId: String, myUserId: String, onBack: () -> Unit, onExit: () -> Unit, onOpenComments: (msgId: String, canAdmin: Boolean) -> Unit,
+    onOpenWallet: ((String) -> Unit)? = null,
+    walletResult: String? = null,
+    onWalletResultUsed: () -> Unit = {},
+) {
+    val ctx = LocalContext.current
+    // 付了频道里的收款消息：转账卡片私聊发给收款人（服务端按 req 决定）
+    LaunchedEffect(walletResult) {
+        val r = walletResult ?: return@LaunchedEffect
+        onWalletResultUsed()
+        toast(ctx, "转账成功，正在核对链上交易…")
+        runCatching { postTransferCard("", r) }
+            .onSuccess { toast(ctx, "已到账，转账卡片发到了和对方的私聊") }
+            .onFailure { toast(ctx, "转账卡片没发出去：${it.message ?: "请稍后再试"}（钱已经转了，可以在钱包里查）") }
+    }
+    val pay = remember(myUserId, onOpenWallet) {
+        ChannelPay(myUserId, onOpenWallet?.let { open -> { p: ChannelPost -> payreqPath(p.content, p.id, p.senderNickname.ifEmpty { "频道" })?.let(open) } })
+    }
+    CompositionLocalProvider(LocalChannelPay provides pay) {
+        ChannelScreenBody(groupId, myUserId, onBack, onExit, onOpenComments)
+    }
+}
+
+@Composable
+private fun ChannelScreenBody(groupId: String, myUserId: String, onBack: () -> Unit, onExit: () -> Unit, onOpenComments: (msgId: String, canAdmin: Boolean) -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var ch by remember { mutableStateOf<ChannelInfo?>(null) }

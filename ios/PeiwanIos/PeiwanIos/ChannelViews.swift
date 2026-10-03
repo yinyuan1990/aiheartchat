@@ -91,6 +91,17 @@ private func parseJsonObject(_ s: String) -> [String: Any]? {
 
 // MARK: - 帖子卡片
 
+/// 频道里收款消息的「转账」：打开钱包（没有钱包入口时为 nil）
+private struct ChannelPayKey: EnvironmentKey {
+    static let defaultValue: ((ChannelPost) -> Void)? = nil
+}
+extension EnvironmentValues {
+    fileprivate var channelPay: ((ChannelPost) -> Void)? {
+        get { self[ChannelPayKey.self] }
+        set { self[ChannelPayKey.self] = newValue }
+    }
+}
+
 /// 一条帖子：频道头 + 内容 + 表情回应 + 浏览数 / 时间 + 评论入口
 private struct ChannelPostCard: View {
     let ch: ChannelInfo
@@ -100,6 +111,8 @@ private struct ChannelPostCard: View {
     let onComments: () -> Void
     let onMedia: () -> Void
     let onDelete: () -> Void
+    @EnvironmentObject var state: AppState
+    @Environment(\.channelPay) private var channelPay
     @State private var picker = false
     @State private var voicePlaying = false
 
@@ -243,6 +256,9 @@ private struct ChannelPostCard: View {
             audioRow
         case "location":
             locationRow
+        case "payreq":
+            PayreqCardView(content: content, mine: p.senderId == state.user?.id, onPay: channelPay.map { f in { f(p) } })
+                .padding(.horizontal, 12).padding(.top, 8)
         default:
             LinkText(text: content)
                 .font(.system(size: 15)).foregroundStyle(Theme.text).lineSpacing(4)
@@ -388,6 +404,7 @@ struct ChannelView: View {
     @State private var toastMsg: String?
     @State private var route: Route?
     @State private var removeListener: (() -> Void)?
+    @State private var walletOk = false
     @FocusState private var inputFocused: Bool
 
     var body: some View {
@@ -443,7 +460,31 @@ struct ChannelView: View {
         }
         .routePush($route)
         .task { await load() }
+        .task { walletOk = await ChainWallet.visible(state.user) }
+        .environment(\.channelPay, walletOk ? payPost : nil)
+        .onReceive(NotificationCenter.default.publisher(for: ChainWallet.resultNotification)) { n in
+            if let s = n.userInfo?["json"] as? String { onWalletResult(s) }
+        }
         .onDisappear { removeListener?() }
+    }
+
+    private func payPost(_ p: ChannelPost) {
+        if let path = ChainCards.payreqPath(p.content ?? "", msgId: p.id, name: p.senderNickname ?? "频道") { route = .chainWalletPath(path) }
+    }
+
+    /// 付了频道里的收款消息：转账卡片私聊发给收款人（服务端按 req 决定）
+    private func onWalletResult(_ json: String) {
+        let r = ChainCards.obj(json)
+        guard r["kind"] as? String == "transfer", r["req"] != nil else { return }
+        toastMsg = "转账成功，正在核对链上交易…"
+        Task { @MainActor in
+            do {
+                _ = try await ChainCards.postTransfer(targetId: "", resultJson: json)
+                toastMsg = "已到账，转账卡片发到了和对方的私聊"
+            } catch {
+                toastMsg = "转账卡片没发出去：\(error.localizedDescription)（钱已经转了，可以在钱包里查）"
+            }
+        }
     }
 
     private var header: some View {

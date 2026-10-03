@@ -10,7 +10,7 @@ import { EmojiPanel } from '../components/EmojiPanel';
 import { StickerView } from '../components/StickerView';
 import { AttachSheet, AttachAction } from '../components/AttachSheet';
 import { LinkText } from '../components/LinkText';
-import { CalloutCard, TransferCard } from '../components/ChainCards';
+import { CalloutCard, PayreqCard, TransferCard } from '../components/ChainCards';
 import {
   DeleteDialog, FORWARDABLE, ForwardSheet, MenuActions, MsgMenu, PinBar, PinItem,
   ReactionChips, ReplyBar, ReplyQuote, ReportSheet, saveMedia,
@@ -414,7 +414,7 @@ function MsgBubble({ m, mine, convType, myId, onImage, onMenu, onReact, onJump }
 }) {
   const press = useRef<ReturnType<typeof setTimeout>>();
   const pressed = useRef(false);
-  const isMedia = m.type === 'image' || m.type === 'video' || m.type === 'sticker' || m.type === 'transfer' || m.type === 'callout';
+  const isMedia = m.type === 'image' || m.type === 'video' || m.type === 'sticker' || m.type === 'transfer' || m.type === 'callout' || m.type === 'payreq';
   let body: JSX.Element;
   switch (m.type) {
     case 'image':
@@ -469,6 +469,9 @@ function MsgBubble({ m, mine, convType, myId, onImage, onMenu, onReact, onJump }
       break;
     case 'callout':
       body = <CalloutCard content={m.content} />;
+      break;
+    case 'payreq':
+      body = <PayreqCard content={m.content} mine={mine} />;
       break;
     default:
       if (m.type === 'call' || m.type.startsWith('call')) {

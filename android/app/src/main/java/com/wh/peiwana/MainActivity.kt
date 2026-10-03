@@ -296,12 +296,18 @@ fun AppRoot() {
                 CreateChannelScreen(onBack = { nav.popBackStack() }, onCreated = { nav.popBackStack(); nav.navigate("channel/$it") })
             }
             page("channel/{id}", listOf(navArgument("id") { type = NavType.StringType })) { entry ->
+                val ctx = androidx.compose.ui.platform.LocalContext.current
+                val walletOk = remember(user) { chainWalletVisible(ctx, user) }
+                val walletResult by entry.savedStateHandle.getStateFlow<String?>("walletResult", null).collectAsState()
                 ChannelScreen(
                     groupId = entry.arguments!!.getString("id")!!,
                     myUserId = user?.id ?: "",
                     onBack = { nav.popBackStack() },
                     onExit = { nav.popBackStack("main", false) },
                     onOpenComments = { msgId, canAdmin -> nav.navigate("channel-post/$msgId?canAdmin=$canAdmin") },
+                    onOpenWallet = if (walletOk) ({ path -> nav.navigate(chainWalletRoute(path)) }) else null,
+                    walletResult = walletResult,
+                    onWalletResultUsed = { entry.savedStateHandle["walletResult"] = null },
                 )
             }
             page(

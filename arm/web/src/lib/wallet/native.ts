@@ -57,8 +57,11 @@ type Bridge = {
   openCoinGroup?: (coin: object) => MaybePromise<unknown>;
 };
 
-/** `proof`: the paying key's signature over payee.ts `transferMessage`, so nobody can post someone else's payment as theirs. */
-export type WalletResult = { kind: "transfer"; chain: string; token: string; symbol: string; decimals: number; amount: string; to: string; from: string; hash: string; proof: string };
+/**
+ * `proof`: the paying key's signature over payee.ts `transferMessage`, so nobody can post someone else's payment as theirs.
+ * `req`: the 收款 message being paid (from the link), so the card goes back to that chat.
+ */
+export type WalletResult = { kind: "transfer"; chain: string; token: string; symbol: string; decimals: number; amount: string; to: string; from: string; hash: string; proof: string; req?: string };
 
 export type BioStatus = { available: boolean; enabled: boolean; kind?: "fingerprint" | "face" | "biometric" };
 
@@ -178,6 +181,8 @@ export const closeWallet = () => nativeBridge()?.walletClose?.();
 
 /** Call-out cards into 心之音 chats (shell feature `chat`). */
 export const canShareCard = () => typeof window !== "undefined" && hasFeature("chat") && !!nativeBridge()?.shareCard;
+/** 收款发到聊天：shareCard 带 kind "payreq"（老壳不认识 kind，会当喊单发，所以要壳声明能力 payreq） */
+export const canSharePayreq = () => canShareCard() && hasFeature("payreq");
 export const shareCard = (card: object) => void nativeBridge()?.shareCard?.(card);
 export const canCoinGroup = () => typeof window !== "undefined" && hasFeature("chat") && !!nativeBridge()?.openCoinGroup;
 export const openCoinGroup = (coin: object) => void nativeBridge()?.openCoinGroup?.(coin);

@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreImage
 
 /// 链上钱包的聊天卡片（和 Android ChainCards.kt、Web components/ChainCards.tsx 同一套字段）：
 /// - transfer：钱包转账成功后，服务端到链上核对过才发的转账卡片（POST /im/transfer），点开看区块浏览器；
@@ -62,9 +63,26 @@ enum ChainCards {
             return "[转账] \(amount(o["amount"] as? String, dec)) \(o["symbol"] as? String ?? "")"
         case "callout":
             return "[喊单] $\(o["symbol"] as? String ?? "")"
+        case "payreq":
+            if let a = o["amount"] as? String { return "[收款] \(amount(a, (o["decimals"] as? Int) ?? 0)) \(o["symbol"] as? String ?? "")" }
+            return "[收款] \(chainName(o["chain"] as? String ?? ""))"
         default:
             return nil
         }
+    }
+
+    /// 点收款消息的「转账」：钱包转账页填好收款地址 / 币 / 金额，转完交回结果（req = 收款消息 id，服务端据此把卡片发回原聊天）
+    static func payreqPath(_ content: String, msgId: String, name: String) -> String? {
+        let o = obj(content)
+        guard let chain = o["chain"] as? String, let to = o["address"] as? String else { return nil }
+        let n = String(name.prefix(24)).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&=+#"))) ?? ""
+        var p = "/wallet/send?to=\(to)&chain=\(chain)&name=\(n)&ret=1&req=\(msgId)"
+        if let t = o["token"] as? String { p += "&token=\(t)" }
+        if let a = o["amount"] as? String, let v = Decimal(string: a) {
+            let n = NSDecimalNumber(decimal: v).multiplying(byPowerOf10: Int16(-((o["decimals"] as? Int) ?? 0)))
+            p += "&amount=\(n.stringValue)"
+        }
+        return p
     }
 
     /// 喊单卡片在钱包里打开的页面
@@ -95,12 +113,13 @@ enum ChainCards {
         return "/wallet/send?to=\(address)&name=\(n)&ret=1" + (chain.map { "&chain=\($0)" } ?? "")
     }
 
-    /// 钱包交回的转账结果 → 服务端核对链上交易后发转账卡片，返回那条消息
+    /// 钱包交回的转账结果 → 服务端核对链上交易后发转账卡片，返回那条消息（付收款消息时 targetId 可以为空）
     static func postTransfer(targetId: String, resultJson: String) async throws -> MsgItem? {
         let r = obj(resultJson)
         guard r["kind"] as? String == "transfer" else { return nil }
-        var body: [String: Any] = ["targetId": targetId]
-        for k in ["chain", "hash", "token", "amount", "symbol", "from", "to", "proof"] { if let v = r[k] as? String { body[k] = v } }
+        var body: [String: Any] = [:]
+        if !targetId.isEmpty { body["targetId"] = targetId }
+        for k in ["chain", "hash", "token", "amount", "symbol", "from", "to", "proof", "req"] { if let v = r[k] as? String { body[k] = v } }
         if let d = r["decimals"] as? Int { body["decimals"] = d }
         let m: MsgItem = try await Api.request("/im/transfer", method: "POST", body: body)
         return m
@@ -199,7 +218,70 @@ struct CalloutCardView: View {
     }
 }
 
-/// 钱包代币页「喊单到聊天」：选会话（最多 10 个），每个发一张喊单卡片
+/// 收款消息：二维码 + 地址（点一下复制）+ 可选的币和金额；别人点「转账」直接进钱包转账页
+struct PayreqCardView: View {
+    let content: String
+    let mine: Bool
+    let onPay: (() -> Void)?
+    @State private var copied = false
+
+    private static let orange = Color(red: 0.96, green: 0.62, blue: 0.04)
+
+    private static func qr(_ text: String) -> UIImage? {
+        let f = CIFilter(name: "CIQRCodeGenerator")
+        f?.setValue(Data(text.utf8), forKey: "inputMessage")
+        f?.setValue("M", forKey: "inputCorrectionLevel")
+        guard let out = f?.outputImage?.transformed(by: CGAffineTransform(scaleX: 8, y: 8)),
+              let cg = CIContext().createCGImage(out, from: out.extent) else { return nil }
+        return UIImage(cgImage: cg)
+    }
+
+    var body: some View {
+        let o = ChainCards.obj(content)
+        let address = o["address"] as? String ?? ""
+        let chain = o["chain"] as? String ?? ""
+        let amount = (o["amount"] as? String).map { "\(ChainCards.amount($0, (o["decimals"] as? Int) ?? 0)) \(o["symbol"] as? String ?? "")" }
+        VStack(spacing: 0) {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.left.arrow.right").font(.system(size: 12, weight: .semibold))
+                Text("收款 · \(ChainCards.chainName(chain))").font(.system(size: 13, weight: .semibold))
+                Spacer()
+            }
+            .foregroundStyle(.white).padding(.horizontal, 12).padding(.vertical, 9).background(Self.orange)
+            VStack(spacing: 6) {
+                Text(amount ?? ((o["symbol"] as? String).map { "收 \($0)" } ?? "金额由付款人填写"))
+                    .font(.system(size: amount != nil ? 20 : 14, weight: .semibold)).foregroundStyle(Color(white: 0.07))
+                if let note = o["note"] as? String, !note.isEmpty { Text(note).font(.system(size: 12)).foregroundStyle(Color(white: 0.33)) }
+                if let img = Self.qr(address) {
+                    Image(uiImage: img).interpolation(.none).resizable().frame(width: 140, height: 140)
+                }
+                Text(address)
+                    .font(.system(size: 11)).foregroundStyle(Color(white: 0.2)).multilineTextAlignment(.center)
+                    .padding(.horizontal, 8).padding(.vertical, 6)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color(white: 0.955)))
+                    .onTapGesture {
+                        UIPasteboard.general.string = address
+                        copied = true
+                    }
+                Text(copied ? "地址已复制" : "点地址复制 · 只收 \(ChainCards.chainName(chain)) 上的币").font(.system(size: 10)).foregroundStyle(Color(white: 0.53))
+                if !mine, let onPay {
+                    Button(action: onPay) {
+                        Text("转账").font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
+                            .frame(maxWidth: .infinity).frame(height: 36).background(Capsule().fill(Self.orange))
+                    }
+                    .buttonStyle(.plain).padding(.top, 4)
+                }
+            }
+            .padding(12)
+        }
+        .frame(width: 230)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Self.orange, lineWidth: 1))
+    }
+}
+
+/// 钱包里「喊单到聊天」/「收款发到聊天」：选会话（最多 10 个），每个发一张卡片（card["kind"] == "payreq" 是收款，否则喊单）
 struct ShareCardSheet: View {
     let card: [String: Any]
     let onDone: (String) -> Void
@@ -220,7 +302,7 @@ struct ShareCardSheet: View {
             HStack {
                 Button("取消") { dismiss() }.font(.system(size: 14)).foregroundStyle(Theme.textSub)
                 Spacer()
-                Text("喊单 $\(card["symbol"] as? String ?? "") 到…").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
+                Text(isPayreq ? "把收款发到…" : "喊单 $\(card["symbol"] as? String ?? "") 到…").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
                 Spacer()
                 Button(picked.isEmpty ? "发送" : "发送(\(picked.count))") { send() }
                     .font(.system(size: 14, weight: .semibold))
@@ -262,14 +344,19 @@ struct ShareCardSheet: View {
         }
     }
 
+    private var isPayreq: Bool { card["kind"] as? String == "payreq" }
+
     private func send() {
-        guard let d = try? JSONSerialization.data(withJSONObject: card), let content = String(data: d, encoding: .utf8) else { return }
+        var payload = card
+        payload.removeValue(forKey: "kind")
+        guard let d = try? JSONSerialization.data(withJSONObject: payload), let content = String(data: d, encoding: .utf8) else { return }
+        let type = isPayreq ? "payreq" : "callout"
         for id in picked {
             guard let c = convs.first(where: { $0.id == id }) else { continue }
-            if c.type == 1, let p = c.peer { _ = WsClient.shared.send(convType: 1, targetId: p.id, msgType: "callout", content: content) }
-            else if let g = c.group { _ = WsClient.shared.send(convType: 2, targetId: g.id, msgType: "callout", content: content) }
+            if c.type == 1, let p = c.peer { _ = WsClient.shared.send(convType: 1, targetId: p.id, msgType: type, content: content) }
+            else if let g = c.group { _ = WsClient.shared.send(convType: 2, targetId: g.id, msgType: type, content: content) }
         }
-        onDone("已喊单到 \(picked.count) 个聊天")
+        onDone(isPayreq ? "收款已发到 \(picked.count) 个聊天" : "已喊单到 \(picked.count) 个聊天")
         dismiss()
     }
 }

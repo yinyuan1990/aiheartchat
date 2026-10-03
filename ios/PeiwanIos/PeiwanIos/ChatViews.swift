@@ -71,7 +71,7 @@ func previewOf(_ msg: LastMsg?) -> String {
     case "audio": return "[语音]"
     case "location": return "[位置]"
     case "gift": return "[礼物]"
-    case "transfer", "callout": return ChainCards.preview(type, msg.content ?? "") ?? ""
+    case "transfer", "callout", "payreq": return ChainCards.preview(type, msg.content ?? "") ?? ""
     default: return type.hasPrefix("call") ? "[通话]" : ""
     }
 }
@@ -596,11 +596,13 @@ struct ChatRoomView: View {
 
     /// 钱包交回的转账结果：服务端核对链上交易后发转账卡片
     private func onWalletResult(_ json: String) {
-        guard convType == 1, ChainCards.obj(json)["kind"] as? String == "transfer" else { return }
+        let r = ChainCards.obj(json)
+        // 付收款消息（带 req）由服务端决定卡片发到哪：群里回到群，频道里私聊发给收款人
+        guard r["kind"] as? String == "transfer", convType == 1 || r["req"] != nil else { return }
         toastMsg = "转账成功，正在核对链上交易…"
         Task { @MainActor in
             do {
-                if let m = try await ChainCards.postTransfer(targetId: targetId, resultJson: json), !messages.contains(where: { $0.id == m.id }) {
+                if let m = try await ChainCards.postTransfer(targetId: convType == 1 ? targetId : "", resultJson: json), m.conversationId == convId, !messages.contains(where: { $0.id == m.id }) {
                     messages.append(m)
                 }
             } catch {
@@ -1466,6 +1468,12 @@ struct MsgBubble: View {
         (m.senderAvatar?.isEmpty == false) ? m.senderAvatar! : fallbackAvatar
     }
 
+    /// 收款消息的「转账」：打开钱包转账页（没有钱包入口为 nil）
+    private var payreqAction: (() -> Void)? {
+        guard let open = onOpenWallet, let path = ChainCards.payreqPath(m.content, msgId: m.id, name: m.senderNickname ?? "") else { return nil }
+        return { open(path) }
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             if mine { Spacer(minLength: 50) }
@@ -1583,6 +1591,8 @@ struct MsgBubble: View {
             TransferCardView(content: m.content, mine: mine)
         case "callout":
             CalloutCardView(content: m.content, canWallet: onOpenWallet != nil) { onOpenWallet?($0) }
+        case "payreq":
+            PayreqCardView(content: m.content, mine: mine, onPay: payreqAction)
         case "call":
             let obj = parseJson(m.content)
             let callType = (obj["callType"] as? Int) ?? 1

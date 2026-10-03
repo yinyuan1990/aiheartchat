@@ -152,7 +152,7 @@ internal fun preview(msg: LastMsg?): String = when {
     msg.type == "audio" -> "[语音]"
     msg.type == "location" -> "[位置]"
     msg.type == "gift" -> "[礼物]"
-    msg.type == "transfer" || msg.type == "callout" -> chainCardPreview(msg.type, msg.content).orEmpty()
+    msg.type == "transfer" || msg.type == "callout" || msg.type == "payreq" -> chainCardPreview(msg.type, msg.content).orEmpty()
     msg.type.startsWith("call") -> "[通话]"
     else -> ""
 }
@@ -548,8 +548,9 @@ fun ChatRoomScreen(
         val r = walletResult ?: return@LaunchedEffect
         onWalletResultUsed()
         toast("转账成功，正在核对链上交易…")
-        runCatching { postTransferCard(targetId, r) }
-            .onSuccess { m -> if (m != null && messages.none { it.id == m.id }) messages = messages + m }
+        // 付收款消息（带 req）由服务端决定卡片发到哪：群里回到群，频道里私聊发给收款人
+        runCatching { postTransferCard(if (convType == 1) targetId else "", r) }
+            .onSuccess { m -> if (m != null && m.conversationId == convId && messages.none { it.id == m.id }) messages = messages + m }
             .onFailure { toast("转账卡片没发出去：${it.message ?: "请稍后再试"}（钱已经转了，可以在钱包里查）") }
     }
 
@@ -1209,6 +1210,7 @@ private fun Bubble(
                 }
                 "transfer" -> TransferCard(m.content, mine)
                 "callout" -> CalloutCard(m.content, canWallet = onOpenWallet != null) { onOpenWallet?.invoke(it) }
+                "payreq" -> PayreqCard(m.content, mine, onOpenWallet?.let { open -> { payreqPath(m.content, m.id, m.senderNickname)?.let(open) } })
                 "call" -> {
                     val obj = runCatching { WsClient.json.parseToJsonElement(m.content).jsonObject }.getOrNull()
                     val callType = obj?.get("callType")?.jsonPrimitive?.content?.toIntOrNull() ?: 1

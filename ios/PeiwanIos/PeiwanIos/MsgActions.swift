@@ -16,7 +16,7 @@ func msgSnippet(_ type: String, _ content: String) -> String {
     case "sticker": return "[表情]"
     case "location": return "[位置]"
     case "gift": return "[礼物]"
-    case "transfer", "callout": return ChainCards.preview(type, content) ?? "[消息]"
+    case "transfer", "callout", "payreq": return ChainCards.preview(type, content) ?? "[消息]"
     default: return type.hasPrefix("call") ? "[通话]" : "[消息]"
     }
 }

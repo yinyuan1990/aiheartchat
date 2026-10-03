@@ -121,7 +121,7 @@ export function TronSend() {
       setSent({ hash: txid, status: "success" });
       if (returnsToApp()) {
         const proof = await key.account.signMessage({ message: transferMessage(txid, from, toAddr) });
-        reportResult({ kind: "transfer", chain: TRON_CHAIN.key, token: asset.trc20 ?? "native", symbol: asset.symbol, decimals: asset.decimals, amount: value.toString(), to: toAddr, from, hash: txid, proof });
+        reportResult({ kind: "transfer", chain: TRON_CHAIN.key, token: asset.trc20 ?? "native", symbol: asset.symbol, decimals: asset.decimals, amount: value.toString(), to: toAddr, from, hash: txid, proof, req: link.req });
       }
     } catch (e) {
       const msg = (e as Error).message.split("\n")[0];

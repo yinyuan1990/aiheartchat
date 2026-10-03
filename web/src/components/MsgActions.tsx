@@ -29,7 +29,8 @@ export function msgSnippet(type: string, content: string): string {
     case 'location': return '[位置]';
     case 'gift': return '[礼物]';
     case 'transfer':
-    case 'callout': return chainCardPreview(type, content) ?? '[消息]';
+    case 'callout':
+    case 'payreq': return chainCardPreview(type, content) ?? '[消息]';
     default: return type.startsWith('call') ? '[通话]' : '[消息]';
   }
 }
