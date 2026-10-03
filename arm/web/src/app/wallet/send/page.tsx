@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { TokenAvatar, WalletDot } from "@/components/shared";
 import { shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { SOL_CHAIN, TRON_CHAIN, WALLET_CHAINS, chainById, explorerTx, isSolana, isTron, publicClientFor, rpcOf } from "@/lib/wallet/chains";
+import { EVM_CHAINS, SOL_CHAIN, TRON_CHAIN, WALLET_CHAINS, chainById, explorerTx, isSolana, isTron, publicClientFor, rpcOf } from "@/lib/wallet/chains";
 import { isTronAddress } from "@/lib/wallet/tron";
 import { hasFeature, reportResult, returnsToApp, scanQr } from "@/lib/wallet/native";
 import { transferMessage } from "@/lib/wallet/payee";
@@ -98,7 +98,8 @@ function EvmSend() {
   const { assets, loading } = useAssets(chain, from);
   const link = useSendLink(chain, assets, loading);
   const [assetId, setAssetId] = useState<string | null>(null);
-  const asset = assets.find((a) => a.id === (assetId ?? link.wantedId)) ?? assets.find((a) => a.raw > 0n) ?? assets[0];
+  // default: the chain's own coin (what pays the fee), unless the link asks for a token
+  const asset = assets.find((a) => a.id === (assetId ?? link.wantedId)) ?? assets.find((a) => a.gas) ?? assets[0];
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
   useEffect(() => {
@@ -108,7 +109,15 @@ function EvmSend() {
   }, [link.amount]);
   const [speed, setSpeed] = useState<Speed>("normal");
   const [custom, setCustom] = useState<CustomGas | null>(null);
-  const [sheet, setSheet] = useState<null | "asset" | "confirm" | "book" | "gas">(null);
+  const [sheet, setSheet] = useState<null | "asset" | "confirm" | "book" | "gas" | "chain">(null);
+  const pickChain = (key: string) => {
+    setSheet(null);
+    if (key === chain.key) return;
+    setChain(key);
+    setAssetId(null);
+    setAmount("");
+    setCustom(null);
+  };
   const [sent, setSent] = useState<Sent | null>(null);
   const fullBook = useAddressBook();
   const book = { contacts: fullBook.contacts.filter((c) => familyOf(c.address) === "evm"), recent: fullBook.recent.filter((a) => familyOf(a) === "evm") };
@@ -256,7 +265,24 @@ function EvmSend() {
 
   return (
     <WalletFrame>
-      <TopBar title={link.name ? `转账给 ${link.name}` : "转账"} back="/wallet" right={<ChainPill chain={chain} />} />
+      <TopBar title={link.name ? `转账给 ${link.name}` : "转账"} back="/wallet" right={<ChainPill chain={chain} onClick={() => setSheet("chain")} />} />
+      <BottomSheet open={sheet === "chain"} onClose={() => setSheet(null)}>
+        <div className="mb-1 text-center text-[17px] font-semibold">选择网络</div>
+        <p className="mb-3 text-center text-[12px] text-muted-foreground">0x 地址在这些链上通用，选对方要收的那条链</p>
+        <ul className="space-y-1">
+          {EVM_CHAINS.map((c) => (
+            <li key={c.key}>
+              <button type="button" onClick={() => pickChain(c.key)} className={cn("flex w-full items-center gap-3 rounded-2xl px-3 py-3", c.key === chain.key ? "bg-muted" : "hover:bg-muted/60")}>
+                <ChainGlyph chain={c} size={32} />
+                <span className="flex-1 text-left">
+                  <span className="block text-[15px] font-semibold">{c.name}</span>
+                  <span className="block text-[12px] text-muted-foreground">默认转 {c.chain.nativeCurrency.symbol}，可再选别的币</span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </BottomSheet>
 
       <div className="flex flex-1 flex-col gap-3 px-4 pb-4">
         <button type="button" onClick={() => setSheet("asset")} disabled={loading} className="flex items-center gap-3 rounded-[22px] bg-card p-4 text-left ring-1 ring-border/60 transition active:scale-[0.99]">

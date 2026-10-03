@@ -18,6 +18,8 @@ import {
 import { chainByKey, isSolana, isTron, type WalletChain } from "@/lib/wallet/chains";
 import { solAddressOf, solKeypairOf, type SolKeypair } from "@/lib/wallet/sol";
 import { tronAddressOf, tronKeyOf, type TronKey } from "@/lib/wallet/tron";
+import { loadPayee, payeeSupported, publishPayee } from "@/lib/wallet/payee";
+import { toast } from "sonner";
 
 type Status = "loading" | "empty" | "locked" | "unlocked";
 
@@ -120,6 +122,28 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       alive = false;
     };
   }, [unlock]);
+
+  // 「允许好友给我转账」开着时，公开的收款地址跟着当前钱包走（切换 / 新建 / 删除钱包后重新签名公开）
+  const payeeSynced = useRef("");
+  useEffect(() => {
+    if (status !== "unlocked" || !payeeSupported()) return;
+    const w = wallets.find((x) => x.id === activeId);
+    const secret = w && unlocked.current?.plain.secrets[w.id];
+    if (!w || !secret || payeeSynced.current === w.id) return;
+    payeeSynced.current = w.id;
+    void (async () => {
+      try {
+        const p = await loadPayee();
+        if (!p || !(p.evm || p.sol || p.trx)) return;
+        const same = p.evm?.toLowerCase() === w.address.toLowerCase() && (p.sol ?? null) === (w.sol ?? null) && (!w.trx || p.trx === w.trx);
+        if (same) return;
+        await publishPayee(p.userId, secret);
+        toast.success(`好友转账的收款地址已换成「${w.name}」`);
+      } catch {
+        payeeSynced.current = "";
+      }
+    })();
+  }, [status, activeId, wallets]);
 
   const setQuick = useCallback<Ctx["setQuick"]>(async (password) => {
     if (!unlocked.current) throw new Error("locked");

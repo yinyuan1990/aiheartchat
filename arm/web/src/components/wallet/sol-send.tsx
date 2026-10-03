@@ -69,7 +69,7 @@ export function SolSend() {
   const { assets, loading } = useAssets(SOL_CHAIN, from);
   const link = useSendLink(SOL_CHAIN, assets, loading);
   const [assetId, setAssetId] = useState<string | null>(null);
-  const asset = assets.find((a) => a.id === (assetId ?? link.wantedId)) ?? assets.find((a) => a.raw > 0n) ?? assets[0];
+  const asset = assets.find((a) => a.id === (assetId ?? link.wantedId)) ?? assets.find((a) => a.gas) ?? assets[0];
   const solAsset = assets.find((a) => a.id === "native");
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
