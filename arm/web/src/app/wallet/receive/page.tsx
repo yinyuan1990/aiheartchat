@@ -59,7 +59,7 @@ export default function ReceivePage() {
           <div className="relative mx-auto mt-5 size-[240px] rounded-3xl bg-white p-3 shadow-[0_10px_30px_-12px_rgba(0,0,0,0.25)]">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             {qr ? <img src={qr} alt="收款二维码" className="size-full" /> : <div className="size-full animate-pulse rounded-2xl bg-muted" />}
-            <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white p-1">
+            <span className="absolute inset-0 m-auto size-fit rounded-full bg-white p-1">
               <ChainGlyph chain={chain} size={40} />
             </span>
           </div>

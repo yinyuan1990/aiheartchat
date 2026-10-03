@@ -128,10 +128,12 @@ export function BottomSheet({ open, onClose, children, className }: { open: bool
       <button type="button" aria-label="关闭" onClick={onClose} className={cn("absolute inset-0 bg-black/40 backdrop-blur-[2px] transition-opacity duration-200", open ? "opacity-100" : "opacity-0")} />
       <div
         className={cn(
-          "absolute inset-x-0 bottom-0 max-h-[88%] overflow-y-auto rounded-t-[28px] bg-card px-5 pt-2 pb-[max(20px,env(safe-area-inset-bottom))] shadow-[0_-10px_40px_rgba(0,0,0,0.18)] transition-transform duration-200 ease-out",
-          open ? "translate-y-0" : "translate-y-full",
+          "absolute inset-x-0 bottom-0 max-h-[88%] overflow-y-auto rounded-t-[28px] bg-card px-5 pt-2 pb-[max(20px,env(safe-area-inset-bottom))] transition-transform duration-200 ease-out",
+          open && "shadow-[0_-10px_40px_rgba(0,0,0,0.18)]",
           className,
         )}
+        // plain `transform`, not Tailwind's translate-* (the standalone `translate` property needs Chromium 104+)
+        style={{ transform: open ? "translateY(0)" : "translateY(100%)" }}
       >
         <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-muted-foreground/25" />
         {children}
