@@ -1,22 +1,20 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
-import { ArrowRight, CaretRight, ClockCounterClockwise, Compass, GameController, Globe, LinkBreak, RocketLaunch, SealCheck, Star, Trophy, Warning } from "@phosphor-icons/react";
+import { useMemo, useState, useSyncExternalStore } from "react";
+import { ArrowRight, CaretRight, ClockCounterClockwise, Compass, GameController, Globe, LinkBreak, RocketLaunch, SealCheck, Star, Trophy, Warning, type Icon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { WalletDot } from "@/components/shared";
 import { shortAddr } from "@/lib/format";
-import { chainById } from "@/lib/wallet/chains";
+import { cn } from "@/lib/utils";
+import { WALLET_CHAINS, chainById, chainByKey } from "@/lib/wallet/chains";
 import { hasFeature, nativeBridge } from "@/lib/wallet/native";
-import { ackOrigin, clearRecents, hostOf, isAcked, isTrusted, originOf, revokePerm, useDappStore } from "@/lib/wallet/dapp-store";
+import { ackOrigin, clearRecents, hostOf, isAcked, isTrusted, originOf, revokePerm, setLaunchChain, useDappStore } from "@/lib/wallet/dapp-store";
+import { catalogFor, isListed, useDappCatalog, type DappItem } from "@/lib/wallet/dapp-catalog";
+import { useVault } from "@/components/wallet/wallet-context";
 import { BottomNav, BottomSheet, ChainGlyph, GhostButton, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
 
-const ARM_SITE = "https://arm.yyheart.com";
-const ARM = [
-  { path: "/", title: "Arm 首页", sub: "免费发币 · 78% 手续费归创作者", icon: Compass },
-  { path: "/create", title: "发币", sub: "几分钟发一个 Arc 代币", icon: RocketLaunch },
-  { path: "/games", title: "游戏探索", sub: "快艇冲冲冲 · 卖在山顶", icon: GameController },
-  { path: "/rank", title: "排行榜", sub: "看看谁在赚钱", icon: Trophy },
-];
+/** `icon: "ph:<key>"` in the catalogue → a built-in icon instead of the site's favicon. */
+const PH_ICONS: Record<string, Icon> = { compass: Compass, rocket: RocketLaunch, game: GameController, trophy: Trophy, star: Star, globe: Globe };
 
 /** Typed text → https URL, or null when it does not look like an address. */
 function toUrl(input: string): string | null {
@@ -42,15 +40,17 @@ export default function DappPage() {
   const [risky, setRisky] = useState<string | null>(null);
   const [remember, setRemember] = useState(true);
 
-  const launch = (url: string) => {
+  const launch = (url: string, chainId?: number) => {
+    const origin = originOf(url);
+    if (origin && chainId) setLaunchChain(origin, chainId);
     const b = nativeBridge();
     if (b?.openDapp) b.openDapp(url);
     else window.open(url, "_blank", "noopener");
   };
-  const open = (url: string) => {
+  const open = (url: string, chainId?: number) => {
     const origin = originOf(url);
     if (!origin) return toast.error("网址格式不对");
-    if (isTrusted(origin) || isAcked(origin)) return launch(url);
+    if (isTrusted(origin) || isAcked(origin) || isListed(origin)) return launch(url, chainId);
     setRemember(true);
     setRisky(url);
   };
@@ -101,27 +101,7 @@ export default function DappPage() {
           </Section>
         )}
 
-        <Section title="Arm">
-          <ul className="divide-y divide-border/60 rounded-[22px] bg-card ring-1 ring-border/60">
-            {ARM.map((a) => (
-              <li key={a.path}>
-                <button type="button" onClick={() => open(`${ARM_SITE}${a.path}`)} className="flex w-full items-center gap-3 px-4 py-3.5 text-left">
-                  <span className="flex size-10 items-center justify-center rounded-xl bg-muted">
-                    <a.icon size={20} weight="duotone" />
-                  </span>
-                  <span className="flex-1">
-                    <span className="flex items-center gap-1 text-[15px] font-semibold">
-                      {a.title}
-                      <SealCheck size={14} weight="fill" className="text-up" />
-                    </span>
-                    <span className="block text-[12px] text-muted-foreground">{a.sub}</span>
-                  </span>
-                  <CaretRight size={16} className="text-muted-foreground" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        </Section>
+        <Discover onOpen={open} />
 
         {store.recents.length > 0 && (
           <Section
@@ -219,6 +199,88 @@ export default function DappPage() {
   );
 }
 
+/** Recommended DApps: chain row (defaults to the wallet's current chain) → category tabs → sites on that chain. */
+function Discover({ onOpen }: { onOpen: (url: string, chainId?: number) => void }) {
+  const { chain } = useVault();
+  const catalog = useDappCatalog();
+  const [chainKey, setChainKey] = useState<string | null>(null);
+  const [catId, setCatId] = useState<string | null>(null);
+  const key = chainKey ?? chain.key;
+  const cats = useMemo(() => catalogFor(catalog, key), [catalog, key]);
+  const cat = cats.find((c) => c.id === catId) ?? cats[0];
+  const target = chainByKey(key);
+
+  return (
+    <section className="space-y-2.5">
+      <div className="flex items-center gap-1 px-1 text-[13px] font-medium text-muted-foreground">
+        <Compass size={14} />
+        常用 DApp
+      </div>
+      <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
+        {WALLET_CHAINS.map((c) => (
+          <button
+            key={c.key}
+            type="button"
+            onClick={() => setChainKey(c.key)}
+            className={cn("flex h-8 shrink-0 items-center gap-1.5 rounded-full pr-3 pl-1 text-[13px] font-medium transition", c.key === key ? "bg-foreground text-background" : "bg-card ring-1 ring-border/60")}
+          >
+            <ChainGlyph chain={c} size={22} />
+            {c.name}
+          </button>
+        ))}
+      </div>
+      {cats.length === 0 ? (
+        <div className="rounded-[22px] bg-card px-4 py-8 text-center text-[13px] text-muted-foreground ring-1 ring-border/60">{target.name} 暂时没有推荐的 DApp，可以在上面输入网址打开</div>
+      ) : (
+        <div className="rounded-[22px] bg-card ring-1 ring-border/60">
+          <div className="no-scrollbar flex gap-5 overflow-x-auto border-b border-border/60 px-4">
+            {cats.map((c) => (
+              <button key={c.id} type="button" onClick={() => setCatId(c.id)} className={cn("relative shrink-0 py-3 text-[14px] transition", c.id === cat?.id ? "font-semibold" : "text-muted-foreground")}>
+                {c.name}
+                {c.id === cat?.id && <span className="absolute inset-x-0 bottom-0 mx-auto h-[3px] w-5 rounded-full bg-foreground" />}
+              </button>
+            ))}
+          </div>
+          <ul className="divide-y divide-border/60">
+            {cat?.items.map((it) => (
+              <li key={it.url}>
+                <button type="button" onClick={() => onOpen(it.url, target.chain.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left">
+                  <DappIcon item={it} />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1 text-[15px] font-semibold">
+                      <span className="truncate">{it.name}</span>
+                      {isTrusted(originOf(it.url) ?? "") && <SealCheck size={14} weight="fill" className="shrink-0 text-up" />}
+                    </span>
+                    {it.desc && <span className="block truncate text-[12px] text-muted-foreground">{it.desc}</span>}
+                  </span>
+                  <CaretRight size={16} className="shrink-0 text-muted-foreground" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function DappIcon({ item }: { item: DappItem }) {
+  const [ok, setOk] = useState(true);
+  const Ph = item.icon?.startsWith("ph:") ? PH_ICONS[item.icon.slice(3)] : undefined;
+  if (item.icon?.startsWith("ph:"))
+    return (
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted">
+        {Ph ? <Ph size={20} weight="duotone" /> : <Globe size={20} weight="duotone" />}
+      </span>
+    );
+  if (item.icon && ok)
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={item.icon} alt="" onError={() => setOk(false)} className="size-10 shrink-0 rounded-xl bg-muted object-cover" />
+    );
+  return <Favicon origin={originOf(item.url) ?? item.url} size={40} />;
+}
+
 function Section({ title, icon, right, children }: { title: string; icon?: React.ReactNode; right?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section>
@@ -234,14 +296,14 @@ function Section({ title, icon, right, children }: { title: string; icon?: React
   );
 }
 
-function Favicon({ origin }: { origin: string }) {
+function Favicon({ origin, size = 36 }: { origin: string; size?: number }) {
   const [ok, setOk] = useState(true);
   return ok ? (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={`${origin}/favicon.ico`} alt="" onError={() => setOk(false)} className="size-9 shrink-0 rounded-xl bg-muted object-cover" />
+    <img src={`${origin}/favicon.ico`} alt="" onError={() => setOk(false)} style={{ width: size, height: size }} className="shrink-0 rounded-xl bg-muted object-cover" />
   ) : (
-    <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-muted">
-      <Globe size={18} weight="duotone" />
+    <span style={{ width: size, height: size }} className="flex shrink-0 items-center justify-center rounded-xl bg-muted">
+      <Globe size={size / 2} weight="duotone" />
     </span>
   );
 }

@@ -15,8 +15,9 @@ import { KeeperPanel } from "./keeper-panel";
 import { HotPanel } from "./hot-panel";
 import { SitePanel } from "./site-panel";
 import { BurnsPanel } from "./burns-panel";
+import { DappsPanel } from "./dapps-panel";
 
-type Tab = "data" | "tokens" | "hot" | "keeper" | "burns";
+type Tab = "data" | "tokens" | "hot" | "keeper" | "burns" | "dapps";
 
 /** Public read-only dashboard: everything shown is public chain data / the public index, so no wallet is needed
  *  to look. Contract parameters are fixed and are not edited from here. The two remaining actions (distribute /
@@ -58,6 +59,7 @@ export default function AdminPage() {
             <TabsTrigger value="hot">{t("admin.tab.hot")}</TabsTrigger>
             <TabsTrigger value="keeper">{t("admin.tab.keeper")}</TabsTrigger>
             <TabsTrigger value="burns">{t("admin.tab.burns")}</TabsTrigger>
+            <TabsTrigger value="dapps">{t("admin.tab.dapps")}</TabsTrigger>
           </TabsList>
         </Tabs>
         <SitePanel canAct={isOwner} />
@@ -71,6 +73,8 @@ export default function AdminPage() {
         <TokensPanel ov={ov.data} canAct={isOwner} />
       ) : tab === "hot" ? (
         <HotPanel canAct={isOwner} />
+      ) : tab === "dapps" ? (
+        <DappsPanel canAct={isOwner} />
       ) : tab === "burns" ? (
         <BurnsPanel ov={ov.data} canAct={isOwner} />
       ) : (

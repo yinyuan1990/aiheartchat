@@ -10,7 +10,8 @@ import { cn } from "@/lib/utils";
 import { chainById, publicClientFor, rpcOf, type WalletChain } from "@/lib/wallet/chains";
 import { accountOf, WrongPasswordError } from "@/lib/wallet/vault";
 import { hasFeature, nativeBridge, onNativePush, type DappRequest, type RpcError } from "@/lib/wallet/native";
-import { addRecent, getPerm, hostOf, isTrusted, loadDappStore, revokePerm, setPerm, toggleFav } from "@/lib/wallet/dapp-store";
+import { addRecent, getPerm, hostOf, isTrusted, launchChainOf, loadDappStore, revokePerm, setPerm, toggleFav } from "@/lib/wallet/dapp-store";
+import { isListed } from "@/lib/wallet/dapp-catalog";
 import { describeTx, describeTyped, looksLikeLogin, readableMessage, type Line, type Risk, type TxView, type TypedData, type TypedView } from "@/lib/wallet/dapp-decode";
 import { useVault } from "./wallet-context";
 import { BottomSheet, ChainGlyph, GhostButton, PrimaryButton } from "./ui";
@@ -92,7 +93,7 @@ export function DappApprover({ onOverlay }: { onOverlay: (on: boolean) => void }
   }, []);
   const emit = (origin: string, event: string, data: unknown) => nativeBridge()?.dappEmit?.({ origin, event, data });
 
-  const chainOf = (origin: string) => getPerm(origin)?.chainId ?? sessionChain.get(origin) ?? DEFAULT_CHAIN;
+  const chainOf = (origin: string) => getPerm(origin)?.chainId ?? sessionChain.get(origin) ?? launchChainOf(origin) ?? DEFAULT_CHAIN;
   const accountsOf = (origin: string): Address[] => {
     const p = getPerm(origin);
     return p && ref.current.wallets.some((w) => w.address === p.address) ? [p.address] : [];
@@ -250,7 +251,7 @@ function Origin({ origin, connected }: { origin: string; connected: boolean }) {
         {trusted && <SealCheck size={16} weight="fill" className="shrink-0 text-up" />}
       </div>
       <div className={cn("text-[12px]", trusted ? "text-muted-foreground" : "text-[#d48806]")}>
-        {trusted ? `Arm 官方${connected ? " · 已连接" : ""}` : insecure ? "不安全的连接（http）" : connected ? "第三方网站 · 已连接" : "第三方网站 · 不在推荐列表里"}
+        {trusted ? `Arm 官方${connected ? " · 已连接" : ""}` : insecure ? "不安全的连接（http）" : connected ? "第三方网站 · 已连接" : isListed(origin) ? "第三方网站 · 推荐列表" : "第三方网站 · 不在推荐列表里"}
       </div>
     </div>
   );

@@ -574,6 +574,10 @@ export const postAdminTelegramTest = (body: { author: string; ts: number; signat
 /** Owner-signed token moderation (hide / show, pin / unpin on the public site); action = `token:<lowercase address>`. */
 export type TokenFlags = { hidden?: boolean; pinned?: boolean };
 export const postAdminToken = (address: string, body: { author: string; ts: number; signature: string; payload: TokenFlags }) => post<{ ok: true; hidden: boolean; pinned: boolean }>(`/admin/tokens/${address}`, body);
+/** Wallet DApp page catalogue (`categories: null` = nothing saved, the wallet uses its built-in list); action = `dapps`. */
+export type DappCatalogResp = { categories: import("@/lib/wallet/dapp-catalog").DappCategory[] | null; updatedAt: string | null };
+export const useDappCatalogAdmin = () => useQuery({ queryKey: ["admin", "dapps"], queryFn: () => get<DappCatalogResp>("/dapps") });
+export const postAdminDapps = (body: { author: string; ts: number; signature: string; payload: unknown }) => post<DappCatalogResp>("/admin/dapps", body);
 export async function uploadLogo(file: File): Promise<{ url: string }> {
   const fd = new FormData();
   fd.append("file", file);

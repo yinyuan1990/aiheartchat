@@ -8,6 +8,7 @@ import { deployments, config } from "./config.js";
 import { factoryAbi, hubAbi, lockerAbi, erc20Abi, treasuryAbi } from "./abi.js";
 import { keeperState } from "./keeper-log.js";
 import { PINNED_X_ACCOUNTS, getSettings, saveSettings } from "./hotspots/settings.js";
+import { getCatalog, resetCatalog, saveCatalog, validateCatalog } from "./dapps.js";
 import { PUBLIC_ORDER, aiCallsToday, aiStatus, generateOne, hasAiLogo, quotaLeft, radarState, refreshHotspots, type HotspotRow } from "./hotspots/service.js";
 import { generateIdeas, generateLogo, monogramLogo, templateIdeas } from "./hotspots/ai.js";
 import { tgStatus, tgSubscriptions, tgTestChannel } from "./telegram/bot.js";
@@ -1151,6 +1152,23 @@ app.post("/api/admin/hotspots/:id", async (c) => {
   } else return c.json({ error: "unknown action" }, 400);
   listCache.clear();
   return c.json({ ok: true });
+});
+
+// In-App wallet DApp page catalogue; `categories: null` = nothing saved yet, the wallet shows its built-in list.
+app.get("/api/dapps", async (c) => {
+  c.header("cache-control", "public, max-age=60");
+  return c.json(await getCatalog());
+});
+
+app.post("/api/admin/dapps", async (c) => {
+  const r = await requireOwner(c, "dapps");
+  if ("error" in r) return c.json({ error: r.error }, r.status);
+  if (r.payload?.reset === true) return c.json(await resetCatalog());
+  try {
+    return c.json(await saveCatalog(validateCatalog(r.payload?.categories)));
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
 });
 
 app.post("/api/admin/hotspots/refresh", async (c) => {

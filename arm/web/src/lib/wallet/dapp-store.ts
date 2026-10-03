@@ -102,6 +102,11 @@ export function toggleFav(url: string, title?: string): boolean {
   return true;
 }
 
+/** Chain picked on the DApp page when a site was opened: its default until it connects or switches (memory only). */
+const launchChains = new Map<string, number>();
+export const setLaunchChain = (origin: string, chainId: number) => launchChains.set(origin, chainId);
+export const launchChainOf = (origin: string) => launchChains.get(origin);
+
 export const isAcked = (origin: string) => state.ack.includes(origin);
 export const ackOrigin = (origin: string) => !isAcked(origin) && update("ack", [...state.ack, origin]);
 
