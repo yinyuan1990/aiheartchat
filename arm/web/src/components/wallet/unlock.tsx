@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { Eye, EyeSlash, LockKey } from "@phosphor-icons/react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Eye, EyeSlash, Fingerprint, LockKey, ScanSmiley } from "@phosphor-icons/react";
 import { WrongPasswordError } from "@/lib/wallet/vault";
+import { bioDisable, bioName, bioStatus, bioUnlock, type BioStatus } from "@/lib/wallet/native";
 import { cn } from "@/lib/utils";
 import { useVault } from "./wallet-context";
-import { PrimaryButton, WalletFrame } from "./ui";
+import { GhostButton, PrimaryButton, WalletFrame } from "./ui";
 
 export function UnlockScreen() {
   const { unlock, wallets } = useVault();
@@ -13,6 +14,50 @@ export function UnlockScreen() {
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [bio, setBio] = useState<BioStatus | null>(null);
+  const prompted = useRef(false);
+
+  const tryBio = useCallback(async () => {
+    setErr("");
+    let secret: string | null;
+    try {
+      secret = await bioUnlock();
+    } catch (e) {
+      const m = (e as Error).message;
+      if (m === "invalidated" || m === "not enabled") {
+        setBio((b) => b && { ...b, enabled: false });
+        setErr("指纹 / 面容有变动，已关闭快捷解锁，请用密码解锁");
+      } else setErr(m);
+      return;
+    }
+    if (!secret) return;
+    setBusy(true);
+    try {
+      await unlock(secret);
+    } catch (e) {
+      setBusy(false);
+      if (e instanceof WrongPasswordError) {
+        await bioDisable();
+        setBio((b) => b && { ...b, enabled: false });
+        setErr("快捷解锁已失效，请用密码解锁");
+      } else setErr("解锁失败，请重试");
+    }
+  }, [unlock]);
+
+  useEffect(() => {
+    let alive = true;
+    void bioStatus().then((s) => {
+      if (!alive) return;
+      setBio(s);
+      if (s?.enabled && !prompted.current) {
+        prompted.current = true;
+        void tryBio();
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [tryBio]);
 
   const submit = async () => {
     if (!pw || busy) return;
@@ -63,6 +108,12 @@ export function UnlockScreen() {
           <PrimaryButton className="mt-2" disabled={!pw || busy} onClick={() => void submit()}>
             {busy ? "解锁中…" : "解锁"}
           </PrimaryButton>
+          {bio?.enabled && (
+            <GhostButton className="mt-3 gap-2" disabled={busy} onClick={() => void tryBio()}>
+              {bio.kind === "face" ? <ScanSmiley size={20} /> : <Fingerprint size={20} />}
+              用{bioName(bio)}解锁
+            </GhostButton>
+          )}
         </form>
 
         <p className="mt-auto pb-10 text-center text-[12px] leading-5 text-muted-foreground">

@@ -3,14 +3,14 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CaretRight, Copy, Key, Lock, PencilSimple, Plus, ShieldWarning, Trash, TreeStructure, Wallet as WalletIcon } from "@phosphor-icons/react";
+import { CaretRight, Copy, Fingerprint, Key, Lock, PencilSimple, Plus, ScanSmiley, ShieldWarning, Trash, TreeStructure, Wallet as WalletIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { WalletDot } from "@/components/shared";
 import { shortAddr } from "@/lib/format";
 import { toHex } from "viem";
 import type { HDAccount } from "viem/accounts";
 import { accountOf, verifyPassword, type Secret, type WalletMeta } from "@/lib/wallet/vault";
-import { copyText, setSecureScreen } from "@/lib/wallet/native";
+import { bioDisable, bioEnable, bioName, bioStatus, copyText, setSecureScreen, type BioStatus } from "@/lib/wallet/native";
 import { cn } from "@/lib/utils";
 import { useVault } from "@/components/wallet/wallet-context";
 import { Field } from "@/components/wallet/password-fields";
@@ -21,6 +21,31 @@ type Sheet = { kind: "rename" | "export" | "delete"; wallet: WalletMeta } | null
 export default function MePage() {
   const { wallets, active, lock } = useVault();
   const [sheet, setSheet] = useState<Sheet>(null);
+  const [bio, setBio] = useState<BioStatus | null>(null);
+  const [bioSheet, setBioSheet] = useState(false);
+  const refreshBio = () => void bioStatus().then(setBio);
+  useEffect(() => {
+    void bioStatus().then(setBio);
+  }, []);
+
+  const toggleBio = async () => {
+    if (!bio) return;
+    if (!bio.enabled) return setBioSheet(true);
+    await bioDisable();
+    toast.success(`已关闭${bioName(bio)}解锁`);
+    refreshBio();
+  };
+  const enableBio = async (pw: string) => {
+    try {
+      if (await bioEnable(pw)) {
+        toast.success(`已开启${bioName(bio)}解锁`);
+        setBioSheet(false);
+      }
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+    refreshBio();
+  };
 
   return (
     <WalletFrame>
@@ -72,6 +97,18 @@ export default function MePage() {
             <span className="flex-1 text-[15px]">立即锁定</span>
             <span className="text-[12px] text-muted-foreground">切到后台 5 分钟自动锁定</span>
           </button>
+          {bio && (bio.available || bio.enabled) && (
+            <button type="button" role="switch" aria-checked={bio.enabled} onClick={() => void toggleBio()} className="flex w-full items-center gap-3 px-4 py-4 text-left">
+              {bio.kind === "face" ? <ScanSmiley size={20} /> : <Fingerprint size={20} />}
+              <span className="flex-1">
+                <span className="block text-[15px]">{bioName(bio)}解锁</span>
+                <span className="block text-[12px] text-muted-foreground">导出助记词 / 私钥仍要输入密码</span>
+              </span>
+              <span className={cn("flex h-7 w-12 shrink-0 items-center rounded-full p-0.5 transition-colors", bio.enabled ? "justify-end bg-up" : "justify-start bg-border")}>
+                <span className="size-6 rounded-full bg-white shadow-sm" />
+              </span>
+            </button>
+          )}
           <Link href="/wallet/nodes" className="flex items-center gap-3 px-4 py-4">
             <TreeStructure size={20} />
             <span className="flex-1 text-[15px]">节点</span>
@@ -100,6 +137,9 @@ export default function MePage() {
         {sheet?.kind === "export" && <Export wallet={sheet.wallet} />}
         {sheet?.kind === "delete" && <Delete wallet={sheet.wallet} onDone={() => setSheet(null)} />}
       </BottomSheet>
+      <BottomSheet open={bioSheet} onClose={() => setBioSheet(false)}>
+        {bioSheet && <PasswordGate title={`开启${bioName(bio)}解锁`} onOk={(pw) => void enableBio(pw)} />}
+      </BottomSheet>
     </WalletFrame>
   );
 }
@@ -127,7 +167,7 @@ function Rename({ wallet, onDone }: { wallet: WalletMeta; onDone: () => void }) 
   );
 }
 
-function PasswordGate({ title, onOk }: { title: string; onOk: () => void }) {
+function PasswordGate({ title, onOk }: { title: string; onOk: (password: string) => void }) {
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -151,7 +191,7 @@ function PasswordGate({ title, onOk }: { title: string; onOk: () => void }) {
         disabled={!pw || busy}
         onClick={async () => {
           setBusy(true);
-          if (await verifyPassword(pw)) onOk();
+          if (await verifyPassword(pw)) onOk(pw);
           else setErr("密码不对");
           setBusy(false);
         }}

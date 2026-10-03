@@ -149,7 +149,7 @@ private val BRIDGE_JS = """
   }
   window.ArmWalletNative = {
     platform: 'android',
-    features: ['dapp', 'store', 'scan'],
+    features: ['dapp', 'store', 'scan', 'bio'],
     vaultGet: function(){ return call('vaultGet'); },
     vaultSet: function(v){ return call('vaultSet', String(v)); },
     vaultClear: function(){ return call('vaultClear'); },
@@ -164,6 +164,10 @@ private val BRIDGE_JS = """
     dappEmit: function(e){ call('dappEmit', e); },
     dappShow: function(on){ call('dappShow', !!on); },
     scanQr: function(){ return call('scanQr'); },
+    bioStatus: function(){ return call('bioStatus'); },
+    bioEnable: function(p){ return call('bioEnable', String(p)); },
+    bioUnlock: function(){ return call('bioUnlock'); },
+    bioDisable: function(){ return call('bioDisable'); },
   };
 })();
 """.trimIndent()
@@ -558,7 +562,22 @@ private class WalletShell(
                 }
                 "vaultClear" -> {
                     ChainWalletVault.clear(ctx)
+                    ChainWalletBio.clear(ctx)
                     send(JsonPrimitive(true))
+                }
+                "bioStatus" -> send(ChainWalletBio.status(ctx))
+                "bioDisable" -> {
+                    ChainWalletBio.clear(ctx)
+                    send(JsonPrimitive(true))
+                }
+                "bioEnable" -> {
+                    val pw = str ?: return send(error = "no password")
+                    val act = activity() ?: return send(error = "no activity")
+                    view.post { ChainWalletBio.enable(act, pw) { r -> r.fold({ send(JsonPrimitive(it)) }, { send(error = it.message ?: "failed") }) } }
+                }
+                "bioUnlock" -> {
+                    val act = activity() ?: return send(error = "no activity")
+                    view.post { ChainWalletBio.unlock(act) { r -> r.fold({ send(it?.let { p -> JsonPrimitive(p) } ?: JsonNull) }, { send(error = it.message ?: "failed") }) } }
                 }
                 "storeGet" -> send(str?.let { ChainWalletStore.get(ctx, it) }?.let { JsonPrimitive(it) } ?: JsonNull)
                 "storeSet" -> {
@@ -641,7 +660,39 @@ private class SyncBridge(
     }
 
     @android.webkit.JavascriptInterface
-    fun bridgeInfo(): String = if (ok()) """{"platform":"android","features":["dapp","store","scan"]}""" else "{}"
+    fun bridgeInfo(): String = if (ok()) """{"platform":"android","features":["dapp","store","scan","bio"]}""" else "{}"
+
+    private fun reply(cb: String, result: JsonElement = JsonNull, error: String? = null) =
+        push(buildJsonObject { put("push", "reply"); put("cb", cb); if (error != null) put("error", error) else put("result", result) })
+
+    @android.webkit.JavascriptInterface
+    fun bioStatus(): String? = if (ok()) ChainWalletBio.status(ctx).toString() else null
+
+    @android.webkit.JavascriptInterface
+    fun bioDisable(): Boolean = ok() && runCatching { ChainWalletBio.clear(ctx) }.isSuccess
+
+    @android.webkit.JavascriptInterface
+    fun bioEnable(cb: String?, password: String?) {
+        if (!ok() || cb == null) return
+        val act = activity
+        view.post {
+            when {
+                act == null -> reply(cb, error = "no activity")
+                password.isNullOrEmpty() -> reply(cb, error = "no password")
+                else -> ChainWalletBio.enable(act, password) { r -> r.fold({ reply(cb, JsonPrimitive(it)) }, { reply(cb, error = it.message ?: "failed") }) }
+            }
+        }
+    }
+
+    @android.webkit.JavascriptInterface
+    fun bioUnlock(cb: String?) {
+        if (!ok() || cb == null) return
+        val act = activity
+        view.post {
+            if (act == null) reply(cb, error = "no activity")
+            else ChainWalletBio.unlock(act) { r -> r.fold({ reply(cb, it?.let { p -> JsonPrimitive(p) } ?: JsonNull) }, { reply(cb, error = it.message ?: "failed") }) }
+        }
+    }
 
     @android.webkit.JavascriptInterface
     fun scanQr(cb: String?) {
@@ -660,7 +711,7 @@ private class SyncBridge(
     fun vaultSet(v: String): Boolean = ok() && runCatching { ChainWalletVault.write(ctx, v) }.isSuccess
 
     @android.webkit.JavascriptInterface
-    fun vaultClear(): Boolean = ok() && runCatching { ChainWalletVault.clear(ctx) }.isSuccess
+    fun vaultClear(): Boolean = ok() && runCatching { ChainWalletVault.clear(ctx); ChainWalletBio.clear(ctx) }.isSuccess
 
     @android.webkit.JavascriptInterface
     fun storeGet(key: String?): String? = if (ok() && key != null) ChainWalletStore.get(ctx, key) else null

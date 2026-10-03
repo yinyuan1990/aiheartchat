@@ -1,3 +1,4 @@
+import LocalAuthentication
 import Security
 import StoreKit
 import SwiftUI
@@ -68,6 +69,95 @@ enum ChainWalletVault {
 
     static func clear() {
         SecItemDelete(query as CFDictionary)
+    }
+}
+
+/// 钱包 Face ID / 指纹解锁：钱包密码存进一条「必须用当前录入的生物识别才能读」的 Keychain 条目（本机、设了锁屏密码才可用）。
+/// 重新录入指纹 / 换 Face ID 后条目失效，要重新用密码开启。
+enum ChainWalletBio {
+    struct Failure: LocalizedError {
+        let message: String
+        var errorDescription: String? { message }
+    }
+
+    private static let base: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: "com.wh.peiwan.armwallet",
+        kSecAttrAccount as String: "bio.v1",
+    ]
+
+    static func status() -> [String: Any] {
+        let ctx = LAContext()
+        var err: NSError?
+        let ok = ctx.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &err)
+        let kind = ctx.biometryType == .faceID ? "face" : ctx.biometryType == .touchID ? "fingerprint" : "biometric"
+        return ["available": ok, "enabled": enabled, "kind": kind]
+    }
+
+    /// 只看条目在不在，不弹验证
+    static var enabled: Bool {
+        let ctx = LAContext()
+        ctx.interactionNotAllowed = true
+        var q = base
+        q[kSecReturnAttributes as String] = true
+        q[kSecUseAuthenticationContext as String] = ctx
+        let s = SecItemCopyMatching(q as CFDictionary, nil)
+        return s == errSecSuccess || s == errSecInteractionNotAllowed
+    }
+
+    static func clear() {
+        SecItemDelete(base as CFDictionary)
+    }
+
+    private static func cancelled(_ e: Error?) -> Bool {
+        guard let e = e as? LAError else { return false }
+        return [.userCancel, .appCancel, .systemCancel, .userFallback].contains(e.code)
+    }
+
+    /// 结果：true 已开启，false 用户取消；先验一次生物识别确认是本人，再写入受保护的条目
+    static func enable(_ password: String, done: @escaping (Result<Bool, Error>) -> Void) {
+        let ctx = LAContext()
+        ctx.localizedFallbackTitle = ""
+        ctx.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: "开启后可以直接用 Face ID / 指纹解锁钱包") { ok, err in
+            guard ok else { return done(cancelled(err) ? .success(false) : .failure(err ?? Failure(message: "验证失败"))) }
+            guard let ac = SecAccessControlCreateWithFlags(nil, kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly, .biometryCurrentSet, nil) else {
+                return done(.failure(Failure(message: "access control")))
+            }
+            clear()
+            var add = base
+            add[kSecValueData as String] = Data(password.utf8)
+            add[kSecAttrAccessControl as String] = ac
+            add[kSecUseAuthenticationContext as String] = ctx
+            let s = SecItemAdd(add as CFDictionary, nil)
+            done(s == errSecSuccess ? .success(true) : .failure(Failure(message: "keychain \(s)")))
+        }
+    }
+
+    /// 结果：密码；nil 用户取消（改用密码）；失败 "invalidated" = 生物识别有变动，已自动关闭
+    static func unlock(done: @escaping (Result<String?, Error>) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let ctx = LAContext()
+            ctx.localizedReason = "解锁钱包"
+            ctx.localizedCancelTitle = "用密码"
+            ctx.localizedFallbackTitle = ""
+            var q = base
+            q[kSecReturnData as String] = true
+            q[kSecMatchLimit as String] = kSecMatchLimitOne
+            q[kSecUseAuthenticationContext as String] = ctx
+            var item: CFTypeRef?
+            let s = SecItemCopyMatching(q as CFDictionary, &item)
+            switch s {
+            case errSecSuccess:
+                if let d = item as? Data, let pw = String(data: d, encoding: .utf8) { done(.success(pw)) } else { done(.failure(Failure(message: "bad item"))) }
+            case errSecUserCanceled:
+                done(.success(nil))
+            case errSecItemNotFound:
+                clear()
+                done(.failure(Failure(message: "invalidated")))
+            default:
+                done(.failure(Failure(message: s == errSecAuthFailed ? "验证失败" : "keychain \(s)")))
+            }
+        }
     }
 }
 
@@ -565,7 +655,32 @@ final class ChainWalletModel: NSObject, ObservableObject {
             if ChainWalletVault.write(v) { send(true) } else { send(error: "keychain write failed") }
         case "vaultClear":
             ChainWalletVault.clear()
+            ChainWalletBio.clear()
             send(true)
+        case "bioStatus":
+            send(ChainWalletBio.status())
+        case "bioDisable":
+            ChainWalletBio.clear()
+            send(true)
+        case "bioEnable":
+            guard let pw = arg as? String, !pw.isEmpty else { return send(error: "no password") }
+            ChainWalletBio.enable(pw) { r in
+                DispatchQueue.main.async {
+                    switch r {
+                    case .success(let on): send(on)
+                    case .failure(let e): send(error: e.localizedDescription)
+                    }
+                }
+            }
+        case "bioUnlock":
+            ChainWalletBio.unlock { r in
+                DispatchQueue.main.async {
+                    switch r {
+                    case .success(let pw): send(pw)
+                    case .failure(let e): send(error: e.localizedDescription)
+                    }
+                }
+            }
         case "storeGet":
             send((arg as? String).flatMap { ChainWalletStore.get($0) })
         case "storeSet":
@@ -730,7 +845,7 @@ private let walletBridgeJS = #"""
   }
   window.ArmWalletNative = {
     platform: 'ios',
-    features: ['dapp', 'store', 'scan'],
+    features: ['dapp', 'store', 'scan', 'bio'],
     vaultGet: function(){ return call('vaultGet'); },
     vaultSet: function(v){ return call('vaultSet', String(v)); },
     vaultClear: function(){ return call('vaultClear'); },
@@ -744,7 +859,11 @@ private let walletBridgeJS = #"""
     dappRespond: function(r){ call('dappRespond', r); },
     dappEmit: function(e){ call('dappEmit', e); },
     dappShow: function(on){ call('dappShow', !!on); },
-    scanQr: function(){ return call('scanQr'); }
+    scanQr: function(){ return call('scanQr'); },
+    bioStatus: function(){ return call('bioStatus'); },
+    bioEnable: function(p){ return call('bioEnable', String(p)); },
+    bioUnlock: function(){ return call('bioUnlock'); },
+    bioDisable: function(){ return call('bioDisable'); }
   };
 })();
 """#

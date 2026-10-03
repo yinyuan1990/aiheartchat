@@ -35,7 +35,16 @@ type Bridge = {
   dappShow?: (on: boolean) => void;
   /** Opens the camera scanner; resolves with the decoded text, null when the user backs out. */
   scanQr?: () => Promise<string | null>;
+  /** Biometric unlock: the wallet password kept by the shell behind a biometric-bound key (feature `bio`). */
+  bioStatus?: () => MaybePromise<BioStatus | string | null>;
+  /** Prompts once; true = stored, false = cancelled. */
+  bioEnable?: (password: string) => Promise<boolean>;
+  /** Prompts; the password, or null when the user picked "use password". Rejects with "invalidated" after a biometric change. */
+  bioUnlock?: () => Promise<string | null>;
+  bioDisable?: () => MaybePromise<unknown>;
 };
+
+export type BioStatus = { available: boolean; enabled: boolean; kind?: "fingerprint" | "face" | "biometric" };
 
 /**
  * Android fallback shell (vendor WebViews without androidx.webkit) injects a raw `addJavascriptInterface` object:
@@ -94,6 +103,10 @@ function wrapSync(raw: SyncBridge): Bridge {
     dappEmit: (e) => void call("dappEmit", json(e)),
     dappShow: (on) => void call("dappShow", !!on),
     scanQr: typeof raw.scanQr === "function" ? () => callAsync("scanQr") as Promise<string | null> : undefined,
+    bioStatus: typeof raw.bioStatus === "function" ? () => (call("bioStatus") as string | null) ?? null : undefined,
+    bioEnable: typeof raw.bioEnable === "function" ? (p) => callAsync("bioEnable", String(p)) as Promise<boolean> : undefined,
+    bioUnlock: typeof raw.bioUnlock === "function" ? () => callAsync("bioUnlock") as Promise<string | null> : undefined,
+    bioDisable: typeof raw.bioDisable === "function" ? () => call("bioDisable") : undefined,
   };
   // bridgeInfo() answers "{}" until the shell has seen this page's origin: don't cache that, ask again next time
   if (info.features?.length) wrapped = { raw, bridge };
@@ -141,6 +154,34 @@ export async function scanQr(): Promise<string | null> {
   if (!b?.scanQr) return null;
   const r = await b.scanQr();
   return typeof r === "string" && r ? r : null;
+}
+
+/** null = this shell has no biometric unlock (old App / browser). */
+export async function bioStatus(): Promise<BioStatus | null> {
+  const b = nativeBridge();
+  if (!b?.bioStatus || !hasFeature("bio")) return null;
+  try {
+    const r = await b.bioStatus();
+    const s = typeof r === "string" ? (JSON.parse(r) as BioStatus) : r;
+    return s && typeof s.available === "boolean" ? s : null;
+  } catch {
+    return null;
+  }
+}
+export const bioName = (s?: BioStatus | null) => (s?.kind === "face" ? "Face ID" : s?.kind === "fingerprint" ? "指纹" : "生物识别");
+export async function bioEnable(password: string): Promise<boolean> {
+  const b = nativeBridge();
+  if (!b?.bioEnable) throw new Error("当前 App 版本不支持");
+  return (await b.bioEnable(password)) === true;
+}
+export async function bioUnlock(): Promise<string | null> {
+  const b = nativeBridge();
+  if (!b?.bioUnlock) return null;
+  const r = await b.bioUnlock();
+  return typeof r === "string" && r ? r : null;
+}
+export async function bioDisable() {
+  await nativeBridge()?.bioDisable?.();
 }
 
 /** Blocks screenshots / screen recording (Android FLAG_SECURE, iOS overlay) while secrets are on screen. */

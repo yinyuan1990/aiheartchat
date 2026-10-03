@@ -165,9 +165,9 @@ export function PrimaryButton({ children, onClick, tone = "default", disabled, c
   );
 }
 
-export function GhostButton({ children, onClick, className }: { children: React.ReactNode; onClick?: () => void; className?: string }) {
+export function GhostButton({ children, onClick, disabled, className }: { children: React.ReactNode; onClick?: () => void; disabled?: boolean; className?: string }) {
   return (
-    <button type="button" onClick={onClick} className={cn("h-14 w-full rounded-2xl bg-muted text-[16px] font-semibold transition active:scale-[0.98]", className)}>
+    <button type="button" onClick={onClick} disabled={disabled} className={cn("flex h-14 w-full items-center justify-center rounded-2xl bg-muted text-[16px] font-semibold transition active:scale-[0.98] disabled:opacity-40", className)}>
       {children}
     </button>
   );

@@ -15,6 +15,8 @@
 	<false/>
 	<key>NSCameraUsageDescription</key>
 	<string>视频通话、扫描二维码与聊天拍照需要使用摄像头</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>用 Face ID 解锁链上钱包</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>在聊天中选择照片发送需要访问相册</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
