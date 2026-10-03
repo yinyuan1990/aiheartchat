@@ -113,11 +113,13 @@ export default function SendPage() {
     value = null;
   }
 
+  // Until an address is typed the fee is estimated as a transfer to yourself; sending still requires toAddr.
   const call = useMemo(() => {
-    if (!asset || !toAddr) return null;
+    const dest = toAddr ?? from;
+    if (!asset || !dest) return null;
     const v = value ?? 0n;
-    return asset.token ? { to: asset.token, data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [toAddr, v] }), value: 0n } : { to: toAddr, data: undefined, value: v };
-  }, [asset, toAddr, value]);
+    return asset.token ? { to: asset.token, data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [dest, v] }), value: 0n } : { to: dest, data: undefined, value: v };
+  }, [asset, toAddr, from, value]);
 
   const fees = useQuery({
     queryKey: ["wallet", "send-fees", chain.key, from, call?.to, call?.data, call?.value?.toString()],
@@ -292,16 +294,21 @@ export default function SendPage() {
             </span>
             <span className="text-[12px] text-muted-foreground">用 {nc.symbol} 支付</span>
           </div>
-          <div className="mt-3 grid grid-cols-3 gap-2">
+          <div className="mt-3 grid grid-cols-3 gap-1 rounded-2xl bg-muted p-1">
             {SPEEDS.map((s) => {
               const f = speedFee(s.key);
+              const on = speed === s.key;
               return (
-                <button key={s.key} type="button" onClick={() => setSpeed(s.key)} className={cn("rounded-2xl border p-2.5 text-left transition active:scale-[0.97]", speed === s.key ? "border-foreground bg-foreground/[0.03]" : "border-border")}>
-                  <div className="flex items-center gap-1 text-[13px] font-semibold">
-                    {s.key === "fast" && <Lightning size={13} weight="fill" />}
+                <button key={s.key} type="button" onClick={() => setSpeed(s.key)} className={cn("flex flex-col items-center rounded-xl px-1 py-2 transition", on ? "bg-card shadow-sm" : "text-muted-foreground")}>
+                  <span className={cn("flex items-center gap-0.5 text-[13px]", on ? "font-semibold" : "font-medium")}>
+                    {s.key === "fast" && <Lightning size={12} weight="fill" className={on ? "text-amber-500" : undefined} />}
                     {s.label}
-                  </div>
-                  <div className="mt-1 font-mono text-[11px] whitespace-nowrap">{f ? fmtFee(f.cost) : call ? "估算中…" : "—"}</div>
+                  </span>
+                  {f ? (
+                    <span className="mt-0.5 font-mono text-[11px] whitespace-nowrap">{fmtFee(f.cost)}</span>
+                  ) : (
+                    <span className="mt-1.5 mb-0.5 h-2.5 w-12 animate-pulse rounded-full bg-border" />
+                  )}
                 </button>
               );
             })}
