@@ -23,6 +23,7 @@ import { perpMarket, perpWhales } from "./perp.js";
 import { gameBoard, gamePlay, gameSell, gameSession, gameStart, gameTick, gameToday } from "./game.js";
 import { boatBoard, boatInfo, boatLogin, boatMe, boatRunEnd, boatRunStart, boatWithdraw } from "./boat.js";
 import { addSolComment, jupQuote, jupSwap, solComments, solRelay, solTokens } from "./solana.js";
+import { isAvatarAddress, walletAvatar } from "./avatars.js";
 import { isMint, pumpCandles, pumpCoin, pumpHolders, pumpList, pumpTrades } from "./pump.js";
 import { isEvmAddr, isMarketChain, kyberBuild, kyberQuote, marketCandles, marketList, marketPrices, marketSearch, marketToken, marketTrades } from "./markets.js";
 
@@ -691,6 +692,14 @@ app.get("/api/img", async (c) => {
   } catch {
     return c.json({ error: "fetch failed" }, 502);
   }
+});
+
+app.get("/api/avatar/:addr", async (c) => {
+  const a = c.req.param("addr");
+  if (!isAvatarAddress(a)) return c.json({ error: "bad address" }, 400);
+  const img = await walletAvatar(a);
+  if (!img) return c.body(null, 404, { "cache-control": "no-store" });
+  return c.body(new Uint8Array(img), 200, { "content-type": "image/jpeg", "cache-control": "public, max-age=31536000, immutable" });
 });
 
 // "N 人在看" on the wallet coin page: each open page pings every 20 s with a random session id; count the last 60 s

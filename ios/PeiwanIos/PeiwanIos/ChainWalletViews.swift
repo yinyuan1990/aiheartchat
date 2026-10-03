@@ -868,7 +868,7 @@ private let walletBridgeJS = #"""
 })();
 """#
 
-/// DApp 网页的钱包接口（EIP-1193 + EIP-6963）。和 Android ChainWalletDapp.kt 里的 DAPP_PROVIDER_JS 一模一样，改的时候两边一起改。
+/// DApp 网页的钱包接口（EIP-1193 + EIP-6963；Solana 走 Wallet Standard，方法名带 sol_ 前缀）。和 Android ChainWalletDapp.kt 里的 DAPP_PROVIDER_JS 一模一样，改的时候两边一起改。
 private let dappProviderJS = #"""
 (function () {
   var tok = window.__armDappTok;
@@ -912,6 +912,7 @@ private let dappProviderJS = #"""
     if (m.event) {
       if (m.event === 'chainChanged') setChain(m.data);
       else if (m.event === 'accountsChanged') setAccounts(m.data || []);
+      else if (m.event === 'sol_accounts') solSet(m.data);
       else emit(m.event, m.data);
       return;
     }
@@ -958,7 +959,8 @@ private let dappProviderJS = #"""
     sendAsync: reply
   };
   if (!window.ethereum) window.ethereum = provider;
-  var icon = 'data:image/svg+xml,' + encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='16' fill='#111'/><rect x='13' y='20' width='38' height='26' rx='6' fill='none' stroke='#fff' stroke-width='4'/><circle cx='41' cy='33' r='3.5' fill='#fff'/></svg>");
+  var iconSvg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='16' fill='#111'/><rect x='13' y='20' width='38' height='26' rx='6' fill='none' stroke='#fff' stroke-width='4'/><circle cx='41' cy='33' r='3.5' fill='#fff'/></svg>";
+  var icon = 'data:image/svg+xml,' + encodeURIComponent(iconSvg);
   var uuid = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, function () { return (Math.random() * 16 | 0).toString(16); });
   var info = Object.freeze({ uuid: uuid, name: '心之音钱包', icon: icon, rdns: 'com.yyheart.wallet' });
   function announce() { window.dispatchEvent(new CustomEvent('eip6963:announceProvider', { detail: Object.freeze({ info: info, provider: provider }) })); }
@@ -967,5 +969,80 @@ private let dappProviderJS = #"""
   window.dispatchEvent(new Event('ethereum#initialized'));
   request({ method: 'eth_chainId' }).catch(function () {});
   request({ method: 'eth_accounts' }).catch(function () {});
+
+  // Solana: a Wallet Standard wallet whose features travel as sol_* requests on the same channel; bytes as base64
+  var SOL_CHAINS = ['solana:mainnet'];
+  var SOL_MAINNET_IDS = ['solana:mainnet', 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp'];
+  var SOL_ACCOUNT_FEATURES = ['solana:signAndSendTransaction', 'solana:signTransaction', 'solana:signMessage'];
+  var solAccounts = [], solListeners = [];
+  function b64e(u) { var s = ''; for (var i = 0; i < u.length; i++) s += String.fromCharCode(u[i]); return btoa(s); }
+  function b64d(s) { var b = atob(s), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
+  function u8(x) {
+    if (x instanceof Uint8Array) return x;
+    if (x && x.buffer && typeof x.byteLength === 'number') return new Uint8Array(x.buffer, x.byteOffset || 0, x.byteLength);
+    throw rpcError({ code: -32602, message: 'Expected a Uint8Array' });
+  }
+  function solSet(list) {
+    list = Array.isArray(list) ? list : [];
+    if (list.length === solAccounts.length && list.every(function (a, i) { return a && a.address === solAccounts[i].address; })) return;
+    solAccounts = list.map(function (a) { return Object.freeze({ address: a.address, publicKey: b64d(a.publicKey), chains: SOL_CHAINS.slice(), features: SOL_ACCOUNT_FEATURES.slice() }); });
+    var accounts = solAccounts.slice();
+    solListeners.slice().forEach(function (f) { try { f({ accounts: accounts }); } catch (e) { setTimeout(function () { throw e; }); } });
+  }
+  function solAsync(f) {
+    return function () { var args = arguments; return new Promise(function (resolve, reject) { try { resolve(f.apply(null, args)); } catch (e) { reject(e); } }); };
+  }
+  function solAddress(inputs) {
+    var a = inputs[0] && inputs[0].account;
+    if (!a || !solAccounts.some(function (s) { return s.address === a.address; })) throw rpcError({ code: 4100, message: 'Account is not connected' });
+    inputs.forEach(function (x) {
+      if (!x || !x.account || x.account.address !== a.address) throw rpcError({ code: 4100, message: 'Account is not connected' });
+      if (x.chain && SOL_MAINNET_IDS.indexOf(x.chain) < 0) throw rpcError({ code: -32602, message: 'Unsupported chain ' + x.chain });
+    });
+    return a.address;
+  }
+  function solTxs(inputs) { return inputs.map(function (x) { return b64e(u8(x.transaction)); }); }
+  var solFeatures = {
+    'standard:connect': { version: '1.0.0', connect: solAsync(function (input) {
+      return request({ method: 'sol_connect', params: { silent: !!(input && input.silent) } }).then(function (r) { solSet(r); return { accounts: solAccounts.slice() }; });
+    }) },
+    'standard:disconnect': { version: '1.0.0', disconnect: solAsync(function () {
+      return request({ method: 'sol_disconnect', params: {} }).then(function () { solSet([]); });
+    }) },
+    'standard:events': { version: '1.0.0', on: function (ev, f) {
+      if (ev !== 'change' || typeof f !== 'function') return function () {};
+      solListeners.push(f);
+      return function () { var i = solListeners.indexOf(f); if (i >= 0) solListeners.splice(i, 1); };
+    } },
+    'solana:signTransaction': { version: '1.0.0', supportedTransactionVersions: ['legacy', 0], signTransaction: solAsync(function () {
+      var inputs = [].slice.call(arguments);
+      return request({ method: 'sol_signTransaction', params: { address: solAddress(inputs), txs: solTxs(inputs) } })
+        .then(function (r) { return r.map(function (s) { return { signedTransaction: b64d(s) }; }); });
+    }) },
+    'solana:signAndSendTransaction': { version: '1.0.0', supportedTransactionVersions: ['legacy', 0], signAndSendTransaction: solAsync(function () {
+      var inputs = [].slice.call(arguments), o = (inputs[0] && inputs[0].options) || {};
+      var opts = { skipPreflight: !!o.skipPreflight, preflightCommitment: o.preflightCommitment || null, mode: o.mode || null };
+      return request({ method: 'sol_signAndSendTransaction', params: { address: solAddress(inputs), txs: solTxs(inputs), options: opts } })
+        .then(function (r) { return r.map(function (s) { return { signature: b64d(s) }; }); });
+    }) },
+    'solana:signMessage': { version: '1.0.0', signMessage: solAsync(function () {
+      var inputs = [].slice.call(arguments);
+      var msgs = inputs.map(function (x) { return u8(x && x.message); });
+      return request({ method: 'sol_signMessage', params: { address: solAddress(inputs), messages: msgs.map(b64e) } })
+        .then(function (r) { return r.map(function (s, i) { return { signedMessage: msgs[i], signature: b64d(s), signatureType: 'ed25519' }; }); });
+    }) }
+  };
+  var solWallet = Object.freeze({
+    version: '1.0.0',
+    name: '心之音钱包',
+    icon: 'data:image/svg+xml;base64,' + btoa(iconSvg),
+    chains: SOL_CHAINS.slice(),
+    get accounts() { return solAccounts.slice(); },
+    features: solFeatures
+  });
+  function solRegister(api) { try { api.register(solWallet); } catch (e) {} }
+  try { window.dispatchEvent(new CustomEvent('wallet-standard:register-wallet', { detail: solRegister })); } catch (e) {}
+  try { window.addEventListener('wallet-standard:app-ready', function (e) { solRegister(e.detail); }); } catch (e) {}
+  request({ method: 'sol_accounts', params: {} }).then(solSet, function () {});
 })();
 """#

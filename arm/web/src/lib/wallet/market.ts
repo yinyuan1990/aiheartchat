@@ -74,7 +74,8 @@ export const useMarketPrices = (chain: string, addrs: string[], enabled = true) 
 
 // ---------- tokens bought through the 交易 tab (so the asset list can show them) ----------
 
-export type HeldToken = { address: string; symbol: string; name: string; image: string | null; decimals: number };
+/** `added`: put on the list by hand (添加代币), so it stays visible at a zero balance. */
+export type HeldToken = { address: string; symbol: string; name: string; image: string | null; decimals: number; added?: boolean };
 type Held = Record<string, HeldToken[]>;
 const HELD_KEY = "evmTokens";
 let held: Held = {};
@@ -92,11 +93,20 @@ function loadHeld() {
   return heldLoaded;
 }
 
-export function rememberToken(chain: string, t: HeldToken) {
-  const list = (held[chain] ?? []).filter((x) => x.address !== t.address);
-  held = { ...held, [chain]: [t, ...list].slice(0, 100) };
+function saveHeld(chain: string, list: HeldToken[]) {
+  held = { ...held, [chain]: list.slice(0, 100) };
   heldSubs.forEach((f) => f());
   void storeWrite(HELD_KEY, JSON.stringify(held));
+}
+
+export function rememberToken(chain: string, t: HeldToken) {
+  const list = held[chain] ?? [];
+  const prev = list.find((x) => x.address.toLowerCase() === t.address.toLowerCase());
+  saveHeld(chain, [{ ...t, added: t.added || prev?.added }, ...list.filter((x) => x !== prev)]);
+}
+
+export function forgetToken(chain: string, address: string) {
+  saveHeld(chain, (held[chain] ?? []).filter((x) => x.address.toLowerCase() !== address.toLowerCase()));
 }
 
 export function useHeldTokens(chain: string): HeldToken[] {

@@ -14,6 +14,7 @@ import { WALLET_CHAINS, explorerAddr, explorerTx, isSolana, probeChainNode, prob
 import { absUrl, useAssets, type Asset } from "@/lib/wallet/assets";
 import { copyText } from "@/lib/wallet/native";
 import { useVault } from "@/components/wallet/wallet-context";
+import { AddTokenSheet } from "@/components/wallet/add-token";
 import { BottomNav, BottomSheet, ChainGlyph, ChainPill, IconButton, Num, Pct, WalletFrame } from "@/components/wallet/ui";
 
 const usd = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -27,7 +28,7 @@ export default function WalletHome() {
   const loading = loadingAssets && !noSol;
   const [hidden, setHidden] = useState(false);
   const [tab, setTab] = useState<"tokens" | "activity">("tokens");
-  const [sheet, setSheet] = useState<null | "chain" | "wallet">(null);
+  const [sheet, setSheet] = useState<null | "chain" | "wallet" | "add">(null);
   const [int, dec] = usd(total).split(".");
   const pct = total > change ? (change / (total - change)) * 100 : 0;
 
@@ -39,7 +40,7 @@ export default function WalletHome() {
     <WalletFrame>
       <header className="flex h-14 items-center gap-2 px-4">
         <button type="button" onClick={() => setSheet("wallet")} className="flex min-w-0 items-center gap-2 rounded-full py-1 pr-2 pl-1 transition active:scale-95 hover:bg-muted">
-          {address && <WalletDot address={address} size={28} />}
+          {active && <WalletDot address={active.address} size={28} />}
           <span className="truncate text-[15px] font-semibold">{active?.name}</span>
           <CaretDown size={12} weight="bold" className="shrink-0 text-muted-foreground" />
         </button>
@@ -100,7 +101,7 @@ export default function WalletHome() {
         {[
           { href: "/wallet/receive", label: "收款", icon: ArrowDown },
           { href: "/wallet/send", label: "转账", icon: ArrowUp },
-          { href: "/wallet/token", label: "交易", icon: ArrowsLeftRight },
+          { href: "/wallet/swap", label: "兑换", icon: ArrowsLeftRight },
           { href: "/wallet/receive?deposit=1", label: "充值", icon: Plus },
         ].map((a) => (
           <Link key={a.label} href={a.href} className="flex flex-col items-center gap-1.5 rounded-2xl py-2 transition active:scale-95">
@@ -152,6 +153,16 @@ export default function WalletHome() {
                   </Link>
                 </li>
               )}
+              <li className="py-3 text-center">
+                {isSolana(chain) ? (
+                  <span className="text-[12px] text-muted-foreground">Solana 上持有的代币会自动显示</span>
+                ) : (
+                  <button type="button" onClick={() => setSheet("add")} className="inline-flex items-center gap-1 rounded-full bg-muted px-3.5 py-1.5 text-[13px] font-medium transition active:scale-95">
+                    <Plus size={14} weight="bold" />
+                    添加代币
+                  </button>
+                )}
+              </li>
             </ul>
           )
         ) : (
@@ -225,6 +236,8 @@ export default function WalletHome() {
           </Link>
         </div>
       </BottomSheet>
+
+      {!isSolana(chain) && <AddTokenSheet chain={chain} open={sheet === "add"} onClose={() => setSheet(null)} />}
     </WalletFrame>
   );
 }

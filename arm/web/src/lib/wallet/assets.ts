@@ -165,6 +165,13 @@ function useArcAssets(address?: Address, enabled = true): { assets: Asset[]; loa
     queryFn: () => publicClientFor(chainByKey("arc")).readContract({ address: boatAddr!, abi: erc20Abi, functionName: "balanceOf", args: [address!] }),
     refetchInterval: 15_000,
   });
+  const added = useHeldTokens("arc");
+  const addedBal = useQuery({
+    queryKey: ["wallet", "arc-added", address, added.map((t) => t.address).join(",")],
+    enabled: enabled && !!address && added.length > 0,
+    queryFn: () => Promise.all(added.map((t) => publicClientFor(chainByKey("arc")).readContract({ address: t.address as Address, abi: erc20Abi, functionName: "balanceOf", args: [address!] }).catch(() => 0n))),
+    refetchInterval: 20_000,
+  });
   const assets: Asset[] = [];
   if (w.data) {
     const raw = BigInt(w.data.usdcBalance);
@@ -194,6 +201,13 @@ function useArcAssets(address?: Address, enabled = true): { assets: Asset[]; loa
     const p = boat.data?.priceUsdc ?? null;
     assets.push({ id: boatAddr, symbol: "BOAT", name: "Speedboat", seed: boatAddr, decimals: 18, raw: boatBal.data, amount, priceUsd: p, valueUsd: p == null ? null : amount * p, change24h: null, token: boatAddr, boat: true });
   }
+  if (w.data) {
+    added.forEach((t, i) => {
+      if (assets.some((a) => a.token?.toLowerCase() === t.address.toLowerCase())) return;
+      const raw = addedBal.data?.[i] ?? 0n;
+      assets.push({ id: t.address, symbol: t.symbol, name: t.name, logo: iconUrl(t.image), seed: t.address, decimals: t.decimals, raw, amount: Number(formatUnits(raw, t.decimals)), priceUsd: null, valueUsd: null, change24h: null, token: getAddress(t.address) });
+    });
+  }
   return { assets, loading: w.isLoading, error: w.isError };
 }
 
@@ -211,7 +225,7 @@ function useEvmAssets(chain: WalletChain, address?: Address, enabled = true) {
     },
     refetchInterval: 20_000,
   });
-  const owned = held.filter((_, i) => (q.data?.tokens[i] ?? 0n) > 0n);
+  const owned = held.filter((t, i) => (q.data?.tokens[i] ?? 0n) > 0n || t.added);
   const mp = useMarketPrices(
     chain.key,
     owned.map((t) => t.address),
@@ -230,7 +244,7 @@ function useEvmAssets(chain: WalletChain, address?: Address, enabled = true) {
     });
     held.forEach((t, i) => {
       const raw = q.data!.tokens[i] ?? 0n;
-      if (raw === 0n) return;
+      if (raw === 0n && !t.added) return;
       const amount = Number(formatUnits(raw, t.decimals));
       const p = mp.data?.[t.address];
       const price = p?.priceUsd ?? null;

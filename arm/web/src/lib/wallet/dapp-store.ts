@@ -9,17 +9,20 @@ import { storeRead as rawGet, storeWrite as rawSet } from "./native";
  */
 
 export type SitePerm = { address: Address; chainId: number; at: number };
+/** Solana connections are granted separately: connecting a site on EVM does not hand it the Solana address. */
+export type SolSitePerm = { address: string; at: number };
 export type SiteEntry = { url: string; title?: string; at: number };
 
 type State = {
   perms: Record<string, SitePerm>;
+  solPerms: Record<string, SolSitePerm>;
   recents: SiteEntry[];
   favs: SiteEntry[];
   ack: string[];
 };
 
-const KEYS: Record<keyof State, string> = { perms: "dapp.perms", recents: "dapp.recents", favs: "dapp.favs", ack: "dapp.ack" };
-const EMPTY: State = { perms: {}, recents: [], favs: [], ack: [] };
+const KEYS: Record<keyof State, string> = { perms: "dapp.perms", solPerms: "dapp.solPerms", recents: "dapp.recents", favs: "dapp.favs", ack: "dapp.ack" };
+const EMPTY: State = { perms: {}, solPerms: {}, recents: [], favs: [], ack: [] };
 const MAX_RECENTS = 20;
 
 let state: State = EMPTY;
@@ -83,6 +86,14 @@ export function revokePerm(origin: string) {
   const next = { ...state.perms };
   delete next[origin];
   update("perms", next);
+}
+
+export const getSolPerm = (origin: string): SolSitePerm | undefined => state.solPerms[origin];
+export const setSolPerm = (origin: string, p: SolSitePerm) => update("solPerms", { ...state.solPerms, [origin]: p });
+export function revokeSolPerm(origin: string) {
+  const next = { ...state.solPerms };
+  delete next[origin];
+  update("solPerms", next);
 }
 
 export function addRecent(url: string, title?: string) {

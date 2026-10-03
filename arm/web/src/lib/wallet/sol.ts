@@ -306,7 +306,9 @@ export function explainSolError(err: unknown, logs: string[] = []): string {
   if (/InsufficientFunds|insufficient funds/i.test(s + log)) return "余额不足";
   if (/BlockhashNotFound/.test(s)) return "交易过期了，请重试";
   if (/SlippageToleranceExceeded|0x1771|Slippage/i.test(s + log)) return "价格变动超过滑点，请调大滑点或重试";
-  if (/AccountNotFound/.test(s)) return "钱包里还没有 SOL，先转入一点 SOL 付网络费";
+  if (/AccountNotFound|no record of a prior credit/.test(s + log)) return "钱包里还没有 SOL，先转入一点 SOL 付网络费";
+  const ie = (err as { InstructionError?: [number, unknown] } | null)?.InstructionError;
+  if (Array.isArray(ie)) return `第 ${ie[0] + 1} 步执行出错（${typeof ie[1] === "string" ? ie[1] : JSON.stringify(ie[1])}）`;
   return typeof err === "string" ? err : s.slice(0, 160);
 }
 

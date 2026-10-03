@@ -6,9 +6,9 @@ import { toast } from "sonner";
 import { WalletDot } from "@/components/shared";
 import { shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { WALLET_CHAINS, chainById, chainByKey, isSolana } from "@/lib/wallet/chains";
+import { SOL_CHAIN, WALLET_CHAINS, chainById, chainByKey, isSolana } from "@/lib/wallet/chains";
 import { hasFeature, nativeBridge } from "@/lib/wallet/native";
-import { ackOrigin, clearRecents, hostOf, isAcked, isTrusted, originOf, revokePerm, setLaunchChain, useDappStore } from "@/lib/wallet/dapp-store";
+import { ackOrigin, clearRecents, hostOf, isAcked, isTrusted, originOf, revokePerm, revokeSolPerm, setLaunchChain, useDappStore } from "@/lib/wallet/dapp-store";
 import { catalogFor, isListed, useDappCatalog, type DappItem } from "@/lib/wallet/dapp-catalog";
 import { useVault } from "@/components/wallet/wallet-context";
 import { BottomNav, BottomSheet, ChainGlyph, GhostButton, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
@@ -59,7 +59,10 @@ export default function DappPage() {
     if (!url) return toast.error("请输入网址，例如 arm.yyheart.com");
     open(url);
   };
-  const perms = Object.entries(store.perms).sort((a, b) => b[1].at - a[1].at);
+  const perms = [
+    ...Object.entries(store.perms).map(([origin, p]) => ({ kind: "evm", origin, address: p.address as string, chain: chainById(p.chainId), at: p.at, revoke: () => revokePerm(origin) })),
+    ...Object.entries(store.solPerms ?? {}).map(([origin, p]) => ({ kind: "sol", origin, address: p.address, chain: SOL_CHAIN, at: p.at, revoke: () => revokeSolPerm(origin) })),
+  ].sort((a, b) => b.at - a.at);
 
   return (
     <WalletFrame>
@@ -120,10 +123,10 @@ export default function DappPage() {
         {perms.length > 0 && (
           <Section title="已连接的网站">
             <ul className="divide-y divide-border/60 rounded-[22px] bg-card ring-1 ring-border/60">
-              {perms.map(([origin, p]) => {
-                const c = chainById(p.chainId);
+              {perms.map((p) => {
+                const { origin, chain: c } = p;
                 return (
-                  <li key={origin} className="flex items-center gap-3 px-4 py-3">
+                  <li key={`${p.kind}:${origin}`} className="flex items-center gap-3 px-4 py-3">
                     <Favicon origin={origin} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[14px] font-semibold">{hostOf(origin)}</span>
@@ -142,7 +145,7 @@ export default function DappPage() {
                     <button
                       type="button"
                       onClick={() => {
-                        revokePerm(origin);
+                        p.revoke();
                         toast.success(`已断开 ${hostOf(origin)}`);
                       }}
                       className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[12px] font-medium transition active:scale-95"

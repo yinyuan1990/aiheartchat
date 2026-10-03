@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { shortAddr, timeAgo } from "@/lib/format";
 import { clockStore, secondClockStore } from "@/lib/store";
 import { useApp } from "@/components/providers";
+import { API_BASE } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 
 type Socials = { website?: string; twitter?: string; telegram?: string; discord?: string; farcaster?: string };
@@ -108,11 +109,21 @@ export function TokenAvatar({ logo, symbol, seed, size = 40, fontScale, classNam
   );
 }
 
-/** Small circular identicon for wallets. */
+const AVATAR_ADDR = /^(0x[0-9a-fA-F]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$/;
+
+/** Wallet avatar: the indexer's AI-painted picture for the address once it exists, a gradient dot until then. */
 export function WalletDot({ address, size = 16, className }: { address: string; size?: number; className?: string }) {
+  const [missing, setMissing] = useState<string | null>(null);
   const h1 = hueOf(address);
   const h2 = (h1 + 90) % 360;
-  return <span className={cn("inline-block shrink-0 rounded-full", className)} style={{ width: size, height: size, background: `linear-gradient(135deg, hsl(${h1} 70% 50%), hsl(${h2} 70% 35%))` }} />;
+  return (
+    <span className={cn("relative inline-block shrink-0 overflow-hidden rounded-full", className)} style={{ width: size, height: size, background: `linear-gradient(135deg, hsl(${h1} 70% 50%), hsl(${h2} 70% 35%))` }}>
+      {missing !== address && AVATAR_ADDR.test(address) && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img key={address} src={`${API_BASE}/avatar/${address}`} alt="" loading="lazy" onError={() => setMissing(address)} className="absolute inset-0 size-full object-cover" />
+      )}
+    </span>
+  );
 }
 
 export function TimeAgo({ ts, className }: { ts: number | string; className?: string }) {
