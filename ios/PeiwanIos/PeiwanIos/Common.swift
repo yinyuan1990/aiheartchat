@@ -228,6 +228,8 @@ enum Route: Hashable {
     /// 我的机器人 / 机器人详情（机器人 id）
     case bots
     case bot(String)
+    /// 链上钱包（自托管网页钱包 + DApp 浏览器）
+    case chainWallet
 }
 
 @ViewBuilder
@@ -266,6 +268,7 @@ func routeView(_ route: Route) -> some View {
     case .channelComments(let msgId, let canAdmin): ChannelCommentsView(msgId: msgId, canAdmin: canAdmin)
     case .bots: BotsView()
     case .bot(let id): BotDetailView(botId: id)
+    case .chainWallet: ChainWalletView()
     }
 }
 

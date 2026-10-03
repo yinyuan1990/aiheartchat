@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { DeviceMobile } from "@phosphor-icons/react";
 import { WalletProvider, useVault } from "@/components/wallet/wallet-context";
 import { UnlockScreen } from "@/components/wallet/unlock";
 import { WalletFrame } from "@/components/wallet/ui";
 import "@/components/wallet/compat.css";
+import { DappApprover } from "@/components/wallet/dapp-approver";
 
 const ONBOARDING = ["/wallet/welcome", "/wallet/create", "/wallet/import"];
-const PREVIEW = ["/wallet/sign"];
 
 const noSubscribe = () => () => {};
 /** The wallet is only offered inside the 心之音 App (its shell injects the native bridge); localhost stays open for dev / e2e. */
@@ -23,11 +23,21 @@ function useWalletHost(): "loading" | "ok" | "outside" {
 
 export default function WalletLayout({ children }: { children: React.ReactNode }) {
   const host = useWalletHost();
+  // While a DApp request sheet is up the shell lays this (transparent) WebView over the DApp page: hide the wallet
+  // page itself so the site stays visible behind the sheet.
+  const [overlay, setOverlay] = useState(false);
+  useEffect(() => {
+    document.documentElement.classList.toggle("wallet-overlay", overlay);
+  }, [overlay]);
+
   if (host === "loading") return <WalletFrame>{null}</WalletFrame>;
   if (host === "outside") return <OutsideApp />;
   return (
     <WalletProvider>
-      <Gate>{children}</Gate>
+      <div className={overlay ? "invisible" : undefined}>
+        <Gate>{children}</Gate>
+      </div>
+      <DappApprover onOverlay={setOverlay} />
     </WalletProvider>
   );
 }
@@ -51,14 +61,12 @@ function Gate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const onboarding = ONBOARDING.includes(pathname);
-  const preview = PREVIEW.includes(pathname);
 
   useEffect(() => {
-    if (status === "empty" && !onboarding && !preview) router.replace("/wallet/welcome");
+    if (status === "empty" && !onboarding) router.replace("/wallet/welcome");
     if ((status === "locked" || status === "unlocked") && pathname === "/wallet/welcome") router.replace("/wallet");
-  }, [status, onboarding, preview, pathname, router]);
+  }, [status, onboarding, pathname, router]);
 
-  if (preview) return children;
   if (status === "loading" || (status === "empty" && !onboarding)) return <WalletFrame>{null}</WalletFrame>;
   // creating / importing an extra wallet re-uses the vault password, so it needs the vault open too
   if (status === "locked") return <UnlockScreen />;

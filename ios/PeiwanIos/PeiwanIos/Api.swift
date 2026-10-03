@@ -22,6 +22,13 @@ struct UserProfile: Codable {
     var fans: Int?
     /// 照片墙（最多 8 张）
     var albums: [AlbumItem]?
+    /// 功能开关（链上钱包等）
+    var features: UserFeatures?
+}
+
+struct UserFeatures: Codable {
+    var wallet: Bool?
+    var walletUrl: String?
 }
 
 /// 注册归因到的邀请人（通过 TA 的专属邀请页下载安装）；仅异性时返回，客户端据此直接打开 TA 主页

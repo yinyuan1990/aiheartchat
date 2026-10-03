@@ -216,6 +216,14 @@
     background: var(--scanlines);
     z-index: 9999;
   }
+  /* wallet WebView laid over a DApp page while a request sheet is up (app/wallet/layout.tsx) */
+  html.wallet-overlay,
+  html.wallet-overlay body {
+    background: transparent;
+  }
+  html.wallet-overlay body::before {
+    display: none;
+  }
   ::selection {
     background: var(--primary);
     color: var(--primary-foreground);
