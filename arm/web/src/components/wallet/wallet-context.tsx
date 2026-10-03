@@ -13,7 +13,8 @@ import {
   type Unlocked,
   type WalletMeta,
 } from "@/lib/wallet/vault";
-import { chainByKey, type WalletChain } from "@/lib/wallet/chains";
+import { chainByKey, isSolana, type WalletChain } from "@/lib/wallet/chains";
+import { solAddressOf, solKeypairOf, type SolKeypair } from "@/lib/wallet/sol";
 
 type Status = "loading" | "empty" | "locked" | "unlocked";
 
@@ -30,8 +31,12 @@ type Ctx = {
   switchTo: (id: string) => Promise<void>;
   rename: (id: string, name: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
+  /** Active wallet's address on the selected chain (Solana: undefined for private-key wallets). */
+  address: string | undefined;
   /** Signing account of the active wallet; throws while locked. */
   account: () => ReturnType<typeof accountOf>;
+  /** Solana signer of the active wallet; throws while locked or for private-key wallets. */
+  solKeypair: () => SolKeypair;
   secretOf: (id: string) => Secret | null;
 };
 
@@ -86,7 +91,16 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const unlock = useCallback(async (password: string) => {
     const r = await unlockVault(password);
     unlocked.current = r.unlocked;
-    setWallets(r.wallets);
+    // vaults from before Solana support: derive each mnemonic wallet's Solana address once and keep it in the metadata
+    let list = r.wallets;
+    if (list.some((w) => w.kind === "mnemonic" && !w.sol)) {
+      list = list.map((w) => {
+        const s = r.unlocked.plain.secrets[w.id];
+        return w.sol || !s ? w : { ...w, sol: solAddressOf(s) ?? undefined };
+      });
+      await saveMeta(r.unlocked, list, r.active).catch(() => {});
+    }
+    setWallets(list);
     setActiveId(r.active);
     setStatus("unlocked");
   }, []);
@@ -154,10 +168,18 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       switchTo,
       rename,
       remove,
+      address: active ? (isSolana(chainByKey(chainKey)) ? active.sol : active.address) : undefined,
       account: () => {
         const s = active && unlocked.current?.plain.secrets[active.id];
         if (!s) throw new Error("locked");
         return accountOf(s);
+      },
+      solKeypair: () => {
+        const s = active && unlocked.current?.plain.secrets[active.id];
+        if (!s) throw new Error("locked");
+        const kp = solKeypairOf(s);
+        if (!kp) throw new Error("私钥导入的钱包没有 Solana 账户，请用助记词钱包");
+        return kp;
       },
       secretOf: (id) => unlocked.current?.plain.secrets[id] ?? null,
     };

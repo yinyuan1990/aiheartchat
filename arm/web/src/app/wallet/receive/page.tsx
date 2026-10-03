@@ -5,16 +5,17 @@ import QRCode from "qrcode";
 import { Copy, ShareNetwork, Warning } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { WalletDot } from "@/components/shared";
-import { WALLET_CHAINS } from "@/lib/wallet/chains";
+import { WALLET_CHAINS, isSolana } from "@/lib/wallet/chains";
 import { copyText, shareText } from "@/lib/wallet/native";
 import { cn } from "@/lib/utils";
 import { useVault } from "@/components/wallet/wallet-context";
 import { ChainGlyph, TopBar, WalletFrame, useQueryParam } from "@/components/wallet/ui";
 
 export default function ReceivePage() {
-  const { active, chain, setChain } = useVault();
+  const { active, chain, setChain, address: chainAddress } = useVault();
   const deposit = useQueryParam("deposit") !== null;
-  const address = active?.address ?? "";
+  const address = chainAddress ?? "";
+  const sol = isSolana(chain);
   const [qr, setQr] = useState("");
 
   useEffect(() => {
@@ -51,6 +52,13 @@ export default function ReceivePage() {
           ))}
         </div>
 
+        {sol && !address ? (
+          <div className="mt-4 rounded-[28px] bg-card p-6 text-center text-[14px] leading-7 text-muted-foreground ring-1 ring-border/60">
+            「{active?.name}」是用私钥导入的，没有 Solana 地址。
+            <br />
+            请切换到助记词钱包收 SOL。
+          </div>
+        ) : (
         <div className="mt-4 rounded-[28px] bg-card p-6 text-center ring-1 ring-border/60">
           <div className="flex items-center justify-center gap-2 text-[15px] font-semibold">
             <WalletDot address={address} size={22} />
@@ -75,12 +83,17 @@ export default function ReceivePage() {
             </button>
           </div>
         </div>
+        )}
 
         <div className="mt-3 flex gap-2 rounded-2xl bg-[#f5a524]/10 p-4 text-[13px] leading-6 text-[#9a6200] dark:text-[#f5c26b]">
           <Warning size={18} weight="fill" className="mt-0.5 shrink-0" />
           <div>
             只能从 <b>{chain.name}</b> 转入（网络费用 {chain.chain.nativeCurrency.symbol} 付）。
-            {chain.nativeIsUsdc ? " Arc 上的 USDC 同时用来付网络费，先充一点 USDC 就能开始交易。" : " 其它链的资产转到这里会丢失或需要跨链找回。"}
+            {chain.nativeIsUsdc
+              ? " Arc 上的 USDC 同时用来付网络费，先充一点 USDC 就能开始交易。"
+              : sol
+                ? " 这个地址收 SOL 和 Solana 上的代币（USDC、pump 币等）。和 EVM 的 0x 地址不通用，别从以太坊 / BNB 链往这里转。"
+                : " 其它链的资产转到这里会丢失或需要跨链找回。"}
             {deposit && <div className="mt-1">从交易所提现时，提现网络选「{chain.name}」，地址填上面这个。</div>}
           </div>
         </div>

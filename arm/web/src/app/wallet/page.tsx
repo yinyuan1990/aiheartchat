@@ -10,7 +10,7 @@ import { TokenAvatar, WalletDot } from "@/components/shared";
 import { useWallet } from "@/lib/api";
 import { fmtSmall, shortAddr, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { WALLET_CHAINS, explorerAddr, explorerTx, probeNode, publicClientFor, rpcOf, useNodes, type WalletChain } from "@/lib/wallet/chains";
+import { WALLET_CHAINS, explorerAddr, explorerTx, isSolana, probeChainNode, probeNode, publicClientFor, rpcOf, useNodes, type WalletChain } from "@/lib/wallet/chains";
 import { absUrl, useAssets, type Asset } from "@/lib/wallet/assets";
 import { copyText } from "@/lib/wallet/native";
 import { useVault } from "@/components/wallet/wallet-context";
@@ -21,9 +21,10 @@ const amt = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? n
 const price = (p: number) => (p >= 1 ? usd(p) : `$${fmtSmall(p)}`);
 
 export default function WalletHome() {
-  const { active, chain, setChain, wallets, switchTo, lock } = useVault();
-  const address = active?.address;
-  const { assets, total, change, loading } = useAssets(chain, address);
+  const { active, chain, setChain, wallets, switchTo, lock, address } = useVault();
+  const { assets, total, change, loading: loadingAssets } = useAssets(chain, address);
+  const noSol = isSolana(chain) && !address;
+  const loading = loadingAssets && !noSol;
   const [hidden, setHidden] = useState(false);
   const [tab, setTab] = useState<"tokens" | "activity">("tokens");
   const [sheet, setSheet] = useState<null | "chain" | "wallet">(null);
@@ -121,7 +122,13 @@ export default function WalletHome() {
           ))}
         </div>
 
-        {tab === "tokens" ? (
+        {noSol ? (
+          <div className="py-8 text-center text-[13px] leading-6 text-muted-foreground">
+            「{active?.name}」是用私钥导入的，只有 EVM 地址，没有 Solana 账户。
+            <br />
+            用助记词新建或导入的钱包会自动带上 Solana 地址。
+          </div>
+        ) : tab === "tokens" ? (
           loading ? (
             <ul className="mt-2 space-y-3">
               {[0, 1, 2].map((i) => (
@@ -199,7 +206,7 @@ export default function WalletHome() {
                 <span className="min-w-0 flex-1 text-left">
                   <span className="block truncate text-[15px] font-semibold">{w.name}</span>
                   <span className="block font-mono text-[12px] text-muted-foreground">
-                    {shortAddr(w.address, 6, 4)} · {w.kind === "mnemonic" ? "助记词" : "私钥"}
+                    {isSolana(chain) ? (w.sol ? shortAddr(w.sol, 6, 4) : "无 Solana 账户") : shortAddr(w.address, 6, 4)} · {w.kind === "mnemonic" ? "助记词" : "私钥"}
                   </span>
                 </span>
                 {w.id === active?.id && <CheckCircle size={22} weight="fill" />}
@@ -234,6 +241,11 @@ function NetStatus({ chain }: { chain: WalletChain }) {
     queryKey: ["wallet", "net-status", chain.key, rpcOf(chain)],
     // gas price first: it opens the connection, so the probe measures a round trip rather than DNS + TLS setup
     queryFn: async () => {
+      if (isSolana(chain)) {
+        await probeChainNode(chain, rpcOf(chain));
+        const probe = await probeChainNode(chain, rpcOf(chain));
+        return { ms: probe.error ? null : probe.ms, gas: null };
+      }
       const gas = await publicClientFor(chain).getGasPrice().catch(() => null);
       const probe = await probeNode(rpcOf(chain));
       return { ms: probe.error ? null : probe.ms, gas };

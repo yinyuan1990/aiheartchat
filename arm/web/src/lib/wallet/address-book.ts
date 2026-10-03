@@ -1,15 +1,17 @@
 import { useSyncExternalStore } from "react";
-import { getAddress, isAddress, type Address } from "viem";
+import { getAddress, isAddress } from "viem";
 import { storeRead, storeWrite } from "./native";
+import { isSolAddress } from "./sol";
 
 /**
- * Saved contacts and recent recipients. EVM addresses are the same on every chain, so entries aren't tied to one.
+ * Saved contacts and recent recipients. EVM addresses are the same on every EVM chain, so those entries aren't tied to
+ * one; Solana (base58) entries only show up while Solana is selected.
  * Native store inside the App (the DApp WebView shares this origin's localStorage), localStorage in browsers.
  */
 
-export type Contact = { address: Address; name: string; at: number };
+export type Contact = { address: string; name: string; at: number };
 
-type State = { contacts: Contact[]; recent: Address[] };
+type State = { contacts: Contact[]; recent: string[] };
 
 const KEYS = { contacts: "addressbook", recent: "recent" } as const;
 const LEGACY_RECENT = "arm.wallet.recent";
@@ -18,16 +20,24 @@ const MAX_RECENT = 6;
 export const MAX_CONTACTS = 200;
 export const MAX_NAME = 20;
 
+/** Checksummed EVM address or a Solana address as typed; null when it's neither. */
+export function normalizeAddr(a: string): string | null {
+  const s = a.trim();
+  if (isAddress(s)) return getAddress(s);
+  return isSolAddress(s) ? s : null;
+}
+export const isSolEntry = (a: string) => !a.startsWith("0x");
+
 let state: State = EMPTY;
 let loaded: Promise<void> | null = null;
 const subs = new Set<() => void>();
 
-const cleanAddrs = (v: unknown): Address[] => (Array.isArray(v) ? v.filter((a): a is string => typeof a === "string" && isAddress(a)).map((a) => getAddress(a)) : []);
+const cleanAddrs = (v: unknown): string[] => (Array.isArray(v) ? v.map((a) => (typeof a === "string" ? normalizeAddr(a) : null)).filter((a): a is string => !!a) : []);
 const cleanContacts = (v: unknown): Contact[] =>
   Array.isArray(v)
     ? v
-        .filter((c): c is Contact => !!c && typeof c.address === "string" && isAddress(c.address) && typeof c.name === "string")
-        .map((c) => ({ address: getAddress(c.address), name: c.name.slice(0, MAX_NAME), at: Number(c.at) || 0 }))
+        .filter((c): c is Contact => !!c && typeof c.address === "string" && !!normalizeAddr(c.address) && typeof c.name === "string")
+        .map((c) => ({ address: normalizeAddr(c.address)!, name: c.name.slice(0, MAX_NAME), at: Number(c.at) || 0 }))
     : [];
 
 async function readJson(key: string): Promise<unknown> {
@@ -75,22 +85,29 @@ export function useAddressBook(): State {
   );
 }
 
-export const contactOf = (a?: string | null) => (a && isAddress(a) ? state.contacts.find((c) => c.address === getAddress(a)) : undefined);
+export const contactOf = (a?: string | null) => {
+  const n = a ? normalizeAddr(a) : null;
+  return n ? state.contacts.find((c) => c.address === n) : undefined;
+};
 
-export function pushRecent(a: Address) {
-  update("recent", [a, ...state.recent.filter((x) => x !== a)].slice(0, MAX_RECENT));
+/** Recent list keeps EVM and Solana recipients apart so each chain still shows up to MAX_RECENT of its own. */
+export function pushRecent(a: string) {
+  const sol = isSolEntry(a);
+  const rest = state.recent.filter((x) => x !== a);
+  const same = [a, ...rest.filter((x) => isSolEntry(x) === sol)].slice(0, MAX_RECENT);
+  update("recent", [...same, ...rest.filter((x) => isSolEntry(x) !== sol)]);
 }
 
 /** Adds or renames; throws with a message the UI can show. */
 export function saveContact(address: string, name: string) {
   const n = name.trim().slice(0, MAX_NAME);
-  if (!isAddress(address.trim())) throw new Error("地址格式不对");
+  const a = normalizeAddr(address);
+  if (!a) throw new Error("地址格式不对");
   if (!n) throw new Error("请填一个名称");
-  const a = getAddress(address.trim());
   const rest = state.contacts.filter((c) => c.address !== a);
   if (rest.length >= MAX_CONTACTS) throw new Error(`地址簿最多 ${MAX_CONTACTS} 个`);
   const prev = state.contacts.find((c) => c.address === a);
   update("contacts", [{ address: a, name: n, at: prev?.at ?? Date.now() }, ...rest]);
 }
 
-export const removeContact = (a: Address) => update("contacts", state.contacts.filter((c) => c.address !== a));
+export const removeContact = (a: string) => update("contacts", state.contacts.filter((c) => c.address !== a));

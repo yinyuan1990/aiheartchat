@@ -1,4 +1,5 @@
 import { getAddress, isAddress, type Address } from "viem";
+import { isSolAddress } from "./sol";
 
 /**
  * What a scanned payment QR asks for. Accepts a bare 0x address and EIP-681 links:
@@ -23,6 +24,20 @@ const toBig = (s: string | null): bigint | undefined => {
     return undefined;
   }
 };
+
+/** Solana Pay transfer request (`solana:<recipient>?amount=1.5&spl-token=<mint>`) or a bare base58 address. Amount is decimal, in the coin's own units. */
+export type ScannedSol = { to: string; amount?: string; mint?: string };
+
+export function parseScannedSol(text: string): ScannedSol | null {
+  const s = text.trim();
+  if (isSolAddress(s)) return { to: s };
+  const m = s.match(/^solana:([1-9A-HJ-NP-Za-km-z]{32,44})(?:\?(.*))?$/);
+  if (!m || !isSolAddress(m[1])) return null;
+  const q = new URLSearchParams(m[2] ?? "");
+  const amount = q.get("amount");
+  const mint = q.get("spl-token");
+  return { to: m[1], amount: amount && /^\d+(\.\d+)?$/.test(amount) ? amount : undefined, mint: mint && isSolAddress(mint) ? mint : undefined };
+}
 
 export function parseScanned(text: string): ScannedPay | null {
   const s = text.trim();

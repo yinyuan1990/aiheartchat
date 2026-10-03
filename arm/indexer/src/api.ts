@@ -22,6 +22,7 @@ import { replayDetail, replayList } from "./replay.js";
 import { perpMarket, perpWhales } from "./perp.js";
 import { gameBoard, gamePlay, gameSell, gameSession, gameStart, gameTick, gameToday } from "./game.js";
 import { boatBoard, boatInfo, boatLogin, boatMe, boatRunEnd, boatRunStart, boatWithdraw } from "./boat.js";
+import { jupQuote, jupSwap, solRelay, solTokens } from "./solana.js";
 
 export const app = new Hono();
 // paged list endpoints report the full row count in X-Total-Count; expose it so the browser can read it
@@ -601,6 +602,21 @@ app.post("/api/boat/run/:id/end", async (c) => {
 app.post("/api/boat/withdraw", async (c) => {
   const r = await boatWithdraw(boatToken(c));
   return "error" in r ? c.json(r, r.error === "login" ? 401 : 400) : c.json(r);
+});
+
+// Solana wallet (solana.ts): RPC relay with node failover, Jupiter token info and swap building.
+app.post("/api/sol/rpc", async (c) => {
+  const r = await solRelay(await c.req.json().catch(() => null), clientIp(c) || "?");
+  return c.json(r.json as object, r.status as 200);
+});
+app.get("/api/sol/tokens", async (c) => c.json(await solTokens((c.req.query("mints") ?? "").split(","))));
+app.get("/api/sol/quote", async (c) => {
+  const r = await jupQuote(c.req.query());
+  return c.json(r.json as object, r.status as 200);
+});
+app.post("/api/sol/swap", async (c) => {
+  const r = await jupSwap(await c.req.json().catch(() => null));
+  return c.json(r.json as object, r.status as 200);
 });
 
 // Perp radar (10.2): Hyperliquid funding / OI dashboard + whale positions and liquidation map.

@@ -1,5 +1,6 @@
 import { english, generateMnemonic, mnemonicToAccount, privateKeyToAccount, type HDAccount, type PrivateKeyAccount } from "viem/accounts";
 import { getAddress, isHex, type Address, type Hex } from "viem";
+import { solAddressOf } from "./sol";
 
 /**
  * Self-custody vault: every secret is encrypted together with one wallet password (PBKDF2-SHA256 → AES-GCM-256) and
@@ -7,7 +8,8 @@ import { getAddress, isHex, type Address, type Hex } from "viem";
  */
 
 export type Secret = { kind: "mnemonic"; phrase: string } | { kind: "key"; key: Hex };
-export type WalletMeta = { id: string; name: string; kind: Secret["kind"]; address: Address; createdAt: number };
+/** `sol`: Solana address on Phantom's path (mnemonic wallets only); filled in on first unlock for older vaults. */
+export type WalletMeta = { id: string; name: string; kind: Secret["kind"]; address: Address; sol?: string; createdAt: number };
 type VaultPlain = { secrets: Record<string, Secret> };
 type StoredVault = { v: 1; iter: number; salt: string; iv: string; ct: string; wallets: WalletMeta[]; active: string };
 
@@ -132,7 +134,7 @@ export async function createVault(password: string, name: string, secret: Secret
   const key = await deriveKey(password, salt, PBKDF2_ITER);
   const id = newId();
   const unlocked: Unlocked = { key, salt, iter: PBKDF2_ITER, plain: { secrets: { [id]: secret } } };
-  const meta: WalletMeta = { id, name, kind: secret.kind, address: getAddress(accountOf(secret).address), createdAt: Date.now() };
+  const meta: WalletMeta = { id, name, kind: secret.kind, address: getAddress(accountOf(secret).address), sol: solAddressOf(secret) ?? undefined, createdAt: Date.now() };
   await store.set(JSON.stringify(await seal(unlocked, [meta], id)));
   return { unlocked, wallets: [meta], active: id };
 }
@@ -145,7 +147,7 @@ export async function addWallet(u: Unlocked, wallets: WalletMeta[], name: string
   const id = newId();
   const plain: VaultPlain = { secrets: { ...u.plain.secrets, [id]: secret } };
   const next: Unlocked = { ...u, plain };
-  const meta: WalletMeta = { id, name, kind: secret.kind, address, createdAt: Date.now() };
+  const meta: WalletMeta = { id, name, kind: secret.kind, address, sol: solAddressOf(secret) ?? undefined, createdAt: Date.now() };
   const list = [...wallets, meta];
   await store.set(JSON.stringify(await seal(next, list, id)));
   return { unlocked: next, wallets: list, active: id };

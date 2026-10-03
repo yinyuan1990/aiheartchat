@@ -2,14 +2,13 @@
 
 import Link from "next/link";
 import { useState, useSyncExternalStore } from "react";
-import { getAddress, isAddress } from "viem";
 import { AddressBook, ClipboardText, Copy, PaperPlaneTilt, Plus, Scan, Trash } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { WalletDot } from "@/components/shared";
 import { shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { MAX_NAME, removeContact, saveContact, useAddressBook, type Contact } from "@/lib/wallet/address-book";
-import { parseScanned } from "@/lib/wallet/scan";
+import { MAX_NAME, isSolEntry, normalizeAddr, removeContact, saveContact, useAddressBook, type Contact } from "@/lib/wallet/address-book";
+import { parseScanned, parseScannedSol } from "@/lib/wallet/scan";
 import { copyText, hasFeature, scanQr } from "@/lib/wallet/native";
 import { BottomSheet, GhostButton, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
 
@@ -52,7 +51,10 @@ export default function AddressesPage() {
                   <WalletDot address={c.address} size={36} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[15px] font-semibold">{c.name}</span>
-                    <span className="block truncate font-mono text-[12px] text-muted-foreground">{shortAddr(c.address, 8, 6)}</span>
+                    <span className="flex items-center gap-1.5 font-mono text-[12px] text-muted-foreground">
+                      <span className="rounded bg-muted px-1 py-px font-sans text-[10px] font-medium">{isSolEntry(c.address) ? "Solana" : "EVM"}</span>
+                      <span className="truncate">{shortAddr(c.address, 8, 6)}</span>
+                    </span>
                   </span>
                 </button>
               </li>
@@ -60,7 +62,7 @@ export default function AddressesPage() {
             {list.length === 0 && <li className="py-6 text-center text-[13px] text-muted-foreground">没有找到</li>}
           </ul>
         )}
-        <p className="mt-4 px-2 text-[12px] leading-5 text-muted-foreground">同一个 0x 地址在各条链上通用；转账前仍请确认对方用的是哪条链。地址簿只保存在这台设备上。</p>
+        <p className="mt-4 px-2 text-[12px] leading-5 text-muted-foreground">同一个 0x 地址在各条 EVM 链上通用，Solana 地址只能在 Solana 上用；转账前仍请确认对方用的是哪条链。地址簿只保存在这台设备上。</p>
       </div>
 
       <BottomSheet open={sheet !== null} onClose={() => setSheet(null)}>
@@ -76,16 +78,17 @@ function AddForm({ onDone }: { onDone: () => void }) {
   const [addr, setAddr] = useState("");
   const [name, setName] = useState("");
   const canScan = useSyncExternalStore(noSubscribe, () => hasFeature("scan"), () => false);
-  const valid = isAddress(addr.trim());
-  const existing = valid ? contacts.find((c) => c.address === getAddress(addr.trim())) : undefined;
+  const norm = normalizeAddr(addr);
+  const valid = !!norm;
+  const existing = norm ? contacts.find((c) => c.address === norm) : undefined;
 
   const scan = async () => {
     try {
       const text = await scanQr();
       if (!text) return;
-      const p = parseScanned(text);
-      if (!p) return void toast.error("没认出地址，请换一个二维码或手动粘贴");
-      setAddr(p.to);
+      const to = parseScanned(text)?.to ?? parseScannedSol(text)?.to;
+      if (!to) return void toast.error("没认出地址，请换一个二维码或手动粘贴");
+      setAddr(to);
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -126,7 +129,7 @@ function AddForm({ onDone }: { onDone: () => void }) {
             </button>
           </span>
         </div>
-        <textarea value={addr} onChange={(e) => setAddr(e.target.value)} rows={2} spellCheck={false} autoCapitalize="none" placeholder="0x…" className="mt-1 w-full resize-none bg-transparent font-mono text-[15px] leading-6 break-all outline-none" />
+        <textarea value={addr} onChange={(e) => setAddr(e.target.value)} rows={2} spellCheck={false} autoCapitalize="none" placeholder="0x… 或 Solana 地址" className="mt-1 w-full resize-none bg-transparent font-mono text-[15px] leading-6 break-all outline-none" />
         {addr.trim() && !valid && <div className="text-[12px] text-down">地址格式不对</div>}
         {existing && <div className="text-[12px] text-[#d48806]">已经存过（{existing.name}），保存会改成新名称</div>}
       </div>

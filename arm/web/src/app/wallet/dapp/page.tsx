@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { WalletDot } from "@/components/shared";
 import { shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { WALLET_CHAINS, chainById, chainByKey } from "@/lib/wallet/chains";
+import { WALLET_CHAINS, chainById, chainByKey, isSolana } from "@/lib/wallet/chains";
 import { hasFeature, nativeBridge } from "@/lib/wallet/native";
 import { ackOrigin, clearRecents, hostOf, isAcked, isTrusted, originOf, revokePerm, setLaunchChain, useDappStore } from "@/lib/wallet/dapp-store";
 import { catalogFor, isListed, useDappCatalog, type DappItem } from "@/lib/wallet/dapp-catalog";
@@ -244,7 +244,7 @@ function Discover({ onOpen }: { onOpen: (url: string, chainId?: number) => void 
           <ul className="divide-y divide-border/60">
             {cat?.items.map((it) => (
               <li key={it.url}>
-                <button type="button" onClick={() => onOpen(it.url, target.chain.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left">
+                <button type="button" onClick={() => onOpen(it.url, isSolana(target) ? undefined : target.chain.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left">
                   <DappIcon item={it} />
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-1 text-[15px] font-semibold">

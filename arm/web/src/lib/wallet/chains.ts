@@ -3,12 +3,16 @@ import { createPublicClient, defineChain, http, type Address, type Chain, type P
 import { storeRead, storeWrite } from "./native";
 import { arbitrum, base, bsc, mainnet, polygon } from "viem/chains";
 import { arcMainnet } from "@/lib/web3";
+import { API_BASE } from "@/lib/api";
+import { probeSolNode } from "./sol";
 
 export type StableToken = { symbol: string; address: Address; decimals: number };
 
 export type WalletChain = {
   key: string;
   name: string;
+  /** Solana has no EVM chain; `chain` then only carries the node list and the native coin (id 0 never matches a chainId). */
+  kind?: "solana";
   chain: Chain;
   color: string;
   glyph: string;
@@ -88,10 +92,32 @@ export const WALLET_CHAINS: WalletChain[] = [
     ],
     explorer: "https://polygonscan.com",
   },
+  {
+    key: "sol",
+    name: "Solana",
+    kind: "solana",
+    chain: defineChain({
+      id: 0,
+      name: "Solana",
+      nativeCurrency: { name: "Solana", symbol: "SOL", decimals: 9 },
+      // our relay first: public nodes are slow or unreachable from mainland China, api.mainnet-beta refuses browser
+      // origins and publicnode refuses token-account scans (balances of SPL tokens need the relay or a custom node)
+      rpcUrls: { default: { http: [`${API_BASE}/sol/rpc`, "https://solana-rpc.publicnode.com"] } },
+    }),
+    color: "#9945FF",
+    glyph: "◎",
+    stables: [],
+    explorer: "https://solscan.io",
+  },
 ];
 
+export const isSolana = (c: WalletChain) => c.kind === "solana";
+export const EVM_CHAINS = WALLET_CHAINS.filter((c) => !isSolana(c));
+export const SOL_CHAIN = WALLET_CHAINS.find(isSolana)!;
 export const chainByKey = (key?: string | null) => WALLET_CHAINS.find((c) => c.key === key) ?? WALLET_CHAINS[0];
-export const chainById = (id?: number | null) => WALLET_CHAINS.find((c) => c.chain.id === id);
+export const chainById = (id?: number | null) => EVM_CHAINS.find((c) => c.chain.id === id);
+/** Built-in relay URLs are host-relative; show them by name. */
+export const nodeLabel = (url: string) => (url === `${API_BASE}/sol/rpc` ? "心之音加速节点" : url.replace(/^https?:\/\//, ""));
 
 // ---------- RPC nodes: built-in list + user-added, one selected per chain (kept in the shell's native store) ----------
 type NodeState = { selected: Record<string, string>; custom: Record<string, string[]> };
@@ -175,8 +201,16 @@ export async function probeNode(url: string, timeoutMs = 6000): Promise<NodeProb
   }
 }
 
+/** Same as probeNode for the chain's own RPC dialect; `chainId` is the chain's id when a Solana node is on mainnet. */
+export async function probeChainNode(c: WalletChain, url: string, timeoutMs = 6000): Promise<NodeProbe> {
+  if (!isSolana(c)) return probeNode(url, timeoutMs);
+  const p = await probeSolNode(url, timeoutMs);
+  return { ms: p.ms, block: p.slot != null ? BigInt(p.slot) : undefined, chainId: p.mainnet ? c.chain.id : p.slot != null ? -1 : undefined, error: p.error };
+}
+
 const clients = new Map<string, PublicClient>();
 export function publicClientFor(c: WalletChain): PublicClient {
+  if (isSolana(c)) throw new Error("Solana has no EVM client");
   void loadNodes();
   let pc = clients.get(c.key);
   if (!pc) {
@@ -191,4 +225,5 @@ export function publicClientFor(c: WalletChain): PublicClient {
 }
 
 export const explorerTx = (c: WalletChain, hash: string) => `${c.explorer}/tx/${hash}`;
-export const explorerAddr = (c: WalletChain, a: string) => `${c.explorer}/address/${a}`;
+export const explorerAddr = (c: WalletChain, a: string) => `${c.explorer}/${isSolana(c) ? "account" : "address"}/${a}`;
+export const explorerToken = (c: WalletChain, t: string) => `${c.explorer}/token/${t}`;

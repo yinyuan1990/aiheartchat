@@ -1,20 +1,22 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createWalletClient, encodeFunctionData, erc20Abi, formatUnits, getAddress, http, isAddress, parseUnits, type Address, type Hex } from "viem";
-import { AddressBook, ArrowSquareOut, CaretDown, CheckCircle, CircleNotch, ClipboardText, Info, Lightning, MagnifyingGlass, Scan, ShieldCheck, SlidersHorizontal, Warning, XCircle } from "@phosphor-icons/react";
+import { AddressBook, CaretDown, ClipboardText, Info, Lightning, Scan, ShieldCheck, SlidersHorizontal, Warning } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { TokenAvatar, WalletDot } from "@/components/shared";
 import { shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { chainById, explorerTx, publicClientFor, rpcOf } from "@/lib/wallet/chains";
+import { SOL_CHAIN, chainById, explorerTx, isSolana, publicClientFor, rpcOf } from "@/lib/wallet/chains";
 import { hasFeature, scanQr } from "@/lib/wallet/native";
 import { parseScanned } from "@/lib/wallet/scan";
-import { MAX_NAME, pushRecent, saveContact, useAddressBook, type Contact } from "@/lib/wallet/address-book";
+import { isSolEntry, pushRecent, useAddressBook } from "@/lib/wallet/address-book";
 import { useAssets, type Asset } from "@/lib/wallet/assets";
+import { isSolAddress } from "@/lib/wallet/sol";
 import { useVault } from "@/components/wallet/wallet-context";
+import { BookPicker, Result, Row, type Sent } from "@/components/wallet/send-parts";
+import { SolSend } from "@/components/wallet/sol-send";
 import { BottomSheet, ChainGlyph, ChainPill, GhostButton, PrimaryButton, TopBar, WalletFrame, useQueryParam } from "@/components/wallet/ui";
 
 const SPEEDS = [
@@ -48,9 +50,21 @@ const noSubscribe = () => () => {};
 
 const fmt = (n: number, max = 6) => n.toLocaleString("en-US", { maximumFractionDigits: max });
 
-type Sent = { hash: Hex; status: "pending" | "success" | "reverted" | "error"; error?: string };
-
 export default function SendPage() {
+  const { chain, setChain } = useVault();
+  const wantedTo = useQueryParam("to");
+  // "转账" from an address-book entry: open the chain family the address belongs to
+  useEffect(() => {
+    if (!wantedTo) return;
+    const want = isSolAddress(wantedTo) ? "sol" : isAddress(wantedTo) ? "evm" : null;
+    if (!want || (want === "sol") === isSolana(chain)) return;
+    const t = setTimeout(() => setChain(want === "sol" ? SOL_CHAIN.key : "arc"), 0);
+    return () => clearTimeout(t);
+  }, [wantedTo, chain, setChain]);
+  return isSolana(chain) ? <SolSend /> : <EvmSend />;
+}
+
+function EvmSend() {
   const { active, chain, account, setChain } = useVault();
   const from = active?.address;
   const { assets, loading } = useAssets(chain, from);
@@ -63,7 +77,8 @@ export default function SendPage() {
   const [custom, setCustom] = useState<CustomGas | null>(null);
   const [sheet, setSheet] = useState<null | "asset" | "confirm" | "book" | "gas">(null);
   const [sent, setSent] = useState<Sent | null>(null);
-  const book = useAddressBook();
+  const fullBook = useAddressBook();
+  const book = { contacts: fullBook.contacts.filter((c) => !isSolEntry(c.address)), recent: fullBook.recent.filter((a) => !isSolEntry(a)) };
   const recent = book.recent;
   const canScan = useSyncExternalStore(noSubscribe, () => hasFeature("scan"), () => false);
   // coin / amount from a scanned EIP-681 link, applied once that chain's asset list is in
@@ -423,7 +438,7 @@ export default function SendPage() {
 
       <BottomSheet open={sheet === "confirm"} onClose={() => (sent?.status === "pending" ? undefined : (setSheet(null), setSent(null)))}>
         {sent ? (
-          <Result sent={sent} chainKey={chain.key} explorer={explorerTx(chain, sent.hash)} to={toAddr} saved={!!contact} />
+          <Result sent={sent} explorer={explorerTx(chain, sent.hash)} to={toAddr} saved={!!contact} />
         ) : (
           <ConfirmBody asset={asset} amount={amount} fromName={active?.name} from={from} to={toAddr} toName={contact?.name} chain={chain} fee={chosen ? fmtFee(chosen.cost) : "—"} onCancel={() => setSheet(null)} onSend={send} />
         )}
@@ -543,127 +558,5 @@ function GasSheet({ legacy, estimate, network, initial, fmtFee, onSave }: { lega
         使用这个设置
       </PrimaryButton>
     </>
-  );
-}
-
-function SaveContact({ to }: { to: Address }) {
-  const [name, setName] = useState("");
-  const [done, setDone] = useState(false);
-  if (done) {
-    return (
-      <div className="mt-5 flex items-center gap-1.5 text-[13px] text-up">
-        <CheckCircle size={16} weight="fill" />
-        已存到地址簿
-      </div>
-    );
-  }
-  const save = () => {
-    try {
-      saveContact(to, name);
-      setDone(true);
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
-  };
-  return (
-    <div className="mt-5 w-full rounded-[20px] bg-muted/60 p-3 text-left">
-      <div className="text-[13px] font-medium">存到地址簿，下次直接选</div>
-      <div className="mt-2 flex gap-2">
-        <input value={name} maxLength={MAX_NAME} onChange={(e) => setName(e.target.value)} placeholder="名称，例如：交易所充值" className="h-10 w-0 flex-1 rounded-xl bg-card px-3 text-[14px] ring-1 ring-border outline-none focus:ring-foreground" />
-        <button type="button" disabled={!name.trim()} onClick={save} className="h-10 rounded-xl bg-foreground px-4 text-[14px] font-semibold text-background disabled:opacity-40">
-          保存
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function BookPicker({ contacts, recent, current, onPick }: { contacts: Contact[]; recent: Address[]; current?: Address; onPick: (a: Address) => void }) {
-  const [q, setQ] = useState("");
-  const s = q.trim().toLowerCase();
-  const list = contacts.filter((c) => !s || c.name.toLowerCase().includes(s) || c.address.toLowerCase().includes(s));
-  const others = recent.filter((r) => !contacts.some((c) => c.address === r) && (!s || r.toLowerCase().includes(s)));
-  const row = (a: Address, name?: string) => (
-    <li key={a}>
-      <button type="button" onClick={() => onPick(a)} className={cn("flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left", current === a ? "bg-muted" : "hover:bg-muted/60")}>
-        <WalletDot address={a} size={32} />
-        <span className="min-w-0 flex-1">
-          {name && <span className="block truncate text-[15px] font-semibold">{name}</span>}
-          <span className={cn("block truncate font-mono text-muted-foreground", name ? "text-[12px]" : "text-[13px]")}>{shortAddr(a, 8, 6)}</span>
-        </span>
-      </button>
-    </li>
-  );
-  return (
-    <>
-      <div className="mb-3 flex items-center justify-between">
-        <span className="w-12" />
-        <span className="text-[17px] font-semibold">地址簿</span>
-        <Link href="/wallet/addresses" className="w-12 text-right text-[13px] font-medium text-muted-foreground">
-          管理
-        </Link>
-      </div>
-      {(contacts.length > 0 || recent.length > 0) && (
-        <div className="flex h-10 items-center gap-2 rounded-2xl bg-muted px-3">
-          <MagnifyingGlass size={16} className="text-muted-foreground" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索名称 / 地址" className="flex-1 bg-transparent text-[14px] outline-none" />
-        </div>
-      )}
-      {list.length > 0 && <ul className="mt-2 space-y-0.5">{list.map((c) => row(c.address, c.name))}</ul>}
-      {others.length > 0 && (
-        <>
-          <div className="mt-3 px-3 text-[12px] font-medium text-muted-foreground">最近转过</div>
-          <ul className="mt-1 space-y-0.5">{others.map((a) => row(a))}</ul>
-        </>
-      )}
-      {contacts.length === 0 && (
-        <p className="py-6 text-center text-[13px] leading-6 text-muted-foreground">
-          还没有保存地址。
-          <br />
-          转账成功后可以顺手存进来，也可以去
-          <Link href="/wallet/addresses" className="font-medium text-foreground underline underline-offset-4">
-            管理
-          </Link>
-          页添加。
-        </p>
-      )}
-    </>
-  );
-}
-
-function Result({ sent, explorer, to, saved }: { sent: Sent; chainKey: string; explorer: string; to?: Address; saved: boolean }) {
-  const [wasSaved] = useState(saved);
-  const icon = {
-    pending: <CircleNotch size={56} className="animate-spin text-muted-foreground" />,
-    success: <CheckCircle size={56} weight="fill" className="text-up" />,
-    reverted: <XCircle size={56} weight="fill" className="text-down" />,
-    error: <XCircle size={56} weight="fill" className="text-down" />,
-  }[sent.status];
-  const title = { pending: "已发出，等待确认…", success: "转账成功", reverted: "交易失败（链上回滚）", error: "出错了" }[sent.status];
-  return (
-    <div className="flex flex-col items-center py-4 text-center">
-      {icon}
-      <div className="mt-4 text-[18px] font-semibold">{title}</div>
-      {sent.error && <div className="mt-2 max-w-[300px] text-[12px] break-words text-muted-foreground">{sent.error}</div>}
-      <a href={explorer} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 font-mono text-[12px] text-muted-foreground underline underline-offset-4">
-        {shortAddr(sent.hash, 10, 8)}
-        <ArrowSquareOut size={13} />
-      </a>
-      {sent.status === "success" && to && !wasSaved && <SaveContact to={to} />}
-      {sent.status !== "pending" && (
-        <Link href="/wallet" className="mt-6 flex h-14 w-full items-center justify-center rounded-2xl bg-primary text-[16px] font-semibold text-primary-foreground">
-          完成
-        </Link>
-      )}
-    </div>
-  );
-}
-
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-4 py-3">
-      <dt className="shrink-0 text-muted-foreground">{label}</dt>
-      <dd className="flex justify-end">{children}</dd>
-    </div>
   );
 }

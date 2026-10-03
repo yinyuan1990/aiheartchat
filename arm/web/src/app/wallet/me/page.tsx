@@ -10,6 +10,7 @@ import { shortAddr } from "@/lib/format";
 import { toHex } from "viem";
 import type { HDAccount } from "viem/accounts";
 import { accountOf, verifyPassword, type Secret, type WalletMeta } from "@/lib/wallet/vault";
+import { exportSolKey, solKeypairOf } from "@/lib/wallet/sol";
 import { bioDisable, bioEnable, bioName, bioStatus, copyText, setSecureScreen, type BioStatus } from "@/lib/wallet/native";
 import { cn } from "@/lib/utils";
 import { useVault } from "@/components/wallet/wallet-context";
@@ -66,6 +67,13 @@ export default function MePage() {
                     {shortAddr(w.address, 6, 4)}
                     <Copy size={12} />
                   </button>
+                  {w.sol && (
+                    <button type="button" onClick={async () => (await copyText(w.sol!)) && toast.success("Solana 地址已复制")} className="flex items-center gap-1 font-mono text-[12px] text-muted-foreground">
+                      <span className="font-sans text-[10px]">◎</span>
+                      {shortAddr(w.sol, 6, 4)}
+                      <Copy size={12} />
+                    </button>
+                  )}
                 </div>
                 <button type="button" aria-label="改名" onClick={() => setSheet({ kind: "rename", wallet: w })} className="flex size-9 items-center justify-center rounded-full hover:bg-muted">
                   <PencilSimple size={18} />
@@ -250,7 +258,19 @@ function Export({ wallet }: { wallet: WalletMeta }) {
 
 function ExportKey({ secret }: { secret: Secret }) {
   const hex = secret.kind === "key" ? secret.key : toHex((accountOf(secret) as HDAccount).getHdKey().privateKey ?? new Uint8Array());
-  return <div className="mt-3 rounded-2xl bg-muted/70 p-3 font-mono text-[13px] leading-6 break-all">{hex}</div>;
+  const kp = solKeypairOf(secret);
+  return (
+    <>
+      <div className="mt-3 text-[12px] font-medium text-muted-foreground">EVM 私钥（Arc / 以太坊 / BNB 等通用）</div>
+      <div className="mt-1 rounded-2xl bg-muted/70 p-3 font-mono text-[13px] leading-6 break-all">{hex}</div>
+      {kp && (
+        <>
+          <div className="mt-3 text-[12px] font-medium text-muted-foreground">Solana 私钥（可导入 Phantom / Solflare）</div>
+          <div className="mt-1 rounded-2xl bg-muted/70 p-3 font-mono text-[13px] leading-6 break-all">{exportSolKey(kp)}</div>
+        </>
+      )}
+    </>
+  );
 }
 
 function Delete({ wallet, onDone }: { wallet: WalletMeta; onDone: () => void }) {
