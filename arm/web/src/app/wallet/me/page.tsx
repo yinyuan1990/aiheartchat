@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CaretRight, Copy, Key, Lock, PencilSimple, Plus, ShieldWarning, Trash, Wallet as WalletIcon } from "@phosphor-icons/react";
+import { CaretRight, Copy, Key, Lock, PencilSimple, Plus, ShieldWarning, Trash, TreeStructure, Wallet as WalletIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { WalletDot } from "@/components/shared";
 import { shortAddr } from "@/lib/format";
@@ -72,6 +72,12 @@ export default function MePage() {
             <span className="flex-1 text-[15px]">立即锁定</span>
             <span className="text-[12px] text-muted-foreground">切到后台 5 分钟自动锁定</span>
           </button>
+          <Link href="/wallet/nodes" className="flex items-center gap-3 px-4 py-4">
+            <TreeStructure size={20} />
+            <span className="flex-1 text-[15px]">节点</span>
+            <span className="text-[12px] text-muted-foreground">各条链的 RPC 节点、测速、切换</span>
+            <CaretRight size={16} className="text-muted-foreground" />
+          </Link>
           <Link href="/" className="flex items-center gap-3 px-4 py-4">
             <span className="flex size-5 items-center justify-center">
               {/* eslint-disable-next-line @next/next/no-img-element */}

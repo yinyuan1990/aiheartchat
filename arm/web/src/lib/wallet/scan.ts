@@ -1,0 +1,47 @@
+import { getAddress, isAddress, type Address } from "viem";
+
+/**
+ * What a scanned payment QR asks for. Accepts a bare 0x address and EIP-681 links:
+ *   ethereum:0xTo[@chainId][?value=<wei>]
+ *   ethereum:0xToken[@chainId]/transfer?address=0xTo&uint256=<base units>
+ * Amounts stay in base units (`raw`); the caller formats them with the asset's decimals.
+ */
+export type ScannedPay = { to: Address; chainId?: number; token?: Address; raw?: bigint };
+
+const toBig = (s: string | null): bigint | undefined => {
+  if (!s) return undefined;
+  try {
+    // "1.5e18" is legal in EIP-681
+    if (/e/i.test(s)) {
+      const [m, e] = s.toLowerCase().split("e");
+      const [i, f = ""] = m.split(".");
+      const exp = Number(e) - f.length;
+      return exp >= 0 ? BigInt(i + f) * 10n ** BigInt(exp) : undefined;
+    }
+    return /^\d+$/.test(s) ? BigInt(s) : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+export function parseScanned(text: string): ScannedPay | null {
+  const s = text.trim();
+  if (isAddress(s)) return { to: getAddress(s) };
+  const m = s.match(/^ethereum:(?:pay-)?(0x[0-9a-fA-F]{40})(?:@(\d+))?(?:\/(\w+))?(?:\?(.*))?$/);
+  if (m) {
+    const target = getAddress(m[1]);
+    const chainId = m[2] ? Number(m[2]) : undefined;
+    const q = new URLSearchParams(m[4] ?? "");
+    if (m[3] === "transfer") {
+      const to = q.get("address");
+      if (!to || !isAddress(to)) return null;
+      return { to: getAddress(to), chainId, token: target, raw: toBig(q.get("uint256")) };
+    }
+    if (m[3]) return null;
+    return { to: target, chainId, raw: toBig(q.get("value")) };
+  }
+  // other wallets' formats ("address:0x…", a URL with the address in it): take a lone address if there is exactly one
+  const all = s.match(/0x[0-9a-fA-F]{40}(?![0-9a-fA-F])/g);
+  if (all && new Set(all.map((a) => a.toLowerCase())).size === 1 && isAddress(all[0])) return { to: getAddress(all[0]) };
+  return null;
+}

@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { Address } from "viem";
-import { nativeBridge } from "./native";
+import { storeRead as rawGet, storeWrite as rawSet } from "./native";
 
 /**
  * DApp browser state: per-site permissions, recents, favourites, sites whose risk notice was accepted.
@@ -25,25 +25,6 @@ const MAX_RECENTS = 20;
 let state: State = EMPTY;
 let loaded: Promise<void> | null = null;
 const subs = new Set<() => void>();
-
-async function rawGet(key: string): Promise<string | null> {
-  const b = nativeBridge();
-  if (b?.storeGet) return (await b.storeGet(key)) ?? null;
-  try {
-    return localStorage.getItem(`arm.wallet.${key}`);
-  } catch {
-    return null;
-  }
-}
-
-async function rawSet(key: string, value: string | null) {
-  const b = nativeBridge();
-  if (b?.storeSet) return void (await b.storeSet(key, value));
-  try {
-    if (value == null) localStorage.removeItem(`arm.wallet.${key}`);
-    else localStorage.setItem(`arm.wallet.${key}`, value);
-  } catch {}
-}
 
 export function loadDappStore(): Promise<void> {
   loaded ??= (async () => {

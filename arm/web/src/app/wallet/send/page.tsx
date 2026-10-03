@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createWalletClient, encodeFunctionData, erc20Abi, formatUnits, getAddress, http, isAddress, parseUnits, type Address, type Hex } from "viem";
-import { ArrowSquareOut, CaretDown, CheckCircle, CircleNotch, ClipboardText, Info, Lightning, ShieldCheck, Warning, XCircle } from "@phosphor-icons/react";
+import { ArrowSquareOut, CaretDown, CheckCircle, CircleNotch, ClipboardText, Info, Lightning, Scan, ShieldCheck, Warning, XCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { TokenAvatar, WalletDot } from "@/components/shared";
 import { shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { explorerTx, publicClientFor } from "@/lib/wallet/chains";
+import { chainById, explorerTx, publicClientFor, rpcOf } from "@/lib/wallet/chains";
+import { hasFeature, scanQr } from "@/lib/wallet/native";
+import { parseScanned } from "@/lib/wallet/scan";
 import { useAssets, type Asset } from "@/lib/wallet/assets";
 import { useVault } from "@/components/wallet/wallet-context";
 import { BottomSheet, ChainGlyph, ChainPill, GhostButton, PrimaryButton, TopBar, WalletFrame, useQueryParam } from "@/components/wallet/ui";
@@ -51,7 +53,7 @@ const fmt = (n: number, max = 6) => n.toLocaleString("en-US", { maximumFractionD
 type Sent = { hash: Hex; status: "pending" | "success" | "reverted" | "error"; error?: string };
 
 export default function SendPage() {
-  const { active, chain, account } = useVault();
+  const { active, chain, account, setChain } = useVault();
   const from = active?.address;
   const { assets, loading } = useAssets(chain, from);
   const wanted = useQueryParam("asset");
@@ -63,8 +65,45 @@ export default function SendPage() {
   const [sheet, setSheet] = useState<null | "asset" | "confirm">(null);
   const [sent, setSent] = useState<Sent | null>(null);
   const recent = useRecent();
+  const canScan = useSyncExternalStore(noSubscribe, () => hasFeature("scan"), () => false);
+  // coin / amount from a scanned EIP-681 link, applied once that chain's asset list is in
+  const [scanned, setScanned] = useState<{ chainId: number; token?: string; raw?: bigint } | null>(null);
 
   const nc = chain.chain.nativeCurrency;
+
+  useEffect(() => {
+    if (!scanned || scanned.chainId !== chain.chain.id || loading || assets.length === 0) return;
+    const a = scanned.token ? assets.find((x) => x.token?.toLowerCase() === scanned.token) : assets.find((x) => x.id === (chain.nativeIsUsdc ? "usdc" : "native"));
+    const t = setTimeout(() => {
+      setScanned(null);
+      if (!a) return void toast.warning("二维码里的代币不在当前钱包的币种列表里，请自己选择币种");
+      setAssetId(a.id);
+      if (scanned.raw != null) setAmount(formatUnits(scanned.raw, scanned.token ? a.decimals : chain.chain.nativeCurrency.decimals));
+    }, 0);
+    return () => clearTimeout(t);
+  }, [scanned, chain, loading, assets]);
+
+  const scan = async () => {
+    let text: string | null;
+    try {
+      text = await scanQr();
+    } catch (e) {
+      return void toast.error((e as Error).message);
+    }
+    if (!text) return;
+    const p = parseScanned(text);
+    if (!p) return void toast.error("没认出收款地址，请换一个二维码或手动粘贴");
+    let target = chain;
+    if (p.chainId && p.chainId !== chain.chain.id) {
+      const c = chainById(p.chainId);
+      if (!c) return void toast.error(`二维码指定的链（ID ${p.chainId}）钱包暂不支持`);
+      setChain(c.key);
+      target = c;
+      toast.info(`二维码指定 ${c.name} 网络，已切换`);
+    }
+    setTo(p.to);
+    if (p.token || p.raw != null) setScanned({ chainId: target.chain.id, token: p.token?.toLowerCase(), raw: p.raw });
+  };
   const validTo = isAddress(to.trim());
   const toAddr = validTo ? getAddress(to.trim()) : undefined;
   let value: bigint | null = null;
@@ -121,7 +160,7 @@ export default function SendPage() {
     if (!call || !chosen || value == null || !toAddr) return;
     let hash: Hex | null = null;
     try {
-      const wc = createWalletClient({ account: account(), chain: chain.chain, transport: http(chain.chain.rpcUrls.default.http[0]) });
+      const wc = createWalletClient({ account: account(), chain: chain.chain, transport: http(rpcOf(chain)) });
       const base = { to: call.to, data: call.data, value: call.value, gas: chosen.gas };
       hash = fees.data?.legacy
         ? await wc.sendTransaction({ ...base, gasPrice: chosen.maxFee })
@@ -178,10 +217,18 @@ export default function SendPage() {
         <div className="rounded-[22px] bg-card p-4 ring-1 ring-border/60">
           <div className="flex items-center justify-between">
             <span className="text-[13px] font-medium text-muted-foreground">收款地址</span>
-            <button type="button" onClick={paste} className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[12px] font-medium">
-              <ClipboardText size={14} />
-              粘贴
-            </button>
+            <span className="flex items-center gap-1.5">
+              {canScan && (
+                <button type="button" onClick={scan} className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[12px] font-medium">
+                  <Scan size={14} />
+                  扫一扫
+                </button>
+              )}
+              <button type="button" onClick={paste} className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[12px] font-medium">
+                <ClipboardText size={14} />
+                粘贴
+              </button>
+            </span>
           </div>
           <textarea
             value={to}
@@ -267,7 +314,8 @@ export default function SendPage() {
         </div>
       </div>
 
-      <div className="sticky bottom-0 bg-background/90 px-4 pt-2 pb-[max(16px,env(safe-area-inset-bottom))] backdrop-blur-xl">
+      <div aria-hidden className="h-[calc(72px+max(16px,env(safe-area-inset-bottom)))] shrink-0 sm:hidden" />
+      <div className="fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-[430px] bg-background/90 px-4 pt-2 pb-[max(16px,env(safe-area-inset-bottom))] backdrop-blur-xl sm:sticky">
         <PrimaryButton disabled={!validTo || !value || over || !chosen} onClick={() => setSheet("confirm")}>
           下一步
         </PrimaryButton>

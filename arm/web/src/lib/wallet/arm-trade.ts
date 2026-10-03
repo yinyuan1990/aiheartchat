@@ -1,7 +1,7 @@
 import { createWalletClient, encodePacked, http, maxUint256, type Address, type Hex, type LocalAccount, type PublicClient } from "viem";
 import { afterBuyTax, maxSellable, sellTaxOn, type TokenView } from "@/lib/api";
 import { ADDR, POOL_FEE, addrsFor, erc20Abi, quoterAbi, routerAbi } from "@/lib/web3";
-import { chainByKey, publicClientFor } from "./chains";
+import { chainByKey, publicClientFor, rpcOf } from "./chains";
 
 /**
  * Arm token swaps signed by the wallet's own key (same routes as components/token/trade-panel.tsx, which goes through
@@ -82,7 +82,7 @@ export async function executeTrade(
 ) {
   const chain = arc();
   const pc = publicClientFor(chain);
-  const wc = createWalletClient({ account, chain: chain.chain, transport: http(chain.chain.rpcUrls.default.http[0]) });
+  const wc = createWalletClient({ account, chain: chain.chain, transport: http(rpcOf(chain)) });
   const r = route(token, side);
   const me = account.address;
 

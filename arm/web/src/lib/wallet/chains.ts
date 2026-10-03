@@ -1,4 +1,6 @@
+import { useSyncExternalStore } from "react";
 import { createPublicClient, defineChain, http, type Address, type Chain, type PublicClient } from "viem";
+import { storeRead, storeWrite } from "./native";
 import { arbitrum, base, bsc, mainnet, polygon } from "viem/chains";
 import { arcMainnet } from "@/lib/web3";
 
@@ -32,7 +34,7 @@ export const WALLET_CHAINS: WalletChain[] = [
   {
     key: "eth",
     name: "Ethereum",
-    chain: withRpc(mainnet, ["https://ethereum-rpc.publicnode.com", "https://eth.llamarpc.com"]),
+    chain: withRpc(mainnet, ["https://ethereum-rpc.publicnode.com", "https://eth.llamarpc.com", "https://1rpc.io/eth", "https://eth.drpc.org"]),
     color: "#627EEA",
     glyph: "Ξ",
     stables: [
@@ -44,7 +46,7 @@ export const WALLET_CHAINS: WalletChain[] = [
   {
     key: "bsc",
     name: "BNB Chain",
-    chain: withRpc(bsc, ["https://bsc-dataseed.bnbchain.org", "https://bsc-dataseed1.binance.org"]),
+    chain: withRpc(bsc, ["https://bsc-dataseed.bnbchain.org", "https://bsc-dataseed1.binance.org", "https://bsc-rpc.publicnode.com", "https://1rpc.io/bnb"]),
     color: "#F0B90B",
     glyph: "B",
     stables: [
@@ -56,7 +58,7 @@ export const WALLET_CHAINS: WalletChain[] = [
   {
     key: "base",
     name: "Base",
-    chain: withRpc(base, ["https://mainnet.base.org", "https://base-rpc.publicnode.com"]),
+    chain: withRpc(base, ["https://mainnet.base.org", "https://base-rpc.publicnode.com", "https://1rpc.io/base", "https://base.drpc.org"]),
     color: "#0052FF",
     glyph: "b",
     stables: [{ symbol: "USDC", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 }],
@@ -65,7 +67,7 @@ export const WALLET_CHAINS: WalletChain[] = [
   {
     key: "arb",
     name: "Arbitrum",
-    chain: withRpc(arbitrum, ["https://arb1.arbitrum.io/rpc", "https://arbitrum-one-rpc.publicnode.com"]),
+    chain: withRpc(arbitrum, ["https://arb1.arbitrum.io/rpc", "https://arbitrum-one-rpc.publicnode.com", "https://1rpc.io/arb", "https://arbitrum.drpc.org"]),
     color: "#28A0F0",
     glyph: "A",
     stables: [
@@ -77,7 +79,7 @@ export const WALLET_CHAINS: WalletChain[] = [
   {
     key: "polygon",
     name: "Polygon",
-    chain: withRpc(polygon, ["https://polygon-rpc.com", "https://polygon-bor-rpc.publicnode.com"]),
+    chain: withRpc(polygon, ["https://polygon-rpc.com", "https://polygon-bor-rpc.publicnode.com", "https://1rpc.io/matic", "https://polygon.drpc.org"]),
     color: "#8247E5",
     glyph: "P",
     stables: [
@@ -91,13 +93,96 @@ export const WALLET_CHAINS: WalletChain[] = [
 export const chainByKey = (key?: string | null) => WALLET_CHAINS.find((c) => c.key === key) ?? WALLET_CHAINS[0];
 export const chainById = (id?: number | null) => WALLET_CHAINS.find((c) => c.chain.id === id);
 
+// ---------- RPC nodes: built-in list + user-added, one selected per chain (kept in the shell's native store) ----------
+type NodeState = { selected: Record<string, string>; custom: Record<string, string[]> };
+let nodes: NodeState = { selected: {}, custom: {} };
+let nodesLoaded: Promise<void> | null = null;
+const nodeSubs = new Set<() => void>();
+
+export function loadNodes(): Promise<void> {
+  nodesLoaded ??= (async () => {
+    try {
+      const v = await storeRead("nodes");
+      if (v) nodes = { ...nodes, ...(JSON.parse(v) as Partial<NodeState>) };
+    } catch {}
+    clients.clear();
+    nodeSubs.forEach((f) => f());
+  })();
+  return nodesLoaded;
+}
+
+function saveNodes(next: NodeState) {
+  nodes = next;
+  clients.clear();
+  nodeSubs.forEach((f) => f());
+  void storeWrite("nodes", JSON.stringify(next));
+}
+
+export const builtinNodes = (c: WalletChain) => c.chain.rpcUrls.default.http;
+export const nodesOf = (c: WalletChain) => [...builtinNodes(c), ...(nodes.custom[c.key] ?? [])];
+export const isCustomNode = (c: WalletChain, url: string) => !!nodes.custom[c.key]?.includes(url);
+/** The node every wallet read / send on this chain goes through. */
+export function rpcOf(c: WalletChain): string {
+  const s = nodes.selected[c.key];
+  return s && nodesOf(c).includes(s) ? s : builtinNodes(c)[0];
+}
+export const selectNode = (c: WalletChain, url: string) => saveNodes({ ...nodes, selected: { ...nodes.selected, [c.key]: url } });
+export function addNode(c: WalletChain, url: string) {
+  if (nodesOf(c).includes(url)) return selectNode(c, url);
+  saveNodes({ selected: { ...nodes.selected, [c.key]: url }, custom: { ...nodes.custom, [c.key]: [...(nodes.custom[c.key] ?? []), url] } });
+}
+export function removeNode(c: WalletChain, url: string) {
+  const selected = { ...nodes.selected };
+  if (selected[c.key] === url) delete selected[c.key];
+  saveNodes({ selected, custom: { ...nodes.custom, [c.key]: (nodes.custom[c.key] ?? []).filter((u) => u !== url) } });
+}
+export function useNodes(): NodeState {
+  return useSyncExternalStore(
+    (f) => {
+      nodeSubs.add(f);
+      void loadNodes();
+      return () => nodeSubs.delete(f);
+    },
+    () => nodes,
+    () => nodes,
+  );
+}
+
+export type NodeProbe = { ms: number; block?: bigint; chainId?: number; error?: string };
+
+async function rpcCall(url: string, method: string, signal: AbortSignal): Promise<string> {
+  const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: [] }), signal });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const j = (await r.json()) as { result?: string; error?: { message?: string } };
+  if (typeof j.result !== "string") throw new Error(j.error?.message ?? "bad response");
+  return j.result;
+}
+
+/** Latency of one eth_blockNumber round trip, plus the node's chain id (a custom node must match the chain). */
+export async function probeNode(url: string, timeoutMs = 6000): Promise<NodeProbe> {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), timeoutMs);
+  const t0 = performance.now();
+  try {
+    const block = BigInt(await rpcCall(url, "eth_blockNumber", ac.signal));
+    const ms = Math.round(performance.now() - t0);
+    const chainId = Number(BigInt(await rpcCall(url, "eth_chainId", ac.signal)));
+    return { ms, block, chainId };
+  } catch (e) {
+    return { ms: Math.round(performance.now() - t0), error: ac.signal.aborted ? "超时" : (e as Error).message || "连不上" };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 const clients = new Map<string, PublicClient>();
 export function publicClientFor(c: WalletChain): PublicClient {
+  void loadNodes();
   let pc = clients.get(c.key);
   if (!pc) {
     pc = createPublicClient({
       chain: c.chain,
-      transport: http(c.chain.rpcUrls.default.http[0], { retryCount: 1 }),
+      transport: http(rpcOf(c), { retryCount: 1 }),
       batch: c.chain.contracts?.multicall3 ? { multicall: true } : undefined,
     }) as PublicClient;
     clients.set(c.key, pc);

@@ -13,7 +13,9 @@ export type NativePush =
   /** The DApp page navigated away or the browser closed: drop everything pending for it. */
   | { push: "dappReset" }
   | { push: "dappVisited"; url: string; title?: string }
-  | { push: "dappFavorite"; url: string; title?: string };
+  | { push: "dappFavorite"; url: string; title?: string }
+  /** Late answer to an async call made through the sync bridge (`raw.method(cb, ...args)`). */
+  | { push: "reply"; cb: string; result?: unknown; error?: string };
 
 type Bridge = {
   platform?: string;
@@ -21,7 +23,6 @@ type Bridge = {
   setSecureScreen?: (on: boolean) => void;
   share?: (text: string) => void;
   toast?: (text: string) => void;
-  scanQr?: () => void;
   haptic?: (kind: string) => void;
   /** Non-secret key/value storage kept outside the web origin (site permissions, DApp history). */
   storeGet?: (key: string) => MaybePromise<string | null>;
@@ -32,6 +33,8 @@ type Bridge = {
   dappEmit?: (e: { origin: string; event: string; data: unknown }) => void;
   /** Raise (true) / lower (false) the wallet layer above the DApp page while a request sheet is up. */
   dappShow?: (on: boolean) => void;
+  /** Opens the camera scanner; resolves with the decoded text, null when the user backs out. */
+  scanQr?: () => Promise<string | null>;
 };
 
 /**
@@ -40,6 +43,10 @@ type Bridge = {
  */
 type SyncBridge = Record<string, ((...a: unknown[]) => unknown) | undefined> & { bridgeInfo: () => string };
 let wrapped: { raw: SyncBridge; bridge: Bridge } | undefined;
+
+let cbSeq = 0;
+const callbacks = new Map<string, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
+let replyListener = false;
 
 function wrapSync(raw: SyncBridge): Bridge {
   if (wrapped?.raw === raw) return wrapped.bridge;
@@ -50,6 +57,29 @@ function wrapSync(raw: SyncBridge): Bridge {
   // Java bridge methods must be called on the bridge object itself
   const call = (k: string, ...a: unknown[]) => (typeof raw[k] === "function" ? raw[k]!(...a) : undefined);
   const json = (v: unknown) => JSON.stringify(v ?? null);
+  if (!replyListener) {
+    replyListener = true;
+    window.addEventListener("armwallet:native", (e) => {
+      const m = (e as CustomEvent<NativePush>).detail;
+      if (m?.push !== "reply") return;
+      const p = callbacks.get(m.cb);
+      if (!p) return;
+      callbacks.delete(m.cb);
+      if (m.error) p.reject(new Error(m.error));
+      else p.resolve(m.result ?? null);
+    });
+  }
+  const callAsync = (k: string, ...a: unknown[]) =>
+    new Promise<unknown>((resolve, reject) => {
+      const cb = `c${++cbSeq}`;
+      callbacks.set(cb, { resolve, reject });
+      try {
+        call(k, cb, ...a);
+      } catch (e) {
+        callbacks.delete(cb);
+        reject(e as Error);
+      }
+    });
   const bridge: Bridge = {
     platform: info.platform,
     features: info.features ?? [],
@@ -63,8 +93,10 @@ function wrapSync(raw: SyncBridge): Bridge {
     dappRespond: (r) => void call("dappRespond", json(r)),
     dappEmit: (e) => void call("dappEmit", json(e)),
     dappShow: (on) => void call("dappShow", !!on),
+    scanQr: typeof raw.scanQr === "function" ? () => callAsync("scanQr") as Promise<string | null> : undefined,
   };
-  wrapped = { raw, bridge };
+  // bridgeInfo() answers "{}" until the shell has seen this page's origin: don't cache that, ask again next time
+  if (info.features?.length) wrapped = { raw, bridge };
   return bridge;
 }
 
@@ -81,6 +113,34 @@ export function onNativePush(fn: (m: NativePush) => void): () => void {
   const h = (e: Event) => fn((e as CustomEvent<NativePush>).detail);
   window.addEventListener("armwallet:native", h);
   return () => window.removeEventListener("armwallet:native", h);
+}
+
+/** Non-secret key/value storage: the shell's native store inside the App (not shared with DApp pages), localStorage in browsers. */
+export async function storeRead(key: string): Promise<string | null> {
+  const b = nativeBridge();
+  if (b?.storeGet) return (await b.storeGet(key)) ?? null;
+  try {
+    return localStorage.getItem(`arm.wallet.${key}`);
+  } catch {
+    return null;
+  }
+}
+
+export async function storeWrite(key: string, value: string | null) {
+  const b = nativeBridge();
+  if (b?.storeSet) return void (await b.storeSet(key, value));
+  try {
+    if (value == null) localStorage.removeItem(`arm.wallet.${key}`);
+    else localStorage.setItem(`arm.wallet.${key}`, value);
+  } catch {}
+}
+
+/** Camera scan through the App shell; null when unavailable or cancelled. */
+export async function scanQr(): Promise<string | null> {
+  const b = nativeBridge();
+  if (!b?.scanQr) return null;
+  const r = await b.scanQr();
+  return typeof r === "string" && r ? r : null;
 }
 
 /** Blocks screenshots / screen recording (Android FLAG_SECURE, iOS overlay) while secrets are on screen. */

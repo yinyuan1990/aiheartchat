@@ -117,6 +117,9 @@ struct ChainWalletView: View {
                     .onAppear { DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { model.toast = nil } }
             }
         }
+        .fullScreenCover(isPresented: Binding(get: { model.scanning }, set: { if !$0 { model.finishScan(nil) } })) {
+            QrScanView(hint: "对准收款地址二维码") { model.finishScan($0) }
+        }
         .onAppear { captured = Self.screenCaptured() }
         .onReceive(NotificationCenter.default.publisher(for: UIScreen.capturedDidChangeNotification)) { _ in
             captured = Self.screenCaptured()
@@ -333,6 +336,15 @@ final class ChainWalletModel: NSObject, ObservableObject {
     }
     @Published var secure = false
     @Published var toast: String?
+    /// 钱包页调 scanQr 时弹扫码页；同一时间只有一个，新的进来先把旧的按取消回掉
+    @Published var scanning = false
+    private var scanReply: ((String?) -> Void)?
+
+    func finishScan(_ text: String?) {
+        scanning = false
+        scanReply?(text)
+        scanReply = nil
+    }
 
     let container: UIView = StackView()
     private(set) var walletWeb: WKWebView?
@@ -593,6 +605,10 @@ final class ChainWalletModel: NSObject, ObservableObject {
         case "dappShow":
             approving = (arg as? Bool) == true
             send(true)
+        case "scanQr":
+            scanReply?(nil)
+            scanReply = { send($0) }
+            scanning = true
         default:
             send(error: "unknown method \(method)")
         }
@@ -714,7 +730,7 @@ private let walletBridgeJS = #"""
   }
   window.ArmWalletNative = {
     platform: 'ios',
-    features: ['dapp', 'store'],
+    features: ['dapp', 'store', 'scan'],
     vaultGet: function(){ return call('vaultGet'); },
     vaultSet: function(v){ return call('vaultSet', String(v)); },
     vaultClear: function(){ return call('vaultClear'); },
@@ -727,7 +743,8 @@ private let walletBridgeJS = #"""
     dappReady: function(){ call('dappReady'); },
     dappRespond: function(r){ call('dappRespond', r); },
     dappEmit: function(e){ call('dappEmit', e); },
-    dappShow: function(on){ call('dappShow', !!on); }
+    dappShow: function(on){ call('dappShow', !!on); },
+    scanQr: function(){ return call('scanQr'); }
   };
 })();
 """#

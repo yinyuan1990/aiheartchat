@@ -128,6 +128,11 @@ class DappHub(private val onShow: (Boolean) -> Unit) {
     private var dappReply: ((String) -> Unit)? = null
     private var dappOrigin: String? = null
 
+    /** 诊断用：钱包页有没有调过 dappReady、积压 / 等回复的请求数 */
+    val walletAttached get() = walletReply != null
+    val queued get() = queue.size
+    val inFlight get() = pending.size
+
     private fun toWallet(msg: JsonObject) {
         val s = msg.toString()
         val w = walletReply

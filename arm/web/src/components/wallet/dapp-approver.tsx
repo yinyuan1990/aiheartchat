@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { WalletDot } from "@/components/shared";
 import { shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { chainById, publicClientFor, type WalletChain } from "@/lib/wallet/chains";
+import { chainById, publicClientFor, rpcOf, type WalletChain } from "@/lib/wallet/chains";
 import { accountOf, WrongPasswordError } from "@/lib/wallet/vault";
 import { hasFeature, nativeBridge, onNativePush, type DappRequest, type RpcError } from "@/lib/wallet/native";
 import { addRecent, getPerm, hostOf, isTrusted, loadDappStore, revokePerm, setPerm, toggleFav } from "@/lib/wallet/dapp-store";
@@ -75,6 +75,15 @@ export function DappApprover({ onOverlay }: { onOverlay: (on: boolean) => void }
     jobsRef.current = jobs;
   });
   const ready = vault.status !== "loading";
+  // a shell may only report its features once it has seen this page's origin: re-check for a few seconds
+  const [dappOk, setDappOk] = useState(false);
+  useEffect(() => {
+    if (!ready || dappOk || !nativeBridge()) return;
+    let n = 0;
+    const tick = () => (hasFeature("dapp") ? setDappOk(true) : ++n < 40 ? (t = setTimeout(tick, 250)) : undefined);
+    let t = setTimeout(tick, 0);
+    return () => clearTimeout(t);
+  }, [ready, dappOk]);
   const current = jobs[0];
   const showing = !!current;
 
@@ -168,7 +177,7 @@ export function DappApprover({ onOverlay }: { onOverlay: (on: boolean) => void }
   );
 
   useEffect(() => {
-    if (!ready || !hasFeature("dapp")) return;
+    if (!dappOk) return;
     let alive = true;
     const off = onNativePush((m) => {
       if (m.push === "dappRequest") void handle(m.req);
@@ -187,7 +196,7 @@ export function DappApprover({ onOverlay }: { onOverlay: (on: boolean) => void }
       alive = false;
       off();
     };
-  }, [ready, handle, finish, respond]);
+  }, [dappOk, handle, finish, respond]);
 
   // raise the wallet layer right away; lower it after the sheet's slide-out
   useEffect(() => {
@@ -465,7 +474,7 @@ function SignFlow({ job, chain, finish }: BodyProps) {
         finish(job, await account.signTypedData({ domain, types: d.types, primaryType: d.primaryType, message: d.message } as never));
       } else {
         if (!prep.fees) throw new Error("没拿到网络费，请稍后再试");
-        const wc = createWalletClient({ account, chain: chain.chain, transport: http(chain.chain.rpcUrls.default.http[0]) });
+        const wc = createWalletClient({ account, chain: chain.chain, transport: http(rpcOf(chain)) });
         const base = { to: prep.to, data: prep.data, value: prep.value, gas: prep.fees.gas, nonce: prep.nonce };
         const hash = prep.fees.legacy
           ? await wc.sendTransaction({ ...base, gasPrice: prep.fees.maxFee } as never)
