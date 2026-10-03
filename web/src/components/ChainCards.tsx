@@ -59,7 +59,7 @@ export function TransferCard({ content, mine }: { content: string; mine: boolean
     <span
       className="no-menu"
       onClick={() => url && window.open(url, '_blank', 'noopener')}
-      style={{ display: 'flex', flexDirection: 'column', width: 220, borderRadius: 14, overflow: 'hidden', background: '#f59e0b', cursor: url ? 'pointer' : 'default' }}
+      style={{ display: 'flex', flexDirection: 'column', width: 220, borderRadius: 14, overflow: 'hidden', background: '#f59e0b', border: '1px solid #f59e0b', cursor: url ? 'pointer' : 'default' }}
     >
       <span style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', color: '#fff' }}>
         <span style={{ width: 38, height: 38, borderRadius: 19, background: 'rgba(255,255,255,.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>⇄</span>
@@ -70,7 +70,7 @@ export function TransferCard({ content, mine }: { content: string; mine: boolean
           <span style={{ fontSize: 12, opacity: 0.85 }}>{mine ? '已转账给对方' : '对方给你转账'}</span>
         </span>
       </span>
-      <span style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 14px', background: '#fff', fontSize: 11, color: '#888' }}>
+      <span style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 14px', background: '#fff4de', fontSize: 11, color: '#9a5b00' }}>
         <span>链上转账 · {CHAIN_NAMES[o.chain] ?? o.chain}</span>
         {o.verified && <span style={{ color: '#16a34a' }}>已到账 ✓</span>}
       </span>

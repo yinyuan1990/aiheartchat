@@ -8,6 +8,7 @@ import { MessagePayload, ReactionView, ReplyPreview, SendFrame } from './im.type
 import { resolveInviteUser } from '../invite/invite.service';
 import { BotService } from './bot.service';
 import { sanitizeCallout } from './card-content';
+import { COIN_GROUP_COLD_MS } from './coin-group.service';
 
 /** 需要扣费的消息类型（礼物走礼物模块自身计费） */
 const CHARGED_TYPES = new Set(['text', 'image', 'video', 'audio', 'location', 'sticker', 'callout']);
@@ -243,12 +244,17 @@ export class ImService {
       take: 100,
     });
 
+    // 币的讨论群 7 天没人说话就不显示（从钱包代币页还能进；有人发言就回来）
+    const coinGroups = groupIds.length ? new Set((await this.prisma.coinGroup.findMany({ where: { groupId: { in: groupIds } }, select: { groupId: true } })).map((g) => g.groupId.toString())) : new Set<string>();
+    const coldBefore = Date.now() - COIN_GROUP_COLD_MS;
+
     // 「只删自己这边」的消息不当会话预览
     const hiddenRows = await this.prisma.messageHide.findMany({ where: { userId }, select: { messageId: true }, orderBy: { createdAt: 'desc' }, take: 2000 });
     const hidden = new Set(hiddenRows.map((h) => h.messageId.toString()));
 
     const result = [] as any[];
     for (const conv of convs) {
+      if (conv.groupId && coinGroups.has(conv.groupId.toString()) && conv.lastMsgAt.getTime() < coldBefore) continue;
       const key = this.crypto.unwrapKey(conv.wrappedKey);
       const recent = await this.prisma.message.findMany({
         where: { conversationId: conv.id },

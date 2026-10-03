@@ -122,16 +122,18 @@ struct TransferCardView: View {
                 }
                 .padding(.horizontal, 14).padding(.vertical, 12)
                 HStack {
-                    Text("链上转账 · \(ChainCards.chainName(chain))").font(.system(size: 11)).foregroundStyle(Theme.textSub)
+                    Text("链上转账 · \(ChainCards.chainName(chain))").font(.system(size: 11)).foregroundStyle(Color(red: 0.6, green: 0.36, blue: 0))
                     Spacer()
                     if o["verified"] as? Bool == true { Text("已到账 ✓").font(.system(size: 11)).foregroundStyle(Color(red: 0.09, green: 0.64, blue: 0.29)) }
                 }
                 .padding(.horizontal, 14).padding(.vertical, 6)
-                .background(Color.white)
+                .background(Color(red: 1, green: 0.957, blue: 0.87))
             }
             .frame(width: 220)
             .background(Color(red: 0.96, green: 0.62, blue: 0.04))
             .clipShape(RoundedRectangle(cornerRadius: 14))
+            // 描边 + 浅橙底栏：白色聊天背景上卡片也有边界
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(red: 0.96, green: 0.62, blue: 0.04), lineWidth: 1))
         }
         .buttonStyle(.plain)
     }

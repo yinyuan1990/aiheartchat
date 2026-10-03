@@ -232,6 +232,8 @@ enum Route: Hashable {
     case chainWallet
     /// 直接打开钱包里的某一页（/wallet 开头的站内路径，例如聊天里的转账）；结果见 ChainWallet.resultNotification
     case chainWalletPath(String)
+    /// 打开一个会话（例如钱包代币页「讨论群」进群聊）：会话 id、类型、对方 / 群 id、标题
+    case chatRoom(String, Int, String, String)
 }
 
 @ViewBuilder
@@ -272,6 +274,7 @@ func routeView(_ route: Route) -> some View {
     case .bot(let id): BotDetailView(botId: id)
     case .chainWallet: ChainWalletView()
     case .chainWalletPath(let path): ChainWalletView(startPath: path)
+    case .chatRoom(let convId, let convType, let targetId, let title): ChatRoomView(convId: convId, convType: convType, targetId: targetId, title: title)
     }
 }
 

@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -53,6 +54,7 @@ private val EXPLORERS = mapOf(
     "arb" to "https://arbiscan.io/tx/", "polygon" to "https://polygonscan.com/tx/", "sol" to "https://solscan.io/tx/",
 )
 private val TransferOrange = Color(0xFFF59E0B)
+private val TransferTint = Color(0xFFFFF4DE)
 
 fun chainName(chain: String) = CHAIN_NAMES[chain] ?: chain
 
@@ -135,8 +137,10 @@ fun TransferCard(content: String, mine: Boolean) {
     val o = remember(content) { obj(content) }
     val chain = o?.str("chain").orEmpty()
     val amount = tokenAmount(o?.str("amount"), o?.str("decimals")?.toIntOrNull() ?: 0)
+    // 描边 + 浅橙底栏：白色聊天背景上卡片也有边界
     Column(
         Modifier.width(220.dp).clip(RoundedCornerShape(14.dp)).background(TransferOrange)
+            .border(1.dp, TransferOrange, RoundedCornerShape(14.dp))
             .noRippleClick { o?.str("hash")?.let { h -> EXPLORERS[chain]?.let { runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it + h)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } } } },
     ) {
         Row(Modifier.padding(14.dp, 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -147,8 +151,8 @@ fun TransferCard(content: String, mine: Boolean) {
                 Text(if (mine) "已转账给对方" else "对方给你转账", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
             }
         }
-        Row(Modifier.fillMaxWidth().background(Color.White).padding(14.dp, 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("链上转账 · ${chainName(chain)}", color = TextSub, fontSize = 11.sp, modifier = Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth().background(TransferTint).padding(14.dp, 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("链上转账 · ${chainName(chain)}", color = Color(0xFF9A5B00), fontSize = 11.sp, modifier = Modifier.weight(1f))
             if (o?.get("verified")?.jsonPrimitive?.booleanOrNull == true) Text("已到账 ✓", color = Color(0xFF16A34A), fontSize = 11.sp)
         }
     }

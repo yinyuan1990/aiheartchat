@@ -1175,6 +1175,20 @@ model UserChainAddress {
   @@map("user_chain_address")
 }
 
+/// 每个币的讨论群：有人在钱包代币页点「讨论群」时才建（群主是系统账号「币群助手」），7 天没人说话就不出现在会话列表里
+model CoinGroup {
+  chain     String   @db.VarChar(16)
+  /// EVM 小写；Solana 原样
+  address   String   @db.VarChar(64)
+  groupId   BigInt   @unique @map("group_id")
+  creatorId BigInt   @map("creator_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@id([chain, address])
+  @@index([creatorId, createdAt])
+  @@map("coin_group")
+}
+
 /// 聊天里的转账卡片：链上核对过的交易，一笔交易只能发一张卡
 model ChainTransfer {
   hash        String   @id @db.VarChar(100)

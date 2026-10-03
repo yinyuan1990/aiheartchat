@@ -232,6 +232,7 @@ struct ChainWalletView: View {
         .sheet(item: $model.shareCard) { s in
             ShareCardSheet(card: s.card) { model.toast = $0 }
         }
+        .routePush($model.chatRoute)
     }
 
     private func load() async {
@@ -450,6 +451,8 @@ final class ChainWalletModel: NSObject, ObservableObject {
     @Published var closeRequested = false
     /// 代币页「喊单到聊天」交来的卡片，弹会话选择
     @Published var shareCard: ShareCard?
+    /// 代币页「讨论群」：进这个群聊
+    @Published var chatRoute: Route?
     /// 钱包页调 scanQr 时弹扫码页；同一时间只有一个，新的进来先把旧的按取消回掉
     @Published var scanning = false
     private var scanReply: ((String?) -> Void)?
@@ -771,6 +774,20 @@ final class ChainWalletModel: NSObject, ObservableObject {
         case "shareCard":
             if let o = arg as? [String: Any] { shareCard = ShareCard(card: o) }
             send(true)
+        case "openCoinGroup":
+            // 币的讨论群：后端没有就建（系统账号当群主）再加入，然后进群聊
+            if let o = arg as? [String: Any] {
+                Task { @MainActor in
+                    struct Resp: Codable { var groupId: String; var conversationId: String?; var name: String }
+                    do {
+                        let r: Resp = try await Api.request("/im/coin-group", method: "POST", body: o)
+                        if let conv = r.conversationId { chatRoute = .chatRoom(conv, 2, r.groupId, r.name) }
+                    } catch {
+                        toast = error.localizedDescription
+                    }
+                }
+            }
+            send(true)
         default:
             send(error: "unknown method \(method)")
         }
@@ -897,6 +914,7 @@ private let walletBridgeJS = #"""
     walletClose: function(){ call('walletClose'); },
     chainAddress: function(a){ return call('chainAddress', a == null ? null : a); },
     shareCard: function(c){ call('shareCard', c); },
+    openCoinGroup: function(c){ call('openCoinGroup', c); },
     vaultGet: function(){ return call('vaultGet'); },
     vaultSet: function(v){ return call('vaultSet', String(v)); },
     vaultClear: function(){ return call('vaultClear'); },

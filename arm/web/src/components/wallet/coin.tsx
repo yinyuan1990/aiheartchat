@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { ArrowBendUpLeft, ArrowLeft, ArrowsDownUp, Bell, ChartLine, CircleNotch, Copy, Crown, Eye, Globe, Lightning, Megaphone, Minus, PaperPlaneRight, Plant, Plus, ShareNetwork, SlidersHorizontal, Star, TelegramLogo, XLogo } from "@phosphor-icons/react";
+import { ArrowBendUpLeft, ArrowLeft, ArrowsDownUp, Bell, ChartLine, ChatsCircle, CircleNotch, Copy, Crown, Eye, Globe, Lightning, Megaphone, Minus, PaperPlaneRight, Plant, Plus, ShareNetwork, SlidersHorizontal, Star, TelegramLogo, XLogo } from "@phosphor-icons/react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { PriceChart, chartPrice, type Candle, type ChartMarker } from "@/components/token/price-chart";
 import { TokenAvatar } from "@/components/shared";
 import { fmtNum, fmtSmall, shortAddr, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { canShareCard, copyText, shareCard } from "@/lib/wallet/native";
+import { canCoinGroup, canShareCard, copyText, openCoinGroup, shareCard } from "@/lib/wallet/native";
 import { iconUrl } from "@/lib/wallet/assets";
 import { BottomSheet, ChainGlyph, Num, Pct, PrimaryButton, WalletFrame } from "./ui";
 
@@ -50,8 +50,33 @@ const squareBtn = "flex size-10 items-center justify-center rounded-xl bg-card r
 /** A coin shared into 心之音 chats as a call-out card (houduan card-content.ts sanitizeCallout keeps these fields). */
 export type CalloutCard = { chain: string; address: string; symbol: string; name: string; image: string | null; priceUsd: number | null; mcapUsd: number | null };
 
-export function CoinTopBar({ back, symbol, createdAt, viewers, starred, onStar, onShare, callout }: { back: string; symbol: string; createdAt?: number | null; viewers?: number | null; starred: boolean; onStar: () => void; onShare: () => void; callout?: CalloutCard | null }) {
+/** Coins hot enough to get a discussion group entry (groups are created on first open, see houduan coin-group.service). */
+export const groupWorthy = (o: { callouts?: number; mcapUsd?: number | null; arm?: boolean }) => !!o.arm || (o.callouts ?? 0) > 0 || (o.mcapUsd ?? 0) >= 50_000;
+
+export function CoinTopBar({
+  back,
+  symbol,
+  createdAt,
+  viewers,
+  starred,
+  onStar,
+  onShare,
+  callout,
+  group,
+}: {
+  back: string;
+  symbol: string;
+  createdAt?: number | null;
+  viewers?: number | null;
+  starred: boolean;
+  onStar: () => void;
+  onShare: () => void;
+  callout?: CalloutCard | null;
+  /** show the 讨论群 button (the page decides whether the coin is hot enough, `groupWorthy`) */
+  group?: boolean;
+}) {
   const canCall = useSyncExternalStore(noSubscribe, canShareCard, () => false);
+  const canGroup = useSyncExternalStore(noSubscribe, canCoinGroup, () => false);
   const [calling, setCalling] = useState(false);
   return (
     <>
@@ -83,6 +108,11 @@ export function CoinTopBar({ back, symbol, createdAt, viewers, starred, onStar, 
       <button type="button" aria-label={starred ? "取消收藏" : "收藏"} onClick={onStar} className={squareBtn}>
         <Star size={18} weight={starred ? "fill" : "regular"} className={starred ? "text-[#f5c542]" : ""} />
       </button>
+      {canGroup && group && callout && (
+        <button type="button" aria-label="讨论群" onClick={() => openCoinGroup({ chain: callout.chain, address: callout.address, symbol: callout.symbol, name: callout.name, image: callout.image })} className={squareBtn}>
+          <ChatsCircle size={18} />
+        </button>
+      )}
       {canCall && callout && (
         <button type="button" aria-label="喊单到聊天" onClick={() => setCalling(true)} className={squareBtn}>
           <Megaphone size={18} />

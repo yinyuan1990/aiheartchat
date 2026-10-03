@@ -390,6 +390,7 @@ fun AppRoot() {
                     onBack = { nav.popBackStack() },
                     startPath = entry.arguments?.getString("path")?.takeIf { it.isNotBlank() },
                     onResult = { nav.previousBackStackEntry?.savedStateHandle?.set("walletResult", it.toString()) },
+                    onOpenChat = { convId, groupId, title -> nav.navigate("chatroom/$convId?convType=2&targetId=$groupId&title=${android.net.Uri.encode(title)}") },
                 )
             }
             page("bots/{id}", listOf(navArgument("id") { type = NavType.StringType })) { e ->

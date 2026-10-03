@@ -21,7 +21,7 @@ import { USDC_LOGO, absUrl, iconUrl } from "@/lib/wallet/assets";
 import { isSolAddress } from "@/lib/wallet/sol";
 import { changeOver, usePumpList, type PumpTab } from "@/lib/wallet/pump";
 import { useVault } from "@/components/wallet/wallet-context";
-import { AboutCard, CoinChartPanel, CoinFrame, CoinHeader, CoinTabs, CoinTopBar, CommentBox, CurveCard, HolderRows, MarkerSheet, PositionCard, StatsCard, TradeBar, TradeRows, allInterval, compactUsd, quickAmount, setQuickAmount, usd, useMarkers, type MarkTrade } from "@/components/wallet/coin";
+import { AboutCard, CoinChartPanel, CoinFrame, CoinHeader, CoinTabs, CoinTopBar, CommentBox, groupWorthy, CurveCard, HolderRows, MarkerSheet, PositionCard, StatsCard, TradeBar, TradeRows, allInterval, compactUsd, quickAmount, setQuickAmount, usd, useMarkers, type MarkTrade } from "@/components/wallet/coin";
 import { costBasis, useStar, useViewers } from "@/lib/wallet/positions";
 import { BottomNav, BottomSheet, ChainGlyph, ChainPill, Num, Pct, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
 import { MARKET_CHAINS, isMarketChain, useMarketList, type MarketChainKey, type MarketTab } from "@/lib/wallet/market";
@@ -440,6 +440,7 @@ function TokenDetail({ address }: { address: string }) {
         onStar={toggleStar}
         onShare={share}
         callout={{ chain: "arc", address: token.address, symbol: token.symbol, name: token.name, image: absUrl(token.logo) ?? null, priceUsd: token.price, mcapUsd: token.mcapUsd }}
+        group={groupWorthy({ arm: true })}
       />
 
       <div className="flex-1 pb-28">

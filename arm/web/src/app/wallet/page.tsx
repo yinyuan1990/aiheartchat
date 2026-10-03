@@ -237,7 +237,7 @@ export default function WalletHome() {
         </div>
       </BottomSheet>
 
-      {!isSolana(chain) && <AddTokenSheet chain={chain} open={sheet === "add"} onClose={() => setSheet(null)} />}
+      {!isSolana(chain) && <AddTokenSheet chain={chain} open={sheet === "add"} onClose={() => setSheet(null)} known={assets.flatMap((a) => (a.token ? [a.token] : []))} />}
     </WalletFrame>
   );
 }

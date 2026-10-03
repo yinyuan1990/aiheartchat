@@ -35,7 +35,7 @@ import { useVault } from "@/components/wallet/wallet-context";
 import { costBasis, useStar, useViewers } from "@/lib/wallet/positions";
 import { useCallouts } from "@/lib/wallet/callouts";
 import { CalloutRow, ListState } from "@/components/wallet/callout-rows";
-import { AboutCard, CoinChartPanel, CoinFrame, CoinHeader, CoinTabs, CoinTopBar, CommentBox, CurveCard, HolderRows, KingBadge, MarkerSheet, PositionCard, StatsCard, TradeBar, TradeRows, allInterval, compactUsd, quickAmount, setQuickAmount, usd, useMarkers, type MarkTrade } from "@/components/wallet/coin";
+import { AboutCard, CoinChartPanel, CoinFrame, CoinHeader, CoinTabs, CoinTopBar, CommentBox, groupWorthy, CurveCard, HolderRows, KingBadge, MarkerSheet, PositionCard, StatsCard, TradeBar, TradeRows, allInterval, compactUsd, quickAmount, setQuickAmount, usd, useMarkers, type MarkTrade } from "@/components/wallet/coin";
 import { BottomSheet, PrimaryButton, TopBar } from "@/components/wallet/ui";
 
 export default function CoinRoute() {
@@ -155,6 +155,7 @@ function SolCoin({ mint }: { mint: string }) {
         onStar={toggleStar}
         onShare={share}
         callout={{ chain: "sol", address: mint, symbol: coin.symbol, name: coin.name, image: iconUrl(coin.image) ?? null, priceUsd: coin.priceUsd, mcapUsd: coin.mcapUsd }}
+        group={groupWorthy({ callouts: callouts.data?.length, mcapUsd: coin.mcapUsd })}
       />
 
       <div className="flex-1 pb-28">

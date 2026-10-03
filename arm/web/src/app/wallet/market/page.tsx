@@ -16,7 +16,7 @@ import { iconUrl } from "@/lib/wallet/assets";
 import { NATIVE, executeKyberSwap, isMarketChain, kyberDexes, kyberImpact, kyberQuote, MarketQuoteError, rememberToken, useMarketCandles, useMarketToken, useMarketTrades, type MarketStep, type MarketToken } from "@/lib/wallet/market";
 import { costBasis, logFill, useFills, useStar, useViewers } from "@/lib/wallet/positions";
 import { useVault } from "@/components/wallet/wallet-context";
-import { AboutCard, CoinChartPanel, CoinFrame, CoinHeader, CoinTabs, CoinTopBar, HolderRows, MarkerSheet, PositionCard, StatsCard, TradeBar, TradeRows, allInterval, compactUsd, quickAmount, setQuickAmount, usd, useMarkers, type MarkTrade } from "@/components/wallet/coin";
+import { AboutCard, CoinChartPanel, CoinFrame, CoinHeader, CoinTabs, CoinTopBar, groupWorthy, HolderRows, MarkerSheet, PositionCard, StatsCard, TradeBar, TradeRows, allInterval, compactUsd, quickAmount, setQuickAmount, usd, useMarkers, type MarkTrade } from "@/components/wallet/coin";
 import { BottomSheet, PrimaryButton, TopBar } from "@/components/wallet/ui";
 
 export default function MarketRoute() {
@@ -120,6 +120,7 @@ function EvmCoin({ chainKey, address }: { chainKey: string; address: string }) {
         onStar={toggleStar}
         onShare={share}
         callout={{ chain: chainKey, address: t.address, symbol: t.symbol, name: t.name, image: iconUrl(t.image) ?? null, priceUsd: t.priceUsd, mcapUsd: t.mcapUsd }}
+        group={groupWorthy({ mcapUsd: t.mcapUsd ?? t.fdvUsd })}
       />
       <div className="flex-1 pb-28">
         <CoinHeader image={t.image} seed={address} symbol={t.symbol} name={t.name} chain={chain} address={address} twitter={t.socials.twitter} priceUsd={price} change={t.changes.h24} holders={t.holders} extra={<span className="truncate text-[12px]">{t.dex}{t.dexLabel ? ` ${t.dexLabel}` : ""} · {t.symbol}/{t.quote.symbol}</span>} />

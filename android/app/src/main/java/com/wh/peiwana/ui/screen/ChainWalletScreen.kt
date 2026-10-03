@@ -155,6 +155,7 @@ private val BRIDGE_JS = """
     walletClose: function(){ call('walletClose'); },
     chainAddress: function(a){ return call('chainAddress', a == null ? null : a); },
     shareCard: function(c){ call('shareCard', c); },
+    openCoinGroup: function(c){ call('openCoinGroup', c); },
     vaultGet: function(){ return call('vaultGet'); },
     vaultSet: function(v){ return call('vaultSet', String(v)); },
     vaultClear: function(){ return call('vaultClear'); },
@@ -208,6 +209,8 @@ fun ChainWalletScreen(
     startPath: String? = null,
     /** 钱包页 walletResult 交回来的结果（例如转账成功），由打开钱包的页面处理 */
     onResult: (JsonObject) -> Unit = {},
+    /** 打开群聊（币的讨论群）：会话 id、群 id、群名 */
+    onOpenChat: (String, String, String) -> Unit = { _, _, _ -> },
 ) {
     val ctx = LocalContext.current
     val activity = remember(ctx) { generateSequence(ctx) { (it as? android.content.ContextWrapper)?.baseContext }.filterIsInstance<android.app.Activity>().firstOrNull() }
@@ -354,6 +357,19 @@ fun ChainWalletScreen(
     // 代币页「喊单到聊天」：钱包页交来的卡片，选会话后发出
     var shareCard by remember { mutableStateOf<JsonObject?>(null) }
     val bridgeScope = rememberCoroutineScope()
+    val openChatCb by rememberUpdatedState(onOpenChat)
+    // 代币页「讨论群」：后端没有就建（系统账号当群主）再加入，然后打开群聊
+    fun openCoinGroupChat(coin: JsonObject) {
+        bridgeScope.launch {
+            runCatching { Api.request("/im/coin-group", "POST", coin)?.jsonObject }
+                .onSuccess { g ->
+                    val conv = g?.get("conversationId")?.jsonPrimitive?.contentOrNull
+                    val gid = g?.get("groupId")?.jsonPrimitive?.contentOrNull
+                    if (conv != null && gid != null) openChatCb(conv, gid, g["name"]?.jsonPrimitive?.contentOrNull.orEmpty())
+                }
+                .onFailure { Toast.makeText(ctx, it.message ?: "进不了讨论群", Toast.LENGTH_SHORT).show() }
+        }
+    }
     val shell = remember {
         WalletShell(
             ctx = ctx,
@@ -364,6 +380,7 @@ fun ChainWalletScreen(
             onResult = { resultCb(it) },
             onClose = { closeCb() },
             onShareCard = { shareCard = it },
+            onCoinGroup = { openCoinGroupChat(it) },
             scope = bridgeScope,
         )
     }
@@ -522,7 +539,7 @@ fun ChainWalletScreen(
                             WebViewCompat.addDocumentStartJavaScript(this, BRIDGE_JS, rules)
                         } else {
                             // 厂商 WebView（华为 / 荣耀等）常不支持上面两个 androidx.webkit 特性：退回同步 JS 接口，每次调用都核对当前页面的源
-                            addJavascriptInterface(SyncBridge(c, activity, this, origin, pageOrigin, hub, onOpenDapp = { openDapp(it) }, onScan = { startScan(it) }, onResult = { resultCb(it) }, onClose = { closeCb() }, onShareCard = { shareCard = it }, scope = bridgeScope), "ArmWalletNative")
+                            addJavascriptInterface(SyncBridge(c, activity, this, origin, pageOrigin, hub, onOpenDapp = { openDapp(it) }, onScan = { startScan(it) }, onResult = { resultCb(it) }, onClose = { closeCb() }, onShareCard = { shareCard = it }, onCoinGroup = { openCoinGroupChat(it) }, scope = bridgeScope), "ArmWalletNative")
                         }
                         webViewClient = object : WebViewClient() {
                             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
@@ -567,6 +584,7 @@ private class WalletShell(
     private val onResult: (JsonObject) -> Unit,
     private val onClose: () -> Unit,
     private val onShareCard: (JsonObject) -> Unit,
+    private val onCoinGroup: (JsonObject) -> Unit,
     private val scope: kotlinx.coroutines.CoroutineScope,
 ) {
     fun handle(view: WebView, message: WebMessageCompat, reply: JavaScriptReplyProxy) {
@@ -677,6 +695,10 @@ private class WalletShell(
                     (arg as? JsonObject)?.let { o -> view.post { onShareCard(o) } }
                     send(JsonPrimitive(true))
                 }
+                "openCoinGroup" -> {
+                    (arg as? JsonObject)?.let { o -> view.post { onCoinGroup(o) } }
+                    send(JsonPrimitive(true))
+                }
                 else -> send(error = "unknown method $method")
             }
         } catch (e: Exception) {
@@ -702,6 +724,7 @@ private class SyncBridge(
     private val onResult: (JsonObject) -> Unit,
     private val onClose: () -> Unit,
     private val onShareCard: (JsonObject) -> Unit,
+    private val onCoinGroup: (JsonObject) -> Unit,
     private val scope: kotlinx.coroutines.CoroutineScope,
 ) {
     private fun ok() = pageOrigin.get() == allowed
@@ -730,6 +753,12 @@ private class SyncBridge(
     fun shareCard(json: String?) {
         val o = obj(json) ?: return
         if (ok()) view.post { onShareCard(o) }
+    }
+
+    @android.webkit.JavascriptInterface
+    fun openCoinGroup(json: String?) {
+        val o = obj(json) ?: return
+        if (ok()) view.post { onCoinGroup(o) }
     }
 
     @android.webkit.JavascriptInterface
