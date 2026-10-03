@@ -73,7 +73,7 @@ export function ChainGlyph({ chain, size = 18 }: { chain: ChainInfo; size?: numb
 
 export function ChainPill({ chain, onClick }: { chain: ChainInfo; onClick?: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="flex h-9 items-center gap-1.5 rounded-full bg-muted pr-2.5 pl-1.5 text-[13px] font-medium transition active:scale-95">
+    <button type="button" onClick={onClick} className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-muted pr-2.5 pl-1.5 text-[13px] font-medium whitespace-nowrap transition active:scale-95">
       <ChainGlyph chain={chain} size={22} />
       {chain.name}
       <CaretDown size={12} weight="bold" className="text-muted-foreground" />

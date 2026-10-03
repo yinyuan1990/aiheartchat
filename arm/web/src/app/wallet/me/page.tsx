@@ -13,6 +13,7 @@ import { accountOf, quickSupported, verifyPassword, type Secret, type WalletMeta
 import { exportSolKey, solKeypairOf } from "@/lib/wallet/sol";
 import { bioDisable, bioEnable, bioName, bioStatus, copyText, setSecureScreen, type BioStatus } from "@/lib/wallet/native";
 import { cn } from "@/lib/utils";
+import { isSolana, isTron } from "@/lib/wallet/chains";
 import { loadPayee, payeeSupported, publishPayee, unpublishPayee, type Payee } from "@/lib/wallet/payee";
 import { useVault } from "@/components/wallet/wallet-context";
 import { Field } from "@/components/wallet/password-fields";
@@ -22,7 +23,7 @@ type Sheet = { kind: "rename" | "export" | "delete"; wallet: WalletMeta } | null
 const noSubscribe = () => () => {};
 
 export default function MePage() {
-  const { wallets, active, lock, quick, setQuick } = useVault();
+  const { wallets, active, lock, quick, setQuick, chain } = useVault();
   const [sheet, setSheet] = useState<Sheet>(null);
   const [quickSheet, setQuickSheet] = useState(false);
   const canQuick = useSyncExternalStore(noSubscribe, quickSupported, () => false);
@@ -85,24 +86,16 @@ export default function MePage() {
                     <span className="truncate">{w.name}</span>
                     {w.id === active?.id && <span className="rounded-md bg-foreground px-1.5 py-px text-[10px] font-medium text-background">当前</span>}
                   </div>
-                  <button type="button" onClick={async () => (await copyText(w.address)) && toast.success("地址已复制")} className="flex items-center gap-1 font-mono text-[12px] text-muted-foreground">
-                    {shortAddr(w.address, 6, 4)}
-                    <Copy size={12} />
-                  </button>
-                  {w.sol && (
-                    <button type="button" onClick={async () => (await copyText(w.sol!)) && toast.success("Solana 地址已复制")} className="flex items-center gap-1 font-mono text-[12px] text-muted-foreground">
-                      <span className="font-sans text-[10px]">◎</span>
-                      {shortAddr(w.sol, 6, 4)}
-                      <Copy size={12} />
-                    </button>
-                  )}
-                  {w.trx && (
-                    <button type="button" onClick={async () => (await copyText(w.trx!)) && toast.success("波场地址已复制")} className="flex items-center gap-1 font-mono text-[12px] text-muted-foreground">
-                      <span className="font-sans text-[10px]">TRON</span>
-                      {shortAddr(w.trx, 6, 4)}
-                      <Copy size={12} />
-                    </button>
-                  )}
+                  {(() => {
+                    const a = isSolana(chain) ? w.sol : isTron(chain) ? w.trx : w.address;
+                    if (!a) return <span className="text-[12px] text-muted-foreground">{isSolana(chain) ? "私钥钱包没有 Solana 地址" : "解锁后显示"}</span>;
+                    return (
+                      <button type="button" onClick={async () => (await copyText(a)) && toast.success(`${chain.name} 地址已复制`)} className="flex items-center gap-1 font-mono text-[12px] text-muted-foreground">
+                        {shortAddr(a, 6, 4)}
+                        <Copy size={12} />
+                      </button>
+                    );
+                  })()}
                 </div>
                 <button type="button" aria-label="改名" onClick={() => setSheet({ kind: "rename", wallet: w })} className="flex size-9 items-center justify-center rounded-full hover:bg-muted">
                   <PencilSimple size={18} />
