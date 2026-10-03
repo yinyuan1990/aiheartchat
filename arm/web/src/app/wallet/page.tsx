@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ArrowDown, ArrowUp, ArrowsLeftRight, CaretDown, CheckCircle, Copy, Eye, EyeSlash, GearSix, Lock, Plus, ArrowSquareOut, Wallet as WalletIcon } from "@phosphor-icons/react";
+import { useQuery } from "@tanstack/react-query";
+import { formatUnits } from "viem";
+import { ArrowDown, ArrowUp, ArrowsLeftRight, CaretDown, CheckCircle, Copy, Eye, EyeSlash, GasPump, GearSix, Lock, Plus, ArrowSquareOut, Wallet as WalletIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { TokenAvatar, WalletDot } from "@/components/shared";
 import { useWallet } from "@/lib/api";
 import { fmtSmall, shortAddr, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { WALLET_CHAINS, explorerAddr, explorerTx } from "@/lib/wallet/chains";
+import { WALLET_CHAINS, explorerAddr, explorerTx, probeNode, publicClientFor, rpcOf, useNodes, type WalletChain } from "@/lib/wallet/chains";
 import { absUrl, useAssets, type Asset } from "@/lib/wallet/assets";
 import { copyText } from "@/lib/wallet/native";
 import { useVault } from "@/components/wallet/wallet-context";
@@ -60,6 +62,7 @@ export default function WalletHome() {
             <button type="button" aria-label={hidden ? "显示金额" : "隐藏金额"} onClick={() => setHidden((v) => !v)} className="transition active:scale-90">
               {hidden ? <EyeSlash size={16} /> : <Eye size={16} />}
             </button>
+            <NetStatus chain={chain} />
           </div>
           <div className="relative mt-1 flex h-11 items-baseline font-mono tracking-tight">
             {loading ? (
@@ -216,6 +219,40 @@ export default function WalletHome() {
         </div>
       </BottomSheet>
     </WalletFrame>
+  );
+}
+
+const gwei = (wei: bigint) => {
+  const g = Number(formatUnits(wei, 9));
+  return g >= 100 ? g.toFixed(0) : g >= 1 ? g.toFixed(1) : g >= 0.01 ? g.toFixed(2) : "<0.01";
+};
+
+/** Current node round trip + gas price, like the strip on Ave's home; tap → nodes page. */
+function NetStatus({ chain }: { chain: WalletChain }) {
+  useNodes();
+  const q = useQuery({
+    queryKey: ["wallet", "net-status", chain.key, rpcOf(chain)],
+    queryFn: async () => {
+      const [probe, gas] = await Promise.all([probeNode(rpcOf(chain)), publicClientFor(chain).getGasPrice().catch(() => null)]);
+      return { ms: probe.error ? null : probe.ms, gas };
+    },
+    refetchInterval: 15_000,
+  });
+  const ms = q.data?.ms;
+  const dot = ms == null ? (q.data ? "bg-[#ff8a80]" : "bg-white/30") : ms < 300 ? "bg-[#4fd1c5]" : ms < 1000 ? "bg-[#f5c26b]" : "bg-[#ff8a80]";
+  return (
+    <Link href="/wallet/nodes" aria-label="节点和网络费" className="ml-auto flex items-center gap-2 rounded-full bg-white/10 px-2.5 py-1 font-mono text-[11px] text-white/70 transition active:scale-95">
+      <span className="flex items-center gap-1">
+        <span className={cn("size-1.5 rounded-full", dot)} />
+        {q.data ? (ms != null ? `${ms}ms` : "连不上") : "…"}
+      </span>
+      {q.data?.gas != null && (
+        <span className="flex items-center gap-0.5">
+          <GasPump size={12} />
+          {gwei(q.data.gas)} Gwei
+        </span>
+      )}
+    </Link>
   );
 }
 

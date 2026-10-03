@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CaretRight, Copy, Fingerprint, Key, Lock, PencilSimple, Plus, ScanSmiley, ShieldWarning, Trash, TreeStructure, Wallet as WalletIcon } from "@phosphor-icons/react";
+import { AddressBook, CaretRight, Copy, Fingerprint, Key, Lock, PencilSimple, Plus, ScanSmiley, ShieldWarning, Trash, TreeStructure, Wallet as WalletIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { WalletDot } from "@/components/shared";
 import { shortAddr } from "@/lib/format";
@@ -109,6 +109,12 @@ export default function MePage() {
               </span>
             </button>
           )}
+          <Link href="/wallet/addresses" className="flex items-center gap-3 px-4 py-4">
+            <AddressBook size={20} />
+            <span className="flex-1 text-[15px]">地址簿</span>
+            <span className="text-[12px] text-muted-foreground">常用收款地址</span>
+            <CaretRight size={16} className="text-muted-foreground" />
+          </Link>
           <Link href="/wallet/nodes" className="flex items-center gap-3 px-4 py-4">
             <TreeStructure size={20} />
             <span className="flex-1 text-[15px]">节点</span>

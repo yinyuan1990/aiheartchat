@@ -1,0 +1,96 @@
+import { useSyncExternalStore } from "react";
+import { getAddress, isAddress, type Address } from "viem";
+import { storeRead, storeWrite } from "./native";
+
+/**
+ * Saved contacts and recent recipients. EVM addresses are the same on every chain, so entries aren't tied to one.
+ * Native store inside the App (the DApp WebView shares this origin's localStorage), localStorage in browsers.
+ */
+
+export type Contact = { address: Address; name: string; at: number };
+
+type State = { contacts: Contact[]; recent: Address[] };
+
+const KEYS = { contacts: "addressbook", recent: "recent" } as const;
+const LEGACY_RECENT = "arm.wallet.recent";
+const EMPTY: State = { contacts: [], recent: [] };
+const MAX_RECENT = 6;
+export const MAX_CONTACTS = 200;
+export const MAX_NAME = 20;
+
+let state: State = EMPTY;
+let loaded: Promise<void> | null = null;
+const subs = new Set<() => void>();
+
+const cleanAddrs = (v: unknown): Address[] => (Array.isArray(v) ? v.filter((a): a is string => typeof a === "string" && isAddress(a)).map((a) => getAddress(a)) : []);
+const cleanContacts = (v: unknown): Contact[] =>
+  Array.isArray(v)
+    ? v
+        .filter((c): c is Contact => !!c && typeof c.address === "string" && isAddress(c.address) && typeof c.name === "string")
+        .map((c) => ({ address: getAddress(c.address), name: c.name.slice(0, MAX_NAME), at: Number(c.at) || 0 }))
+    : [];
+
+async function readJson(key: string): Promise<unknown> {
+  try {
+    return JSON.parse((await storeRead(key)) ?? "null");
+  } catch {
+    return null;
+  }
+}
+
+export function loadAddressBook(): Promise<void> {
+  loaded ??= (async () => {
+    const contacts = cleanContacts(await readJson(KEYS.contacts));
+    let recent = cleanAddrs(await readJson(KEYS.recent));
+    // recipients used to live in localStorage, which DApp pages on this origin can read
+    try {
+      const legacy = localStorage.getItem(LEGACY_RECENT);
+      if (legacy) {
+        recent = [...new Set([...recent, ...cleanAddrs(JSON.parse(legacy))])].slice(0, MAX_RECENT);
+        void storeWrite(KEYS.recent, JSON.stringify(recent));
+        localStorage.removeItem(LEGACY_RECENT);
+      }
+    } catch {}
+    state = { contacts, recent };
+    subs.forEach((f) => f());
+  })();
+  return loaded;
+}
+
+function update<K extends keyof State>(k: K, v: State[K]) {
+  state = { ...state, [k]: v };
+  subs.forEach((f) => f());
+  void storeWrite(KEYS[k], JSON.stringify(v));
+}
+
+export function useAddressBook(): State {
+  return useSyncExternalStore(
+    (f) => {
+      subs.add(f);
+      void loadAddressBook();
+      return () => subs.delete(f);
+    },
+    () => state,
+    () => EMPTY,
+  );
+}
+
+export const contactOf = (a?: string | null) => (a && isAddress(a) ? state.contacts.find((c) => c.address === getAddress(a)) : undefined);
+
+export function pushRecent(a: Address) {
+  update("recent", [a, ...state.recent.filter((x) => x !== a)].slice(0, MAX_RECENT));
+}
+
+/** Adds or renames; throws with a message the UI can show. */
+export function saveContact(address: string, name: string) {
+  const n = name.trim().slice(0, MAX_NAME);
+  if (!isAddress(address.trim())) throw new Error("地址格式不对");
+  if (!n) throw new Error("请填一个名称");
+  const a = getAddress(address.trim());
+  const rest = state.contacts.filter((c) => c.address !== a);
+  if (rest.length >= MAX_CONTACTS) throw new Error(`地址簿最多 ${MAX_CONTACTS} 个`);
+  const prev = state.contacts.find((c) => c.address === a);
+  update("contacts", [{ address: a, name: n, at: prev?.at ?? Date.now() }, ...rest]);
+}
+
+export const removeContact = (a: Address) => update("contacts", state.contacts.filter((c) => c.address !== a));
