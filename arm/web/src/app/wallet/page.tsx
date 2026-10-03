@@ -232,8 +232,10 @@ function NetStatus({ chain }: { chain: WalletChain }) {
   useNodes();
   const q = useQuery({
     queryKey: ["wallet", "net-status", chain.key, rpcOf(chain)],
+    // gas price first: it opens the connection, so the probe measures a round trip rather than DNS + TLS setup
     queryFn: async () => {
-      const [probe, gas] = await Promise.all([probeNode(rpcOf(chain)), publicClientFor(chain).getGasPrice().catch(() => null)]);
+      const gas = await publicClientFor(chain).getGasPrice().catch(() => null);
+      const probe = await probeNode(rpcOf(chain));
       return { ms: probe.error ? null : probe.ms, gas };
     },
     refetchInterval: 15_000,
