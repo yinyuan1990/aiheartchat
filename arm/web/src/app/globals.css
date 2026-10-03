@@ -436,3 +436,11 @@
     display: none;
   }
 }
+
+/* Chromium < 105 (vendor system WebViews) has no container units: size the hero CTA labels from the viewport
+   (phone layout — the sm/md range queries don't apply there either). */
+@supports not (container-type: inline-size) {
+  .hero-cta {
+    font-size: clamp(9px, 2.3vw, 17px);
+  }
+}

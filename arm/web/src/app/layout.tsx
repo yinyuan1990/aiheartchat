@@ -5,6 +5,7 @@ import "@fontsource-variable/jetbrains-mono";
 // CJK: split into ~100 unicode-range chunks, browsers fetch only the ones a page needs.
 import "@fontsource-variable/noto-sans-sc";
 import "./globals.css";
+import "./compat.css";
 import { AppProviders } from "@/components/providers";
 import { AppShell } from "@/components/layout/app-shell";
 import { Toaster } from "@/components/ui/sonner";

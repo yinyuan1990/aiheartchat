@@ -6,7 +6,6 @@ import { DeviceMobile } from "@phosphor-icons/react";
 import { WalletProvider, useVault } from "@/components/wallet/wallet-context";
 import { UnlockScreen } from "@/components/wallet/unlock";
 import { WalletFrame } from "@/components/wallet/ui";
-import "@/components/wallet/compat.css";
 import { DappApprover } from "@/components/wallet/dapp-approver";
 
 const ONBOARDING = ["/wallet/welcome", "/wallet/create", "/wallet/import"];

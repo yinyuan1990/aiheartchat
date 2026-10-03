@@ -22,7 +22,7 @@ import { PulseView } from "@/components/token/pulse-view";
 
 /** One font rule for both hero CTAs (they are the same width, so the same cqw = the same px). 10cqw keeps the long
  *  English "Launch a Token →" inside the button on md+; phones use the short label and can go bigger. */
-const HERO_CTA_TEXT = "inline-flex items-center gap-[0.4em] text-[length:clamp(9px,14cqw,17px)] md:text-[length:clamp(9px,10cqw,17px)]";
+const HERO_CTA_TEXT = "hero-cta inline-flex items-center gap-[0.4em] text-[length:clamp(9px,14cqw,17px)] md:text-[length:clamp(9px,10cqw,17px)]";
 
 type Filter = "trending" | "new" | "graduating" | "graduated" | "watchlist";
 type Sort = "volume" | "mcap" | "created" | "oldest" | "progress";
