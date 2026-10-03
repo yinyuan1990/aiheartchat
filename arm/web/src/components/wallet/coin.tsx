@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowBendUpLeft, ArrowLeft, ArrowsDownUp, Bell, ChartLine, CircleNotch, Copy, Crown, Eye, Globe, Lightning, Minus, PaperPlaneRight, Plant, Plus, ShareNetwork, SlidersHorizontal, Star, TelegramLogo, XLogo } from "@phosphor-icons/react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { ArrowBendUpLeft, ArrowLeft, ArrowsDownUp, Bell, ChartLine, CircleNotch, Copy, Crown, Eye, Globe, Lightning, Megaphone, Minus, PaperPlaneRight, Plant, Plus, ShareNetwork, SlidersHorizontal, Star, TelegramLogo, XLogo } from "@phosphor-icons/react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { PriceChart, chartPrice, type Candle, type ChartMarker } from "@/components/token/price-chart";
 import { TokenAvatar } from "@/components/shared";
 import { fmtNum, fmtSmall, shortAddr, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { copyText } from "@/lib/wallet/native";
+import { canShareCard, copyText, shareCard } from "@/lib/wallet/native";
 import { iconUrl } from "@/lib/wallet/assets";
 import { BottomSheet, ChainGlyph, Num, Pct, PrimaryButton, WalletFrame } from "./ui";
 
@@ -44,10 +44,17 @@ export function ageLabel(ts: number, now = Date.now()) {
   return d < 365 ? `${d} 天` : `${Math.floor(d / 365)} 年`;
 }
 
+const noSubscribe = () => () => {};
 const squareBtn = "flex size-10 items-center justify-center rounded-xl bg-card ring-1 ring-border transition active:scale-90";
 
-export function CoinTopBar({ back, symbol, createdAt, viewers, starred, onStar, onShare }: { back: string; symbol: string; createdAt?: number | null; viewers?: number | null; starred: boolean; onStar: () => void; onShare: () => void }) {
+/** A coin shared into 心之音 chats as a call-out card (houduan card-content.ts sanitizeCallout keeps these fields). */
+export type CalloutCard = { chain: string; address: string; symbol: string; name: string; image: string | null; priceUsd: number | null; mcapUsd: number | null };
+
+export function CoinTopBar({ back, symbol, createdAt, viewers, starred, onStar, onShare, callout }: { back: string; symbol: string; createdAt?: number | null; viewers?: number | null; starred: boolean; onStar: () => void; onShare: () => void; callout?: CalloutCard | null }) {
+  const canCall = useSyncExternalStore(noSubscribe, canShareCard, () => false);
+  const [calling, setCalling] = useState(false);
   return (
+    <>
     <header className="sticky top-0 z-20 flex h-14 items-center gap-2 bg-background/90 px-3 backdrop-blur-xl">
       <Link href={back} aria-label="返回" className="flex size-9 items-center justify-center rounded-full transition active:scale-90">
         <ArrowLeft size={20} weight="bold" />
@@ -76,10 +83,61 @@ export function CoinTopBar({ back, symbol, createdAt, viewers, starred, onStar, 
       <button type="button" aria-label={starred ? "取消收藏" : "收藏"} onClick={onStar} className={squareBtn}>
         <Star size={18} weight={starred ? "fill" : "regular"} className={starred ? "text-[#f5c542]" : ""} />
       </button>
+      {canCall && callout && (
+        <button type="button" aria-label="喊单到聊天" onClick={() => setCalling(true)} className={squareBtn}>
+          <Megaphone size={18} />
+        </button>
+      )}
       <button type="button" aria-label="分享" onClick={onShare} className={squareBtn}>
         <ShareNetwork size={18} />
       </button>
     </header>
+    {/* outside the header: its backdrop-filter would make it the containing block of the fixed sheet */}
+    {callout && (
+      <BottomSheet open={calling} onClose={() => setCalling(false)}>
+        {calling && <CalloutSheet card={callout} onDone={() => setCalling(false)} />}
+      </BottomSheet>
+    )}
+    </>
+  );
+}
+
+function CalloutSheet({ card, onDone }: { card: CalloutCard; onDone: () => void }) {
+  const [note, setNote] = useState("");
+  const send = () => {
+    shareCard({ ...card, note: note.trim().slice(0, 200) });
+    onDone();
+  };
+  return (
+    <>
+      <div className="mb-3 flex items-center justify-center gap-1.5 text-[17px] font-semibold">
+        <Megaphone size={18} weight="fill" />
+        喊单到聊天
+      </div>
+      <div className="flex items-center gap-3 rounded-2xl bg-muted/60 px-3.5 py-3">
+        <TokenAvatar symbol={card.symbol} seed={card.address} logo={card.image ?? undefined} size={44} className="rounded-xl" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[15px] font-semibold">${card.symbol}</span>
+          <span className="block truncate text-[12px] text-muted-foreground">{card.name}</span>
+        </span>
+        <span className="text-right font-mono text-[12px]">
+          {card.priceUsd != null && <span className="block">{usd(card.priceUsd)}</span>}
+          {card.mcapUsd != null && <span className="block text-muted-foreground">市值 {compactUsd(card.mcapUsd)}</span>}
+        </span>
+      </div>
+      <textarea
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        maxLength={200}
+        rows={3}
+        placeholder="说点什么（可选），比如为什么看好"
+        className="mt-3 w-full resize-none rounded-2xl bg-muted/60 px-3.5 py-3 text-[14px] outline-none placeholder:text-muted-foreground/70"
+      />
+      <p className="mt-1 px-1 text-[11px] text-muted-foreground">卡片里的价格是现在的快照，好友点开能看实时行情、直接买。喊单不构成投资建议。</p>
+      <PrimaryButton className="mt-3" onClick={send}>
+        选择聊天发送
+      </PrimaryButton>
+    </>
   );
 }
 

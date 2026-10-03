@@ -46,9 +46,17 @@ type Bridge = {
   walletResult?: (r: WalletResult) => void;
   /** Feature `result`: close the wallet and go back to that screen. */
   walletClose?: () => void;
+  /**
+   * Feature `chat`: the 心之音 account's published receiving address, read (null) or written (signed body) by the shell
+   * with its own login — the wallet page never sees the account token. Resolves the account's {userId, evm, sol}.
+   */
+  chainAddress?: (arg: object | null) => Promise<unknown>;
+  /** Feature `chat`: let the user pick chats in the App and send them a call-out card. */
+  shareCard?: (card: object) => MaybePromise<unknown>;
 };
 
-export type WalletResult = { kind: "transfer"; chain: string; token: string; symbol: string; decimals: number; amount: string; to: string; from: string; hash: string };
+/** `proof`: the paying key's signature over payee.ts `transferMessage`, so nobody can post someone else's payment as theirs. */
+export type WalletResult = { kind: "transfer"; chain: string; token: string; symbol: string; decimals: number; amount: string; to: string; from: string; hash: string; proof: string };
 
 export type BioStatus = { available: boolean; enabled: boolean; kind?: "fingerprint" | "face" | "biometric" };
 
@@ -115,6 +123,8 @@ function wrapSync(raw: SyncBridge): Bridge {
     bioDisable: typeof raw.bioDisable === "function" ? () => call("bioDisable") : undefined,
     walletResult: typeof raw.walletResult === "function" ? (r) => void call("walletResult", json(r)) : undefined,
     walletClose: typeof raw.walletClose === "function" ? () => void call("walletClose") : undefined,
+    chainAddress: typeof raw.chainAddress === "function" ? (a) => callAsync("chainAddress", json(a)) : undefined,
+    shareCard: typeof raw.shareCard === "function" ? (c) => call("shareCard", json(c)) : undefined,
   };
   // bridgeInfo() answers "{}" until the shell has seen this page's origin: don't cache that, ask again next time
   if (info.features?.length) wrapped = { raw, bridge };
@@ -162,6 +172,10 @@ export const reportResult = (r: WalletResult) => {
   if (returnsToApp()) nativeBridge()?.walletResult?.(r);
 };
 export const closeWallet = () => nativeBridge()?.walletClose?.();
+
+/** Call-out cards into 心之音 chats (shell feature `chat`). */
+export const canShareCard = () => typeof window !== "undefined" && hasFeature("chat") && !!nativeBridge()?.shareCard;
+export const shareCard = (card: object) => void nativeBridge()?.shareCard?.(card);
 
 /** Camera scan through the App shell; null when unavailable or cancelled. */
 export async function scanQr(): Promise<string | null> {

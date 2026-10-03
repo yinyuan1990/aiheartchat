@@ -5,7 +5,7 @@ import SwiftUI
 /// 聊天「+」弹框（Telegram 式）：顶部 × / 相册切换，3 列相册网格（第一格相机），
 /// 底部悬浮胶囊切 相册 / 礼物 / 位置 / 通话；选了图后胶囊换成「添加说明 + 发送」。
 enum AttachAction {
-    case gift, location, voiceCall, videoCall
+    case gift, transfer, location, voiceCall, videoCall
 }
 
 private let attachMaxPick = 9
@@ -14,6 +14,8 @@ struct AttachSheet: View {
     /// 单聊才有礼物 / 通话
     let isSingle: Bool
     let canVideoCall: Bool
+    /// 链上钱包转账（单聊、有钱包入口）
+    var canTransfer: Bool = false
     let onClose: () -> Void
     let onSendAssets: ([PHAsset], String) -> Void
     /// 拍照 / 系统相册兜底选的图（已是 JPEG）
@@ -167,6 +169,7 @@ struct AttachSheet: View {
     private var tabs: [Tab] {
         var t = [Tab(id: "album", icon: "photo.fill", label: "相册", action: nil)]
         if isSingle { t.append(Tab(id: "gift", icon: "gift.fill", label: "礼物", action: .gift)) }
+        if canTransfer { t.append(Tab(id: "transfer", icon: "arrow.left.arrow.right", label: "转账", action: .transfer)) }
         t.append(Tab(id: "location", icon: "location.fill", label: "位置", action: .location))
         if isSingle {
             t.append(Tab(id: "voice", icon: "phone.fill", label: "语音通话", action: .voiceCall))

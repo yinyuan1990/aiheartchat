@@ -152,6 +152,7 @@ internal fun preview(msg: LastMsg?): String = when {
     msg.type == "audio" -> "[语音]"
     msg.type == "location" -> "[位置]"
     msg.type == "gift" -> "[礼物]"
+    msg.type == "transfer" || msg.type == "callout" -> chainCardPreview(msg.type, msg.content).orEmpty()
     msg.type.startsWith("call") -> "[通话]"
     else -> ""
 }
@@ -468,7 +469,15 @@ private data class GiftWallItem(val id: Int, val name: String, val icon: String,
 @SuppressLint("MissingPermission")
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: String, focusMsgId: String = "", myUserId: String, myAvatar: String, myNickname: String, onBack: () -> Unit, onCall: (Int) -> Unit, onGroupInfo: () -> Unit) {
+fun ChatRoomScreen(
+    convId: String, convType: Int, targetId: String, title: String, focusMsgId: String = "", myUserId: String, myAvatar: String, myNickname: String,
+    onBack: () -> Unit, onCall: (Int) -> Unit, onGroupInfo: () -> Unit,
+    /** 打开链上钱包的某一页（没有钱包入口的人为 null：不显示「转账」，喊单卡片去网页看） */
+    onOpenWallet: ((String) -> Unit)? = null,
+    /** 钱包交回的转账结果（JSON），处理完调 onWalletResultUsed 清掉 */
+    walletResult: String? = null,
+    onWalletResultUsed: () -> Unit = {},
+) {
     var messages by remember { mutableStateOf<List<MsgItem>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
     var bot by remember { mutableStateOf<BotPublic?>(null) }
@@ -520,6 +529,28 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
     val canPin = convType == 1 || isGroupAdmin
 
     fun toast(msg: String) = android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_SHORT).show()
+
+    // ---------- 链上转账：对方在钱包里公开了收款地址才能转；转完钱包交回结果，服务端核对链上交易后发卡片 ----------
+    var transferAddr by remember { mutableStateOf<ChainAddr?>(null) }
+    fun startTransfer() {
+        val open = onOpenWallet ?: return
+        scope.launch {
+            val a = runCatching { Api.getObj<ChainAddr>("/user/$targetId/chain-address") }.getOrElse { toast(it.message ?: "没取到对方的收款地址"); return@launch }
+            when {
+                a.evm == null && a.sol == null -> toast("对方还没在钱包里打开「允许好友给我转账」")
+                a.evm != null && a.sol != null -> transferAddr = a
+                else -> open(transferPath(a.evm ?: a.sol!!, a.evm == null, title))
+            }
+        }
+    }
+    LaunchedEffect(walletResult) {
+        val r = walletResult ?: return@LaunchedEffect
+        onWalletResultUsed()
+        toast("转账成功，正在核对链上交易…")
+        runCatching { postTransferCard(targetId, r) }
+            .onSuccess { m -> if (m != null && messages.none { it.id == m.id }) messages = messages + m }
+            .onFailure { toast("转账卡片没发出去：${it.message ?: "请稍后再试"}（钱已经转了，可以在钱包里查）") }
+    }
 
     /** 发消息并乐观显示；正在回复的话只挂在这一条上 */
     fun sendMsg(type: String, content: String) {
@@ -890,6 +921,7 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
                             onMenu = { if (!m.pending) { focus.clearFocus(); keyboard?.hide(); menuMsg = m } },
                             onReact = { react(m.id, it) },
                             onJump = { jumpTo(it) },
+                            onOpenWallet = onOpenWallet,
                         )
                     }
                 }
@@ -1032,11 +1064,13 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
             isSingle = convType == 1 && bot == null,
             // 视频通话仅男方可发起（女方只能接听）
             canVideoCall = com.wh.peiwana.net.Session.gender == 1,
+            canTransfer = convType == 1 && bot == null && onOpenWallet != null,
             onDismiss = { showAttach = false },
             onSend = { uris, caption -> sendImages(uris, caption) },
             onAction = { a ->
                 when (a) {
                     AttachAction.Gift -> { showGift = true }
+                    AttachAction.Transfer -> startTransfer()
                     AttachAction.Location -> locPerm.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
                     AttachAction.VoiceCall -> onCall(1)
                     AttachAction.VideoCall -> onCall(2)
@@ -1045,6 +1079,9 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
         )
     }
     if (showGift) GiftSheet(targetId) { showGift = false }
+    transferAddr?.let { a ->
+        TransferChainDialog(a, onPick = { addr, sol -> transferAddr = null; onOpenWallet?.invoke(transferPath(addr, sol, title)) }, onDismiss = { transferAddr = null })
+    }
     menuMsg?.let { m ->
         MsgMenuDialog(
             msgId = m.id, mine = m.senderId == myUserId, convType = convType,
@@ -1083,6 +1120,7 @@ fun ChatRoomScreen(convId: String, convType: Int, targetId: String, title: Strin
 private fun Bubble(
     m: MsgItem, mine: Boolean, convType: Int, myId: String,
     onImage: (String) -> Unit, onMenu: () -> Unit, onReact: (String) -> Unit, onJump: (String) -> Unit,
+    onOpenWallet: ((String) -> Unit)? = null,
 ) {
     val menu by rememberUpdatedState(onMenu)
     // 微信式：对方左侧灰气泡，自己右侧主题气泡，头像顶部对齐、贴边尾角
@@ -1168,6 +1206,8 @@ private fun Bubble(
                         }
                     }
                 }
+                "transfer" -> TransferCard(m.content, mine)
+                "callout" -> CalloutCard(m.content, canWallet = onOpenWallet != null) { onOpenWallet?.invoke(it) }
                 "call" -> {
                     val obj = runCatching { WsClient.json.parseToJsonElement(m.content).jsonObject }.getOrNull()
                     val callType = obj?.get("callType")?.jsonPrimitive?.content?.toIntOrNull() ?: 1

@@ -76,7 +76,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.math.roundToInt
 
-enum class AttachAction { Gift, Location, VoiceCall, VideoCall }
+enum class AttachAction { Gift, Transfer, Location, VoiceCall, VideoCall }
 
 private const val MAX_PICK = 9
 
@@ -127,6 +127,8 @@ private suspend fun queryImages(ctx: Context): List<MediaImage> = withContext(Di
 fun AttachSheet(
     isSingle: Boolean,
     canVideoCall: Boolean,
+    /** 链上钱包转账（单聊、有钱包入口） */
+    canTransfer: Boolean = false,
     onDismiss: () -> Unit,
     onSend: (List<Uri>, String) -> Unit,
     onAction: (AttachAction) -> Unit,
@@ -394,7 +396,7 @@ fun AttachSheet(
                     .padding(bottom = 8.dp),
             ) {
                 if (selection.isEmpty()) {
-                    AttachTabBar(isSingle, canVideoCall) { a -> exit { onAction(a) } }
+                    AttachTabBar(isSingle, canVideoCall, canTransfer) { a -> exit { onAction(a) } }
                 } else {
                     CaptionBar(caption, { caption = it }, selection.size) {
                         val picked = selection
@@ -491,10 +493,11 @@ private fun DeniedTip(onGrant: () -> Unit, onSystemPicker: () -> Unit) {
 private data class AttachTab(val label: String, val action: AttachAction?, val icon: @Composable (Color) -> Unit)
 
 @Composable
-private fun AttachTabBar(isSingle: Boolean, canVideoCall: Boolean, onAction: (AttachAction) -> Unit) {
+private fun AttachTabBar(isSingle: Boolean, canVideoCall: Boolean, canTransfer: Boolean, onAction: (AttachAction) -> Unit) {
     val tabs = buildList {
         add(AttachTab("相册", null) { ImageIcon(it, 24.dp) })
         if (isSingle) add(AttachTab("礼物", AttachAction.Gift) { GiftIcon(it, 24.dp) })
+        if (canTransfer) add(AttachTab("转账", AttachAction.Transfer) { TransferIcon(it, 24.dp) })
         add(AttachTab("位置", AttachAction.Location) { PinIcon(it, 22.dp) })
         if (isSingle) {
             add(AttachTab("语音通话", AttachAction.VoiceCall) { MicIcon(it, 24.dp) })

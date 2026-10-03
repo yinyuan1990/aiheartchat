@@ -111,7 +111,16 @@ function EvmCoin({ chainKey, address }: { chainKey: string; address: string }) {
 
   return (
     <CoinFrame>
-      <CoinTopBar back="/wallet/token" symbol={t.symbol} createdAt={t.pairCreatedAt} viewers={viewers} starred={starred} onStar={toggleStar} onShare={share} />
+      <CoinTopBar
+        back="/wallet/token"
+        symbol={t.symbol}
+        createdAt={t.pairCreatedAt}
+        viewers={viewers}
+        starred={starred}
+        onStar={toggleStar}
+        onShare={share}
+        callout={{ chain: chainKey, address: t.address, symbol: t.symbol, name: t.name, image: iconUrl(t.image) ?? null, priceUsd: t.priceUsd, mcapUsd: t.mcapUsd }}
+      />
       <div className="flex-1 pb-28">
         <CoinHeader image={t.image} seed={address} symbol={t.symbol} name={t.name} chain={chain} address={address} twitter={t.socials.twitter} priceUsd={price} change={t.changes.h24} holders={t.holders} extra={<span className="truncate text-[12px]">{t.dex}{t.dexLabel ? ` ${t.dexLabel}` : ""} · {t.symbol}/{t.quote.symbol}</span>} />
         <CoinChartPanel alertKey={`${chainKey}:${address}`} candles={chart} loading={candles.isLoading} interval={iv} onInterval={setIv} priceUsd={price} avg={knownCost != null && amount > 0 ? knownCost / amount : null} markers={mk.markers} onMarker={mk.onMarker} />

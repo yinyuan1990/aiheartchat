@@ -1164,3 +1164,26 @@ model Report {
   @@index([reporterId, targetType, targetId])
   @@map("report")
 }
+
+/// 链上钱包收款地址（用户在钱包里打开「允许好友给我转账」才有）；写入时要用钱包私钥签名证明地址是自己的
+model UserChainAddress {
+  userId    BigInt   @id @map("user_id")
+  evm       String?  @db.VarChar(42)
+  sol       String?  @db.VarChar(44)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("user_chain_address")
+}
+
+/// 聊天里的转账卡片：链上核对过的交易，一笔交易只能发一张卡
+model ChainTransfer {
+  hash        String   @id @db.VarChar(100)
+  chain       String   @db.VarChar(16)
+  messageId   BigInt   @map("message_id")
+  senderId    BigInt   @map("sender_id")
+  receiverId  BigInt   @map("receiver_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([senderId])
+  @@map("chain_transfer")
+}

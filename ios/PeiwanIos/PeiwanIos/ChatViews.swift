@@ -71,6 +71,7 @@ func previewOf(_ msg: LastMsg?) -> String {
     case "audio": return "[语音]"
     case "location": return "[位置]"
     case "gift": return "[礼物]"
+    case "transfer", "callout": return ChainCards.preview(type, msg.content ?? "") ?? ""
     default: return type.hasPrefix("call") ? "[通话]" : ""
     }
 }
@@ -543,6 +544,11 @@ struct ChatRoomView: View {
     @State private var reportId: String?
     @State private var myRole = "member"
     @State private var jumpReq: String?
+    // 链上钱包：转账（对方公开了收款地址才能转）、喊单卡片点开
+    @State private var walletOk = false
+    @State private var walletRoute: Route?
+    @State private var transferAddr: ChainAddr?
+    @State private var showTransferChain = false
 
     private var myId: String { state.user?.id ?? "" }
     private var isGroupAdmin: Bool { convType == 2 && (myRole == "owner" || myRole == "admin") }
@@ -552,7 +558,54 @@ struct ChatRoomView: View {
     var body: some View {
         decorated(msgActionLayers(mainColumn))
             .task { await onLoad() }
+            .task { walletOk = await ChainWallet.visible(state.user) }
             .onDisappear { removeListener?() }
+            .routePush($walletRoute)
+            .onReceive(NotificationCenter.default.publisher(for: ChainWallet.resultNotification)) { n in
+                if let s = n.userInfo?["json"] as? String { onWalletResult(s) }
+            }
+            .sheet(isPresented: $showTransferChain) {
+                if let a = transferAddr {
+                    TransferChainSheet(addr: a) { addr, sol in
+                        walletRoute = .chainWalletPath(ChainCards.transferPath(address: addr, sol: sol, name: title))
+                    }
+                    .compatDetents(height: 300)
+                }
+            }
+    }
+
+    /// 聊天里「转账」：先查对方公开的收款地址，两条链都有就让选，再打开钱包转账页（ret=1 转完交回结果）
+    private func startTransfer() {
+        Task { @MainActor in
+            do {
+                let a: ChainAddr = try await Api.request("/user/\(targetId)/chain-address")
+                if a.evm == nil && a.sol == nil {
+                    toastMsg = "对方还没在钱包里打开「允许好友给我转账」"
+                } else if a.evm != nil && a.sol != nil {
+                    transferAddr = a
+                    showTransferChain = true
+                } else {
+                    walletRoute = .chainWalletPath(ChainCards.transferPath(address: a.evm ?? a.sol!, sol: a.evm == nil, name: title))
+                }
+            } catch {
+                toastMsg = error.localizedDescription
+            }
+        }
+    }
+
+    /// 钱包交回的转账结果：服务端核对链上交易后发转账卡片
+    private func onWalletResult(_ json: String) {
+        guard convType == 1, ChainCards.obj(json)["kind"] as? String == "transfer" else { return }
+        toastMsg = "转账成功，正在核对链上交易…"
+        Task { @MainActor in
+            do {
+                if let m = try await ChainCards.postTransfer(targetId: targetId, resultJson: json), !messages.contains(where: { $0.id == m.id }) {
+                    messages.append(m)
+                }
+            } catch {
+                toastMsg = "转账卡片没发出去：\(error.localizedDescription)（钱已经转了，可以在钱包里查）"
+            }
+        }
     }
 
     private var mainColumn: some View {
@@ -728,6 +781,7 @@ struct ChatRoomView: View {
             AttachSheet(
                 isSingle: convType == 1 && bot == nil,
                 canVideoCall: state.user?.gender == 1,
+                canTransfer: convType == 1 && bot == nil && walletOk,
                 onClose: { showAttach = false },
                 onSendAssets: sendAttachAssets,
                 onSendDatas: sendAttachDatas,
@@ -1033,6 +1087,7 @@ struct ChatRoomView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
             switch action {
             case .gift: showGift = true
+            case .transfer: startTransfer()
             case .location: sendLocation()
             case .voiceCall: startCallWithPermissions(calleeId: targetId, type: 1, name: title, avatar: peerAvatar)
             // 视频通话仅男方可发起（女方只能接听），弹框里已按性别隐藏入口
@@ -1123,6 +1178,7 @@ struct ChatRoomView: View {
             onMenu: { inputFocused = false; showSticker = false; menuMsg = m },
             onReact: { react(m.id, $0) },
             onJump: { jumpTo($0) },
+            onOpenWallet: walletOk ? { walletRoute = .chainWalletPath($0) } : nil,
             onImage: { fullImage = $0 }
         )
         if let sel = selecting {
@@ -1394,6 +1450,8 @@ struct MsgBubble: View {
     var onMenu: (() -> Void)? = nil
     var onReact: ((String) -> Void)? = nil
     var onJump: ((String) -> Void)? = nil
+    /// 打开链上钱包某一页（没有钱包入口为 nil：喊单卡片去网页看）
+    var onOpenWallet: ((String) -> Void)? = nil
     var onImage: (String) -> Void
 
     @State private var voicePlaying = false
@@ -1520,6 +1578,10 @@ struct MsgBubble: View {
             }
             .padding(.horizontal, 14).padding(.vertical, 10)
             .background(bubbleShape.fill(bg))
+        case "transfer":
+            TransferCardView(content: m.content, mine: mine)
+        case "callout":
+            CalloutCardView(content: m.content, canWallet: onOpenWallet != nil) { onOpenWallet?($0) }
         case "call":
             let obj = parseJson(m.content)
             let callType = (obj["callType"] as? Int) ?? 1

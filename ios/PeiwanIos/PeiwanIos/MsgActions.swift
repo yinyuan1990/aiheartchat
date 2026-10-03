@@ -4,8 +4,8 @@ import Photos
 /// 与后端 MSG_REACTIONS 一致；前 7 个是菜单顶上那一排
 let MSG_REACTIONS = ["❤️", "👍", "👎", "🔥", "🥰", "👏", "😁", "😂", "😮", "😢", "🎉", "🙏"]
 
-/// 能转发的类型（礼物、通话记录不行）
-let FORWARDABLE: Set<String> = ["text", "image", "video", "audio", "location", "sticker"]
+/// 能转发的类型（礼物、通话记录、转账卡片不行；喊单卡片可以），和后端 message.service FORWARDABLE 一致
+let FORWARDABLE: Set<String> = ["text", "image", "video", "audio", "location", "sticker", "callout"]
 
 func msgSnippet(_ type: String, _ content: String) -> String {
     switch type {
@@ -16,6 +16,7 @@ func msgSnippet(_ type: String, _ content: String) -> String {
     case "sticker": return "[表情]"
     case "location": return "[位置]"
     case "gift": return "[礼物]"
+    case "transfer", "callout": return ChainCards.preview(type, content) ?? "[消息]"
     default: return type.hasPrefix("call") ? "[通话]" : "[消息]"
     }
 }

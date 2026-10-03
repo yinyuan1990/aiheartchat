@@ -9,7 +9,8 @@ import { TokenAvatar, WalletDot } from "@/components/shared";
 import { shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { SOL_CHAIN, explorerTx, rpcOf, useNodes } from "@/lib/wallet/chains";
-import { hasFeature, reportResult, scanQr } from "@/lib/wallet/native";
+import { hasFeature, reportResult, returnsToApp, scanQr } from "@/lib/wallet/native";
+import { transferMessage } from "@/lib/wallet/payee";
 import { parseScannedSol } from "@/lib/wallet/scan";
 import { isSolEntry, pushRecent, useAddressBook } from "@/lib/wallet/address-book";
 import { useAssets, type Asset } from "@/lib/wallet/assets";
@@ -20,6 +21,7 @@ import {
   TOKEN_ACCOUNT_RENT,
   accountExists,
   ataOf,
+  b64,
   compileMessage,
   explainSolError,
   isSolAddress,
@@ -28,6 +30,7 @@ import {
   latestBlockhash,
   priorityFees,
   sendAndConfirm,
+  signBytes,
   signMessageTx,
   simulate,
   unsignedTx,
@@ -197,7 +200,10 @@ export function SolSend() {
       await sendAndConfirm(url, signed.tx, signature, lastValidBlockHeight);
       pushRecent(toAddr);
       setSent({ hash: signature, status: "success" });
-      reportResult({ kind: "transfer", chain: SOL_CHAIN.key, token: asset.mint ?? "native", symbol: asset.symbol, decimals: asset.decimals, amount: value.toString(), to: toAddr, from, hash: signature });
+      if (returnsToApp()) {
+        const proof = b64.encode(signBytes(new TextEncoder().encode(transferMessage(signature, from, toAddr)), kp));
+        reportResult({ kind: "transfer", chain: SOL_CHAIN.key, token: asset.mint ?? "native", symbol: asset.symbol, decimals: asset.decimals, amount: value.toString(), to: toAddr, from, hash: signature, proof });
+      }
     } catch (e) {
       const msg = (e as Error).message.split("\n")[0];
       if (signature) setSent({ hash: signature, status: "error", error: msg });

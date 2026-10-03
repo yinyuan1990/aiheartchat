@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
 import { ScanIcon } from './QrScanner';
+import { chainCardPreview } from './ChainCards';
 
 export interface SearchConv {
   id: string;
@@ -82,6 +83,8 @@ function previewOf(msg?: SearchConv['lastMsg']) {
     case 'gift': return '[礼物]';
     case 'audio': return '[语音]';
     case 'location': return '[位置]';
+    case 'transfer':
+    case 'callout': return chainCardPreview(msg.type, msg.content) ?? '';
     default: return msg.type.startsWith('call') ? '[通话]' : '';
   }
 }

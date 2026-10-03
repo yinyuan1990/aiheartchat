@@ -7,6 +7,7 @@ import { VoiceRoomService } from './voiceroom.service';
 import { ChannelService } from './channel.service';
 import { BotService } from './bot.service';
 import { MessageService } from './message.service';
+import { ChainCardService, type TransferBody } from './chain-card.service';
 import { CreateGroupDto, GroupInfoDto, MemberIdsDto } from './im.dto';
 
 function toId(v: unknown): bigint {
@@ -29,7 +30,14 @@ export class ImController {
     private readonly channels: ChannelService,
     private readonly bots: BotService,
     private readonly msgs: MessageService,
+    private readonly cards: ChainCardService,
   ) {}
+
+  /** 链上钱包转账成功后发转账卡片（单聊）；服务端到链上核对过才发，见 chain-card.service.ts */
+  @Post('transfer')
+  chainTransfer(@CurrentUser() userId: bigint, @Body() body: TransferBody) {
+    return this.cards.sendTransfer(userId, body ?? {});
+  }
 
   @Get('conversations')
   conversations(@CurrentUser() userId: bigint) {

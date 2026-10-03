@@ -10,6 +10,7 @@ import { EmojiPanel } from '../components/EmojiPanel';
 import { StickerView } from '../components/StickerView';
 import { AttachSheet, AttachAction } from '../components/AttachSheet';
 import { LinkText } from '../components/LinkText';
+import { CalloutCard, TransferCard } from '../components/ChainCards';
 import {
   DeleteDialog, FORWARDABLE, ForwardSheet, MenuActions, MsgMenu, PinBar, PinItem,
   ReactionChips, ReplyBar, ReplyQuote, ReportSheet, saveMedia,
@@ -413,7 +414,7 @@ function MsgBubble({ m, mine, convType, myId, onImage, onMenu, onReact, onJump }
 }) {
   const press = useRef<ReturnType<typeof setTimeout>>();
   const pressed = useRef(false);
-  const isMedia = m.type === 'image' || m.type === 'video' || m.type === 'sticker';
+  const isMedia = m.type === 'image' || m.type === 'video' || m.type === 'sticker' || m.type === 'transfer' || m.type === 'callout';
   let body: JSX.Element;
   switch (m.type) {
     case 'image':
@@ -463,6 +464,12 @@ function MsgBubble({ m, mine, convType, myId, onImage, onMenu, onReact, onJump }
       );
       break;
     }
+    case 'transfer':
+      body = <TransferCard content={m.content} mine={mine} />;
+      break;
+    case 'callout':
+      body = <CalloutCard content={m.content} />;
+      break;
     default:
       if (m.type === 'call' || m.type.startsWith('call')) {
         let c: any = {};

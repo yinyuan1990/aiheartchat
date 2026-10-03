@@ -7,11 +7,12 @@ import { IntimacyService } from '../intimacy/intimacy.service';
 import { MessagePayload, ReactionView, ReplyPreview, SendFrame } from './im.types';
 import { resolveInviteUser } from '../invite/invite.service';
 import { BotService } from './bot.service';
+import { sanitizeCallout } from './card-content';
 
 /** 需要扣费的消息类型（礼物走礼物模块自身计费） */
-const CHARGED_TYPES = new Set(['text', 'image', 'video', 'audio', 'location', 'sticker']);
-/** 频道帖子允许的类型 */
-const CHANNEL_TYPES = new Set(['text', 'image', 'video', 'audio', 'location', 'sticker']);
+const CHARGED_TYPES = new Set(['text', 'image', 'video', 'audio', 'location', 'sticker', 'callout']);
+/** 频道帖子允许的类型（callout = 喊单卡片） */
+const CHANNEL_TYPES = new Set(['text', 'image', 'video', 'audio', 'location', 'sticker', 'callout']);
 
 @Injectable()
 export class ImService {
@@ -29,6 +30,7 @@ export class ImService {
   async sendMessage(senderId: bigint, frame: SendFrame): Promise<MessagePayload> {
     const sender = await this.prisma.user.findUnique({ where: { id: senderId } });
     if (!sender || sender.status !== 0) throw new ForbiddenException('账号异常');
+    if (frame.msgType === 'callout') frame = { ...frame, content: sanitizeCallout(frame.content) };
 
     if (frame.convType === 1) {
       return this.sendSingle(sender, BigInt(frame.targetId), frame);

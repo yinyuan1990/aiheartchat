@@ -427,7 +427,16 @@ function TokenDetail({ address }: { address: string }) {
 
   return (
     <CoinFrame>
-      <CoinTopBar back="/wallet/token" symbol={token.symbol} createdAt={new Date(token.launchTs).getTime()} viewers={viewers} starred={starred} onStar={toggleStar} onShare={share} />
+      <CoinTopBar
+        back="/wallet/token"
+        symbol={token.symbol}
+        createdAt={new Date(token.launchTs).getTime()}
+        viewers={viewers}
+        starred={starred}
+        onStar={toggleStar}
+        onShare={share}
+        callout={{ chain: "arc", address: token.address, symbol: token.symbol, name: token.name, image: absUrl(token.logo) ?? null, priceUsd: token.price, mcapUsd: token.mcapUsd }}
+      />
 
       <div className="flex-1 pb-28">
         <CoinHeader

@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import type { Reaction, ReplyPreview } from '../ws';
+import { chainCardPreview } from './ChainCards';
 
 /** 与后端 MSG_REACTIONS 一致；前 7 个是菜单顶上那一排 */
 export const MSG_REACTIONS = ['❤️', '👍', '👎', '🔥', '🥰', '👏', '😁', '😂', '😮', '😢', '🎉', '🙏'];
 
-/** 能转发的类型（礼物、通话记录不行） */
-export const FORWARDABLE = new Set(['text', 'image', 'video', 'audio', 'location', 'sticker']);
+/** 能转发的类型（礼物、通话记录、转账卡片不行；喊单卡片可以），和后端 message.service FORWARDABLE 一致 */
+export const FORWARDABLE = new Set(['text', 'image', 'video', 'audio', 'location', 'sticker', 'callout']);
 
 export interface MenuMsg {
   id: string;
@@ -27,6 +28,8 @@ export function msgSnippet(type: string, content: string): string {
     case 'sticker': return '[表情]';
     case 'location': return '[位置]';
     case 'gift': return '[礼物]';
+    case 'transfer':
+    case 'callout': return chainCardPreview(type, content) ?? '[消息]';
     default: return type.startsWith('call') ? '[通话]' : '[消息]';
   }
 }

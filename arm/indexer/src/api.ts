@@ -24,6 +24,7 @@ import { gameBoard, gamePlay, gameSell, gameSession, gameStart, gameTick, gameTo
 import { boatBoard, boatInfo, boatLogin, boatMe, boatRunEnd, boatRunStart, boatWithdraw } from "./boat.js";
 import { addSolComment, jupQuote, jupSwap, solComments, solRelay, solTokens } from "./solana.js";
 import { isAvatarAddress, walletAvatar } from "./avatars.js";
+import { claimOf, verifyTransfer } from "./verify.js";
 import { isMint, pumpCandles, pumpCoin, pumpHolders, pumpList, pumpTrades } from "./pump.js";
 import { isEvmAddr, isMarketChain, kyberBuild, kyberQuote, marketCandles, marketList, marketPrices, marketSearch, marketToken, marketTrades } from "./markets.js";
 
@@ -693,6 +694,13 @@ app.get("/api/img", async (c) => {
   } catch {
     return c.json({ error: "fetch failed" }, 502);
   }
+});
+
+// 心之音 chat transfer cards: is this transaction really `amount` of `token` from → to? (verify.ts)
+app.get("/api/verify-transfer", async (c) => {
+  const claim = claimOf(c.req.query());
+  if (!claim) return c.json({ ok: false, reason: "bad params" }, 400);
+  return c.json(await verifyTransfer(claim).catch((e: Error) => ({ ok: false, pending: true, reason: e.message.slice(0, 120) })));
 });
 
 app.get("/api/avatar/:addr", async (c) => {

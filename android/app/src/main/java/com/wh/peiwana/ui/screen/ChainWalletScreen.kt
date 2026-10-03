@@ -49,6 +49,7 @@ import androidx.webkit.WebViewFeature
 import com.wh.peiwana.BuildConfig
 import com.wh.peiwana.net.Api
 import com.wh.peiwana.net.UserProfile
+import kotlinx.coroutines.launch
 import com.wh.peiwana.ui.BackIcon
 import com.wh.peiwana.ui.noRippleClick
 import com.wh.peiwana.ui.theme.*
@@ -149,9 +150,11 @@ private val BRIDGE_JS = """
   }
   window.ArmWalletNative = {
     platform: 'android',
-    features: ['dapp', 'store', 'scan', 'bio', 'result'],
+    features: ['dapp', 'store', 'scan', 'bio', 'result', 'chat'],
     walletResult: function(r){ call('walletResult', r); },
     walletClose: function(){ call('walletClose'); },
+    chainAddress: function(a){ return call('chainAddress', a == null ? null : a); },
+    shareCard: function(c){ call('shareCard', c); },
     vaultGet: function(){ return call('vaultGet'); },
     vaultSet: function(v){ return call('vaultSet', String(v)); },
     vaultClear: function(){ return call('vaultClear'); },
@@ -348,6 +351,9 @@ fun ChainWalletScreen(
 
     val resultCb by rememberUpdatedState(onResult)
     val closeCb by rememberUpdatedState(onBack)
+    // 代币页「喊单到聊天」：钱包页交来的卡片，选会话后发出
+    var shareCard by remember { mutableStateOf<JsonObject?>(null) }
+    val bridgeScope = rememberCoroutineScope()
     val shell = remember {
         WalletShell(
             ctx = ctx,
@@ -357,6 +363,8 @@ fun ChainWalletScreen(
             onScan = { startScan(it) },
             onResult = { resultCb(it) },
             onClose = { closeCb() },
+            onShareCard = { shareCard = it },
+            scope = bridgeScope,
         )
     }
 
@@ -386,6 +394,10 @@ fun ChainWalletScreen(
         }
     }
     BackHandler { back() }
+
+    shareCard?.let { card ->
+        ShareCardDialog(card, onDone = { tip -> shareCard = null; Toast.makeText(ctx, tip, Toast.LENGTH_SHORT).show() }, onDismiss = { shareCard = null })
+    }
 
     diag?.let { text ->
         AlertDialog(
@@ -510,7 +522,7 @@ fun ChainWalletScreen(
                             WebViewCompat.addDocumentStartJavaScript(this, BRIDGE_JS, rules)
                         } else {
                             // 厂商 WebView（华为 / 荣耀等）常不支持上面两个 androidx.webkit 特性：退回同步 JS 接口，每次调用都核对当前页面的源
-                            addJavascriptInterface(SyncBridge(c, activity, this, origin, pageOrigin, hub, onOpenDapp = { openDapp(it) }, onScan = { startScan(it) }, onResult = { resultCb(it) }, onClose = { closeCb() }), "ArmWalletNative")
+                            addJavascriptInterface(SyncBridge(c, activity, this, origin, pageOrigin, hub, onOpenDapp = { openDapp(it) }, onScan = { startScan(it) }, onResult = { resultCb(it) }, onClose = { closeCb() }, onShareCard = { shareCard = it }, scope = bridgeScope), "ArmWalletNative")
                         }
                         webViewClient = object : WebViewClient() {
                             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
@@ -554,6 +566,8 @@ private class WalletShell(
     private val onScan: ((String?) -> Unit) -> Unit,
     private val onResult: (JsonObject) -> Unit,
     private val onClose: () -> Unit,
+    private val onShareCard: (JsonObject) -> Unit,
+    private val scope: kotlinx.coroutines.CoroutineScope,
 ) {
     fun handle(view: WebView, message: WebMessageCompat, reply: JavaScriptReplyProxy) {
         val req = runCatching { Json.parseToJsonElement(message.data ?: "").jsonObject }.getOrNull() ?: return
@@ -651,6 +665,18 @@ private class WalletShell(
                     view.post { onClose() }
                     send(JsonPrimitive(true))
                 }
+                // 心之音账号的收款地址：用 App 自己的登录态调后端（钱包页拿不到 token）；arg 为空 = 读，否则 = 写（带签名）
+                "chainAddress" -> {
+                    val body = arg as? JsonObject
+                    scope.launch {
+                        runCatching { if (body == null) Api.request("/user/chain-address") else Api.request("/user/chain-address", "PUT", body) }
+                            .fold({ send(it ?: JsonNull) }, { send(error = it.message ?: "failed") })
+                    }
+                }
+                "shareCard" -> {
+                    (arg as? JsonObject)?.let { o -> view.post { onShareCard(o) } }
+                    send(JsonPrimitive(true))
+                }
                 else -> send(error = "unknown method $method")
             }
         } catch (e: Exception) {
@@ -675,6 +701,8 @@ private class SyncBridge(
     private val onScan: ((String?) -> Unit) -> Unit,
     private val onResult: (JsonObject) -> Unit,
     private val onClose: () -> Unit,
+    private val onShareCard: (JsonObject) -> Unit,
+    private val scope: kotlinx.coroutines.CoroutineScope,
 ) {
     private fun ok() = pageOrigin.get() == allowed
 
@@ -686,7 +714,23 @@ private class SyncBridge(
     }
 
     @android.webkit.JavascriptInterface
-    fun bridgeInfo(): String = if (ok()) """{"platform":"android","features":["dapp","store","scan","bio","result"]}""" else "{}"
+    fun bridgeInfo(): String = if (ok()) """{"platform":"android","features":["dapp","store","scan","bio","result","chat"]}""" else "{}"
+
+    @android.webkit.JavascriptInterface
+    fun chainAddress(cb: String?, json: String?) {
+        if (!ok() || cb == null) return
+        val body = obj(json)
+        scope.launch {
+            val r = runCatching { if (body == null) Api.request("/user/chain-address") else Api.request("/user/chain-address", "PUT", body) }
+            view.post { r.fold({ reply(cb, it ?: JsonNull) }, { reply(cb, error = it.message ?: "failed") }) }
+        }
+    }
+
+    @android.webkit.JavascriptInterface
+    fun shareCard(json: String?) {
+        val o = obj(json) ?: return
+        if (ok()) view.post { onShareCard(o) }
+    }
 
     @android.webkit.JavascriptInterface
     fun walletResult(json: String?) {

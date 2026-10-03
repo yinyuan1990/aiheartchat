@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { AddressBook, CaretRight, Copy, Fingerprint, Key, Lock, PencilSimple, Plus, ScanSmiley, ShieldWarning, Trash, TreeStructure, Wallet as WalletIcon } from "@phosphor-icons/react";
+import { AddressBook, CaretRight, Copy, Fingerprint, HandCoins, Key, Lock, PencilSimple, Plus, ScanSmiley, ShieldWarning, Trash, TreeStructure, Wallet as WalletIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { WalletDot } from "@/components/shared";
 import { shortAddr } from "@/lib/format";
@@ -13,11 +13,13 @@ import { accountOf, verifyPassword, type Secret, type WalletMeta } from "@/lib/w
 import { exportSolKey, solKeypairOf } from "@/lib/wallet/sol";
 import { bioDisable, bioEnable, bioName, bioStatus, copyText, setSecureScreen, type BioStatus } from "@/lib/wallet/native";
 import { cn } from "@/lib/utils";
+import { loadPayee, payeeSupported, publishPayee, unpublishPayee, type Payee } from "@/lib/wallet/payee";
 import { useVault } from "@/components/wallet/wallet-context";
 import { Field } from "@/components/wallet/password-fields";
 import { BottomNav, BottomSheet, GhostButton, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
 
 type Sheet = { kind: "rename" | "export" | "delete"; wallet: WalletMeta } | null;
+const noSubscribe = () => () => {};
 
 export default function MePage() {
   const { wallets, active, lock } = useVault();
@@ -117,6 +119,7 @@ export default function MePage() {
               </span>
             </button>
           )}
+          <PayeeRow />
           <Link href="/wallet/addresses" className="flex items-center gap-3 px-4 py-4">
             <AddressBook size={20} />
             <span className="flex-1 text-[15px]">地址簿</span>
@@ -155,6 +158,103 @@ export default function MePage() {
         {bioSheet && <PasswordGate title={`开启${bioName(bio)}解锁`} onOk={(pw) => void enableBio(pw)} />}
       </BottomSheet>
     </WalletFrame>
+  );
+}
+
+/** 「允许好友给我转账」: publishes the current wallet's addresses to the 心之音 account (signed, see lib/wallet/payee.ts). */
+function PayeeRow() {
+  const vault = useVault();
+  const { active } = vault;
+  const supported = useSyncExternalStore(noSubscribe, payeeSupported, () => false);
+  const [payee, setPayee] = useState<Payee | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [gate, setGate] = useState(false);
+  useEffect(() => {
+    if (!supported) return;
+    let alive = true;
+    loadPayee().then(
+      (p) => alive && setPayee(p),
+      (e: Error) => alive && toast.error(e.message),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [supported]);
+  if (!supported || !active) return null;
+
+  const on = !!(payee?.evm || payee?.sol);
+  const other = on && payee?.evm?.toLowerCase() !== active.address.toLowerCase();
+  const publish = async (secret: Secret) => {
+    if (!payee) return;
+    setBusy(true);
+    try {
+      setPayee(await publishPayee(payee.userId, secret));
+      toast.success("已开启：聊过天的好友可以直接给你转账");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const start = () => {
+    const s = vault.secretOf(active.id);
+    if (s) void publish(s);
+    else setGate(true);
+  };
+  const toggle = async () => {
+    if (busy || !payee) return;
+    if (!on) return start();
+    setBusy(true);
+    try {
+      setPayee(await unpublishPayee());
+      toast.success("已关闭，好友看不到你的收款地址了");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <button type="button" role="switch" aria-checked={on} disabled={busy || !payee} onClick={() => void toggle()} className="flex w-full items-center gap-3 px-4 py-4 text-left disabled:opacity-60">
+        <HandCoins size={20} />
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px]">允许好友给我转账</span>
+          <span className="block text-[12px] text-muted-foreground">
+            {on ? `聊过天的人能看到：${[payee?.evm && shortAddr(payee.evm, 6, 4), payee?.sol && `◎ ${shortAddr(payee.sol, 4, 4)}`].filter(Boolean).join(" · ")}` : "打开后，聊过天的人在聊天里点「转账」就能直接给你转"}
+          </span>
+        </span>
+        <span className={cn("flex h-7 w-12 shrink-0 items-center rounded-full p-0.5 transition-colors", on ? "justify-end bg-up" : "justify-start bg-border")}>
+          <span className="size-6 rounded-full bg-white shadow-sm" />
+        </span>
+      </button>
+      {other && (
+        <div className="flex items-center gap-2 px-4 pb-3 text-[12px] text-[#b07005]">
+          <span className="flex-1">公开的是另一个钱包的地址，不是「{active.name}」</span>
+          <button type="button" disabled={busy} onClick={start} className="shrink-0 rounded-full bg-muted px-2.5 py-1 font-medium text-foreground">
+            改用当前钱包
+          </button>
+        </div>
+      )}
+      <BottomSheet open={gate} onClose={() => setGate(false)}>
+        {gate && (
+          <PasswordGate
+            title="输入钱包密码，用钱包签名确认收款地址"
+            onOk={async (pw) => {
+              try {
+                await vault.unlock(pw);
+              } catch {
+                return void toast.error("密码不对");
+              }
+              setGate(false);
+              const s = vault.secretOf(active.id);
+              if (s) void publish(s);
+            }}
+          />
+        )}
+      </BottomSheet>
+    </>
   );
 }
 

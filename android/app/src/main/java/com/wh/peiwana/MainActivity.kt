@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
@@ -241,6 +242,9 @@ fun AppRoot() {
                 val convType = a.getInt("convType")
                 val targetId = a.getString("targetId") ?: ""
                 val startCall = rememberStartCall(targetId, a.getString("title") ?: "")
+                val ctx = androidx.compose.ui.platform.LocalContext.current
+                val walletOk = remember(user) { chainWalletVisible(ctx, user) }
+                val walletResult by entry.savedStateHandle.getStateFlow<String?>("walletResult", null).collectAsState()
                 ChatRoomScreen(
                     convId = a.getString("convId")!!,
                     convType = convType,
@@ -253,6 +257,9 @@ fun AppRoot() {
                     onBack = { nav.popBackStack() },
                     onCall = { type -> startCall(type) },
                     onGroupInfo = { nav.navigate("group-info/$targetId") },
+                    onOpenWallet = if (walletOk) ({ path -> nav.navigate(chainWalletRoute(path)) }) else null,
+                    walletResult = walletResult,
+                    onWalletResultUsed = { entry.savedStateHandle["walletResult"] = null },
                 )
             }
             page("group-info/{groupId}", listOf(navArgument("groupId") { type = NavType.StringType })) { entry ->

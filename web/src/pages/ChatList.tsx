@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { openNativeChat } from '../bridge';
+import { chainCardPreview } from '../components/ChainCards';
 import { api, uploadFile } from '../api';
 import { wsManager } from '../ws';
 import { MusicSheet, NowPlayingBar } from './Music';
@@ -67,6 +68,8 @@ function previewText(msg?: ConversationItem['lastMsg']): string {
     case 'gift': return '[礼物]';
     case 'audio': return '[语音]';
     case 'location': return '[位置]';
+    case 'transfer':
+    case 'callout': return chainCardPreview(msg.type, msg.content) ?? '';
     default: return msg.type.startsWith('call') ? '[通话]' : '';
   }
 }

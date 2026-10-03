@@ -10,7 +10,8 @@ import { TokenAvatar, WalletDot } from "@/components/shared";
 import { shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { SOL_CHAIN, WALLET_CHAINS, chainById, explorerTx, isSolana, publicClientFor, rpcOf } from "@/lib/wallet/chains";
-import { hasFeature, reportResult, scanQr } from "@/lib/wallet/native";
+import { hasFeature, reportResult, returnsToApp, scanQr } from "@/lib/wallet/native";
+import { transferMessage } from "@/lib/wallet/payee";
 import { parseScanned } from "@/lib/wallet/scan";
 import { isSolEntry, pushRecent, useAddressBook } from "@/lib/wallet/address-book";
 import { useAssets, type Asset } from "@/lib/wallet/assets";
@@ -224,8 +225,10 @@ function EvmSend() {
       setSent({ hash, status: "pending" });
       const r = await publicClientFor(chain).waitForTransactionReceipt({ hash, timeout: 120_000 });
       setSent({ hash, status: r.status === "success" ? "success" : "reverted" });
-      if (r.status === "success" && from)
-        reportResult({ kind: "transfer", chain: chain.key, token: asset!.token ?? "native", symbol: asset!.symbol, decimals: asset!.decimals, amount: value.toString(), to: toAddr, from, hash });
+      if (r.status === "success" && from && returnsToApp()) {
+        const proof = await account().signMessage({ message: transferMessage(hash, from, toAddr) });
+        reportResult({ kind: "transfer", chain: chain.key, token: asset!.token ?? "native", symbol: asset!.symbol, decimals: asset!.decimals, amount: value.toString(), to: toAddr, from, hash, proof });
+      }
     } catch (e) {
       const msg = ((e as { shortMessage?: string }).shortMessage ?? (e as Error).message).split("\n")[0];
       if (hash) setSent({ hash, status: "error", error: msg });

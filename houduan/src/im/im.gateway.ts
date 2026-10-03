@@ -21,6 +21,7 @@ export class ImGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private static readonly MAX_CONN_PER_USER = 8;
   private static readonly MAX_FRAMES_PER_SEC = 25;
   private static readonly MAX_CONTENT_LEN = 8000;
+  private static readonly SERVER_ONLY_TYPES = new Set(['transfer']);
 
   constructor(
     private readonly jwt: JwtService,
@@ -89,6 +90,8 @@ export class ImGateway implements OnGatewayConnection, OnGatewayDisconnect {
           delete f.fwdFrom;
           if (!f.targetId || !f.msgType || typeof f.content !== 'string') return;
           if (f.content.length > ImGateway.MAX_CONTENT_LEN) return;
+          // 转账卡片只能由服务端核对链上交易后发（POST /im/transfer）
+          if (ImGateway.SERVER_ONLY_TYPES.has(f.msgType)) throw new Error('这种消息不能直接发送');
           const payload = await this.im.sendMessage(userId, f);
           ws.send(
             JSON.stringify({

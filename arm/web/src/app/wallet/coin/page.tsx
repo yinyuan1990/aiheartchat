@@ -143,7 +143,16 @@ function SolCoin({ mint }: { mint: string }) {
 
   return (
     <CoinFrame>
-      <CoinTopBar back="/wallet/token" symbol={coin.symbol} createdAt={coin.createdAt} viewers={viewers} starred={starred} onStar={toggleStar} onShare={share} />
+      <CoinTopBar
+        back="/wallet/token"
+        symbol={coin.symbol}
+        createdAt={coin.createdAt}
+        viewers={viewers}
+        starred={starred}
+        onStar={toggleStar}
+        onShare={share}
+        callout={{ chain: "sol", address: mint, symbol: coin.symbol, name: coin.name, image: iconUrl(coin.image) ?? null, priceUsd: coin.priceUsd, mcapUsd: coin.mcapUsd }}
+      />
 
       <div className="flex-1 pb-28">
         <CoinHeader

@@ -34,6 +34,12 @@ enum ChainWallet {
     }
 }
 
+/// 钱包代币页交来的喊单卡片（sheet(item:) 要 Identifiable）
+struct ShareCard: Identifiable {
+    let id = UUID()
+    let card: [String: Any]
+}
+
 /// 钱包密文（网页已用钱包密码加密）存 Keychain。注意 Keychain 卸载 App 后仍在，重装后用原密码还能解锁。
 enum ChainWalletVault {
     private static let query: [String: Any] = [
@@ -223,6 +229,9 @@ struct ChainWalletView: View {
         }
         .task { await load() }
         .onChange(of: model.closeRequested) { if $0 { dismiss() } }
+        .sheet(item: $model.shareCard) { s in
+            ShareCardSheet(card: s.card) { model.toast = $0 }
+        }
     }
 
     private func load() async {
@@ -439,6 +448,8 @@ final class ChainWalletModel: NSObject, ObservableObject {
     @Published var toast: String?
     /// 钱包页调了 walletClose（例如聊天里的转账做完了）
     @Published var closeRequested = false
+    /// 代币页「喊单到聊天」交来的卡片，弹会话选择
+    @Published var shareCard: ShareCard?
     /// 钱包页调 scanQr 时弹扫码页；同一时间只有一个，新的进来先把旧的按取消回掉
     @Published var scanning = false
     private var scanReply: ((String?) -> Void)?
@@ -745,6 +756,21 @@ final class ChainWalletModel: NSObject, ObservableObject {
         case "walletClose":
             closeRequested = true
             send(true)
+        case "chainAddress":
+            // 心之音账号的收款地址：用 App 自己的登录态调后端（钱包页拿不到 token）；arg 为空 = 读，否则 = 写（带签名）
+            let body = arg as? [String: Any]
+            Task { @MainActor in
+                struct Resp: Codable { var userId: String; var evm: String?; var sol: String? }
+                do {
+                    let r: Resp = try await Api.request("/user/chain-address", method: body == nil ? "GET" : "PUT", body: body)
+                    send(["userId": r.userId, "evm": r.evm ?? NSNull(), "sol": r.sol ?? NSNull()] as [String: Any])
+                } catch {
+                    send(error: error.localizedDescription)
+                }
+            }
+        case "shareCard":
+            if let o = arg as? [String: Any] { shareCard = ShareCard(card: o) }
+            send(true)
         default:
             send(error: "unknown method \(method)")
         }
@@ -866,9 +892,11 @@ private let walletBridgeJS = #"""
   }
   window.ArmWalletNative = {
     platform: 'ios',
-    features: ['dapp', 'store', 'scan', 'bio', 'result'],
+    features: ['dapp', 'store', 'scan', 'bio', 'result', 'chat'],
     walletResult: function(r){ call('walletResult', r); },
     walletClose: function(){ call('walletClose'); },
+    chainAddress: function(a){ return call('chainAddress', a == null ? null : a); },
+    shareCard: function(c){ call('shareCard', c); },
     vaultGet: function(){ return call('vaultGet'); },
     vaultSet: function(v){ return call('vaultSet', String(v)); },
     vaultClear: function(){ return call('vaultClear'); },
