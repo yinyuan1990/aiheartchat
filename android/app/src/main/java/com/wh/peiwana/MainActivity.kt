@@ -377,7 +377,14 @@ fun AppRoot() {
             page("realname") { RealnameScreen(onBack = { nav.popBackStack() }) }
             page("gifts-received") { GiftsReceivedScreen(onBack = { nav.popBackStack() }) }
             page("bots") { BotsScreen(onBack = { nav.popBackStack() }, onOpen = { nav.navigate("bots/$it") }) }
-            page("chain-wallet") { ChainWalletScreen(onBack = { nav.popBackStack() }) }
+            // path：直接打开钱包里的某一页（需要 URL 编码）；钱包交回的结果放进上一页的 savedStateHandle["walletResult"]（JSON 字符串）
+            page("chain-wallet?path={path}", listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" })) { entry ->
+                ChainWalletScreen(
+                    onBack = { nav.popBackStack() },
+                    startPath = entry.arguments?.getString("path")?.takeIf { it.isNotBlank() },
+                    onResult = { nav.previousBackStackEntry?.savedStateHandle?.set("walletResult", it.toString()) },
+                )
+            }
             page("bots/{id}", listOf(navArgument("id") { type = NavType.StringType })) { e ->
                 BotDetailScreen(
                     botId = e.arguments?.getString("id") ?: "",

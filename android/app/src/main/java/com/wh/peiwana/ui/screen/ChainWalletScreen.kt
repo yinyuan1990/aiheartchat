@@ -149,7 +149,9 @@ private val BRIDGE_JS = """
   }
   window.ArmWalletNative = {
     platform: 'android',
-    features: ['dapp', 'store', 'scan', 'bio'],
+    features: ['dapp', 'store', 'scan', 'bio', 'result'],
+    walletResult: function(r){ call('walletResult', r); },
+    walletClose: function(){ call('walletClose'); },
     vaultGet: function(){ return call('vaultGet'); },
     vaultSet: function(v){ return call('vaultSet', String(v)); },
     vaultClear: function(){ return call('vaultClear'); },
@@ -197,7 +199,13 @@ private fun originOf(u: Uri): String? {
 
 @SuppressLint("SetJavaScriptEnabled", "RequiresFeature")
 @Composable
-fun ChainWalletScreen(onBack: () -> Unit) {
+fun ChainWalletScreen(
+    onBack: () -> Unit,
+    /** 直接打开钱包里的某一页（例如聊天里的转账：/wallet/send?to=…&ret=1）；只接受 /wallet 开头的站内路径 */
+    startPath: String? = null,
+    /** 钱包页 walletResult 交回来的结果（例如转账成功），由打开钱包的页面处理 */
+    onResult: (JsonObject) -> Unit = {},
+) {
     val ctx = LocalContext.current
     val activity = remember(ctx) { generateSequence(ctx) { (it as? android.content.ContextWrapper)?.baseContext }.filterIsInstance<android.app.Activity>().firstOrNull() }
     var me by remember { mutableStateOf<UserProfile?>(null) }
@@ -208,8 +216,10 @@ fun ChainWalletScreen(onBack: () -> Unit) {
     }
     val webMajor = remember { chromiumMajor(ctx) }
     val bridgeOk = remember { WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER) && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT) }
-    val url = me?.features?.walletUrl?.takeIf { it.isNotBlank() } ?: FALLBACK_URL
-    val origin = originOf(url)
+    val home = me?.features?.walletUrl?.takeIf { it.isNotBlank() } ?: FALLBACK_URL
+    val origin = originOf(home)
+    val start = startPath?.takeIf { it.startsWith("/wallet") && !it.contains("//") && !it.contains('\\') }
+    val url = if (start != null && origin != null) origin + start else home
 
     var walletView by remember { mutableStateOf<WebView?>(null) }
     var dappView by remember { mutableStateOf<WebView?>(null) }
@@ -336,6 +346,8 @@ fun ChainWalletScreen(onBack: () -> Unit) {
         dappCurrent = target
     }
 
+    val resultCb by rememberUpdatedState(onResult)
+    val closeCb by rememberUpdatedState(onBack)
     val shell = remember {
         WalletShell(
             ctx = ctx,
@@ -343,6 +355,8 @@ fun ChainWalletScreen(onBack: () -> Unit) {
             hub = hub,
             onOpenDapp = { openDapp(it) },
             onScan = { startScan(it) },
+            onResult = { resultCb(it) },
+            onClose = { closeCb() },
         )
     }
 
@@ -496,7 +510,7 @@ fun ChainWalletScreen(onBack: () -> Unit) {
                             WebViewCompat.addDocumentStartJavaScript(this, BRIDGE_JS, rules)
                         } else {
                             // 厂商 WebView（华为 / 荣耀等）常不支持上面两个 androidx.webkit 特性：退回同步 JS 接口，每次调用都核对当前页面的源
-                            addJavascriptInterface(SyncBridge(c, activity, this, origin, pageOrigin, hub, onOpenDapp = { openDapp(it) }, onScan = { startScan(it) }), "ArmWalletNative")
+                            addJavascriptInterface(SyncBridge(c, activity, this, origin, pageOrigin, hub, onOpenDapp = { openDapp(it) }, onScan = { startScan(it) }, onResult = { resultCb(it) }, onClose = { closeCb() }), "ArmWalletNative")
                         }
                         webViewClient = object : WebViewClient() {
                             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
@@ -538,6 +552,8 @@ private class WalletShell(
     private val hub: DappHub,
     private val onOpenDapp: (String) -> Unit,
     private val onScan: ((String?) -> Unit) -> Unit,
+    private val onResult: (JsonObject) -> Unit,
+    private val onClose: () -> Unit,
 ) {
     fun handle(view: WebView, message: WebMessageCompat, reply: JavaScriptReplyProxy) {
         val req = runCatching { Json.parseToJsonElement(message.data ?: "").jsonObject }.getOrNull() ?: return
@@ -627,6 +643,14 @@ private class WalletShell(
                     send(JsonPrimitive(true))
                 }
                 "scanQr" -> view.post { onScan { text -> send(text?.let { JsonPrimitive(it) } ?: JsonNull) } }
+                "walletResult" -> {
+                    (arg as? JsonObject)?.let { o -> view.post { onResult(o) } }
+                    send(JsonPrimitive(true))
+                }
+                "walletClose" -> {
+                    view.post { onClose() }
+                    send(JsonPrimitive(true))
+                }
                 else -> send(error = "unknown method $method")
             }
         } catch (e: Exception) {
@@ -649,6 +673,8 @@ private class SyncBridge(
     private val hub: DappHub,
     private val onOpenDapp: (String) -> Unit,
     private val onScan: ((String?) -> Unit) -> Unit,
+    private val onResult: (JsonObject) -> Unit,
+    private val onClose: () -> Unit,
 ) {
     private fun ok() = pageOrigin.get() == allowed
 
@@ -660,7 +686,18 @@ private class SyncBridge(
     }
 
     @android.webkit.JavascriptInterface
-    fun bridgeInfo(): String = if (ok()) """{"platform":"android","features":["dapp","store","scan","bio"]}""" else "{}"
+    fun bridgeInfo(): String = if (ok()) """{"platform":"android","features":["dapp","store","scan","bio","result"]}""" else "{}"
+
+    @android.webkit.JavascriptInterface
+    fun walletResult(json: String?) {
+        val o = obj(json) ?: return
+        if (ok()) view.post { onResult(o) }
+    }
+
+    @android.webkit.JavascriptInterface
+    fun walletClose() {
+        if (ok()) view.post { onClose() }
+    }
 
     private fun reply(cb: String, result: JsonElement = JsonNull, error: String? = null) =
         push(buildJsonObject { put("push", "reply"); put("cb", cb); if (error != null) put("error", error) else put("result", result) })

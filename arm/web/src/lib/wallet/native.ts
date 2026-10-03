@@ -42,7 +42,13 @@ type Bridge = {
   /** Prompts; the password, or null when the user picked "use password". Rejects with "invalidated" after a biometric change. */
   bioUnlock?: () => Promise<string | null>;
   bioDisable?: () => MaybePromise<unknown>;
+  /** Feature `result`: hand a finished action (e.g. a transfer started from a chat) back to the App screen that opened the wallet. */
+  walletResult?: (r: WalletResult) => void;
+  /** Feature `result`: close the wallet and go back to that screen. */
+  walletClose?: () => void;
 };
+
+export type WalletResult = { kind: "transfer"; chain: string; token: string; symbol: string; decimals: number; amount: string; to: string; from: string; hash: string };
 
 export type BioStatus = { available: boolean; enabled: boolean; kind?: "fingerprint" | "face" | "biometric" };
 
@@ -107,6 +113,8 @@ function wrapSync(raw: SyncBridge): Bridge {
     bioEnable: typeof raw.bioEnable === "function" ? (p) => callAsync("bioEnable", String(p)) as Promise<boolean> : undefined,
     bioUnlock: typeof raw.bioUnlock === "function" ? () => callAsync("bioUnlock") as Promise<string | null> : undefined,
     bioDisable: typeof raw.bioDisable === "function" ? () => call("bioDisable") : undefined,
+    walletResult: typeof raw.walletResult === "function" ? (r) => void call("walletResult", json(r)) : undefined,
+    walletClose: typeof raw.walletClose === "function" ? () => void call("walletClose") : undefined,
   };
   // bridgeInfo() answers "{}" until the shell has seen this page's origin: don't cache that, ask again next time
   if (info.features?.length) wrapped = { raw, bridge };
@@ -147,6 +155,13 @@ export async function storeWrite(key: string, value: string | null) {
     else localStorage.setItem(`arm.wallet.${key}`, value);
   } catch {}
 }
+
+/** Opened by an App screen that wants the outcome back (`?ret=1`, shell feature `result`). */
+export const returnsToApp = () => typeof window !== "undefined" && new URLSearchParams(location.search).get("ret") === "1" && hasFeature("result") && !!nativeBridge()?.walletResult;
+export const reportResult = (r: WalletResult) => {
+  if (returnsToApp()) nativeBridge()?.walletResult?.(r);
+};
+export const closeWallet = () => nativeBridge()?.walletClose?.();
 
 /** Camera scan through the App shell; null when unavailable or cancelled. */
 export async function scanQr(): Promise<string | null> {

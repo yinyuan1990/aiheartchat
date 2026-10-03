@@ -230,6 +230,8 @@ enum Route: Hashable {
     case bot(String)
     /// 链上钱包（自托管网页钱包 + DApp 浏览器）
     case chainWallet
+    /// 直接打开钱包里的某一页（/wallet 开头的站内路径，例如聊天里的转账）；结果见 ChainWallet.resultNotification
+    case chainWalletPath(String)
 }
 
 @ViewBuilder
@@ -269,6 +271,7 @@ func routeView(_ route: Route) -> some View {
     case .bots: BotsView()
     case .bot(let id): BotDetailView(botId: id)
     case .chainWallet: ChainWalletView()
+    case .chainWalletPath(let path): ChainWalletView(startPath: path)
     }
 }
 

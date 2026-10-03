@@ -9,7 +9,7 @@ import { TokenAvatar, WalletDot } from "@/components/shared";
 import { shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { SOL_CHAIN, explorerTx, rpcOf, useNodes } from "@/lib/wallet/chains";
-import { hasFeature, scanQr } from "@/lib/wallet/native";
+import { hasFeature, reportResult, scanQr } from "@/lib/wallet/native";
 import { parseScannedSol } from "@/lib/wallet/scan";
 import { isSolEntry, pushRecent, useAddressBook } from "@/lib/wallet/address-book";
 import { useAssets, type Asset } from "@/lib/wallet/assets";
@@ -34,7 +34,7 @@ import {
   type Instruction,
 } from "@/lib/wallet/sol";
 import { useVault } from "@/components/wallet/wallet-context";
-import { BookPicker, Result, Row, type Sent } from "@/components/wallet/send-parts";
+import { BookPicker, Result, Row, useSendLink, type Sent } from "@/components/wallet/send-parts";
 import { BottomSheet, ChainGlyph, ChainPill, GhostButton, PrimaryButton, TopBar, WalletFrame, useQueryParam } from "@/components/wallet/ui";
 
 const SPEEDS = [
@@ -64,12 +64,17 @@ export function SolSend() {
   const { active, solKeypair, address: from } = useVault();
   const url = rpcOf(SOL_CHAIN);
   const { assets, loading } = useAssets(SOL_CHAIN, from);
-  const wanted = useQueryParam("asset");
+  const link = useSendLink(SOL_CHAIN, assets, loading);
   const [assetId, setAssetId] = useState<string | null>(null);
-  const asset = assets.find((a) => a.id === (assetId ?? wanted)) ?? assets.find((a) => a.raw > 0n) ?? assets[0];
+  const asset = assets.find((a) => a.id === (assetId ?? link.wantedId)) ?? assets.find((a) => a.raw > 0n) ?? assets[0];
   const solAsset = assets.find((a) => a.id === "native");
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
+  useEffect(() => {
+    if (!link.amount) return;
+    const t = setTimeout(() => setAmount((cur) => cur || link.amount!), 0);
+    return () => clearTimeout(t);
+  }, [link.amount]);
   const [speed, setSpeed] = useState<Speed>("mid");
   const [sheet, setSheet] = useState<null | "asset" | "confirm" | "book">(null);
   const [sent, setSent] = useState<Sent | null>(null);
@@ -192,6 +197,7 @@ export function SolSend() {
       await sendAndConfirm(url, signed.tx, signature, lastValidBlockHeight);
       pushRecent(toAddr);
       setSent({ hash: signature, status: "success" });
+      reportResult({ kind: "transfer", chain: SOL_CHAIN.key, token: asset.mint ?? "native", symbol: asset.symbol, decimals: asset.decimals, amount: value.toString(), to: toAddr, from, hash: signature });
     } catch (e) {
       const msg = (e as Error).message.split("\n")[0];
       if (signature) setSent({ hash: signature, status: "error", error: msg });
@@ -214,9 +220,10 @@ export function SolSend() {
 
   return (
     <WalletFrame>
-      <TopBar title="转账" back="/wallet" right={<ChainPill chain={SOL_CHAIN} />} />
+      <TopBar title={link.name ? `转账给 ${link.name}` : "转账"} back="/wallet" right={<ChainPill chain={SOL_CHAIN} />} />
 
       <div className="flex flex-1 flex-col gap-3 px-4 pb-4">
+        {link.notHeld && <p className="rounded-2xl bg-[#d48806]/10 px-3.5 py-2.5 text-[12px] leading-5 text-[#b07005]">你还没有持有对方要的那个币，先买一点或换个币转。</p>}
         <button type="button" onClick={() => setSheet("asset")} disabled={loading} className="flex items-center gap-3 rounded-[22px] bg-card p-4 text-left ring-1 ring-border/60 transition active:scale-[0.99]">
           {asset ? (
             <>

@@ -15,6 +15,8 @@ import WebKit
  */
 enum ChainWallet {
     static let fallbackURL = URL(string: "https://arm.yyheart.com/wallet")!
+    /// 钱包页 walletResult 交回的结果（userInfo["json"] 是 JSON 字符串，例如转账成功）；打开钱包的页面自己监听
+    static let resultNotification = Notification.Name("ChainWalletResult")
 
     /// App Store 所在国家是中国时钱包整块不出现；拿不到（模拟器、没登录 App Store）时只有调试包放行
     static func storefrontAllowed() async -> Bool {
@@ -173,6 +175,8 @@ private enum ChainWalletStore {
 // MARK: - 页面
 
 struct ChainWalletView: View {
+    /// 直接打开钱包里的某一页；只接受 /wallet 开头的站内路径
+    var startPath: String? = nil
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var model = ChainWalletModel()
@@ -218,6 +222,7 @@ struct ChainWalletView: View {
             if model.secure { model.toast = "截图里有助记词 / 私钥，请马上到相册删除这张截图" }
         }
         .task { await load() }
+        .onChange(of: model.closeRequested) { if $0 { dismiss() } }
     }
 
     private func load() async {
@@ -233,7 +238,13 @@ struct ChainWalletView: View {
             return
         }
         let custom = URL(string: me?.features?.walletUrl ?? "").flatMap { $0.scheme == "https" ? $0 : nil }
-        phase = .ready(custom ?? ChainWallet.fallbackURL)
+        phase = .ready(Self.startURL(custom ?? ChainWallet.fallbackURL, startPath))
+    }
+
+    private static func startURL(_ home: URL, _ path: String?) -> URL {
+        guard let p = path, p.hasPrefix("/wallet"), !p.contains("//"), !p.contains("\\"), let scheme = home.scheme, let host = home.host else { return home }
+        let port = home.port.map { ":\($0)" } ?? ""
+        return URL(string: "\(scheme)://\(host)\(port)\(p)") ?? home
     }
 
     private func back() {
@@ -426,6 +437,8 @@ final class ChainWalletModel: NSObject, ObservableObject {
     }
     @Published var secure = false
     @Published var toast: String?
+    /// 钱包页调了 walletClose（例如聊天里的转账做完了）
+    @Published var closeRequested = false
     /// 钱包页调 scanQr 时弹扫码页；同一时间只有一个，新的进来先把旧的按取消回掉
     @Published var scanning = false
     private var scanReply: ((String?) -> Void)?
@@ -724,6 +737,14 @@ final class ChainWalletModel: NSObject, ObservableObject {
             scanReply?(nil)
             scanReply = { send($0) }
             scanning = true
+        case "walletResult":
+            if let o = arg as? [String: Any], let s = Self.json(o) {
+                NotificationCenter.default.post(name: ChainWallet.resultNotification, object: nil, userInfo: ["json": s])
+            }
+            send(true)
+        case "walletClose":
+            closeRequested = true
+            send(true)
         default:
             send(error: "unknown method \(method)")
         }
@@ -845,7 +866,9 @@ private let walletBridgeJS = #"""
   }
   window.ArmWalletNative = {
     platform: 'ios',
-    features: ['dapp', 'store', 'scan', 'bio'],
+    features: ['dapp', 'store', 'scan', 'bio', 'result'],
+    walletResult: function(r){ call('walletResult', r); },
+    walletClose: function(){ call('walletClose'); },
     vaultGet: function(){ return call('vaultGet'); },
     vaultSet: function(v){ return call('vaultSet', String(v)); },
     vaultClear: function(){ return call('vaultClear'); },

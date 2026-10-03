@@ -1,13 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowSquareOut, CheckCircle, CircleNotch, MagnifyingGlass, XCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { WalletDot } from "@/components/shared";
 import { shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { MAX_NAME, saveContact, type Contact } from "@/lib/wallet/address-book";
+import { closeWallet, returnsToApp } from "@/lib/wallet/native";
+import { isSolana, type WalletChain } from "@/lib/wallet/chains";
+import type { Asset } from "@/lib/wallet/assets";
+import { rememberToken } from "@/lib/wallet/market";
+import { lookupToken } from "@/lib/wallet/swap";
+import { useQueryParam } from "./ui";
 
 export type Sent = { hash: string; status: "pending" | "success" | "reverted" | "error"; error?: string };
 
@@ -96,8 +102,41 @@ export function BookPicker({ contacts, recent, current, onPick }: { contacts: Co
   );
 }
 
+/**
+ * Link parameters of the send page: `asset=<id>` or `token=<contract | mint | native>`, `amount=`, `name=` (who you are
+ * paying, e.g. the chat friend). An EVM token the wallet does not list yet is looked up and added (Solana lists every
+ * held token by itself).
+ */
+export function useSendLink(chain: WalletChain, assets: Asset[], loading: boolean) {
+  const assetParam = useQueryParam("asset");
+  const token = useQueryParam("token");
+  const amount = useQueryParam("amount");
+  const name = useQueryParam("name");
+  const sol = isSolana(chain);
+  const match = (a: Asset) => {
+    if (!token) return false;
+    if (token === "native") return a.id === "native" || (!!chain.nativeIsUsdc && a.gas === true);
+    const id = a.token ?? a.mint;
+    return !!id && (sol ? id === token : id.toLowerCase() === token.toLowerCase());
+  };
+  const wantedId = assetParam ?? assets.find(match)?.id ?? null;
+  const missing = !!token && token !== "native" && !loading && assets.length > 0 && !assets.some(match);
+  useEffect(() => {
+    if (!missing || sol || !token) return;
+    let alive = true;
+    void lookupToken(chain, token).then((t) => {
+      if (alive && t) rememberToken(chain.key, { address: t.address, symbol: t.symbol, name: t.name, image: null, decimals: t.decimals, added: true });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [missing, sol, token, chain]);
+  return { wantedId, amount: amount && /^\d*\.?\d+$/.test(amount) ? amount : null, name: name?.slice(0, 24) || null, notHeld: missing && sol };
+}
+
 export function Result({ sent, explorer, to, saved }: { sent: Sent; explorer: string; to?: string; saved: boolean }) {
   const [wasSaved] = useState(saved);
+  const [ret] = useState(returnsToApp);
   const icon = {
     pending: <CircleNotch size={56} className="animate-spin text-muted-foreground" />,
     success: <CheckCircle size={56} weight="fill" className="text-up" />,
@@ -114,8 +153,12 @@ export function Result({ sent, explorer, to, saved }: { sent: Sent; explorer: st
         {shortAddr(sent.hash, 10, 8)}
         <ArrowSquareOut size={13} />
       </a>
-      {sent.status === "success" && to && !wasSaved && <SaveContact to={to} />}
-      {sent.status !== "pending" && (
+      {sent.status === "success" && to && !wasSaved && !ret && <SaveContact to={to} />}
+      {sent.status !== "pending" && ret ? (
+        <button type="button" onClick={closeWallet} className="mt-6 flex h-14 w-full items-center justify-center rounded-2xl bg-primary text-[16px] font-semibold text-primary-foreground">
+          {sent.status === "success" ? "完成，返回聊天" : "返回聊天"}
+        </button>
+      ) : sent.status !== "pending" && (
         <Link href="/wallet" className="mt-6 flex h-14 w-full items-center justify-center rounded-2xl bg-primary text-[16px] font-semibold text-primary-foreground">
           完成
         </Link>

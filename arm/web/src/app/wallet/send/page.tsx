@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createWalletClient, encodeFunctionData, erc20Abi, formatUnits, getAddress, http, isAddress, parseUnits, type Address, type Hex } from "viem";
 import { AddressBook, CaretDown, ClipboardText, Info, Lightning, Scan, ShieldCheck, SlidersHorizontal, Warning } from "@phosphor-icons/react";
@@ -8,14 +8,14 @@ import { toast } from "sonner";
 import { TokenAvatar, WalletDot } from "@/components/shared";
 import { shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { SOL_CHAIN, chainById, explorerTx, isSolana, publicClientFor, rpcOf } from "@/lib/wallet/chains";
-import { hasFeature, scanQr } from "@/lib/wallet/native";
+import { SOL_CHAIN, WALLET_CHAINS, chainById, explorerTx, isSolana, publicClientFor, rpcOf } from "@/lib/wallet/chains";
+import { hasFeature, reportResult, scanQr } from "@/lib/wallet/native";
 import { parseScanned } from "@/lib/wallet/scan";
 import { isSolEntry, pushRecent, useAddressBook } from "@/lib/wallet/address-book";
 import { useAssets, type Asset } from "@/lib/wallet/assets";
 import { isSolAddress } from "@/lib/wallet/sol";
 import { useVault } from "@/components/wallet/wallet-context";
-import { BookPicker, Result, Row, type Sent } from "@/components/wallet/send-parts";
+import { BookPicker, Result, Row, useSendLink, type Sent } from "@/components/wallet/send-parts";
 import { SolSend } from "@/components/wallet/sol-send";
 import { BottomSheet, ChainGlyph, ChainPill, GhostButton, PrimaryButton, TopBar, WalletFrame, useQueryParam } from "@/components/wallet/ui";
 
@@ -51,16 +51,31 @@ const noSubscribe = () => () => {};
 const fmt = (n: number, max = 6) => n.toLocaleString("en-US", { maximumFractionDigits: max });
 
 export default function SendPage() {
+  // a new link (other recipient / coin) starts from a clean form
+  const search = useSyncExternalStore(noSubscribe, () => window.location.search, () => "");
+  return <LinkedSend key={search} />;
+}
+
+function LinkedSend() {
   const { chain, setChain } = useVault();
   const wantedTo = useQueryParam("to");
+  const chainParam = useQueryParam("chain");
+  const wantedChain = WALLET_CHAINS.find((c) => c.key === chainParam);
+  // `chain=` from a link (e.g. a chat transfer): switch once, the user may still pick another network afterwards
+  const switched = useRef(false);
+  useEffect(() => {
+    if (!wantedChain || switched.current) return;
+    switched.current = true;
+    if (wantedChain.key !== chain.key) setTimeout(() => setChain(wantedChain.key), 0);
+  }, [wantedChain, chain, setChain]);
   // "转账" from an address-book entry: open the chain family the address belongs to
   useEffect(() => {
-    if (!wantedTo) return;
+    if (!wantedTo || wantedChain) return;
     const want = isSolAddress(wantedTo) ? "sol" : isAddress(wantedTo) ? "evm" : null;
     if (!want || (want === "sol") === isSolana(chain)) return;
     const t = setTimeout(() => setChain(want === "sol" ? SOL_CHAIN.key : "arc"), 0);
     return () => clearTimeout(t);
-  }, [wantedTo, chain, setChain]);
+  }, [wantedTo, wantedChain, chain, setChain]);
   return isSolana(chain) ? <SolSend /> : <EvmSend />;
 }
 
@@ -68,11 +83,16 @@ function EvmSend() {
   const { active, chain, account, setChain } = useVault();
   const from = active?.address;
   const { assets, loading } = useAssets(chain, from);
-  const wanted = useQueryParam("asset");
+  const link = useSendLink(chain, assets, loading);
   const [assetId, setAssetId] = useState<string | null>(null);
-  const asset = assets.find((a) => a.id === (assetId ?? wanted)) ?? assets.find((a) => a.raw > 0n) ?? assets[0];
+  const asset = assets.find((a) => a.id === (assetId ?? link.wantedId)) ?? assets.find((a) => a.raw > 0n) ?? assets[0];
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
+  useEffect(() => {
+    if (!link.amount) return;
+    const t = setTimeout(() => setAmount((cur) => cur || link.amount!), 0);
+    return () => clearTimeout(t);
+  }, [link.amount]);
   const [speed, setSpeed] = useState<Speed>("normal");
   const [custom, setCustom] = useState<CustomGas | null>(null);
   const [sheet, setSheet] = useState<null | "asset" | "confirm" | "book" | "gas">(null);
@@ -195,6 +215,8 @@ function EvmSend() {
       setSent({ hash, status: "pending" });
       const r = await publicClientFor(chain).waitForTransactionReceipt({ hash, timeout: 120_000 });
       setSent({ hash, status: r.status === "success" ? "success" : "reverted" });
+      if (r.status === "success" && from)
+        reportResult({ kind: "transfer", chain: chain.key, token: asset!.token ?? "native", symbol: asset!.symbol, decimals: asset!.decimals, amount: value.toString(), to: toAddr, from, hash });
     } catch (e) {
       const msg = ((e as { shortMessage?: string }).shortMessage ?? (e as Error).message).split("\n")[0];
       if (hash) setSent({ hash, status: "error", error: msg });
@@ -219,7 +241,7 @@ function EvmSend() {
 
   return (
     <WalletFrame>
-      <TopBar title="转账" back="/wallet" right={<ChainPill chain={chain} />} />
+      <TopBar title={link.name ? `转账给 ${link.name}` : "转账"} back="/wallet" right={<ChainPill chain={chain} />} />
 
       <div className="flex flex-1 flex-col gap-3 px-4 pb-4">
         <button type="button" onClick={() => setSheet("asset")} disabled={loading} className="flex items-center gap-3 rounded-[22px] bg-card p-4 text-left ring-1 ring-border/60 transition active:scale-[0.99]">
