@@ -133,6 +133,18 @@ private val BRIDGE_JS = """
 })();
 """.trimIndent()
 
+/**
+ * 内核真实的 Chromium 主版本：从默认 UA 的 "Chrome/xxx" 取。不能用 WebView 包的 versionName——
+ * 华为等厂商自带的 WebView 包（com.huawei.webview 等）版本号是自己的编号（如 14.x），和 Chromium 版本无关。
+ * 取不到返回 0（不拦）。
+ */
+private fun chromiumMajor(ctx: Context): Int {
+    val ua = runCatching { android.webkit.WebSettings.getDefaultUserAgent(ctx) }.getOrNull().orEmpty()
+    Regex("""Chrome/(\d+)""").find(ua)?.groupValues?.get(1)?.toIntOrNull()?.let { return it }
+    return WebViewCompat.getCurrentWebViewPackage(ctx)?.takeIf { it.packageName.contains("google") || it.packageName == "com.android.webview" || it.packageName == "com.android.chrome" }
+        ?.versionName?.substringBefore('.')?.toIntOrNull() ?: 0
+}
+
 private fun originOf(url: String): String? = runCatching {
     val u = Uri.parse(url)
     if (u.scheme != "https" || u.host.isNullOrBlank()) null else "https://${u.host}"
@@ -149,7 +161,7 @@ fun ChainWalletScreen(onBack: () -> Unit) {
         me = runCatching { Api.getObj<UserProfile>("/user/me") }.getOrNull()
         loaded = true
     }
-    val webMajor = remember { WebViewCompat.getCurrentWebViewPackage(ctx)?.versionName?.substringBefore('.')?.toIntOrNull() ?: 0 }
+    val webMajor = remember { chromiumMajor(ctx) }
     val bridgeOk = remember { WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER) && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT) }
     val url = me?.features?.walletUrl?.takeIf { it.isNotBlank() } ?: FALLBACK_URL
     val origin = originOf(url)
@@ -193,7 +205,7 @@ fun ChainWalletScreen(onBack: () -> Unit) {
             !BuildConfig.WALLET_ALLOWED -> Notice("当前版本不提供钱包功能")
             !loaded -> Box(Modifier.fillMaxSize())
             !chainWalletVisible(ctx, me) -> Notice("钱包功能暂未对你开放")
-            webMajor in 1 until MIN_WEBVIEW_MAJOR || !bridgeOk || origin == null -> WebViewTooOld(webMajor)
+            webMajor in 1 until MIN_WEBVIEW_MAJOR || origin == null -> WebViewTooOld(webMajor)
             else -> AndroidView(
                 modifier = Modifier.weight(1f).fillMaxWidth().navigationBarsPadding(),
                 factory = { c ->
@@ -208,11 +220,21 @@ fun ChainWalletScreen(onBack: () -> Unit) {
                             userAgentString = "$userAgentString PeiwanApp/Android ArmWallet/1"
                         }
                         val rules = setOf(origin!!)
-                        WebViewCompat.addWebMessageListener(this, "ArmWalletBridge", rules) { view, message, _, isMainFrame, reply ->
-                            if (isMainFrame) handleBridge(c, activity, view, message, reply)
+                        val pageOrigin = java.util.concurrent.atomic.AtomicReference<String?>(null)
+                        if (bridgeOk) {
+                            WebViewCompat.addWebMessageListener(this, "ArmWalletBridge", rules) { view, message, _, isMainFrame, reply ->
+                                if (isMainFrame) handleBridge(c, activity, view, message, reply)
+                            }
+                            WebViewCompat.addDocumentStartJavaScript(this, BRIDGE_JS, rules)
+                        } else {
+                            // 厂商 WebView（华为 / 荣耀等）常不支持上面两个 androidx.webkit 特性：退回同步 JS 接口，每次调用都核对当前页面的源
+                            addJavascriptInterface(SyncBridge(c, activity, this, origin, pageOrigin), "ArmWalletNative")
                         }
-                        WebViewCompat.addDocumentStartJavaScript(this, BRIDGE_JS, rules)
                         webViewClient = object : WebViewClient() {
+                            override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
+                                pageOrigin.set(url?.let(::originOf))
+                            }
+
                             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                                 val u = request.url ?: return false
                                 // 钱包只在自己的源里跳；其它网址（Arm 主站、区块浏览器）交给系统浏览器，桥接不会带过去
@@ -282,6 +304,44 @@ private fun handleBridge(ctx: Context, activity: android.app.Activity?, view: We
     }
 }
 
+/** 兜底桥（同步）：方法跑在 WebView 的 JS 线程，返回值直接给网页；页面源不是钱包源一律拒绝。 */
+private class SyncBridge(
+    private val ctx: Context,
+    private val activity: android.app.Activity?,
+    private val view: WebView,
+    private val allowed: String,
+    private val pageOrigin: java.util.concurrent.atomic.AtomicReference<String?>,
+) {
+    private fun ok() = pageOrigin.get() == allowed
+
+    @android.webkit.JavascriptInterface
+    fun vaultGet(): String? = if (ok()) runCatching { ChainWalletVault.read(ctx) }.getOrNull() else null
+
+    @android.webkit.JavascriptInterface
+    fun vaultSet(v: String): Boolean = ok() && runCatching { ChainWalletVault.write(ctx, v) }.isSuccess
+
+    @android.webkit.JavascriptInterface
+    fun vaultClear(): Boolean = ok() && runCatching { ChainWalletVault.clear(ctx) }.isSuccess
+
+    @android.webkit.JavascriptInterface
+    fun setSecureScreen(on: Boolean) {
+        if (!ok()) return
+        view.post {
+            if (on) activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            else activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+    }
+
+    @android.webkit.JavascriptInterface
+    fun share(text: String) {
+        if (!ok()) return
+        view.post {
+            val i = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
+            runCatching { ctx.startActivity(Intent.createChooser(i, "分享").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        }
+    }
+}
+
 @Composable
 private fun Notice(text: String) {
     Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
@@ -295,7 +355,7 @@ private fun WebViewTooOld(major: Int) {
     Column(Modifier.fillMaxSize().padding(28.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
         Text("系统 WebView 版本太旧", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Text(
-            "钱包需要较新的系统网页组件（Android System WebView ${MIN_WEBVIEW_MAJOR}+${if (major > 0) "，当前 $major" else ""}）。请到应用商店更新「Android System WebView」或 Chrome 后再打开。",
+            "钱包需要较新的系统网页内核（Chromium ${MIN_WEBVIEW_MAJOR}+${if (major > 0) "，当前 $major" else ""}）。请到应用商店更新「Android System WebView」或 Chrome 后再打开。",
             color = TextSub, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 12.dp),
         )
         Box(
