@@ -8,6 +8,7 @@ import { type DictKey, translate } from "@/lib/i18n";
 import { localeStore, themeStore, type Locale, type Theme } from "@/lib/store";
 import { wagmiConfig, chain, NET } from "@/lib/web3";
 import { API_BASE } from "@/lib/api";
+import { awaitWallet, isWalletAbort } from "@/lib/wallet-wait";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
@@ -61,9 +62,10 @@ function Inner({ children }: { children: React.ReactNode }) {
   const connectWith = useCallback(
     async (c: Connector) => {
       try {
-        await connectAsync({ connector: c, chainId: chain.id });
+        await awaitWallet(connectAsync({ connector: c, chainId: chain.id }));
         setPickerOpen(false);
       } catch (e) {
+        if (isWalletAbort(e) && e.reason === "cancel") return;
         const msg = (e as Error).message;
         toast.error(/provider|not found|No injected/i.test(msg) ? t("wallet.notFound") : msg.split("\n")[0]);
       }
@@ -85,8 +87,9 @@ function Inner({ children }: { children: React.ReactNode }) {
         if (isConnected) {
           if (wrongChain) {
             try {
-              await switchChainAsync({ chainId: chain.id });
+              await awaitWallet(switchChainAsync({ chainId: chain.id }));
             } catch (e) {
+              if (isWalletAbort(e) && e.reason === "cancel") return;
               toast.error((e as Error).message.split("\n")[0]);
             }
             return;

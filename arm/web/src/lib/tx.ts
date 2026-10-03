@@ -8,6 +8,7 @@ import { txUrl } from "@/lib/web3";
 import { useApp } from "@/components/providers";
 import { errMsg } from "@/components/shared";
 import { logDebug } from "@/lib/debuglog";
+import { awaitWallet, isWalletAbort } from "@/lib/wallet-wait";
 
 /**
  * Small wrapper around wagmi's writeContract that toasts sent → confirmed/failed with explorer links.
@@ -22,13 +23,17 @@ export function useTx() {
     async (label: string, write: Parameters<typeof writeContractAsync>[0]) => {
       const id = toast.loading(`${label} · ${t("tx.confirming")}`);
       try {
-        const hash: Hex = await writeContractAsync(write);
+        const hash: Hex = await awaitWallet(writeContractAsync(write), { toastId: id, label });
         toast.loading(`${label} · ${t("tx.sent")}`, { id, description: hash.slice(0, 18) + "…", action: { label: t("tx.view"), onClick: () => window.open(txUrl(hash), "_blank") } });
         const rc = await client!.waitForTransactionReceipt({ hash });
         if (rc.status !== "success") throw new Error(t("tx.failed"));
         toast.success(`${label} · ${t("tx.success")}`, { id, action: { label: t("tx.view"), onClick: () => window.open(txUrl(hash), "_blank") } });
         return rc;
       } catch (e) {
+        if (isWalletAbort(e)) {
+          toast.error(`${label} · ${e.message}`, { id, description: t("wallet.lateTx"), action: undefined });
+          return null;
+        }
         logDebug("tx.failed", label, JSON.stringify({ to: write.address, fn: write.functionName, args: write.args }, (_, v) => (typeof v === "bigint" ? v.toString() : v)), e);
         toast.error(`${label} · ${t("tx.failed")}`, { id, description: errMsg(e) });
         return null;

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSignMessage } from "wagmi";
+import { awaitWallet } from "@/lib/wallet-wait";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Megaphone, X } from "lucide-react";
@@ -36,7 +37,7 @@ export function ReferralBindBanner() {
     setBusy(true);
     try {
       const ts = Math.floor(Date.now() / 1000);
-      const sig = await signMessageAsync({ message: bindMessage(address, ref, ts) });
+      const sig = await awaitWallet(signMessageAsync({ message: bindMessage(address, ref, ts) }));
       const r = await postReferralBind({ wallet: address, referrer: ref, ts, sig });
       if (!r.ok) throw new Error(r.error ?? "bind failed");
       toast.success(t("ref.bound"));

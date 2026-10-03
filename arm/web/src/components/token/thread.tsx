@@ -5,6 +5,7 @@ import { CornerDownRight, Heart, Send, X } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSignMessage } from "wagmi";
+import { awaitWallet } from "@/lib/wallet-wait";
 import { commentMessage, likeMessage, postComment, postLike, useComments, type Comment, type TokenView } from "@/lib/api";
 import { shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -33,7 +34,7 @@ export function Thread({ token }: { token: TokenView }) {
     try {
       const ts = Date.now();
       const body = text.trim();
-      const signature = await signMessageAsync({ message: commentMessage(token.address, body, ts, replyTo?.id ?? null) });
+      const signature = await awaitWallet(signMessageAsync({ message: commentMessage(token.address, body, ts, replyTo?.id ?? null) }));
       await postComment(token.address, { author: address, text: body, replyTo: replyTo?.id ?? null, ts, signature });
       setText("");
       setReplyTo(null);
@@ -53,7 +54,7 @@ export function Thread({ token }: { token: TokenView }) {
     }
     try {
       const ts = new Date().getTime();
-      const signature = await signMessageAsync({ message: likeMessage(c.id, ts) });
+      const signature = await awaitWallet(signMessageAsync({ message: likeMessage(c.id, ts) }));
       await postLike(c.id, { author: address, ts, signature });
       void refresh();
     } catch (e) {

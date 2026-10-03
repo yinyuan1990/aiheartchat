@@ -3,6 +3,8 @@
 import { useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSignMessage } from "wagmi";
+import { toast } from "sonner";
+import { awaitWallet, isWalletAbort } from "@/lib/wallet-wait";
 import { useApp } from "@/components/providers";
 import { BoatError, boatLogin, boatLoginMessage, boatSession, clearBoatSession, saveBoatSession, useBoatMe } from "@/lib/boat";
 
@@ -27,13 +29,19 @@ export function useBoatAccount() {
     setBusy(true);
     try {
       const ts = Date.now();
-      const sig = await signMessageAsync({ message: boatLoginMessage(address, ts) });
+      const sig = await awaitWallet(signMessageAsync({ message: boatLoginMessage(address, ts) }));
       const r = await boatLogin(address, ts, sig);
       saveBoatSession(r.token, address);
       setWelcomed(r.welcomed);
       setBump((b) => b + 1);
       qc.setQueryData(["boat", "me", r.token], r.me);
       return r.token;
+    } catch (e) {
+      if (isWalletAbort(e)) {
+        if (e.reason === "timeout") toast.error(e.message);
+        return null;
+      }
+      throw e;
     } finally {
       setBusy(false);
     }

@@ -9,6 +9,7 @@ import { formatUnits, isAddress, parseUnits, type Address, type EIP1193Provider 
 import { useApp } from "@/components/providers";
 import { useSite } from "@/lib/api";
 import { erc20Abi } from "@/lib/web3";
+import { awaitWallet } from "@/lib/wallet-wait";
 import { fmtUsd, shortAddr } from "@/lib/format";
 import {
   allowanceOf, balanceOf, dirSides, ensureChain, getQuote, getStatus, LifiError, NATIVE, pendingStore, publicClientFor, tokenPriceUsd,
@@ -202,7 +203,7 @@ function Bridge() {
     try {
       const provider = (await connector.getProvider()) as EIP1193Provider;
       setStep("switch");
-      await ensureChain(provider, from);
+      await awaitWallet(ensureChain(provider, from));
       const wc = walletClientFor(provider, from, address);
       const pc = publicClientFor(from);
       // fresh quote right before signing (routes/prices move; the displayed one may be up to 30s old)
@@ -214,13 +215,13 @@ function Bridge() {
         const have = await allowanceOf(from, address, q.estimate.approvalAddress);
         if (have < amountWei) {
           setStep("approve");
-          const h = await wc.writeContract({ address: from.token, abi: erc20Abi, functionName: "approve", args: [q.estimate.approvalAddress, amountWei] });
+          const h = await awaitWallet(wc.writeContract({ address: from.token, abi: erc20Abi, functionName: "approve", args: [q.estimate.approvalAddress, amountWei] }));
           await pc.waitForTransactionReceipt({ hash: h });
         }
       }
       setStep("send");
       const tx = q.transactionRequest;
-      const hash = await wc.sendTransaction({ to: tx.to, data: tx.data, value: tx.value ? BigInt(tx.value) : 0n, gas: tx.gasLimit ? BigInt(tx.gasLimit) : undefined });
+      const hash = await awaitWallet(wc.sendTransaction({ to: tx.to, data: tx.data, value: tx.value ? BigInt(tx.value) : 0n, gas: tx.gasLimit ? BigInt(tx.gasLimit) : undefined }));
       pendingStore.set({ txHash: hash, dir, recv, fromChain: from.chain.id, toChain: to.chain.id, bridge: q.tool, fromAmount: amountWei.toString(), toAddress: recipient as Address });
       setAmount("");
       toast.success(t("tools.step.wait").replace("{tool}", q.toolDetails?.name ?? q.tool));

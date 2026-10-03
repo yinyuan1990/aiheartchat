@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Copy, Loader2, Mountain, RotateCcw, Trophy, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { useSignMessage } from "wagmi";
+import { awaitWallet } from "@/lib/wallet-wait";
 import { useQueryClient } from "@tanstack/react-query";
 import { useApp } from "@/components/providers";
 import { errMsg } from "@/components/shared";
@@ -411,7 +412,7 @@ export function SellTop({ shared }: { shared?: string }) {
       let body: { wallet?: string; ts?: number; sig?: string } = {};
       if (connected && address && rank && !mineId) {
         const ts = Date.now();
-        const sig = await signMessageAsync({ message: gameSignMessage(address, d.day, ts) });
+        const sig = await awaitWallet(signMessageAsync({ message: gameSignMessage(address, d.day, ts) }));
         body = { wallet: address, ts, sig };
       }
       const s = await gameStart(body);
