@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowDownUp, Coins, ExternalLink, Gamepad2, Loader2, Mountain, Ship, Trophy, Wallet } from "lucide-react";
+import { ArrowDownUp, Car, Coins, ExternalLink, Gamepad2, Loader2, Mountain, Ship, Trophy, Wallet } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useReadContract } from "wagmi";
 import { formatUnits, maxUint256, parseUnits, type Address } from "viem";
@@ -15,7 +15,7 @@ import { ADDR, NET, addrUrl, erc20Abi } from "@/lib/web3";
 import { useTx } from "@/lib/tx";
 import { shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { V4, boatWithdrawSig, useBoatBoard, useBoatInfo, v4QuoterAbi, vaultAbi, type BoatInfo } from "@/lib/boat";
+import { V4, boatWithdrawSig, useBoatBoard, useBoatInfo, v4QuoterAbi, vaultAbi, type BoatGame, type BoatInfo } from "@/lib/boat";
 import { useBoatAccount } from "@/components/boat/use-boat-account";
 
 const SLIPPAGES = [2, 5, 10];
@@ -36,12 +36,14 @@ export function GamesExplore() {
     <div className="mx-auto max-w-5xl space-y-6">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-bold"><Gamepad2 className="size-6 text-primary" />{zh ? "游戏探索" : "Games"}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{zh ? "在 Arc 上玩的小游戏。快艇跑多远赚多少 $BOAT，卖在山顶比谁卖得准。" : "Small games on Arc. Earn $BOAT with the speedboat, or test your timing in Sell the Top."}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{zh ? "在 Arc 上玩的小游戏。快艇和赛车跑多远赚多少 $BOAT，卖在山顶比谁卖得准。" : "Small games on Arc. Earn $BOAT with the speedboat or the race car, or test your timing in Sell the Top."}</p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <GameCard href="/boat" icon={<Ship className="size-6" />} title={zh ? "快艇冲冲冲" : "Speedboat Dash"} tag="$BOAT"
           desc={zh ? "连钱包送 100 枚，一局门票 10，跑 1 米得 1 枚，单局最多 300。越往后礁石越密，还有炮击。" : "100 BOAT on sign-in, 10 per run, 1 BOAT per metre up to 300. Rocks get denser, then the artillery starts."} />
+        <GameCard href="/race" icon={<Car className="size-6" />} title={zh ? "极速跨海" : "Bridge Rush"} tag="$BOAT"
+          desc={zh ? "跨海大桥上从黄昏开到深夜：变道躲车、跳过路障、冲跳台飞过车流，后面还有逆行卡车。规则和快艇一样，同一个 BOAT 余额。" : "Sunset to midnight on a sea bridge: weave through traffic, hop barriers, fly off ramps, dodge wrong-way trucks. Same rules and BOAT balance as the speedboat."} />
         <GameCard href="/game" icon={<Mountain className="size-6" />} title={zh ? "卖在山顶" : "Sell the Top"} tag={zh ? "免费" : "Free"}
           desc={zh ? "每天一个真实 Arc 新币开盘，你是第一个散户，只能按一次卖出。只比成绩，没有奖品。" : "One real Arc launch a day, you're the first retail buyer, one sell. Bragging rights only."} />
       </div>
@@ -190,12 +192,23 @@ function MyBoat({ d, zh }: { d: BoatInfo; zh: boolean }) {
 }
 
 function Board({ zh }: { zh: boolean }) {
-  const b = useBoatBoard();
+  const [game, setGame] = useState<BoatGame>("boat");
+  const b = useBoatBoard(game);
   const rows = b.data?.rows ?? [];
   return (
     <Card>
       <CardContent className="p-5">
-        <div className="mb-2 flex items-center gap-2 font-semibold"><Trophy className="size-4 text-amber-500" />{zh ? "今日最远" : "Today's longest"}</div>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 font-semibold"><Trophy className="size-4 text-amber-500" />{zh ? "今日最远" : "Today's longest"}</div>
+          <div className="flex rounded-lg bg-muted p-0.5 text-xs">
+            {(["boat", "race"] as const).map((g) => (
+              <button key={g} type="button" onClick={() => setGame(g)}
+                className={cn("rounded-md px-2.5 py-1 font-medium", game === g ? "bg-background shadow-sm" : "text-muted-foreground")}>
+                {g === "boat" ? (zh ? "快艇" : "Boat") : (zh ? "赛车" : "Race")}
+              </button>
+            ))}
+          </div>
+        </div>
         {rows.length === 0 ? <p className="text-sm text-muted-foreground">{zh ? "今天还没人跑，去拿第一。" : "No runs yet today."}</p> : (
           <ol className="space-y-1 text-sm">
             {rows.map((r, i) => (

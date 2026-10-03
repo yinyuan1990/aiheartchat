@@ -86,11 +86,13 @@ export class BoatError extends Error {
 
 export const boatLogin = (wallet: string, ts: number, sig: string) =>
   call<{ token: string; welcomed: boolean; me: BoatMe }>("/login", { method: "POST", body: { wallet, ts, sig } });
-export const boatRunStart = (token: string) => call<BoatRun>("/run", { method: "POST", token, body: {} });
+export type BoatGame = "boat" | "race";
+export const boatRunStart = (token: string, game: BoatGame = "boat") => call<BoatRun>("/run", { method: "POST", token, body: { game } });
 export const boatRunEnd = (token: string, id: string, meters: number) => call<BoatRunEnd>(`/run/${id}/end`, { method: "POST", token, body: { meters } });
 export const boatWithdrawSig = (token: string) => call<BoatClaim>("/withdraw", { method: "POST", token, body: {} });
 
 export const useBoatInfo = () => useQuery({ queryKey: ["boat", "info"], queryFn: () => call<BoatInfo>("/info"), refetchInterval: 20_000 });
 export const useBoatMe = (token: string | null) =>
   useQuery({ queryKey: ["boat", "me", token], enabled: !!token, queryFn: () => call<BoatMe>("/me", { token }), refetchInterval: 15_000, retry: false });
-export const useBoatBoard = () => useQuery({ queryKey: ["boat", "board"], queryFn: () => call<{ day: number; rows: { wallet: string; meters: number }[] }>("/board"), refetchInterval: 30_000 });
+export const useBoatBoard = (game: BoatGame = "boat") =>
+  useQuery({ queryKey: ["boat", "board", game], queryFn: () => call<{ day: number; rows: { wallet: string; meters: number }[] }>(`/board?game=${game}`), refetchInterval: 30_000 });

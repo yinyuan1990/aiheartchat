@@ -583,7 +583,7 @@ app.get("/api/game/play/:id", async (c) => {
 // Speedboat (10.2): $BOAT game ledger, rewards withdrawn from BoatVault with a server signature (boat.ts).
 const boatToken = (c: { req: { header: (n: string) => string | undefined } }) => c.req.header("authorization")?.replace(/^Bearer /, "");
 app.get("/api/boat/info", async (c) => c.json(await boatInfo()));
-app.get("/api/boat/board", async (c) => c.json(await boatBoard()));
+app.get("/api/boat/board", async (c) => c.json(await boatBoard(c.req.query("game"))));
 app.post("/api/boat/login", async (c) => {
   const body = await c.req.json<{ wallet?: string; ts?: number; sig?: string }>().catch(() => ({}));
   const r = await boatLogin(clientIp(c) || "?", body);
@@ -594,7 +594,8 @@ app.get("/api/boat/me", async (c) => {
   return r ? c.json(r) : c.json({ error: "login" }, 401);
 });
 app.post("/api/boat/run", async (c) => {
-  const r = await boatRunStart(boatToken(c), clientIp(c) || "?");
+  const body = await c.req.json<{ game?: string }>().catch(() => ({}) as { game?: string });
+  const r = await boatRunStart(boatToken(c), clientIp(c) || "?", body.game);
   return "error" in r ? c.json(r, 401) : c.json(r);
 });
 app.post("/api/boat/run/:id/end", async (c) => {

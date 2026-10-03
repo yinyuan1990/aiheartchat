@@ -436,6 +436,26 @@
     display: none;
   }
 }
+@keyframes race-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  15% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+  30% {
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-28px);
+  }
+}
+@utility race-pop {
+  animation: race-pop 0.9s ease-out forwards;
+}
 
 /* Chromium < 105 (vendor system WebViews) has no container units: size the hero CTA labels from the viewport
    (phone layout — the sm/md range queries don't apply there either). */

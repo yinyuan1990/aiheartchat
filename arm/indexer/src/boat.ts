@@ -49,6 +49,11 @@ const vaultAbi = parseAbi([
 ]);
 const stateViewAbi = parseAbi(["function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96, int24 tick, uint24 protocolFee, uint24 lpFee)"]);
 
+/** Games paid from the same $BOAT ledger. Both run at the same world scale, so MAX_MPS bounds either; the daily
+ *  ranked-run limits are shared between them. */
+const GAMES = ["boat", "race"] as const;
+const gameOf = (g?: string) => (GAMES as readonly string[]).includes(g ?? "") ? (g as (typeof GAMES)[number]) : "boat";
+
 export const loginMessage = (wallet: string, ts: number) => `Arm · Speedboat\nWallet: ${getAddress(wallet)}\nTime: ${ts}`;
 /** Same day boundary as BoatVault.today(): 00:00 UTC+8. */
 const today = () => Math.floor((Date.now() / 1000 + 8 * 3600) / 86400);
@@ -64,6 +69,7 @@ function ensure() {
     await sql`create table if not exists boat_runs (
       id text primary key, wallet text not null, day int not null, ip text not null, ranked boolean not null,
       started_at timestamptz not null, ended_at timestamptz, meters int, reward int)`;
+    await sql`alter table boat_runs add column if not exists game text not null default 'boat'`;
     await sql`create index if not exists boat_runs_day_wallet on boat_runs (day, wallet)`;
     await sql`create index if not exists boat_runs_day_ip on boat_runs (day, ip)`;
     await sql`create table if not exists boat_withdrawals (
@@ -209,7 +215,8 @@ export async function boatMe(token: string | undefined) {
 
 // ---------------------------------------------------------------- runs
 
-export async function boatRunStart(token: string | undefined, ip: string) {
+export async function boatRunStart(token: string | undefined, ip: string, gameIn?: string) {
+  const game = gameOf(gameIn);
   const wallet = await walletOf(token);
   if (!wallet) return { error: "login" as const };
   const day = today();
@@ -228,7 +235,7 @@ export async function boatRunStart(token: string | undefined, ip: string) {
       const fromBonus = Math.min(bonus, ENTRY);
       await tx`update boat_players set bonus = bonus - ${fromBonus}, cash = cash - ${ENTRY - fromBonus} where wallet = ${wallet}`;
     }
-    await tx`insert into boat_runs (id, wallet, day, ip, ranked, started_at) values (${runId}, ${wallet}, ${day}, ${ip}, ${ranked}, now())`;
+    await tx`insert into boat_runs (id, wallet, day, ip, ranked, started_at, game) values (${runId}, ${wallet}, ${day}, ${ip}, ${ranked}, now(), ${game})`;
     return { ranked, practiceReason: why };
   });
   const c = await chainState().catch(() => null);
@@ -313,10 +320,11 @@ export async function boatInfo() {
   };
 }
 
-export async function boatBoard() {
+export async function boatBoard(gameIn?: string) {
   await ensure();
+  const game = gameOf(gameIn);
   const rows = await sql<{ wallet: string; meters: number }[]>`
-    select wallet, max(meters)::int as meters from boat_runs where day = ${today()} and ranked and meters is not null
+    select wallet, max(meters)::int as meters from boat_runs where day = ${today()} and ranked and meters is not null and game = ${game}
     group by wallet order by meters desc limit 20`;
-  return { day: today(), rows };
+  return { day: today(), game, rows };
 }

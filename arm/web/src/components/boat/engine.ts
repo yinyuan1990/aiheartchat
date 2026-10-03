@@ -119,7 +119,7 @@ function buildBuoy() {
 // Islands built before they arrive fall back to the procedural palms below.
 let palmProtos: THREE.Object3D[] = [];
 let palmLoad: Promise<void> | null = null;
-function loadPalms() {
+export function loadPalms() {
   if (palmLoad) return palmLoad;
   const loader = new GLTFLoader();
   palmLoad = Promise.all(
@@ -147,7 +147,7 @@ function loadPalms() {
   return palmLoad;
 }
 
-function buildIsland() {
+export function buildIsland() {
   const g = new THREE.Group();
   const sand = new THREE.Mesh(new THREE.CylinderGeometry(rand(3, 6), rand(6, 9), 1.4, 9), new THREE.MeshStandardMaterial({ color: "#f1d9a0", roughness: 1, flatShading: true }));
   sand.position.y = -0.2;
