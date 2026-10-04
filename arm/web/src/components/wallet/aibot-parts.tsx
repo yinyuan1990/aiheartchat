@@ -10,7 +10,7 @@ import type { HlAsset } from "@/lib/wallet/hl";
 import { providerOf, type AiConfig } from "@/lib/wallet/ai-trade";
 import { DEFAULT_BOT, MAX_COINS, MIN_OI_USD, botState, pauseBot, resumeBot, startBot, stopBot, updateBot, type BotCfg, type BotEvent, type BotState } from "@/lib/wallet/aibot";
 import { BottomSheet, GhostButton, PrimaryButton } from "./ui";
-import { AI_GRADIENT, Slider, Spinner, px, usd } from "./perp-parts";
+import { AI_GRADIENT, Slider, Spinner, px, sUsd } from "./perp-parts";
 
 type Sheet = null | "setup" | "stop";
 
@@ -79,7 +79,7 @@ export function HostedCard({ main, user, list, aiCfg, funded, onNeedAi }: { main
       {bot && (
         <>
           <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-            <Stat k="托管盈亏" v={`${pnl >= 0 ? "+" : ""}${usd(pnl)}`} sub={`${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%`} tone={pnl >= 0 ? "up" : "down"} />
+            <Stat k="托管盈亏" v={sUsd(pnl)} sub={`${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%`} tone={pnl >= 0 ? "up" : "down"} />
             <Stat k="币种" v={bot.cfg.coins.join(" ")} sub={`${bot.cfg.maxLeverage}x · ${bot.cfg.maxPct}%`} />
             <Stat k={bot.status === "running" ? "下次分析" : "亏损止停"} v={bot.status === "running" ? <Countdown at={bot.nextRunAt} /> : `${bot.cfg.maxLossPct}%`} sub={providerOf(bot.ai.provider).name} />
           </div>

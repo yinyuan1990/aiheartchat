@@ -14,6 +14,8 @@ import { GhostButton, PrimaryButton } from "./ui";
 /** Inline gradient: Tailwind 4 gradient utilities don't render in Chromium 99. */
 export const AI_GRADIENT = "linear-gradient(90deg, #7c3aed, #2563eb)";
 export const usd = (n: number, d = 2) => `$${n.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d })}`;
+/** "+$1.20" / "-$0.19" */
+export const sUsd = (n: number, d = 2) => `${n >= 0 ? "+" : "-"}${usd(Math.abs(n), d)}`;
 export const px = (n: number) => (n >= 1000 ? n.toLocaleString("en-US", { maximumFractionDigits: 1 }) : n >= 1 ? n.toLocaleString("en-US", { maximumFractionDigits: 4 }) : n.toPrecision(4));
 
 export function RiskGate({ onAccept }: { onAccept: () => void }) {

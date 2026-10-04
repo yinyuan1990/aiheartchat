@@ -7,10 +7,10 @@ import { ArrowDown, ArrowUp, CaretDown, CheckCircle, Robot, Sparkle } from "@pho
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { storeRead, storeWrite } from "@/lib/wallet/native";
-import { HL_BUILDER, account, agentActive, agentExtraKey, approveAgent, approveBuilder, assets, builderApproved, cancelOrder, closePosition, newAgent, openOrders, openPosition, parseAgent, setLeverage, type HlAsset, type HlPosition } from "@/lib/wallet/hl";
+import { HL_BUILDER, account, agentActive, agentExtraKey, approveAgent, approveBuilder, assets, TAKER_FEE, builderApproved, cancelOrder, closePosition, trades, newAgent, openOrders, openPosition, parseAgent, setLeverage, type HlAsset, type HlPosition, type HlTrade } from "@/lib/wallet/hl";
 import { AI_CONFIG_KEY, analyze, parseAiConfig, type AiConfig, type AiResult } from "@/lib/wallet/ai-trade";
 import { useVault } from "@/components/wallet/wallet-context";
-import { AI_GRADIENT, AiCard, AiSettingsSheet, CoinPicker, DepositSheet, RiskGate, Spinner, WithdrawSheet, px, usd } from "@/components/wallet/perp-parts";
+import { AI_GRADIENT, AiCard, AiSettingsSheet, CoinPicker, DepositSheet, RiskGate, Spinner, WithdrawSheet, px, sUsd, usd } from "@/components/wallet/perp-parts";
 import { BottomNav, BottomSheet, GhostButton, IconButton, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
 import { HostedCard } from "@/components/wallet/aibot-parts";
 import { PerpChart, type ChartLine } from "@/components/wallet/perp-chart";
@@ -50,6 +50,7 @@ export default function PerpPage() {
   const asset = list.data?.find((a) => a.name === coin);
   const acctQ = useQuery({ queryKey: ["hl", "acct", user], queryFn: () => account(user!), enabled: !!user, refetchInterval: 5_000 });
   const ordersQ = useQuery({ queryKey: ["hl", "orders", user], queryFn: () => openOrders(user!), enabled: !!user, refetchInterval: 8_000 });
+  const tradesQ = useQuery({ queryKey: ["hl", "trades", user], queryFn: () => trades(user!), enabled: !!user, refetchInterval: 15_000 });
   const acct = acctQ.data;
   const available = acct?.available ?? 0;
   const funded = !!acct && (acct.equity > 0 || acct.positions.length > 0);
@@ -109,11 +110,19 @@ export default function PerpPage() {
         ? "每笔至少 10 美元（保证金 × 杠杆）"
         : tpN && (isLong ? tpN <= refPx : tpN >= refPx)
           ? "止盈价要在开仓价的" + (isLong ? "上方" : "下方")
+          : tpN && Math.abs(tpN / refPx - 1) < TAKER_FEE * 2.5
+            ? `止盈离开仓价太近（不到 ${(TAKER_FEE * 250).toFixed(2)}%），一碰就平，扣掉开平仓手续费是亏的`
           : slN && (isLong ? slN >= refPx : slN <= refPx)
             ? "止损价要在开仓价的" + (isLong ? "下方" : "上方")
             : slN && liqEst && (isLong ? slN <= liqEst : slN >= liqEst)
               ? "止损价在强平价之外，会先被强平"
               : null;
+  const fee = notional * TAKER_FEE * 2;
+  const hints = [
+    levUsed >= 20 ? `${levUsed} 倍杠杆：价格反向波动约 ${(100 / levUsed).toFixed(1)}% 就会亏光这笔保证金（强平）` : "",
+    slN && Math.abs(slN / refPx - 1) < 0.002 ? "止损离开仓价不到 0.2%，正常波动就可能被打掉" : "",
+    m && fee > m * 0.05 ? `开仓加平仓手续费约 ${usd(fee)}，占保证金 ${((fee / m) * 100).toFixed(0)}%` : "",
+  ].filter(Boolean);
 
   const place = async () => {
     if (!asset || !agent) return;
@@ -243,7 +252,7 @@ export default function PerpPage() {
           <div className="mt-1 font-mono text-[30px] font-semibold">{acct ? usd(acct.equity) : "…"}</div>
           <div className="mt-1 flex gap-4 text-[12px] text-white/60">
             <span>可用 {usd(available)}</span>
-            {acct && acct.positions.length > 0 && <span className={acct.upnl >= 0 ? "text-[#4fd1c5]" : "text-[#ff8a80]"}>浮盈 {acct.upnl >= 0 ? "+" : ""}{usd(acct.upnl)}</span>}
+            {acct && acct.positions.length > 0 && <span className={acct.upnl >= 0 ? "text-[#4fd1c5]" : "text-[#ff8a80]"}>浮盈 {sUsd(acct.upnl)}</span>}
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setSheet("deposit")} className="flex h-10 items-center justify-center gap-1 rounded-xl bg-white text-[14px] font-semibold text-black">
@@ -357,8 +366,16 @@ export default function PerpPage() {
             <Line k="数量" v={size ? `${size.toPrecision(4)} ${coin}` : "—"} />
             <Line k="预估强平价" v={liqEst ? px(liqEst) : "—"} />
             <Line k="最多亏损" v={m ? `${usd(m)}（这笔保证金）` : "—"} />
+            <Line k="手续费（开 + 平，约）" v={notional ? usd(fee) : "—"} />
           </div>
           {problem && <div className="mt-2 text-[12px] text-down">{problem}</div>}
+          {!problem && hints.length > 0 && (
+            <ul className="mt-2 space-y-0.5 text-[12px] leading-5 text-[#b45309]">
+              {hints.map((h) => (
+                <li key={h}>· {h}</li>
+              ))}
+            </ul>
+          )}
           <PrimaryButton className="mt-3" tone={isLong ? "up" : "down"} disabled={!ready || !m || !!problem || !asset} onClick={() => setSheet("confirm")}>
             {!ready ? "先完成上面的开通步骤" : `${isLong ? "开多" : "开空"} ${coin}`}
           </PrimaryButton>
@@ -379,8 +396,7 @@ export default function PerpPage() {
                         {p.side === "long" ? "多" : "空"} {p.leverage}x {p.cross ? "全仓" : "逐仓"}
                       </span>
                       <span className={cn("ml-auto font-mono text-[14px] font-semibold", p.upnl >= 0 ? "text-up" : "text-down")}>
-                        {p.upnl >= 0 ? "+" : ""}
-                        {usd(p.upnl)} ({(p.roe * 100).toFixed(1)}%)
+                        {sUsd(p.upnl)} ({(p.roe * 100).toFixed(1)}%)
                       </span>
                     </div>
                     <div className="mt-2 grid grid-cols-4 gap-1 text-[11px] text-muted-foreground">
@@ -432,6 +448,9 @@ export default function PerpPage() {
             </ul>
           </section>
         )}
+
+        {/* trade history */}
+        {(tradesQ.data?.length ?? 0) > 0 && <TradeList rows={tradesQ.data!} />}
 
         {/* AI history */}
         {log.length > 0 && (
@@ -538,8 +557,7 @@ export default function PerpPage() {
             <p className="mt-3 text-center text-[14px] text-muted-foreground">
               {closing.side === "long" ? "多" : "空"}单 {closing.size} {closing.coin}，当前浮盈{" "}
               <b className={closing.upnl >= 0 ? "text-up" : "text-down"}>
-                {closing.upnl >= 0 ? "+" : ""}
-                {usd(closing.upnl)}
+                {sUsd(closing.upnl)}
               </b>
             </p>
             <div className="mt-5 grid grid-cols-2 gap-2">
@@ -552,6 +570,62 @@ export default function PerpPage() {
         )}
       </BottomSheet>
     </WalletFrame>
+  );
+}
+
+const DIR: Record<string, string> = { "Open Long": "开多", "Close Long": "平多", "Open Short": "开空", "Close Short": "平空", "Long > Short": "多转空", "Short > Long": "空转多" };
+const REASON: Record<HlTrade["reason"], { label: string; cls: string }> = {
+  tp: { label: "止盈触发", cls: "bg-up/15 text-up" },
+  sl: { label: "止损触发", cls: "bg-down/15 text-down" },
+  liq: { label: "强平", cls: "bg-down text-white" },
+  market: { label: "市价", cls: "bg-muted text-muted-foreground" },
+  limit: { label: "限价", cls: "bg-muted text-muted-foreground" },
+};
+
+function TradeList({ rows }: { rows: HlTrade[] }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? rows.slice(0, 50) : rows.slice(0, 6);
+  return (
+    <section className="rounded-[22px] bg-card p-4 ring-1 ring-border/60">
+      <div className="mb-1 text-[15px] font-semibold">成交记录</div>
+      <ul className="divide-y divide-border/50">
+        {shown.map((t) => {
+          const closing = /^Close|>/.test(t.dir);
+          const net = t.pnl - t.fee - t.openFee;
+          const r = REASON[t.reason];
+          return (
+            <li key={t.oid} className="py-2.5 text-[12px]">
+              <div className="flex items-center gap-2">
+                <span className="text-[13px] font-semibold">{t.coin}</span>
+                <span className={["Open Long", "Close Short", "Short > Long"].includes(t.dir) ? "text-up" : "text-down"}>{DIR[t.dir] ?? t.dir}</span>
+                <span className={cn("rounded px-1.5 py-0.5 text-[11px] font-semibold", r.cls)}>{r.label}</span>
+                {closing && (
+                  <span className={cn("ml-auto font-mono text-[13px] font-semibold", net >= 0 ? "text-up" : "text-down")}>
+                    {sUsd(net)}
+                  </span>
+                )}
+              </div>
+              <div className="mt-0.5 flex gap-3 font-mono text-muted-foreground">
+                <span>{new Date(t.time).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
+                <span>@ {px(t.px)}</span>
+                <span>{t.size}</span>
+                <span>手续费 {usd(t.fee, 3)}</span>
+              </div>
+              {closing && (
+                <div className="mt-0.5 text-muted-foreground">
+                  价差盈亏 {sUsd(t.pnl, 3)}，扣开平仓手续费 {usd(t.fee + t.openFee, 3)} 后 {sUsd(net, 3)}
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {rows.length > 6 && (
+        <button type="button" onClick={() => setAll((v) => !v)} className="mt-1 text-[12px] text-muted-foreground underline underline-offset-4">
+          {all ? "收起" : `查看更多（共 ${Math.min(rows.length, 50)} 条）`}
+        </button>
+      )}
+    </section>
   );
 }
 
@@ -608,6 +682,7 @@ function Confirm(p: { asset: HlAsset; isLong: boolean; type: string; price: numb
         <Line k="数量" v={`${p.size.toPrecision(4)} ${p.asset.name}`} />
         <Line k="止盈 / 止损" v={`${p.tp ? px(p.tp) : "—"} / ${p.sl ? px(p.sl) : "—"}`} />
         <Line k="预估强平价" v={p.liq ? px(p.liq) : "—"} />
+        <Line k="手续费（开 + 平，约）" v={usd(p.notional * TAKER_FEE * 2)} />
       </div>
       <p className="mt-3 text-[12px] leading-5 text-muted-foreground">由这台手机上的交易钥匙签名后提交到 Hyperliquid。{HL_BUILDER ? "平台收 0.05% 手续费（另有 Hyperliquid 自己的手续费）。" : "Hyperliquid 收取交易手续费。"}</p>
       <div className="mt-4 grid grid-cols-2 gap-2">

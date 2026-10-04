@@ -8,7 +8,7 @@ const HL = "https://api.hyperliquid.xyz";
 const INFO_TYPES = new Set([
   "meta", "metaAndAssetCtxs", "allMids", "l2Book", "candleSnapshot",
   "clearinghouseState", "openOrders", "frontendOpenOrders", "userFills", "userFillsByTime", "orderStatus",
-  "maxBuilderFee", "extraAgents", "userRole", "userFees", "spotClearinghouseState", "fundingHistory", "userAbstraction",
+  "maxBuilderFee", "extraAgents", "userRole", "userFees", "spotClearinghouseState", "fundingHistory", "userAbstraction", "historicalOrders",
 ]);
 /** shared answers: market data only, never per-user state */
 const INFO_TTL: Record<string, number> = { meta: 60_000, metaAndAssetCtxs: 2_000, allMids: 1_000, candleSnapshot: 15_000, fundingHistory: 60_000 };

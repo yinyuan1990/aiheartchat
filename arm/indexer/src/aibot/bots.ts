@@ -101,6 +101,7 @@ async function pause(user: string, reason: string) {
   await event(user, "pause", "", reason);
 }
 const usd = (n: number) => `$${n.toFixed(2)}`;
+const sUsd = (n: number) => `${n >= 0 ? "+" : "-"}${usd(Math.abs(n))}`;
 const side = (s: string) => (s === "long" ? "多" : "空");
 
 async function readCfg(b: unknown, list: HlAsset[]): Promise<BotCfg> {
@@ -139,7 +140,7 @@ async function closeAll(user: string, key: Hex, coins: string[], acct: HlAccount
     if (!a) continue;
     await closePosition(agent, a, p);
     await cancelReduceOnly(agent, user, a).catch(() => {});
-    done.push(`${p.coin} ${side(p.side)}单（浮盈 ${p.upnl >= 0 ? "+" : ""}${usd(p.upnl)}）`);
+    done.push(`${p.coin} ${side(p.side)}单（浮盈 ${sUsd(p.upnl)}）`);
   }
   return done;
 }
@@ -260,7 +261,7 @@ async function trade(user: string, s: Secret, cfg: BotCfg, asset: HlAsset, acct:
   if (p.close && pos) {
     await closePosition(agent, asset, pos);
     await cancelReduceOnly(agent, user, asset).catch(() => {});
-    await event(user, "close", asset.name, `平掉${side(pos.side)}单 ${pos.size} ${asset.name}，浮盈 ${pos.upnl >= 0 ? "+" : ""}${usd(pos.upnl)}`, { upnl: pos.upnl });
+    await event(user, "close", asset.name, `平掉${side(pos.side)}单 ${pos.size} ${asset.name}，浮盈 ${sUsd(pos.upnl)}`, { upnl: pos.upnl });
     if (p.open) p = plan(d, undefined, (await account(user)).available, asset, cfg, r.atr1h);
   }
   if (p.skip) return event(user, "skip", asset.name, p.skip);

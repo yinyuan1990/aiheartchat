@@ -225,6 +225,53 @@ export async function openOrders(user: Address): Promise<HlOrder[]> {
   return rows.map((o) => ({ coin: o.coin, oid: o.oid, side: o.side === "B" ? "long" : "short", px: Number(o.limitPx), size: Number(o.sz), reduceOnly: o.reduceOnly, trigger: o.isTrigger ? (/take profit/i.test(o.orderType) ? "tp" : "sl") : null, triggerPx: o.isTrigger ? Number(o.triggerPx) : null, orderType: o.orderType }));
 }
 
+/** One order's fills merged; `reason` says what closed / opened it (the trigger order, a liquidation, or a plain order) */
+export type HlTrade = { oid: number; time: number; coin: string; dir: string; px: number; size: number; pnl: number; fee: number; openFee: number; reason: "tp" | "sl" | "liq" | "market" | "limit" };
+export async function trades(user: Address): Promise<HlTrade[]> {
+  type F = { coin: string; px: string; sz: string; time: number; dir: string; closedPnl: string; fee: string; oid: number; crossed: boolean; liquidation?: unknown };
+  type H = { order: { oid: number; orderType: string } };
+  const [fills, hist] = await Promise.all([info<F[]>({ type: "userFills", user }), info<H[]>({ type: "historicalOrders", user }).catch(() => [] as H[])]);
+  const kind = new Map(hist.map((h) => [h.order.oid, h.order.orderType]));
+  const byOid = new Map<number, HlTrade & { notional: number }>();
+  for (const f of fills) {
+    const sz = Number(f.sz), px = Number(f.px);
+    const t = byOid.get(f.oid);
+    if (t) {
+      t.size += sz;
+      t.notional += sz * px;
+      t.px = t.notional / t.size;
+      t.pnl += Number(f.closedPnl);
+      t.fee += Number(f.fee);
+      t.time = Math.max(t.time, f.time);
+      continue;
+    }
+    const ot = kind.get(f.oid) ?? "";
+    const reason = f.liquidation ? "liq" : /take profit/i.test(ot) ? "tp" : /stop/i.test(ot) ? "sl" : f.crossed ? "market" : "limit";
+    byOid.set(f.oid, { oid: f.oid, time: f.time, coin: f.coin, dir: f.dir, px, size: sz, pnl: Number(f.closedPnl), fee: Number(f.fee), openFee: 0, reason, notional: sz * px });
+  }
+  // a close also carries its share of the fees paid to open that size, so "after fees" is the whole round trip
+  const list = [...byOid.values()].sort((a, b) => a.time - b.time);
+  const pool = new Map<string, { size: number; fee: number }>();
+  for (const t of list) {
+    const p = pool.get(t.coin) ?? { size: 0, fee: 0 };
+    if (t.dir.startsWith("Open")) {
+      p.size += t.size;
+      p.fee += t.fee;
+    } else if (p.size > 0) {
+      const share = Math.min(1, t.size / p.size);
+      t.openFee = p.fee * share;
+      p.fee -= t.openFee;
+      p.size = t.dir.includes(">") ? 0 : Math.max(0, p.size - t.size);
+      if (!p.size) p.fee = 0;
+    }
+    pool.set(t.coin, p);
+  }
+  return list.reverse().map(({ notional: _, ...t }) => t);
+}
+
+/** Hyperliquid's base taker fee (0.045%), for estimates */
+export const TAKER_FEE = 0.00045;
+
 export const builderApproved = async (user: Address) => (HL_BUILDER ? (await info<number>({ type: "maxBuilderFee", user, builder: HL_BUILDER })) >= BUILDER_FEE : true);
 
 // ---------- price / size formatting (Hyperliquid tick and lot rules) ----------
