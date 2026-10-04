@@ -196,7 +196,7 @@ export default function ShootGame() {
         <div className="absolute inset-0 flex flex-col items-center justify-end gap-4 bg-gradient-to-t from-black/70 via-black/10 to-transparent pb-16 text-center">
           <h1 className="text-4xl font-black italic tracking-tight text-cyan-200 drop-shadow-[0_0_18px_rgba(56,232,255,0.7)] sm:text-6xl">{zh ? "霓虹打击" : "Neon Strike"}</h1>
           <p className="max-w-sm px-4 text-base font-medium opacity-95 drop-shadow">
-            {zh ? "飞船自动开火，你只管走位。连续击杀叠连击，倍率最高 ×3。碰到敌人或子弹就结束，越往后越难。" : "Your ship fires on its own: just move. Chain kills for a combo, up to ×3 points. One touch from an enemy or a bullet ends it, and it keeps getting harder."}
+            {zh ? "飞船自动开火，你只管走位。霓虹怪里混着卡通水果，打爆会溅出各自颜色的果汁，西瓜还会吐瓜子。连续击杀叠连击，倍率最高 ×3。碰到敌人或子弹就结束，越往后越难。" : "Your ship fires on its own: just move. Cartoon fruit flies in with the neon shapes and bursts in its own juice; watermelons spit seeds. Chain kills for up to ×3 points. One touch ends it, and it keeps getting harder."}
           </p>
           {live && (
             <div className="pointer-events-auto w-full max-w-xs rounded-2xl bg-black/50 px-4 py-3 text-sm backdrop-blur">

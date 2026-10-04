@@ -5,6 +5,7 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { ShootAudio, recordingAudio, renderLog, type AudioLog } from "./audio";
 import { Batch, createGrid, mix, rgba, withA, type Rgba } from "./gfx";
 import { allFx, type Fx, type FxKey } from "./fx";
+import { FRUITS, FRUIT_DEFS, SMALL_FRUITS, drawFruit, isFruit, type Fruit } from "./fruit";
 
 export type Phase = "ready" | "playing" | "over";
 
@@ -29,12 +30,19 @@ export const spawnBudget = (s: number) => 40 + (s <= 120 ? 15 * s + 0.125 * s * 
 export const MAX_MULT = 3;
 export const multFor = (combo: number) => Math.min(MAX_MULT, 1 + 0.5 * Math.floor(combo / 10));
 
-type Kind = "dart" | "hex" | "elite";
-const KINDS: Record<Kind, { r: number; sides: number; hp: number; pts: number; color: Rgba; mass: number }> = {
+type Kind = "dart" | "hex" | "elite" | Fruit;
+type KindDef = { r: number; sides: number; hp: number; pts: number; color: Rgba; mass: number };
+/** color = what the hit sparks, rings and numbers take: the neon outline, or a fruit's juice */
+const KINDS = {
   dart: { r: 11, sides: 4, hp: 60, pts: 5, color: rgba("#ff3fa4"), mass: 1 },
   hex: { r: 16, sides: 6, hp: 200, pts: 15, color: rgba("#ff9a1f"), mass: 2.2 },
   elite: { r: 27, sides: 4, hp: 1200, pts: 100, color: rgba("#4dff6a"), mass: 7 },
-};
+  ...Object.fromEntries(FRUITS.map((f) => {
+    const d = FRUIT_DEFS[f];
+    return [f, { r: d.r, sides: 0, hp: d.hp, pts: d.pts, color: d.juice, mass: d.mass }];
+  })),
+} as Record<Kind, KindDef>;
+const pickFruit = () => SMALL_FRUITS[Math.floor(Math.random() * SMALL_FRUITS.length)];
 
 type Enemy = {
   kind: Kind;
@@ -55,12 +63,21 @@ type Enemy = {
   px: number; py: number;
 };
 type Planned = { kind: Kind; at: number; x0: number; x1: number; y1: number; arc: number; hover: number; dive?: boolean };
-type Bullet = { x: number; y: number; vx: number; vy: number; life: number };
-type Particle = { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; c: Rgba; kind: 0 | 1 | 2; rot: number; vr: number; drag: number };
+type Bullet = { x: number; y: number; vx: number; vy: number; life: number; seed?: boolean };
+/** kind 0 spark streak, 1 shard, 2 flash, 3 juice drop, 4 seed. g = gravity */
+type Particle = { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; c: Rgba; kind: 0 | 1 | 2 | 3 | 4; rot: number; vr: number; drag: number; g?: number };
+/** juice splat left on the floor, drifting down with the grid */
+type Stain = { x: number; y: number; blobs: [number, number, number][]; c: Rgba; life: number; max: number };
 type Text = { x: number; y: number; vy: number; text: string; life: number; max: number; size: number; color: string; glow: string };
 type Wave = { x: number; y: number; r: number; max: number; life: number; maxLife: number; w: number; c: Rgba; grid: number };
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
+/** halfway to white, as a CSS colour */
+const paleHex = (hex: string) => {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = (v: number) => Math.round(v + (255 - v) * 0.55);
+  return `rgb(${ch((n >> 16) & 255)},${ch((n >> 8) & 255)},${ch(n & 255)})`;
+};
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const WHITE: Rgba = [1, 1, 1, 1];
 const SHIP_C = rgba("#38e8ff");
@@ -74,7 +91,10 @@ export class ShootEngine {
   private scene = new THREE.Scene();
   private camera = new THREE.OrthographicCamera(-HALF_W, HALF_W, HALF_H, -HALF_H, -10, 10);
   private grid = createGrid();
-  private solid = new Batch(24000, false);
+  private solid = new Batch(30000, false);
+  /** cartoon fruit, juice and seeds: drawn after the bloom so the flat colours and outlines stay crisp */
+  private cartoon = new Batch(90000, false);
+  private over = new THREE.Scene();
   private glow = new Batch(60000, true);
   private overlay: HTMLCanvasElement;
   private g2: CanvasRenderingContext2D;
@@ -114,6 +134,7 @@ export class ShootEngine {
   private particles: Particle[] = [];
   private texts: Text[] = [];
   private waves: Wave[] = [];
+  private stains: Stain[] = [];
   private spent = 0;
   private plan: { cost: number; enemies: Planned[] } | null = null;
   private nextWave = 0;
@@ -145,8 +166,9 @@ export class ShootEngine {
   private capture = this.local && this.params.get("capture") === "1";
   private demo = this.local && (this.params.get("demo") === "1" || this.capture);
   // ?lab=1 (local): three targets that stand still and respawn, the ship can't die — for judging each effect
-  private lab = this.local && this.params.get("lab") === "1";
-  private labRespawn: Record<Kind, number> = { dart: 0, hex: 0, elite: 0 };
+  // ?lab=fruit: one of each fruit instead
+  private lab = this.local && !!this.params.get("lab") && this.params.get("lab") !== "0";
+  private labRespawn: Partial<Record<Kind, number>> = {};
 
   constructor(private host: HTMLElement, private hooks: Hooks, fx?: Fx | null) {
     if (fx) this.fx = { ...fx };
@@ -172,6 +194,7 @@ export class ShootEngine {
     this.solid.mesh.renderOrder = 0;
     this.glow.mesh.renderOrder = 1;
     this.scene.add(this.grid.mesh, this.solid.mesh, this.glow.mesh);
+    this.over.add(this.cartoon.mesh);
 
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
@@ -212,7 +235,7 @@ export class ShootEngine {
   start() {
     this.audio.unlock();
     if (this.phase === "playing") return;
-    this.enemies = []; this.queue = []; this.bullets = []; this.ebullets = []; this.particles = []; this.texts = []; this.waves = [];
+    this.enemies = []; this.queue = []; this.bullets = []; this.ebullets = []; this.particles = []; this.texts = []; this.waves = []; this.stains = [];
     this.gt = this.local ? Number(this.params.get("t")) || 0 : 0;
     this.spent = this.gt > 0 ? spawnBudget(this.gt) - 40 : 0;
     this.plan = null;
@@ -235,7 +258,7 @@ export class ShootEngine {
     window.removeEventListener("keyup", this.onKeyUp);
     this.composer.dispose();
     this.bloom.dispose();
-    this.scene.traverse((o) => {
+    for (const sc of [this.scene, this.over]) sc.traverse((o) => {
       const m = o as THREE.Mesh;
       m.geometry?.dispose();
       (m.material as THREE.Material | undefined)?.dispose();
@@ -407,13 +430,15 @@ export class ShootEngine {
   private director() {
     const t = this.gt;
     if (this.lab) {
-      const spots: Record<Kind, [number, number]> = { dart: [-110, 40], hex: [0, 70], elite: [110, 40] };
-      for (const kind of ["dart", "hex", "elite"] as Kind[]) {
-        if (this.enemies.some((e) => e.kind === kind) || t < this.labRespawn[kind]) continue;
-        const [x, y] = spots[kind];
+      const spots: Partial<Record<Kind, [number, number]>> = this.params.get("lab") === "fruit"
+        ? { apple: [-120, 110], orange: [-40, 110], lemon: [40, 110], grape: [120, 110], strawberry: [-110, 30], kiwi: [-30, 30], melon: [80, 30] }
+        : { dart: [-110, 40], hex: [0, 70], elite: [110, 40] };
+      for (const kind of Object.keys(spots) as Kind[]) {
+        if (this.enemies.some((e) => e.kind === kind) || t < (this.labRespawn[kind] ?? 0)) continue;
+        const [x, y] = spots[kind]!;
         this.spawn({ kind, at: t, x0: x, x1: x, y1: y, arc: 0, hover: Infinity });
         const e = this.enemies[this.enemies.length - 1];
-        e.swayA = 0; e.vr = 0; e.rot = kind === "hex" ? 0 : Math.PI / 4;
+        e.swayA = 0; e.vr = 0; e.rot = kind === "hex" || isFruit(kind) ? 0 : Math.PI / 4;
         e.state = "hover"; e.x = x; e.y = y; e.sqv = 6;
         this.labRespawn[kind] = Infinity;
       }
@@ -443,6 +468,8 @@ export class ShootEngine {
     if (t >= 40 && t - this.lastElite > Math.max(12, 24 - t * 0.06) && !this.enemies.some((e) => e.kind === "elite")) types.push(["elite", 4]);
     if (t >= 60) types.push(["rain", 1 + t / 60]);
     if (t >= 90) types.push(["mixed", 2]);
+    types.push(["fruit", 3]);
+    if (t >= 25) types.push(["melon", 1.5]);
     let r = Math.random() * types.reduce((s, x) => s + x[1], 0);
     let type = types[0][0];
     for (const [k, w] of types) { r -= w; if (r <= 0) { type = k; break; } }
@@ -477,8 +504,21 @@ export class ShootEngine {
       const n = 5 + Math.floor(rand(0, Math.min(5, t / 40)));
       for (let i = 0; i < n; i++) {
         const x = rand(-HALF_W + 20, HALF_W - 20);
-        list.push({ kind: "dart", at: i * rand(0.15, 0.3), x0: x, x1: x, y1: top - 20, arc: 0, hover: 0, dive: true });
+        list.push({ kind: Math.random() < 0.4 ? pickFruit() : "dart", at: i * rand(0.15, 0.3), x0: x, x1: x, y1: top - 20, arc: 0, hover: 0, dive: true });
       }
+    } else if (type === "fruit") {
+      // a basket of mixed fruit swung in from one side
+      const n = 4 + Math.floor(rand(0, Math.min(4, 1 + t / 30)));
+      const y1 = top - rand(170, 280);
+      for (let i = 0; i < n; i++) {
+        const x1 = (i - (n - 1) / 2) * Math.min(50, 300 / n);
+        list.push({ kind: pickFruit(), at: i * 0.14, x0: -side * 200, x1, y1: y1 + Math.sin(i * 1.3) * 18, arc: side * 40, hover: hover() + i * 0.12 });
+      }
+    } else if (type === "melon") {
+      const n = t > 60 ? 2 : 1;
+      const y1 = top - rand(190, 270);
+      for (let i = 0; i < n; i++) list.push({ kind: "melon", at: i * 0.3, x0: (i - (n - 1) / 2) * 120, x1: (i - (n - 1) / 2) * 120, y1, arc: side * 30, hover: hover() + 3 });
+      for (let i = 0; i < 3; i++) list.push({ kind: pickFruit(), at: 0.4 + i * 0.15, x0: (i - 1) * 70, x1: (i - 1) * 70, y1: y1 + 70, arc: 0, hover: hover() });
     } else {
       const y1 = top - rand(200, 270);
       for (let i = 0; i < 2; i++) list.push({ kind: "hex", at: i * 0.2, x0: (i ? 1 : -1) * 200, x1: (i ? 1 : -1) * 70, y1, arc: 0, hover: hover() + 2 });
@@ -493,7 +533,8 @@ export class ShootEngine {
     const y0 = this.hh + k.r + 20;
     this.enemies.push({
       kind: p.kind, x: p.x0, y: y0, ox: 0, oy: 0, ovx: 0, ovy: 0, sq: 0, sqv: 0,
-      rot: rand(0, Math.PI), vr: p.kind === "elite" ? 0.9 : rand(-1.5, 1.5),
+      // fruit stays roughly upright and only wobbles; the neon shapes spin
+      rot: isFruit(p.kind) ? rand(-0.3, 0.3) : rand(0, Math.PI), vr: p.kind === "elite" ? 0.9 : isFruit(p.kind) ? rand(-0.4, 0.4) : rand(-1.5, 1.5),
       hp: k.hp, flash: 0, state: p.dive ? "dive" : "enter", t: 0,
       x0: p.x0, y0, x1: clamp(p.x1, -HALF_W + k.r, HALF_W - k.r), y1: p.y1, arc: p.arc, enterDur: p.kind === "elite" ? 1.6 : rand(0.9, 1.2),
       hoverDur: p.hover, swayA: p.kind === "elite" ? 90 : rand(10, 26), swayF: p.kind === "elite" ? 0.5 : rand(0.8, 1.6), ph: rand(0, 6),
@@ -511,6 +552,7 @@ export class ShootEngine {
       const k = KINDS[e.kind];
       e.px = e.x + e.ox; e.py = e.y + e.oy;
       e.t += dt;
+      if (isFruit(e.kind)) e.vr += (-e.rot * 14 - e.vr * 2.2) * dt;
       e.rot += e.vr * dt;
       if (e.state === "enter") {
         const u = Math.min(1, e.t / e.enterDur);
@@ -559,6 +601,8 @@ export class ShootEngine {
   private enemyFire(e: Enemy, dt: number, t: number) {
     if (this.lab || e.kind === "dart" && t < 100) return;
     if (e.kind === "hex" && t < 20) return;
+    // of the fruit only the melon shoots: seeds, from 30 s
+    if (isFruit(e.kind) && (e.kind !== "melon" || t < 30)) return;
     e.fireT -= dt;
     if (e.fireT > 0 || e.y < this.sy + 140) return;
     const ex = e.x + e.ox, ey = e.y + e.oy;
@@ -573,6 +617,10 @@ export class ShootEngine {
         this.ebullets.push({ x: ex, y: ey - 10, vx: Math.cos(b) * v, vy: Math.sin(b) * v, life: 8 });
       }
       if (this.fx.squash) e.sqv -= 4;
+    } else if (e.kind === "melon") {
+      e.fireT = Math.max(1.4, 2.6 - (t - 30) * 0.01) + rand(0, 0.6);
+      for (const s of [-0.12, 0.12]) this.ebullets.push({ x: ex, y: ey - 12, vx: Math.cos(a + s) * v, vy: Math.sin(a + s) * v, life: 8, seed: true });
+      if (this.fx.squash) e.sqv -= 6;
     } else {
       e.fireT = e.kind === "hex" ? Math.max(1.1, 3 - t * 0.015) + rand(0, 0.8) : rand(3, 6);
       this.ebullets.push({ x: ex, y: ey - 8, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 8 });
@@ -618,24 +666,68 @@ export class ShootEngine {
     if (this.fx.flash) e.flash = 0.034;
     if (this.fx.knock) { const imp = (crit ? 420 : 260) / k.mass; e.ovx += dx * imp; e.ovy += dy * imp; e.vr += rand(-1, 1) * (crit ? 6 : 3) / k.mass; }
     if (this.fx.squash) e.sqv += (crit ? 13 : 9) / Math.sqrt(k.mass);
-    if (this.fx.numbers) this.addDamageText(ex + rand(-10, 10), ey + k.r * 0.4, dmg, crit);
+    const fruit = isFruit(e.kind) ? FRUIT_DEFS[e.kind] : null;
+    if (this.fx.numbers) this.addDamageText(ex + rand(-10, 10), ey + k.r * 0.4, dmg, crit, fruit?.juiceHex);
     if (this.fx.particles) {
       const hx = b.x, hy = ey - k.r * 0.7;
+      // sparks: bullet yellow off the neon shapes, the fruit's juice off fruit
+      const spark = fruit ? fruit.juice : BULLET_C;
       for (let i = 0; i < (crit ? 16 : 9); i++) {
         const a = -Math.PI / 2 + rand(-1.3, 1.3);
         const sp = rand(260, crit ? 760 : 560);
-        this.particles.push({ x: hx, y: hy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.14, 0.32), max: 0.32, size: crit ? 2.8 : 2.3, c: mix(WHITE, BULLET_C, rand(0, 0.7)), kind: 0, rot: 0, vr: 0, drag: 6 });
+        this.particles.push({ x: hx, y: hy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.14, 0.32), max: 0.32, size: crit ? 2.8 : 2.3, c: mix(WHITE, spark, rand(0.3, 0.9)), kind: 0, rot: 0, vr: 0, drag: 6 });
       }
-      for (let i = 0; i < (crit ? 6 : 3); i++) {
-        const a = rand(0, Math.PI * 2), sp = rand(80, 220);
-        this.particles.push({ x: hx, y: hy + k.r * 0.4, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp + 60, life: rand(0.25, 0.45), max: 0.45, size: rand(2.5, 4), c: k.color, kind: 1, rot: rand(0, 6), vr: rand(-15, 15), drag: 3 });
+      if (fruit) {
+        for (let i = 0; i < (crit ? 9 : 5); i++) {
+          const a = -Math.PI / 2 + rand(-1.1, 1.1), sp = rand(120, 320);
+          this.particles.push({ x: hx, y: hy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.35, 0.6), max: 0.6, size: rand(2, 3.6), c: fruit.juice, kind: 3, rot: 0, vr: 0, drag: 1.5, g: 700 });
+        }
+      } else {
+        for (let i = 0; i < (crit ? 6 : 3); i++) {
+          const a = rand(0, Math.PI * 2), sp = rand(80, 220);
+          this.particles.push({ x: hx, y: hy + k.r * 0.4, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp + 60, life: rand(0.25, 0.45), max: 0.45, size: rand(2.5, 4), c: k.color, kind: 1, rot: rand(0, 6), vr: rand(-15, 15), drag: 3 });
+        }
       }
-      this.particles.push({ x: hx, y: hy, vx: 0, vy: 0, life: 0.07, max: 0.07, size: crit ? 18 : 11, c: withA(BULLET_C, 0.8), kind: 2, rot: 0, vr: 0, drag: 0 });
+      this.particles.push({ x: hx, y: hy, vx: 0, vy: 0, life: 0.07, max: 0.07, size: crit ? 18 : 11, c: withA(spark, 0.8), kind: 2, rot: 0, vr: 0, drag: 0 });
     }
     if (e.hp <= 0) { this.kill(e, crit); return; }
     this.hitStop(crit ? 0.06 : 0.04);
     this.addTrauma(crit ? 0.14 : dmg / 450);
-    this.audio.hit(crit);
+    this.audio.hit(crit, !!fruit);
+  }
+
+  /** a fruit bursts: juice drops in its colour, chunks of skin and flesh, seeds, and a splat on the floor */
+  private fruitBurst(f: Fruit, ex: number, ey: number) {
+    const d = FRUIT_DEFS[f];
+    const big = f === "melon";
+    const s = big ? 1.6 : 1;
+    if (this.fx.particles) {
+      for (let i = 0; i < (big ? 46 : 26); i++) {
+        const a = rand(0, Math.PI * 2), sp = rand(90, 380) * s;
+        this.particles.push({ x: ex, y: ey, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp + 80, life: rand(0.5, 0.95), max: 0.95, size: rand(2.4, 5.5) * (big ? 1.2 : 1), c: i % 4 ? d.juice : mix(d.juice, WHITE, 0.45), kind: 3, rot: 0, vr: 0, drag: 1.4, g: 650 });
+      }
+      for (let i = 0; i < (big ? 16 : 9); i++) {
+        const a = rand(0, Math.PI * 2), sp = rand(70, 240) * s;
+        this.particles.push({ x: ex, y: ey, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp + 120, life: rand(0.7, 1.1), max: 1.1, size: rand(3.5, 6.5) * (big ? 1.4 : 1), c: i % 2 ? d.skin : d.flesh, kind: 1, rot: rand(0, 6), vr: rand(-12, 12), drag: 1, g: 520 });
+      }
+      if (d.seeds) for (let i = 0; i < (big ? 14 : 6); i++) {
+        const a = rand(0, Math.PI * 2), sp = rand(120, 330) * s;
+        this.particles.push({ x: ex, y: ey, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp + 90, life: rand(0.6, 1), max: 1, size: big ? 3 : 2, c: f === "strawberry" ? rgba("#ffe66b") : [0.08, 0.06, 0.05, 1], kind: 4, rot: a, vr: rand(-10, 10), drag: 1.2, g: 600 });
+      }
+      for (let i = 0; i < (big ? 24 : 12); i++) {
+        const a = rand(0, Math.PI * 2), sp = rand(240, 620) * s;
+        this.particles.push({ x: ex, y: ey, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.12, 0.3), max: 0.3, size: 2.2, c: mix(WHITE, d.juice, 0.6), kind: 0, rot: 0, vr: 0, drag: 5 });
+      }
+      this.particles.push({ x: ex, y: ey, vx: 0, vy: 0, life: 0.1, max: 0.1, size: d.r * (big ? 3 : 2.4), c: withA(mix(WHITE, d.juice, 0.55), 0.55), kind: 2, rot: 0, vr: 0, drag: 0 });
+      const blobs: [number, number, number][] = [[0, 0, d.r * 0.9 * s]];
+      for (let i = 0; i < (big ? 9 : 6); i++) { const a = rand(0, Math.PI * 2), r = rand(0.6, 1.5) * d.r * s; blobs.push([Math.cos(a) * r, Math.sin(a) * r, rand(0.18, 0.42) * d.r * s]); }
+      this.stains.push({ x: ex, y: ey, blobs, c: d.juice, life: 2.4, max: 2.4 });
+      if (this.stains.length > 24) this.stains.shift();
+    }
+    if (this.fx.wave) {
+      this.waves.push({ x: ex, y: ey, r: d.r, max: big ? 170 : 100, life: 0, maxLife: big ? 0.55 : 0.42, w: big ? 6 : 4, c: mix(WHITE, d.juice, 0.55), grid: big ? 1 : 0.6 });
+      if (big) this.waves.push({ x: ex, y: ey, r: d.r, max: 120, life: -0.07, maxLife: 0.45, w: 3, c: d.juice, grid: 0 });
+    }
   }
 
   private kill(e: Enemy, crit: boolean) {
@@ -652,12 +744,20 @@ export class ShootEngine {
     const mult = multFor(this.combo);
     const pts = Math.round(k.pts * mult);
     this.score += pts;
+    const fruit = isFruit(e.kind) ? e.kind : null;
     if (this.fx.combo) {
-      this.addText(ex + 18, ey + k.r + 18, `+${pts}`, 14, "#fff3a0", "rgba(255,200,40,0.8)", 0.7);
+      const col = fruit ? FRUIT_DEFS[fruit].juiceHex : "#fff3a0";
+      this.addText(ex + 18, ey + k.r + 18, `+${pts}`, fruit ? 16 : 14, col, fruit ? col : "rgba(255,200,40,0.8)", 0.7);
       if (mult > before) { this.multPop = 0; this.audio.levelUp(mult); }
     }
-    this.hitStop(big ? 0.16 : crit ? 0.09 : 0.065, true);
-    this.addTrauma(big ? 0.75 : e.kind === "hex" ? 0.32 : 0.22);
+    const melon = e.kind === "melon";
+    this.hitStop(big ? 0.16 : melon ? 0.11 : crit ? 0.09 : 0.065, true);
+    this.addTrauma(big ? 0.75 : melon ? 0.45 : e.kind === "hex" ? 0.32 : 0.22);
+    if (fruit) {
+      this.audio.splat(this.combo, melon);
+      this.fruitBurst(fruit, ex, ey);
+      return;
+    }
     this.audio.kill(this.combo, big);
     if (this.fx.particles) {
       const n = big ? 60 : e.kind === "hex" ? 30 : 20;
@@ -702,6 +802,7 @@ export class ShootEngine {
       if (p.life <= 0) { this.particles.splice(i, 1); continue; }
       const d = Math.exp(-p.drag * dt);
       p.vx *= d; p.vy *= d;
+      if (p.g) p.vy -= p.g * dt;
       p.x += p.vx * dt; p.y += p.vy * dt;
       p.rot += p.vr * dt;
     }
@@ -717,11 +818,19 @@ export class ShootEngine {
       w.life += dt;
       if (w.life >= w.maxLife) this.waves.splice(i, 1);
     }
+    for (let i = this.stains.length - 1; i >= 0; i--) {
+      const s = this.stains[i];
+      s.life -= dt;
+      // the grid scrolls down at 6 units / s; the splat sits on it
+      s.y -= 6 * dt;
+      if (s.life <= 0) this.stains.splice(i, 1);
+    }
   }
 
-  private addDamageText(x: number, y: number, dmg: number, crit: boolean) {
-    if (crit) this.addText(x, y, `${dmg}!`, 34, "#ff6a3d", "rgba(255,80,40,0.95)", 0.8);
-    else this.addText(x, y, String(dmg), 20, "#ffffff", "rgba(255,255,255,0.6)", 0.6);
+  /** juice = the fruit's colour: crits take it in full, normal hits a pale tint of it */
+  private addDamageText(x: number, y: number, dmg: number, crit: boolean, juice?: string) {
+    if (crit) this.addText(x, y, `${dmg}!`, 34, juice ?? "#ff6a3d", juice ?? "rgba(255,80,40,0.95)", 0.8);
+    else this.addText(x, y, String(dmg), 20, juice ? paleHex(juice) : "#ffffff", juice ?? "rgba(255,255,255,0.6)", 0.6);
   }
 
   private addText(x: number, y: number, text: string, size: number, color: string, glow: string, life: number) {
@@ -790,7 +899,8 @@ export class ShootEngine {
     for (; gi < gw.length; gi++) gw[gi].w = 0;
 
     const S = this.solid, G = this.glow;
-    S.begin(); G.begin();
+    const C = this.cartoon;
+    S.begin(); G.begin(); C.begin();
     const glowOn = this.fx.glow;
 
     // field edges when the screen is wider than the field
@@ -812,6 +922,14 @@ export class ShootEngine {
       if (glowOn) G.ring(w.x, w.y, r * 0.95, w.w * 3, withA(w.c, 0.08 * (1 - u)));
     }
 
+    // juice splats on the floor, under everything that moves
+    for (const s of this.stains) {
+      const u = s.life / s.max;
+      const a = 0.42 * Math.min(1, u * 2.5);
+      const grow = 1 + (1 - u) * 0.15;
+      for (const [bx, by, br] of s.blobs) S.polyFill(s.x + bx * grow, s.y + by * grow, br * grow, 12, 0, 1, 1, withA(s.c, a));
+    }
+
     // enemies
     for (const e of this.enemies) {
       const k = KINDS[e.kind];
@@ -819,6 +937,11 @@ export class ShootEngine {
       const sq = this.fx.squash ? e.sq : 0;
       const sx = 1 + sq, sy = 1 - sq;
       const white = e.flash > 0;
+      if (isFruit(e.kind)) {
+        if (glowOn && !white) G.dot(ex, ey, k.r * 2.2, withA(k.color, 0.07));
+        drawFruit(C, e.kind, ex, ey, e.rot, sx, sy, white);
+        continue;
+      }
       const c = white ? WHITE : k.color;
       if (glowOn && !white) G.dot(ex, ey, k.r * 2.4, withA(c, 0.1));
       S.polyFill(ex, ey, k.r, k.sides, e.rot, sx, sy, white ? [0.92, 0.92, 0.92, 1] : withA(mix([0, 0, 0, 1], k.color, 0.18), 0.85));
@@ -835,6 +958,13 @@ export class ShootEngine {
 
     // enemy bullets
     for (const b of this.ebullets) {
+      if (b.seed) {
+        // a watermelon seed: dark with a pale pink rim so it reads on the dark floor
+        if (glowOn) G.dot(b.x, b.y, 13, withA(rgba("#ff3b5c"), 0.3));
+        C.polyFill(b.x, b.y, 6.2, 10, 0, 1, 1.3, rgba("#ffd0d8"));
+        C.polyFill(b.x, b.y, 4.6, 10, 0, 1, 1.3, [0.08, 0.05, 0.05, 1]);
+        continue;
+      }
       if (glowOn) G.dot(b.x, b.y, 14, withA(EBULLET_C, 0.35));
       S.polyFill(b.x, b.y, 4.5, 10, 0, 1, 1, EBULLET_C);
       S.polyFill(b.x, b.y, 2.2, 8, 0, 1, 1, WHITE);
@@ -859,7 +989,15 @@ export class ShootEngine {
       if (p.kind === 0) {
         G.line(p.x - p.vx * 0.045, p.y - p.vy * 0.045, p.x, p.y, p.size, withA(p.c, 0), withA(p.c, a));
       } else if (p.kind === 1) {
-        G.polyFill(p.x, p.y, p.size * (0.5 + 0.5 * a), 3, p.rot, 1, 0.6, withA(p.c, a));
+        // fruit chunks (they fall: g) are solid cartoon bits, neon shards glow
+        if (p.g) C.polyFill(p.x, p.y, p.size * (0.6 + 0.4 * a), 4, p.rot, 1, 0.7, withA(p.c, Math.min(1, a * 1.5)));
+        else G.polyFill(p.x, p.y, p.size * (0.5 + 0.5 * a), 3, p.rot, 1, 0.6, withA(p.c, a));
+      } else if (p.kind === 3) {
+        const sz = p.size * (0.45 + 0.55 * a);
+        C.polyFill(p.x, p.y, sz, 10, 0, 1, 1 + Math.min(0.8, Math.abs(p.vy) / 900), withA(p.c, Math.min(1, a * 1.4)));
+        C.polyFill(p.x - sz * 0.3, p.y + sz * 0.3, sz * 0.32, 6, 0, 1, 1, [1, 1, 1, 0.6 * a]);
+      } else if (p.kind === 4) {
+        C.polyFill(p.x, p.y, p.size, 8, p.rot, 1.6, 1, withA(p.c, Math.min(1, a * 1.5)));
       } else {
         G.dot(p.x, p.y, p.size * (1.4 - a * 0.4), withA(p.c, a));
       }
@@ -896,9 +1034,13 @@ export class ShootEngine {
       }
     }
 
-    S.end(); G.end();
+    S.end(); G.end(); C.end();
     if (glowOn) this.composer.render();
     else this.renderer.render(this.scene, this.camera);
+    this.renderer.autoClear = false;
+    this.renderer.setRenderTarget(null);
+    this.renderer.render(this.over, this.camera);
+    this.renderer.autoClear = true;
     this.draw2d();
   }
 

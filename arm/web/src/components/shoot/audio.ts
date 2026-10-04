@@ -85,8 +85,14 @@ export class ShootAudio {
     this.burst(0.03, "highpass", 5000, 3000, 0.05, 0.7);
   }
 
-  /** bullet hits an enemy that survives */
-  hit(crit: boolean) {
+  /** bullet hits an enemy that survives; fruit = a softer, wetter thud */
+  hit(crit: boolean, fruit = false) {
+    if (fruit) {
+      this.tone("sine", crit ? 520 : 380, crit ? 160 : 120, crit ? 0.09 : 0.06, crit ? 0.3 : 0.2);
+      this.burst(0.06, "bandpass", 1400, 500, crit ? 0.3 : 0.18, 1.5);
+      if (crit) this.tone("sine", 1800, 2600, 0.05, 0.08, 0.01);
+      return;
+    }
     this.tone("triangle", crit ? 1500 : 980, crit ? 500 : 360, crit ? 0.08 : 0.05, crit ? 0.22 : 0.13);
     this.burst(0.05, "bandpass", 3200, 1400, crit ? 0.3 : 0.18, 2);
     if (crit) this.tone("sine", 2600, 2400, 0.12, 0.07, 0.01);
@@ -103,6 +109,19 @@ export class ShootAudio {
       this.burst(1.4, "bandpass", 1800, 200, 0.35, 0.7, 0.05);
       for (const [fr, a] of [[392, 0.09], [523, 0.08], [784, 0.07]] as const) this.tone("triangle", fr * 2, fr * 2, 0.18, a, 0.08 + fr / 9000);
     }
+  }
+
+  /** fruit bursts: a wet squelch, then drops pattering, pitched up a semitone per combo step like kill() */
+  splat(combo: number, big: boolean) {
+    const k = 2 ** (Math.min(combo, 24) / 12);
+    this.burst(big ? 0.4 : 0.22, "lowpass", 2600, 220, big ? 0.8 : 0.55, 3);
+    this.tone("sine", 260 * k, 70, big ? 0.3 : 0.16, big ? 0.7 : 0.45);
+    this.burst(0.12, "bandpass", 900, 2400, 0.25, 4, 0.02);
+    for (let i = 0; i < (big ? 6 : 3); i++) {
+      const f = (900 + Math.random() * 900) * k;
+      this.tone("sine", f, f * 1.6, 0.04, 0.07, 0.06 + i * 0.045 + Math.random() * 0.03);
+    }
+    if (big) this.tone("sine", 110, 35, 0.5, 0.8);
   }
 
   /** the combo multiplier went up a step */
@@ -154,7 +173,7 @@ export class ShootAudio {
 
 /** Calls the engine makes on ShootAudio, recorded with game time so a capture can be scored afterwards. */
 export type AudioLog = [number, string, unknown[]][];
-const LOGGED = new Set(["shot", "hit", "kill", "levelUp", "comboBreak", "enemyShot", "die", "start", "setEnabled"]);
+const LOGGED = new Set(["shot", "hit", "kill", "splat", "levelUp", "comboBreak", "enemyShot", "die", "start", "setEnabled"]);
 
 /** Wraps a ShootAudio so the listed calls are logged (at clock()) instead of played. */
 export function recordingAudio(real: ShootAudio, log: AudioLog, clock: () => number): ShootAudio {

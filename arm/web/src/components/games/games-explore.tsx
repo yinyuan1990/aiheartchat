@@ -45,7 +45,7 @@ export function GamesExplore() {
         <GameCard href="/race" icon={<Car className="size-6" />} title={zh ? "极速跨海" : "Bridge Rush"} tag="$BOAT"
           desc={zh ? "跨海大桥上从黄昏开到深夜：变道躲车、跳过路障、冲跳台飞过车流，后面还有逆行卡车。规则和快艇一样，同一个 BOAT 余额。" : "Sunset to midnight on a sea bridge: weave through traffic, hop barriers, fly off ramps, dodge wrong-way trucks. Same rules and BOAT balance as the speedboat."} />
         <GameCard href="/shoot" icon={<Crosshair className="size-6" />} title={zh ? "霓虹打击" : "Neon Strike"} tag="$BOAT"
-          desc={zh ? "霓虹几何射击：飞船自动开火，走位躲弹，连杀叠倍率最高 ×3。每 10 分得 1 枚，单局最多 300，越往后敌人越密、子弹越多。" : "Neon geometry shooter: auto-fire, dodge, chain kills for up to ×3. 1 BOAT per 10 points up to 300 a run; enemies and bullets keep piling on."} />
+          desc={zh ? "霓虹射击：飞船自动开火，走位躲弹，打爆霓虹怪和卡通水果，连杀叠倍率最高 ×3。每 10 分得 1 枚，单局最多 300，越往后敌人越密、子弹越多。" : "Neon shooter: auto-fire, dodge, pop neon shapes and cartoon fruit, chain kills for up to ×3. 1 BOAT per 10 points up to 300 a run; enemies and bullets keep piling on."} />
         <GameCard href="/game" icon={<Mountain className="size-6" />} title={zh ? "卖在山顶" : "Sell the Top"} tag={zh ? "免费" : "Free"}
           desc={zh ? "每天一个真实 Arc 新币开盘，你是第一个散户，只能按一次卖出。只比成绩，没有奖品。" : "One real Arc launch a day, you're the first retail buyer, one sell. Bragging rights only."} />
       </div>
