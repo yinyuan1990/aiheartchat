@@ -1,7 +1,8 @@
 import { BadRequestException } from '@nestjs/common';
+import { tonRaw } from '../user/chain-address';
 
 /** 链上钱包支持的链（和 Arm 钱包的 WALLET_CHAINS key 一致） */
-export const CARD_CHAINS = ['arc', 'eth', 'bsc', 'base', 'arb', 'polygon', 'sol', 'trx'] as const;
+export const CARD_CHAINS = ['arc', 'eth', 'bsc', 'base', 'arb', 'polygon', 'sol', 'trx', 'ton'] as const;
 export const isCardChain = (c: string) => (CARD_CHAINS as readonly string[]).includes(c);
 
 export const cleanText = (s: unknown, max: number) => String(s ?? '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, max);
@@ -10,6 +11,7 @@ export const cleanText = (s: unknown, max: number) => String(s ?? '').replace(/[
 export function isChainAddress(chain: string, a: string): boolean {
   if (chain === 'sol') return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a);
   if (chain === 'trx') return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(a);
+  if (chain === 'ton') return !!tonRaw(a);
   return /^0x[0-9a-fA-F]{40}$/.test(a);
 }
 

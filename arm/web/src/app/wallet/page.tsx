@@ -10,10 +10,10 @@ import { TokenAvatar, WalletDot } from "@/components/shared";
 import { useWallet } from "@/lib/api";
 import { fmtSmall, shortAddr, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { WALLET_CHAINS, explorerAddr, explorerTx, isEvm, isSolana, isTron, probeChainNode, probeNode, publicClientFor, rpcOf, useNodes, type WalletChain } from "@/lib/wallet/chains";
+import { WALLET_CHAINS, explorerAddr, explorerTx, isEvm, isSolana, isTon, probeChainNode, probeNode, publicClientFor, rpcOf, useNodes, type WalletChain } from "@/lib/wallet/chains";
 import { absUrl, useAssets, type Asset } from "@/lib/wallet/assets";
 import { copyText } from "@/lib/wallet/native";
-import { useVault } from "@/components/wallet/wallet-context";
+import { addressOn, useVault } from "@/components/wallet/wallet-context";
 import { AddTokenSheet } from "@/components/wallet/add-token";
 import { BottomNav, BottomSheet, ChainGlyph, ChainPill, IconButton, Num, Pct, WalletFrame } from "@/components/wallet/ui";
 
@@ -24,7 +24,7 @@ const price = (p: number) => (p >= 1 ? usd(p) : `$${fmtSmall(p)}`);
 export default function WalletHome() {
   const { active, chain, setChain, wallets, switchTo, lock, address } = useVault();
   const { assets, total, change, loading: loadingAssets } = useAssets(chain, address);
-  const noSol = isSolana(chain) && !address;
+  const noSol = (isSolana(chain) || isTon(chain)) && !address && active?.kind === "key";
   const loading = loadingAssets && !noSol;
   const [hidden, setHidden] = useState(false);
   const [tab, setTab] = useState<"tokens" | "activity">("tokens");
@@ -125,9 +125,9 @@ export default function WalletHome() {
 
         {noSol ? (
           <div className="py-8 text-center text-[13px] leading-6 text-muted-foreground">
-            「{active?.name}」是用私钥导入的，只有 EVM 地址，没有 Solana 账户。
+            「{active?.name}」是用私钥导入的，只有 EVM / 波场地址，没有 {chain.name} 账户。
             <br />
-            用助记词新建或导入的钱包会自动带上 Solana 地址。
+            用助记词新建或导入的钱包会自动带上 {chain.name} 地址。
           </div>
         ) : tab === "tokens" ? (
           loading ? (
@@ -217,7 +217,11 @@ export default function WalletHome() {
                 <span className="min-w-0 flex-1 text-left">
                   <span className="block truncate text-[15px] font-semibold">{w.name}</span>
                   <span className="block font-mono text-[12px] text-muted-foreground">
-                    {isSolana(chain) ? (w.sol ? shortAddr(w.sol, 6, 4) : "无 Solana 账户") : isTron(chain) ? (w.trx ? shortAddr(w.trx, 6, 4) : "解锁后显示") : shortAddr(w.address, 6, 4)} · {w.kind === "mnemonic" ? "助记词" : "私钥"}
+                    {(() => {
+                      const a = addressOn(w, chain);
+                      return a ? shortAddr(a, 6, 4) : (isSolana(chain) || isTon(chain)) && w.kind === "key" ? `无 ${chain.name} 账户` : "解锁后显示";
+                    })()}{" "}
+                    · {w.kind === "mnemonic" ? "助记词" : "私钥"}
                   </span>
                 </span>
                 {w.id === active?.id && <CheckCircle size={22} weight="fill" />}
@@ -237,7 +241,7 @@ export default function WalletHome() {
         </div>
       </BottomSheet>
 
-      {!isSolana(chain) && <AddTokenSheet chain={chain} open={sheet === "add"} onClose={() => setSheet(null)} known={assets.flatMap((a) => (a.token ? [a.token] : a.trc20 ? [a.trc20] : []))} />}
+      {!isSolana(chain) && <AddTokenSheet chain={chain} open={sheet === "add"} onClose={() => setSheet(null)} known={assets.flatMap((a) => (a.token ? [a.token] : a.trc20 ? [a.trc20] : a.jetton ? [a.jetton] : []))} />}
     </WalletFrame>
   );
 }

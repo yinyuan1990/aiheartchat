@@ -8,10 +8,11 @@ import QRCode from 'qrcode';
  * - payreq：收款消息，显示二维码和地址（App 里能点「转账」）。
  */
 
-const CHAIN_NAMES: Record<string, string> = { arc: 'Arc', eth: 'Ethereum', bsc: 'BNB Chain', base: 'Base', arb: 'Arbitrum', polygon: 'Polygon', sol: 'Solana', trx: 'TRON' };
+const CHAIN_NAMES: Record<string, string> = { arc: 'Arc', eth: 'Ethereum', bsc: 'BNB Chain', base: 'Base', arb: 'Arbitrum', polygon: 'Polygon', sol: 'Solana', trx: 'TRON', ton: 'TON' };
 const EXPLORERS: Record<string, string> = {
   arc: 'https://arc-scan.org/tx/', eth: 'https://etherscan.io/tx/', bsc: 'https://bscscan.com/tx/', base: 'https://basescan.org/tx/',
   arb: 'https://arbiscan.io/tx/', polygon: 'https://polygonscan.com/tx/', sol: 'https://solscan.io/tx/', trx: 'https://tronscan.org/#/transaction/',
+  ton: 'https://tonviewer.com/transaction/',
 };
 
 const parse = (s: string): Record<string, any> => {

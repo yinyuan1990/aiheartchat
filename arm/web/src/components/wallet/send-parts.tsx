@@ -9,8 +9,9 @@ import { shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { MAX_NAME, saveContact, type Contact } from "@/lib/wallet/address-book";
 import { closeWallet, returnsToApp } from "@/lib/wallet/native";
-import { isEvm, isSolana, isTron, type WalletChain } from "@/lib/wallet/chains";
+import { isEvm, isSolana, isTon, isTron, type WalletChain } from "@/lib/wallet/chains";
 import { isTronAddress, trc20Meta } from "@/lib/wallet/tron";
+import { sameTonAddress, tonJettonMeta } from "@/lib/wallet/ton";
 import type { Asset } from "@/lib/wallet/assets";
 import { rememberToken } from "@/lib/wallet/market";
 import { lookupToken } from "@/lib/wallet/swap";
@@ -119,17 +120,17 @@ export function useSendLink(chain: WalletChain, assets: Asset[], loading: boolea
   const match = (a: Asset) => {
     if (!token) return false;
     if (token === "native") return a.id === "native" || (!!chain.nativeIsUsdc && a.gas === true);
-    const id = a.token ?? a.mint ?? a.trc20;
-    return !!id && (isEvm(chain) ? id.toLowerCase() === token.toLowerCase() : id === token);
+    const id = a.token ?? a.mint ?? a.trc20 ?? a.jetton;
+    return !!id && (isEvm(chain) ? id.toLowerCase() === token.toLowerCase() : isTon(chain) ? sameTonAddress(id, token) : id === token);
   };
   const wantedId = assetParam ?? assets.find(match)?.id ?? null;
   const missing = !!token && token !== "native" && !loading && assets.length > 0 && !assets.some(match);
   useEffect(() => {
     if (!missing || sol || !token) return;
     let alive = true;
-    const look = isTron(chain) ? (isTronAddress(token) ? trc20Meta(token).then((m) => m && { address: token, ...m }) : Promise.resolve(null)) : lookupToken(chain, token);
+    const look = isTron(chain) ? (isTronAddress(token) ? trc20Meta(token).then((m) => m && { address: token, ...m, image: null }) : Promise.resolve(null)) : isTon(chain) ? tonJettonMeta(token) : lookupToken(chain, token).then((m) => m && { ...m, image: null });
     void look.then((t) => {
-      if (alive && t) rememberToken(chain.key, { address: t.address, symbol: t.symbol, name: t.name, image: null, decimals: t.decimals, added: true });
+      if (alive && t) rememberToken(chain.key, { address: t.address, symbol: t.symbol, name: t.name, image: t.image, decimals: t.decimals, added: true });
     });
     return () => {
       alive = false;

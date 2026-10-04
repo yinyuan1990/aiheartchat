@@ -4,7 +4,7 @@ import { CryptoService } from '../common/crypto.service';
 import { ImService } from './im.service';
 import { MessagePayload } from './im.types';
 import { cleanText as clean, isCardChain } from './card-content';
-import { verifyTransferProof } from '../user/chain-address';
+import { tonRaw, verifyTransferProof } from '../user/chain-address';
 
 /**
  * 链上钱包相关的聊天卡片。
@@ -41,11 +41,14 @@ export class ChainCardService {
     const to = String(b.to ?? '');
     const decimals = Number(b.decimals);
     if (!/^\d{1,40}$/.test(amount) || amount === '0' || !Number.isInteger(decimals) || decimals < 0 || decimals > 36 || !hash || hash.length > 100) throw new BadRequestException('转账信息不对');
+    // 十六进制哈希只收小写：链上核对不分大小写，换个大小写就能绕过「一笔交易一张卡」
+    if (chain !== 'sol' && hash !== hash.toLowerCase()) throw new BadRequestException('转账信息不对');
     // 付款地址必须是发卡片的人自己的：钱包用付款私钥签过这笔交易
     if (!verifyTransferProof(chain, hash, from, to, b.proof)) throw new BadRequestException('付款人证明不对');
 
     const base58 = chain === 'sol' || chain === 'trx';
-    const sameAddr = (a: string) => (base58 ? a === to : a.toLowerCase() === to.toLowerCase());
+    // TON 的同一个地址有 UQ / EQ / 0:hex 几种写法
+    const sameAddr = (a: string) => (chain === 'ton' ? !!tonRaw(to) && tonRaw(a) === tonRaw(to) : base58 ? a === to : a.toLowerCase() === to.toLowerCase());
     const { receiverId, dest } = b.req ? await this.fromRequest(userId, String(b.req), chain, sameAddr) : await this.toPublished(String(b.targetId ?? ''), chain, sameAddr);
 
     // 先占住这笔交易，防止同一笔交易重复发卡
@@ -70,7 +73,7 @@ export class ChainCardService {
   private async toPublished(targetId: string, chain: string, sameAddr: (a: string) => boolean) {
     if (!/^\d{1,19}$/.test(targetId)) throw new BadRequestException('参数不正确');
     const peer = await this.prisma.userChainAddress.findUnique({ where: { userId: BigInt(targetId) } });
-    const expected = chain === 'sol' ? peer?.sol : chain === 'trx' ? peer?.trx : peer?.evm;
+    const expected = chain === 'sol' ? peer?.sol : chain === 'trx' ? peer?.trx : chain === 'ton' ? peer?.ton : peer?.evm;
     if (!expected || !sameAddr(expected)) throw new BadRequestException('收款地址不是对方公开的地址');
     return { receiverId: BigInt(targetId), dest: { convType: 1 as const, targetId } };
   }

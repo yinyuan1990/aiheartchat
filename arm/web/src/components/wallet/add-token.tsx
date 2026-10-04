@@ -7,8 +7,9 @@ import { toast } from "sonner";
 import { TokenAvatar } from "@/components/shared";
 import { shortAddr } from "@/lib/format";
 import { useTokens } from "@/lib/api";
-import { isTron, type WalletChain } from "@/lib/wallet/chains";
+import { isTon, isTron, type WalletChain } from "@/lib/wallet/chains";
 import { isTronAddress, trc20Meta } from "@/lib/wallet/tron";
+import { isTonAddress, tonJettonMeta } from "@/lib/wallet/ton";
 import { forgetToken, isMarketChain, rememberToken, useHeldTokens, useMarketList, type MarketChainKey } from "@/lib/wallet/market";
 import { lookupToken } from "@/lib/wallet/swap";
 import { absUrl, iconUrl } from "@/lib/wallet/assets";
@@ -38,8 +39,9 @@ export function AddTokenSheet({ chain, open, onClose, known = [] }: { chain: Wal
     return () => clearTimeout(id);
   }, [input]);
   const tron = isTron(chain);
-  const isAddr = tron ? isTronAddress(q) : /^0x[0-9a-fA-F]{40}$/.test(q);
-  const look = (a: string) => (tron ? (isTronAddress(a) ? trc20Meta(a).then((m) => m && { address: a, ...m }) : Promise.resolve(null)) : lookupToken(chain, a));
+  const ton = isTon(chain);
+  const isAddr = tron ? isTronAddress(q) : ton ? isTonAddress(q) : /^0x[0-9a-fA-F]{40}$/.test(q);
+  const look = (a: string) => (tron ? (isTronAddress(a) ? trc20Meta(a).then((m) => m && { address: a, ...m }) : Promise.resolve(null)) : ton ? tonJettonMeta(a) : lookupToken(chain, a));
   const found = useQuery({ queryKey: ["wallet", "add-token", chain.key, q], enabled: open && isAddr, queryFn: () => look(q), staleTime: 300_000, retry: 1 });
   const mine = useHeldTokens(chain.key).filter((t) => t.added);
   const have = new Set([...known.map((k) => k.toLowerCase()), ...mine.map((m) => m.address.toLowerCase())]);
@@ -51,7 +53,7 @@ export function AddTokenSheet({ chain, open, onClose, known = [] }: { chain: Wal
       const t = await look(c.address);
       if (!t) throw new Error(`${chain.name} 上这个地址不是代币合约`);
       if (verify && !symbolOk(c.symbol, t.symbol)) throw new Error(`链上读到的是 ${t.symbol}，不是 ${c.symbol}，没有添加`);
-      rememberToken(chain.key, { address: t.address, symbol: t.symbol, name: t.name, image: c.image ?? null, decimals: t.decimals, added: true });
+      rememberToken(chain.key, { address: t.address, symbol: t.symbol, name: t.name, image: c.image ?? ("image" in t ? (t.image as string | null) : null), decimals: t.decimals, added: true });
       toast.success(`已添加 ${t.symbol}`);
       if (!verify) setInput("");
     } catch (e) {
@@ -82,7 +84,7 @@ export function AddTokenSheet({ chain, open, onClose, known = [] }: { chain: Wal
       </div>
       <label className="flex h-12 items-center gap-2 rounded-2xl bg-muted px-3.5">
         <MagnifyingGlass size={16} className="shrink-0 text-muted-foreground" />
-        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={`名称、符号，或粘贴合约地址 ${tron ? "T…" : "0x…"}`} autoCapitalize="none" spellCheck={false} className="min-w-0 flex-1 bg-transparent text-[14px] outline-none" />
+        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={`名称、符号，或粘贴合约地址 ${tron ? "T…" : ton ? "EQ…" : "0x…"}`} autoCapitalize="none" spellCheck={false} className="min-w-0 flex-1 bg-transparent text-[14px] outline-none" />
         <button type="button" onClick={paste} aria-label="粘贴" className="shrink-0 text-muted-foreground">
           <ClipboardText size={18} />
         </button>

@@ -1,5 +1,6 @@
 import { getAddress, isAddress, type Address } from "viem";
 import { isSolAddress } from "./sol";
+import { isTonAddress } from "./ton-cell";
 
 /**
  * What a scanned payment QR asks for. Accepts a bare 0x address and EIP-681 links:
@@ -37,6 +38,23 @@ export function parseScannedSol(text: string): ScannedSol | null {
   const amount = q.get("amount");
   const mint = q.get("spl-token");
   return { to: m[1], amount: amount && /^\d+(\.\d+)?$/.test(amount) ? amount : undefined, mint: mint && isSolAddress(mint) ? mint : undefined };
+}
+
+/**
+ * TON transfer link (Tonkeeper's `ton://transfer/<address>?amount=<nano>&text=<comment>&jetton=<master>`, also its
+ * https://app.tonkeeper.com/transfer/… form) or a bare address. `raw` is in base units of GRAM, or of the jetton.
+ */
+export type ScannedTon = { to: string; raw?: bigint; jetton?: string; text?: string };
+
+export function parseScannedTon(text: string): ScannedTon | null {
+  const s = text.trim();
+  if (isTonAddress(s)) return { to: s };
+  const m = s.match(/^(?:ton:\/\/transfer\/|tonkeeper:\/\/transfer\/|https:\/\/app\.tonkeeper\.com\/transfer\/)([^?#\s]+)(?:\?([^#]*))?/i);
+  if (!m || !isTonAddress(m[1])) return null;
+  const q = new URLSearchParams(m[2] ?? "");
+  const jetton = q.get("jetton");
+  const t = q.get("text");
+  return { to: m[1], raw: toBig(q.get("amount")), jetton: jetton && isTonAddress(jetton) ? jetton : undefined, text: t ? t.slice(0, 120) : undefined };
 }
 
 export function parseScanned(text: string): ScannedPay | null {

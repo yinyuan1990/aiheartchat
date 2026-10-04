@@ -26,6 +26,7 @@ import { addSolComment, jupQuote, jupSwap, solComments, solRelay, solTokens } fr
 import { isAvatarAddress, walletAvatar } from "./avatars.js";
 import { claimOf, verifyTransfer } from "./verify.js";
 import { tronRelay } from "./tron.js";
+import { tonJettons, tonRelay } from "./ton.js";
 import { calloutCaller, calloutCallers, calloutFeed, pinCaller } from "./callouts.js";
 import { isMint, pumpCandles, pumpCoin, pumpHolders, pumpList, pumpTrades } from "./pump.js";
 import { isEvmAddr, isMarketChain, kyberBuild, kyberQuote, marketCandles, marketList, marketPrices, marketSearch, marketToken, marketTrades } from "./markets.js";
@@ -683,7 +684,7 @@ app.get("/api/pump/coin/:mint/holders", async (c) => {
 
 // Token icons for the wallet: CoinGecko / GeckoTerminal / IPFS hosts hang from mainland China, so the wallet loads them
 // through here. Known image hosts only; small ones stay in memory for a day.
-const IMG_HOSTS = /(^|\.)(coingecko\.com|geckoterminal\.com|dexscreener\.com|pump\.fun|ipfs\.io|cf-ipfs\.com|dweb\.link|nftstorage\.link|mypinata\.cloud|pinata\.cloud|arweave\.net|irys\.xyz|axiom-cdn\.io|j7tracker\.io|githubusercontent\.com|defined\.fi|jup\.ag)$/i;
+const IMG_HOSTS = /(^|\.)(coingecko\.com|geckoterminal\.com|dexscreener\.com|pump\.fun|ipfs\.io|cf-ipfs\.com|dweb\.link|nftstorage\.link|mypinata\.cloud|pinata\.cloud|arweave\.net|irys\.xyz|axiom-cdn\.io|j7tracker\.io|githubusercontent\.com|defined\.fi|jup\.ag|tonapi\.io)$/i;
 const imgCache = new Map<string, { at: number; type: string; body: ArrayBuffer }>();
 app.get("/api/img", async (c) => {
   let u: URL;
@@ -719,6 +720,19 @@ app.all("/api/trx/*", async (c) => {
   const path = c.req.path.replace(/^\/api\/trx\//, "");
   const body = c.req.method === "POST" ? await c.req.json().catch(() => ({})) : undefined;
   const r = await tronRelay(path, c.req.method, body, clientIp(c) || "?");
+  return c.json(r.json as object, r.status as 200);
+});
+
+// TON (ton.ts): jetton names / prices, then the toncenter-v2-style relay (reads + sendBoc of wallet-signed messages)
+app.get("/api/ton/jettons", async (c) => {
+  const ids = (c.req.query("ids") ?? "").split(",").filter(Boolean);
+  if (!ids.length) return c.json({});
+  c.header("cache-control", "public, max-age=30");
+  return c.json(await tonJettons(ids).catch(() => ({})));
+});
+app.all("/api/ton/:method", async (c) => {
+  const body = c.req.method === "POST" ? await c.req.json().catch(() => ({})) : undefined;
+  const r = await tonRelay(c.req.param("method"), c.req.method, c.req.query(), body, clientIp(c) || "?");
   return c.json(r.json as object, r.status as 200);
 });
 

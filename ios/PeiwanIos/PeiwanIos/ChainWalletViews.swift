@@ -763,10 +763,11 @@ final class ChainWalletModel: NSObject, ObservableObject {
             // 心之音账号的收款地址：用 App 自己的登录态调后端（钱包页拿不到 token）；arg 为空 = 读，否则 = 写（带签名）
             let body = arg as? [String: Any]
             Task { @MainActor in
-                struct Resp: Codable { var userId: String; var evm: String?; var sol: String?; var trx: String? }
+                struct Resp: Codable { var userId: String; var evm: String?; var sol: String?; var trx: String?; var ton: String? }
                 do {
                     let r: Resp = try await Api.request("/user/chain-address", method: body == nil ? "GET" : "PUT", body: body)
-                    send(["userId": r.userId, "evm": r.evm ?? NSNull(), "sol": r.sol ?? NSNull(), "trx": r.trx ?? NSNull()] as [String: Any])
+                    let out: [String: Any] = ["userId": r.userId, "evm": r.evm ?? NSNull(), "sol": r.sol ?? NSNull(), "trx": r.trx ?? NSNull(), "ton": r.ton ?? NSNull()]
+                    send(out)
                 } catch {
                     send(error: error.localizedDescription)
                 }

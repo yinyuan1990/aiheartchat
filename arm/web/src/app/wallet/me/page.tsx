@@ -13,9 +13,9 @@ import { accountOf, quickSupported, verifyPassword, type Secret, type WalletMeta
 import { exportSolKey, solKeypairOf } from "@/lib/wallet/sol";
 import { bioDisable, bioEnable, bioName, bioStatus, copyText, setSecureScreen, type BioStatus } from "@/lib/wallet/native";
 import { cn } from "@/lib/utils";
-import { isSolana, isTron } from "@/lib/wallet/chains";
+import { isSolana, isTon } from "@/lib/wallet/chains";
 import { loadPayee, payeeSupported, publishPayee, unpublishPayee, type Payee } from "@/lib/wallet/payee";
-import { useVault } from "@/components/wallet/wallet-context";
+import { addressOn, useVault } from "@/components/wallet/wallet-context";
 import { Field } from "@/components/wallet/password-fields";
 import { BottomNav, BottomSheet, GhostButton, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
 
@@ -87,8 +87,8 @@ export default function MePage() {
                     {w.id === active?.id && <span className="rounded-md bg-foreground px-1.5 py-px text-[10px] font-medium text-background">当前</span>}
                   </div>
                   {(() => {
-                    const a = isSolana(chain) ? w.sol : isTron(chain) ? w.trx : w.address;
-                    if (!a) return <span className="text-[12px] text-muted-foreground">{isSolana(chain) ? "私钥钱包没有 Solana 地址" : "解锁后显示"}</span>;
+                    const a = addressOn(w, chain);
+                    if (!a) return <span className="text-[12px] text-muted-foreground">{(isSolana(chain) || isTon(chain)) && w.kind === "key" ? `私钥钱包没有 ${chain.name} 地址` : "解锁后显示"}</span>;
                     return (
                       <button type="button" onClick={async () => (await copyText(a)) && toast.success(`${chain.name} 地址已复制`)} className="flex items-center gap-1 font-mono text-[12px] text-muted-foreground">
                         {shortAddr(a, 6, 4)}
@@ -265,7 +265,7 @@ function PayeeRow() {
         <span className="min-w-0 flex-1">
           <span className="block text-[15px]">允许好友给我转账</span>
           <span className="block text-[12px] text-muted-foreground">
-            {on ? `聊过天的人能看到：${[payee?.evm && shortAddr(payee.evm, 6, 4), payee?.sol && `◎ ${shortAddr(payee.sol, 4, 4)}`, payee?.trx && `TRON ${shortAddr(payee.trx, 4, 4)}`].filter(Boolean).join(" · ")}` : "打开后，聊过天的人在聊天里点「转账」就能直接给你转"}
+            {on ? `聊过天的人能看到：${[payee?.evm && shortAddr(payee.evm, 6, 4), payee?.sol && `◎ ${shortAddr(payee.sol, 4, 4)}`, payee?.trx && `TRON ${shortAddr(payee.trx, 4, 4)}`, payee?.ton && `TON ${shortAddr(payee.ton, 4, 4)}`].filter(Boolean).join(" · ")}` : "打开后，聊过天的人在聊天里点「转账」就能直接给你转"}
           </span>
         </span>
         <span className={cn("flex h-7 w-12 shrink-0 items-center rounded-full p-0.5 transition-colors", on ? "justify-end bg-up" : "justify-start bg-border")}>

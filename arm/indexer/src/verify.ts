@@ -2,6 +2,7 @@ import { createPublicClient, decodeEventLog, erc20Abi, fallback, getAddress, htt
 import { client as arcClient } from "./chain.js";
 import { solRelay } from "./solana.js";
 import { tronRelay } from "./tron.js";
+import { verifyTon } from "./ton.js";
 
 /**
  * Checks a transfer someone claims to have made, for 心之音's chat transfer cards: the transaction succeeded, came from
@@ -41,7 +42,7 @@ export function claimOf(q: Record<string, string | undefined>): TransferClaim | 
 }
 
 export async function verifyTransfer(c: TransferClaim): Promise<TransferCheck> {
-  return c.chain === "sol" ? verifySol(c) : c.chain === "trx" ? verifyTron(c) : verifyEvm(c);
+  return c.chain === "sol" ? verifySol(c) : c.chain === "trx" ? verifyTron(c) : c.chain === "ton" ? verifyTon(c) : verifyEvm(c);
 }
 
 // ---------- TRON ----------

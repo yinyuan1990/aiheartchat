@@ -6,6 +6,7 @@ import { arcMainnet } from "@/lib/web3";
 import { API_BASE } from "@/lib/api";
 import { probeSolNode } from "./sol";
 import { probeTronNode } from "./tron";
+import { probeTonNode } from "./ton";
 
 export type StableToken = { symbol: string; address: Address; decimals: number };
 
@@ -13,7 +14,7 @@ export type WalletChain = {
   key: string;
   name: string;
   /** Solana has no EVM chain; `chain` then only carries the node list and the native coin (id 0 never matches a chainId). */
-  kind?: "solana" | "tron";
+  kind?: "solana" | "tron" | "ton";
   chain: Chain;
   color: string;
   /** fallback letter when the logo can't load */
@@ -137,20 +138,40 @@ export const WALLET_CHAINS: WalletChain[] = [
     stables: [],
     explorer: "https://tronscan.org/#",
   },
+  {
+    key: "ton",
+    name: "TON",
+    kind: "ton",
+    chain: defineChain({
+      id: -239,
+      // the native coin was renamed Toncoin (TON) → Gram (GRAM) on 2026-06-15; the network is still TON
+      name: "TON",
+      nativeCurrency: { name: "Gram", symbol: "GRAM", decimals: 9 },
+      // a toncenter-v2-style REST base (…/getAddressInformation, …/runGetMethod, …/sendBoc)
+      rpcUrls: { default: { http: [`${API_BASE}/ton`] } },
+    }),
+    color: "#0098EA",
+    glyph: "G",
+    icon: "/wallet/chains/ton.png",
+    stables: [],
+    explorer: "https://tonviewer.com",
+  },
 ];
 
 export const isSolana = (c: WalletChain) => c.kind === "solana";
 export const isTron = (c: WalletChain) => c.kind === "tron";
+export const isTon = (c: WalletChain) => c.kind === "ton";
 export const isEvm = (c: WalletChain) => !c.kind;
 /** Logo of the chain's gas coin: ETH on the L2s, otherwise the chain's own. */
 export const nativeIcon = (c: WalletChain) => (c.key === "base" || c.key === "arb" ? "/wallet/chains/eth.png" : c.icon);
 export const EVM_CHAINS = WALLET_CHAINS.filter(isEvm);
 export const SOL_CHAIN = WALLET_CHAINS.find(isSolana)!;
 export const TRON_CHAIN = WALLET_CHAINS.find(isTron)!;
+export const TON_CHAIN = WALLET_CHAINS.find(isTon)!;
 export const chainByKey = (key?: string | null) => WALLET_CHAINS.find((c) => c.key === key) ?? WALLET_CHAINS[0];
 export const chainById = (id?: number | null) => EVM_CHAINS.find((c) => c.chain.id === id);
 /** Built-in relay URLs are host-relative; show them by name. */
-export const nodeLabel = (url: string) => (url === `${API_BASE}/sol/rpc` || url === `${API_BASE}/trx` ? "心之音加速节点" : url.replace(/^https?:\/\//, ""));
+export const nodeLabel = (url: string) => (url === `${API_BASE}/sol/rpc` || url === `${API_BASE}/trx` || url === `${API_BASE}/ton` ? "心之音加速节点" : url.replace(/^https?:\/\//, ""));
 
 // ---------- RPC nodes: built-in list + user-added, one selected per chain (kept in the shell's native store) ----------
 type NodeState = { selected: Record<string, string>; custom: Record<string, string[]> };
@@ -240,6 +261,10 @@ export async function probeChainNode(c: WalletChain, url: string, timeoutMs = 60
     const t = await probeTronNode(url, timeoutMs);
     return { ms: t.ms, block: t.block != null ? BigInt(t.block) : undefined, chainId: t.block != null ? c.chain.id : undefined, error: t.error ?? (t.block == null ? "不是波场节点" : undefined) };
   }
+  if (isTon(c)) {
+    const t = await probeTonNode(url, timeoutMs);
+    return { ms: t.ms, block: t.block != null ? BigInt(t.block) : undefined, chainId: t.mainnet ? c.chain.id : t.block != null ? -1 : undefined, error: t.error ?? (t.block == null ? "不是 TON 节点（要 toncenter v2 格式）" : undefined) };
+  }
   if (!isSolana(c)) return probeNode(url, timeoutMs);
   const p = await probeSolNode(url, timeoutMs);
   return { ms: p.ms, block: p.slot != null ? BigInt(p.slot) : undefined, chainId: p.mainnet ? c.chain.id : p.slot != null ? -1 : undefined, error: p.error };
@@ -261,6 +286,6 @@ export function publicClientFor(c: WalletChain): PublicClient {
   return pc;
 }
 
-export const explorerTx = (c: WalletChain, hash: string) => `${c.explorer}/${isTron(c) ? "transaction" : "tx"}/${hash}`;
-export const explorerAddr = (c: WalletChain, a: string) => `${c.explorer}/${isSolana(c) ? "account" : "address"}/${a}`;
-export const explorerToken = (c: WalletChain, t: string) => `${c.explorer}/token/${t}`;
+export const explorerTx = (c: WalletChain, hash: string) => `${c.explorer}/${isTron(c) || isTon(c) ? "transaction" : "tx"}/${hash}`;
+export const explorerAddr = (c: WalletChain, a: string) => (isTon(c) ? `${c.explorer}/${a}` : `${c.explorer}/${isSolana(c) ? "account" : "address"}/${a}`);
+export const explorerToken = (c: WalletChain, t: string) => (isTon(c) ? `${c.explorer}/${t}` : `${c.explorer}/token/${t}`);

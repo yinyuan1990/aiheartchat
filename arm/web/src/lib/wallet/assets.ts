@@ -4,10 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import { erc20Abi, formatUnits, getAddress, type Address } from "viem";
 import { API_BASE, useWallet } from "@/lib/api";
 import { useBoatInfo } from "@/lib/boat";
-import { SOL_CHAIN, TRON_CHAIN, chainByKey, isEvm, isSolana, isTron, nativeIcon, publicClientFor, rpcOf, useNodes, type WalletChain } from "./chains";
+import { SOL_CHAIN, TON_CHAIN, TRON_CHAIN, chainByKey, isEvm, isSolana, isTon, isTron, nativeIcon, publicClientFor, rpcOf, useNodes, type WalletChain } from "./chains";
 import { useHeldTokens, useMarketPrices } from "./market";
 import { LAMPORTS, WSOL_MINT, getTokenAccounts, solRpc } from "./sol";
 import { SUN, USDT_TRC20, tronAccount } from "./tron";
+import { NANO, USDT_TON, fetchTonJettons, sameTonAddress, tonAccount } from "./ton";
 
 export type Asset = {
   id: string;
@@ -40,6 +41,8 @@ export type Asset = {
   market?: boolean;
   /** TRON: TRC20 contract ("T…"); undefined = TRX */
   trc20?: string;
+  /** TON: jetton master ("EQ…"); undefined = GRAM */
+  jetton?: string;
   spark?: number[];
 };
 
@@ -129,7 +132,7 @@ export function absUrl(u?: string | null): string | undefined {
 }
 
 // keep in sync with the indexer's /api/img host list
-const PROXIED = /(^|\.)(coingecko\.com|geckoterminal\.com|dexscreener\.com|pump\.fun|ipfs\.io|cf-ipfs\.com|dweb\.link|nftstorage\.link|mypinata\.cloud|pinata\.cloud|arweave\.net|irys\.xyz|axiom-cdn\.io|j7tracker\.io|githubusercontent\.com|defined\.fi|jup\.ag)$/i;
+const PROXIED = /(^|\.)(coingecko\.com|geckoterminal\.com|dexscreener\.com|pump\.fun|ipfs\.io|cf-ipfs\.com|dweb\.link|nftstorage\.link|mypinata\.cloud|pinata\.cloud|arweave\.net|irys\.xyz|axiom-cdn\.io|j7tracker\.io|githubusercontent\.com|defined\.fi|jup\.ag|tonapi\.io)$/i;
 /** Token icons from hosts that hang in mainland China go through the indexer's image relay. */
 export function iconUrl(u?: string | null): string | undefined {
   if (!u) return undefined;
@@ -286,15 +289,54 @@ function useTronAssets(owner?: string, enabled = true): { assets: Asset[]; loadi
   return { assets, loading: q.isLoading, error: q.isError };
 }
 
+export const GRAM_LOGO = "/wallet/chains/ton.png";
+
+/** GRAM, USDT and the jettons the user added (like TRON: TON addresses get spam jettons, so others are not listed). */
+function useTonAssets(owner?: string, enabled = true): { assets: Asset[]; loading: boolean; error: boolean } {
+  useNodes();
+  const added = useHeldTokens(TON_CHAIN.key);
+  const tokens = [{ address: USDT_TON, symbol: "USDT", name: "Tether USD", image: USDT_LOGO as string | null, decimals: 6 }, ...added.filter((t) => !sameTonAddress(t.address, USDT_TON))];
+  const q = useQuery({
+    queryKey: ["wallet", "ton-balances", owner, rpcOf(TON_CHAIN), tokens.map((t) => t.address).join(",")],
+    enabled: enabled && !!owner,
+    queryFn: () => tonAccount(owner!, tokens.map((t) => t.address)),
+    refetchInterval: 30_000,
+  });
+  const info = useQuery({
+    queryKey: ["wallet", "ton-jettons", tokens.map((t) => t.address).join(",")],
+    enabled,
+    queryFn: () => fetchTonJettons(["ton", ...tokens.map((t) => t.address)]),
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+    retry: 1,
+  });
+  const assets: Asset[] = [];
+  if (q.data) {
+    const p = info.data?.ton;
+    const amount = Number(q.data.ton) / NANO;
+    assets.push({ id: "native", symbol: "GRAM", name: "Gram（原 Toncoin）", logo: GRAM_LOGO, seed: "ton-native", decimals: 9, raw: q.data.ton, amount, priceUsd: p?.priceUsd ?? null, valueUsd: p?.priceUsd != null ? amount * p.priceUsd : null, change24h: p?.change24h ?? null, gas: true });
+    for (const t of tokens) {
+      const raw = q.data.jettons[t.address] ?? 0n;
+      const amount = Number(formatUnits(raw, t.decimals));
+      const m = info.data?.[t.address];
+      const usd = sameTonAddress(t.address, USDT_TON) ? 1 : (m?.priceUsd ?? null);
+      assets.push({ id: t.address, symbol: t.symbol, name: t.name, logo: t.image ? iconUrl(t.image) : iconUrl(m?.image), seed: t.address, decimals: t.decimals, raw, amount, priceUsd: usd, valueUsd: usd != null ? amount * usd : null, change24h: sameTonAddress(t.address, USDT_TON) ? 0 : (m?.change24h ?? null), jetton: t.address });
+    }
+  }
+  return { assets, loading: q.isLoading, error: q.isError };
+}
+
 /** Balances of `address` on `chain`, highest value first (gas coin pinned on top). */
 export function useAssets(chain: WalletChain, address?: string) {
   const sol = isSolana(chain);
   const tron = isTron(chain);
+  const ton = isTon(chain);
   const arc = useArcAssets(address as Address | undefined, chain.key === "arc");
   const evm = useEvmAssets(chain, address as Address | undefined, chain.key !== "arc" && isEvm(chain));
   const solana = useSolAssets(address, sol);
   const tronR = useTronAssets(address, tron);
-  const r = sol ? solana : tron ? tronR : chain.key === "arc" ? arc : evm;
+  const tonR = useTonAssets(address, ton);
+  const r = sol ? solana : tron ? tronR : ton ? tonR : chain.key === "arc" ? arc : evm;
   const assets = [...r.assets].sort((a, b) => Number(!!b.gas) - Number(!!a.gas) || (b.valueUsd ?? 0) - (a.valueUsd ?? 0));
   const total = assets.reduce((s, a) => s + (a.valueUsd ?? 0), 0);
   const change = assets.reduce((s, a) => s + (a.valueUsd && a.change24h ? a.valueUsd - a.valueUsd / (1 + a.change24h / 100) : 0), 0);

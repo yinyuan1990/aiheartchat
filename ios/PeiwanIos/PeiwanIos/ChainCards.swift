@@ -4,10 +4,13 @@ import CoreImage
 /// 链上钱包的聊天卡片（和 Android ChainCards.kt、Web components/ChainCards.tsx 同一套字段）：
 /// - transfer：钱包转账成功后，服务端到链上核对过才发的转账卡片（POST /im/transfer），点开看区块浏览器；
 /// - callout：喊单卡片（钱包代币页「喊单到聊天」），点开在钱包里打开这个币的页面，能直接买。
-struct ChainAddr: Codable {
+struct ChainAddr: Codable, Identifiable {
     var evm: String?
     var sol: String?
     var trx: String?
+    var ton: String?
+
+    var id: String { (evm ?? "-") + "|" + (sol ?? "-") + "|" + (trx ?? "-") + "|" + (ton ?? "-") }
 
     /// 对方公开了的链：(钱包 chain 参数，nil 是 EVM, 地址)
     var options: [(chain: String?, address: String)] {
@@ -15,15 +18,17 @@ struct ChainAddr: Codable {
         if let a = evm { out.append((nil, a)) }
         if let a = sol { out.append(("sol", a)) }
         if let a = trx { out.append(("trx", a)) }
+        if let a = ton { out.append(("ton", a)) }
         return out
     }
 }
 
 enum ChainCards {
-    static let chainNames = ["arc": "Arc", "eth": "Ethereum", "bsc": "BNB Chain", "base": "Base", "arb": "Arbitrum", "polygon": "Polygon", "sol": "Solana", "trx": "TRON"]
+    static let chainNames = ["arc": "Arc", "eth": "Ethereum", "bsc": "BNB Chain", "base": "Base", "arb": "Arbitrum", "polygon": "Polygon", "sol": "Solana", "trx": "TRON", "ton": "TON"]
     static let explorers = [
         "arc": "https://arc-scan.org/tx/", "eth": "https://etherscan.io/tx/", "bsc": "https://bscscan.com/tx/", "base": "https://basescan.org/tx/",
         "arb": "https://arbiscan.io/tx/", "polygon": "https://polygonscan.com/tx/", "sol": "https://solscan.io/tx/", "trx": "https://tronscan.org/#/transaction/",
+        "ton": "https://tonviewer.com/transaction/",
     ]
 
     static func obj(_ s: String) -> [String: Any] {
@@ -373,6 +378,7 @@ struct TransferChainSheet: View {
             if let a = addr.evm { choice("EVM 链", "Arc / Ethereum / BNB / Base / Arbitrum / Polygon", a) { onPick(a, nil) } }
             if let a = addr.sol { choice("Solana", "SOL、USDC、pump 币等", a) { onPick(a, "sol") } }
             if let a = addr.trx { choice("TRON 波场", "TRX、USDT（TRC20）", a) { onPick(a, "trx") } }
+            if let a = addr.ton { choice("TON", "GRAM（原 Toncoin）、USDT 等", a) { onPick(a, "ton") } }
             Text("转账页里可以选币种和网络；转完会在聊天里发一张转账卡片。").font(.system(size: 12)).foregroundStyle(Theme.textSub)
             Spacer(minLength: 0)
         }

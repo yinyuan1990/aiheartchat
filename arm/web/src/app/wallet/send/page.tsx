@@ -9,8 +9,9 @@ import { toast } from "sonner";
 import { TokenAvatar, WalletDot } from "@/components/shared";
 import { shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { EVM_CHAINS, SOL_CHAIN, TRON_CHAIN, WALLET_CHAINS, chainById, explorerTx, isSolana, isTron, publicClientFor, rpcOf } from "@/lib/wallet/chains";
+import { EVM_CHAINS, SOL_CHAIN, TON_CHAIN, TRON_CHAIN, WALLET_CHAINS, chainById, explorerTx, isSolana, isTon, isTron, publicClientFor, rpcOf } from "@/lib/wallet/chains";
 import { isTronAddress } from "@/lib/wallet/tron";
+import { isTonAddress } from "@/lib/wallet/ton";
 import { hasFeature, reportResult, returnsToApp, scanQr } from "@/lib/wallet/native";
 import { transferMessage } from "@/lib/wallet/payee";
 import { parseScanned } from "@/lib/wallet/scan";
@@ -21,6 +22,7 @@ import { useVault } from "@/components/wallet/wallet-context";
 import { BookPicker, Result, Row, useSendLink, type Sent } from "@/components/wallet/send-parts";
 import { SolSend } from "@/components/wallet/sol-send";
 import { TronSend } from "@/components/wallet/tron-send";
+import { TonSend } from "@/components/wallet/ton-send";
 import { BottomSheet, ChainGlyph, ChainPill, GhostButton, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
 
 const SPEEDS = [
@@ -83,13 +85,13 @@ function LinkedSend() {
   // "转账" from an address-book entry: open the chain family the address belongs to
   useEffect(() => {
     if (!wantedTo || wantedChain) return;
-    const want = isTronAddress(wantedTo) ? "trx" : isSolAddress(wantedTo) ? "sol" : isAddress(wantedTo) ? "evm" : null;
-    const have = isSolana(chain) ? "sol" : isTron(chain) ? "trx" : "evm";
+    const want = isTronAddress(wantedTo) ? "trx" : isTonAddress(wantedTo) ? "ton" : isSolAddress(wantedTo) ? "sol" : isAddress(wantedTo) ? "evm" : null;
+    const have = isSolana(chain) ? "sol" : isTron(chain) ? "trx" : isTon(chain) ? "ton" : "evm";
     if (!want || want === have) return;
-    const t = setTimeout(() => setChain(want === "sol" ? SOL_CHAIN.key : want === "trx" ? TRON_CHAIN.key : "arc"), 0);
+    const t = setTimeout(() => setChain(want === "sol" ? SOL_CHAIN.key : want === "trx" ? TRON_CHAIN.key : want === "ton" ? TON_CHAIN.key : "arc"), 0);
     return () => clearTimeout(t);
   }, [wantedTo, wantedChain, chain, setChain]);
-  return isSolana(chain) ? <SolSend /> : isTron(chain) ? <TronSend /> : <EvmSend />;
+  return isSolana(chain) ? <SolSend /> : isTron(chain) ? <TronSend /> : isTon(chain) ? <TonSend /> : <EvmSend />;
 }
 
 function EvmSend() {

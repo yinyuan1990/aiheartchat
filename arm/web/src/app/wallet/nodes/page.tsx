@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ArrowsClockwise, CheckCircle, Circle, Lightning, Plus, ShieldWarning, Trash } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { WALLET_CHAINS, addNode, chainByKey, isCustomNode, isEvm, isSolana, isTron, nodeLabel, nodesOf, probeChainNode, removeNode, rpcOf, selectNode, useNodes, type NodeProbe, type WalletChain } from "@/lib/wallet/chains";
+import { WALLET_CHAINS, addNode, chainByKey, isCustomNode, isEvm, isSolana, isTon, isTron, nodeLabel, nodesOf, probeChainNode, removeNode, rpcOf, selectNode, useNodes, type NodeProbe, type WalletChain } from "@/lib/wallet/chains";
 import { useVault } from "@/components/wallet/wallet-context";
 import { BottomSheet, ChainGlyph, GhostButton, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
 
@@ -170,7 +170,7 @@ function AddNode({ chain, onDone, onAdded }: { chain: WalletChain; onDone: () =>
     const r = await probeChainNode(chain, u, 8000);
     setBusy(false);
     if (r.error) return setErr(`连不上：${r.error}`);
-    if (r.chainId !== chain.chain.id) return setErr(isSolana(chain) ? "这个节点不是 Solana 主网（genesis 不对）" : `这是链 ID ${r.chainId} 的节点，不是 ${chain.name}（${chain.chain.id}）`);
+    if (r.chainId !== chain.chain.id) return setErr(isSolana(chain) ? "这个节点不是 Solana 主网（genesis 不对）" : isTon(chain) ? "这个节点不是 TON 主网" : `这是链 ID ${r.chainId} 的节点，不是 ${chain.name}（${chain.chain.id}）`);
     addNode(chain, u);
     toast.success(`已添加并切换到这个节点（${r.ms} ms）`);
     onAdded();
@@ -190,7 +190,7 @@ function AddNode({ chain, onDone, onAdded }: { chain: WalletChain; onDone: () =>
         className="mt-5 h-12 w-full rounded-2xl bg-muted px-4 font-mono text-[14px] outline-none placeholder:text-muted-foreground/70"
       />
       {err && <div className="mt-2 text-[12px] text-down">{err}</div>}
-      <p className="mt-2 text-[12px] leading-5 text-muted-foreground">{isSolana(chain) ? "添加前会先连一次，核对是 Solana 主网。" : isTron(chain) ? "填 TronGrid 风格的 HTTP 地址（如 https://api.trongrid.io），添加前会先连一次。" : `添加前会先连一次，核对链 ID 是 ${chain.chain.id}。`}</p>
+      <p className="mt-2 text-[12px] leading-5 text-muted-foreground">{isSolana(chain) ? "添加前会先连一次，核对是 Solana 主网。" : isTron(chain) ? "填 TronGrid 风格的 HTTP 地址（如 https://api.trongrid.io），添加前会先连一次。" : isTon(chain) ? "填 toncenter v2 格式的地址（如 https://toncenter.com/api/v2，不带 key 每秒只能查 1 次），添加前会先连一次，核对是 TON 主网。" : `添加前会先连一次，核对链 ID 是 ${chain.chain.id}。`}</p>
       <div className="mt-4 grid grid-cols-[1fr_2fr] gap-2">
         <GhostButton onClick={onDone}>取消</GhostButton>
         <PrimaryButton disabled={busy || !url.trim()} onClick={submit}>

@@ -15,9 +15,13 @@ import {
   type Unlocked,
   type WalletMeta,
 } from "@/lib/wallet/vault";
-import { chainByKey, isSolana, isTron, type WalletChain } from "@/lib/wallet/chains";
+import { chainByKey, isSolana, isTon, isTron, type WalletChain } from "@/lib/wallet/chains";
 import { solAddressOf, solKeypairOf, type SolKeypair } from "@/lib/wallet/sol";
 import { tronAddressOf, tronKeyOf, type TronKey } from "@/lib/wallet/tron";
+import { sameTonAddress, tonAddressOf, tonKeyOf, type TonKey } from "@/lib/wallet/ton";
+
+/** The wallet's address on that chain (undefined: none, e.g. Solana / TON of a private-key wallet) */
+export const addressOn = (w: WalletMeta, c: WalletChain) => (isSolana(c) ? w.sol : isTron(c) ? w.trx : isTon(c) ? w.ton : w.address);
 import { loadPayee, payeeSupported, publishPayee } from "@/lib/wallet/payee";
 import { toast } from "sonner";
 
@@ -44,6 +48,8 @@ type Ctx = {
   solKeypair: () => SolKeypair;
   /** TRON signer of the active wallet; throws while locked. */
   tronKey: () => TronKey;
+  /** TON signer of the active wallet; throws while locked or for private-key wallets. */
+  tonKey: () => TonKey;
   secretOf: (id: string) => Secret | null;
   /** 免密码使用: opens without the password and does not auto-lock in the background */
   quick: boolean;
@@ -87,10 +93,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     unlocked.current = r.unlocked;
     // vaults from before Solana / TRON support: derive the missing addresses once and keep them in the metadata
     let list = r.wallets;
-    if (list.some((w) => (w.kind === "mnemonic" && !w.sol) || !w.trx)) {
+    if (list.some((w) => (w.kind === "mnemonic" && (!w.sol || !w.ton)) || !w.trx)) {
       list = list.map((w) => {
         const s = r.unlocked.plain.secrets[w.id];
-        return !s ? w : { ...w, sol: w.sol ?? solAddressOf(s) ?? undefined, trx: w.trx ?? tronAddressOf(s) };
+        return !s ? w : { ...w, sol: w.sol ?? solAddressOf(s) ?? undefined, trx: w.trx ?? tronAddressOf(s), ton: w.ton ?? tonAddressOf(s) ?? undefined };
       });
       await saveMeta(r.unlocked, list, r.active).catch(() => {});
     }
@@ -134,8 +140,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     void (async () => {
       try {
         const p = await loadPayee();
-        if (!p || !(p.evm || p.sol || p.trx)) return;
-        const same = p.evm?.toLowerCase() === w.address.toLowerCase() && (p.sol ?? null) === (w.sol ?? null) && (!w.trx || p.trx === w.trx);
+        if (!p || !(p.evm || p.sol || p.trx || p.ton)) return;
+        const same = p.evm?.toLowerCase() === w.address.toLowerCase() && (p.sol ?? null) === (w.sol ?? null) && (!w.trx || p.trx === w.trx) && (!w.ton || p.ton === undefined || sameTonAddress(p.ton, w.ton));
         if (same) return;
         await publishPayee(p.userId, secret);
         toast.success(`好友转账的收款地址已换成「${w.name}」`);
@@ -214,7 +220,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       switchTo,
       rename,
       remove,
-      address: active ? (isSolana(chainByKey(chainKey)) ? active.sol : isTron(chainByKey(chainKey)) ? active.trx : active.address) : undefined,
+      address: active ? addressOn(active, chainByKey(chainKey)) : undefined,
       account: () => {
         const s = active && unlocked.current?.plain.secrets[active.id];
         if (!s) throw new Error("locked");
@@ -231,6 +237,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const s = active && unlocked.current?.plain.secrets[active.id];
         if (!s) throw new Error("locked");
         return tronKeyOf(s);
+      },
+      tonKey: () => {
+        const s = active && unlocked.current?.plain.secrets[active.id];
+        if (!s) throw new Error("locked");
+        const k = tonKeyOf(s);
+        if (!k) throw new Error("私钥导入的钱包没有 TON 账户，请用助记词钱包");
+        return k;
       },
       secretOf: (id) => unlocked.current?.plain.secrets[id] ?? null,
       quick: quickOn,

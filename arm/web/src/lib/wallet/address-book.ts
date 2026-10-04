@@ -3,6 +3,7 @@ import { getAddress, isAddress } from "viem";
 import { storeRead, storeWrite } from "./native";
 import { isSolAddress } from "./sol";
 import { isTronAddress } from "./tron";
+import { isTonAddress } from "./ton-cell";
 
 /**
  * Saved contacts and recent recipients. EVM addresses are the same on every EVM chain, so those entries aren't tied to
@@ -21,16 +22,19 @@ const MAX_RECENT = 6;
 export const MAX_CONTACTS = 200;
 export const MAX_NAME = 20;
 
-/** Checksummed EVM address, or a Solana / TRON address as typed; null when it's none of them. */
+/** Checksummed EVM address, or a Solana / TRON / TON address as typed (a TON address keeps its bounceable flag); null
+ * when it's none of them. */
 export function normalizeAddr(a: string): string | null {
   const s = a.trim();
   if (isAddress(s)) return getAddress(s);
-  return isSolAddress(s) || isTronAddress(s) ? s : null;
+  return isSolAddress(s) || isTronAddress(s) || isTonAddress(s) ? s : null;
 }
-/** Which chain family an entry belongs to (TRON's base58check never decodes to a 32-byte Solana key). */
-export const familyOf = (a: string): "evm" | "sol" | "trx" => (a.startsWith("0x") ? "evm" : isTronAddress(a) ? "trx" : "sol");
+/** Which chain family an entry belongs to (TRON's base58check never decodes to a 32-byte Solana key; TON's 48-character
+ * base64 or "0:…" forms are neither). */
+export const familyOf = (a: string): "evm" | "sol" | "trx" | "ton" => (a.startsWith("0x") ? "evm" : isTronAddress(a) ? "trx" : isTonAddress(a) ? "ton" : "sol");
 export const isSolEntry = (a: string) => familyOf(a) === "sol";
 export const isTronEntry = (a: string) => familyOf(a) === "trx";
+export const isTonEntry = (a: string) => familyOf(a) === "ton";
 
 let state: State = EMPTY;
 let loaded: Promise<void> | null = null;

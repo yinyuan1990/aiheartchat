@@ -548,7 +548,7 @@ struct ChatRoomView: View {
     @State private var walletOk = false
     @State private var walletRoute: Route?
     @State private var transferAddr: ChainAddr?
-    @State private var showTransferChain = false
+    @State private var transferPick: String?
 
     private var myId: String { state.user?.id ?? "" }
     private var isGroupAdmin: Bool { convType == 2 && (myRole == "owner" || myRole == "admin") }
@@ -564,13 +564,17 @@ struct ChatRoomView: View {
             .onReceive(NotificationCenter.default.publisher(for: ChainWallet.resultNotification)) { n in
                 if let s = n.userInfo?["json"] as? String { onWalletResult(s) }
             }
-            .sheet(isPresented: $showTransferChain) {
-                if let a = transferAddr {
-                    TransferChainSheet(addr: a) { addr, chain in
-                        walletRoute = .chainWalletPath(ChainCards.transferPath(address: addr, chain: chain, name: title))
-                    }
-                    .compatDetents(height: 370)
+            .sheet(item: $transferAddr, onDismiss: {
+                // sheet 收起动画中 push 会被吞掉，等收完再跳钱包
+                if let p = transferPick {
+                    transferPick = nil
+                    walletRoute = .chainWalletPath(p)
                 }
+            }) { a in
+                TransferChainSheet(addr: a) { addr, chain in
+                    transferPick = ChainCards.transferPath(address: addr, chain: chain, name: title)
+                }
+                .compatDetents(height: 430)
             }
     }
 
@@ -584,7 +588,6 @@ struct ChatRoomView: View {
                     toastMsg = "对方还没在钱包里打开「允许好友给我转账」"
                 } else if opts.count > 1 {
                     transferAddr = a
-                    showTransferChain = true
                 } else {
                     walletRoute = .chainWalletPath(ChainCards.transferPath(address: opts[0].address, chain: opts[0].chain, name: title))
                 }

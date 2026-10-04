@@ -47,15 +47,16 @@ import java.math.BigDecimal
  */
 
 @Serializable
-data class ChainAddr(val evm: String? = null, val sol: String? = null, val trx: String? = null) {
+data class ChainAddr(val evm: String? = null, val sol: String? = null, val trx: String? = null, val ton: String? = null) {
     /** 对方公开了的链：(钱包 chain 参数，null 是 EVM) → 地址 */
-    fun options(): List<Pair<String?, String>> = listOfNotNull(evm?.let { null to it }, sol?.let { "sol" to it }, trx?.let { "trx" to it })
+    fun options(): List<Pair<String?, String>> = listOfNotNull(evm?.let { null to it }, sol?.let { "sol" to it }, trx?.let { "trx" to it }, ton?.let { "ton" to it })
 }
 
-private val CHAIN_NAMES = mapOf("arc" to "Arc", "eth" to "Ethereum", "bsc" to "BNB Chain", "base" to "Base", "arb" to "Arbitrum", "polygon" to "Polygon", "sol" to "Solana", "trx" to "TRON")
+private val CHAIN_NAMES = mapOf("arc" to "Arc", "eth" to "Ethereum", "bsc" to "BNB Chain", "base" to "Base", "arb" to "Arbitrum", "polygon" to "Polygon", "sol" to "Solana", "trx" to "TRON", "ton" to "TON")
 private val EXPLORERS = mapOf(
     "arc" to "https://arc-scan.org/tx/", "eth" to "https://etherscan.io/tx/", "bsc" to "https://bscscan.com/tx/", "base" to "https://basescan.org/tx/",
     "arb" to "https://arbiscan.io/tx/", "polygon" to "https://polygonscan.com/tx/", "sol" to "https://solscan.io/tx/", "trx" to "https://tronscan.org/#/transaction/",
+    "ton" to "https://tonviewer.com/transaction/",
 )
 private val TransferOrange = Color(0xFFF59E0B)
 private val TransferTint = Color(0xFFFFF4DE)
@@ -311,6 +312,7 @@ fun TransferChainDialog(addr: ChainAddr, onPick: (address: String, chain: String
             addr.evm?.let { a -> ChainChoice("EVM 链", "Arc / Ethereum / BNB / Base / Arbitrum / Polygon", a) { onPick(a, null) } }
             addr.sol?.let { a -> ChainChoice("Solana", "SOL、USDC、pump 币等", a) { onPick(a, "sol") } }
             addr.trx?.let { a -> ChainChoice("TRON 波场", "TRX、USDT（TRC20）", a) { onPick(a, "trx") } }
+            addr.ton?.let { a -> ChainChoice("TON", "GRAM（原 Toncoin）、USDT 等", a) { onPick(a, "ton") } }
             Text("转账页里可以选币种和网络；转完会在聊天里发一张转账卡片。", color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
         }
     }

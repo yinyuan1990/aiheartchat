@@ -2,6 +2,7 @@ import { english, generateMnemonic, mnemonicToAccount, privateKeyToAccount, type
 import { getAddress, isHex, type Address, type Hex } from "viem";
 import { solAddressOf } from "./sol";
 import { tronAddressOf } from "./tron";
+import { tonAddressOf } from "./ton";
 
 /**
  * Self-custody vault: every secret is encrypted together with one wallet password (PBKDF2-SHA256 → AES-GCM-256) and
@@ -10,8 +11,8 @@ import { tronAddressOf } from "./tron";
 
 export type Secret = { kind: "mnemonic"; phrase: string } | { kind: "key"; key: Hex };
 /** `sol`: Solana address on Phantom's path (mnemonic wallets only); `trx`: TRON address on TronLink's path (or the private
- * key itself). Both are filled in on first unlock for older vaults. */
-export type WalletMeta = { id: string; name: string; kind: Secret["kind"]; address: Address; sol?: string; trx?: string; createdAt: number };
+ * key itself); `ton`: TON W5 address on m/44'/607'/0' (mnemonic wallets only). Filled in on first unlock for older vaults. */
+export type WalletMeta = { id: string; name: string; kind: Secret["kind"]; address: Address; sol?: string; trx?: string; ton?: string; createdAt: number };
 type VaultPlain = { secrets: Record<string, Secret> };
 /**
  * `quick`: 「免密码使用」 — the wallet password kept next to the ciphertext so the vault opens without asking. Only allowed
@@ -160,7 +161,7 @@ export async function createVault(password: string, name: string, secret: Secret
   const key = await deriveKey(password, salt, PBKDF2_ITER);
   const id = newId();
   const unlocked: Unlocked = { key, salt, iter: PBKDF2_ITER, plain: { secrets: { [id]: secret } } };
-  const meta: WalletMeta = { id, name, kind: secret.kind, address: getAddress(accountOf(secret).address), sol: solAddressOf(secret) ?? undefined, trx: tronAddressOf(secret), createdAt: Date.now() };
+  const meta: WalletMeta = { id, name, kind: secret.kind, address: getAddress(accountOf(secret).address), sol: solAddressOf(secret) ?? undefined, trx: tronAddressOf(secret), ton: tonAddressOf(secret) ?? undefined, createdAt: Date.now() };
   await store.set(JSON.stringify(await seal(unlocked, [meta], id)));
   return { unlocked, wallets: [meta], active: id };
 }
@@ -173,7 +174,7 @@ export async function addWallet(u: Unlocked, wallets: WalletMeta[], name: string
   const id = newId();
   const plain: VaultPlain = { secrets: { ...u.plain.secrets, [id]: secret } };
   const next: Unlocked = { ...u, plain };
-  const meta: WalletMeta = { id, name, kind: secret.kind, address, sol: solAddressOf(secret) ?? undefined, trx: tronAddressOf(secret), createdAt: Date.now() };
+  const meta: WalletMeta = { id, name, kind: secret.kind, address, sol: solAddressOf(secret) ?? undefined, trx: tronAddressOf(secret), ton: tonAddressOf(secret) ?? undefined, createdAt: Date.now() };
   const list = [...wallets, meta];
   await store.set(JSON.stringify(await seal(next, list, id)));
   return { unlocked: next, wallets: list, active: id };

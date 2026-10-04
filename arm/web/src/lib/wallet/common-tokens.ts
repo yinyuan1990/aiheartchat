@@ -54,4 +54,16 @@ export const COMMON_TOKENS: Record<string, CommonToken[]> = {
     { symbol: "WIN", name: "WINkLink", address: "TLa2f6VPqDgRE67v1736s7bJ8Ray5wYjU7" },
     { symbol: "SUNDOG", name: "Sundog", address: "TXL6rJbvmjD46zeN1JssfgxvSo99qC8MRT" },
   ],
+  // jetton masters; symbols as tonapi reports them (bemo's stTON became stGRAM with the Gram rename)
+  ton: [
+    { symbol: "NOT", name: "Notcoin", address: "EQAvlWFDxGF2lXm67y4yzC17wYKD9A0guwPkMs1gOsM__NOT" },
+    { symbol: "DOGS", name: "Dogs", address: "EQCvxJy4eG8hyHBFsZ7eePxrRsUQSFE_jpptRAYBmcG_DOGS" },
+    { symbol: "STON", name: "STON", address: "EQA2kCVNwVsil2EM2mB0SkXytxCqQjS4mttjDpnXmwG9T6bO" },
+    { symbol: "HMSTR", name: "Hamster Kombat", address: "EQAJ8uWd7EBqsmpSWaRdf_I-8R8-XHwh3gsNKhy-UrdrPcUo" },
+    { symbol: "CATI", name: "Catizen", address: "EQD-cvR0Nz6XAyRBvbhz-abTrRC6sI5tvHvvpeQraV9UAAD7" },
+    { symbol: "tsTON", name: "Tonstakers TON", address: "EQC98_qAmNEptUtPc7W6xdHh_ZHrBUFpw5Ft_IzNU20QAJav" },
+    { symbol: "stGRAM", name: "Staked GRAM (bemo)", address: "EQDNhy-nxYFgUqzfUzImBEP67JqsyMIcyk2S5_RwNNEYku0k" },
+    { symbol: "MAJOR", name: "Major", address: "EQCuPm01HldiduQ55xaBF_1kaW_WAUy5DHey8suqzU_MAJOR" },
+    { symbol: "X", name: "X Empire", address: "EQB4zZusHsbU2vVTPqjhlokIOoiZhEdCMT703CWEzhTOo__X" },
+  ],
 };
