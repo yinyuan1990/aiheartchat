@@ -6,7 +6,7 @@ import { api, uploadFile } from '../api';
 import { wsManager } from '../ws';
 import { MusicSheet, NowPlayingBar } from './Music';
 import { ChatSearch, SearchExtra } from '../components/ChatSearch';
-import { parseGroupCode, parseInviteCode, QrScanner, ScanIcon } from '../components/QrScanner';
+import { looksLikeWalletPayment, parseGroupCode, parseInviteCode, QrScanner, ScanIcon } from '../components/QrScanner';
 import { CreateChannelSheet } from './Channel';
 
 interface ConversationItem {
@@ -287,14 +287,27 @@ export function JoinGroupSheet({ onClose, onJoined, initialCode }: { onClose: ()
   );
 }
 
-/** 扫一扫（消息页搜索 / 我的页共用）：邀请名片 → 直接打开与对方的私聊；群邀请码 → 加入群聊；收款码 → 提示去转赠页 */
-export function ScanFlow({ onClose }: { onClose: () => void }) {
+/**
+ * 扫到的二维码统一在这里处理（消息页搜索 / 我的页的扫一扫、聊天图片「识别二维码」共用）：
+ * 邀请名片 → 直接打开与对方的私聊；收款码 → 积分转赠页并填好；群邀请码 → 加入群聊；
+ * 钱包地址 / 收款链接 → 网页版没有钱包，提示去 App 里转账（地址复制到剪贴板）。
+ * 传了 text 就不开相机，直接处理这段内容。
+ */
+export function ScanFlow({ onClose, text: given }: { onClose: () => void; text?: string }) {
   const nav = useNavigate();
-  const [scanning, setScanning] = useState(true);
+  const [scanning, setScanning] = useState(given == null);
   const [joinCode, setJoinCode] = useState<string | null>(null);
+  const started = useRef(false);
+  useEffect(() => {
+    if (given == null || started.current) return;
+    started.current = true;
+    void handle(given);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [given]);
 
-  const handle = async (text: string) => {
+  const handle = async (raw: string) => {
     setScanning(false);
+    const text = raw.trim();
     const invite = parseInviteCode(text);
     if (invite) {
       try {
@@ -310,14 +323,20 @@ export function ScanFlow({ onClose }: { onClose: () => void }) {
       }
       return;
     }
-    if (text.includes('pay?sid=')) {
-      alert('这是收款码，请到「积分明细 - 转赠」里扫码使用');
+    const sid = text.match(/pay\?sid=(\d{6})/)?.[1];
+    if (sid) {
       onClose();
+      nav(`/transfer?sid=${sid}`);
       return;
     }
-    const g = parseGroupCode(text);
-    if (g) setJoinCode(g);
-    else { alert('无法识别的二维码'); onClose(); }
+    const wallet = looksLikeWalletPayment(text);
+    const g = wallet ? null : parseGroupCode(text);
+    if (g) return setJoinCode(g);
+    if (wallet) {
+      await navigator.clipboard?.writeText(text).catch(() => {});
+      alert(`这是链上钱包地址（已复制）：\n${text}\n\n网页版没有钱包，请在心之音 App 的钱包里转账。`);
+    } else alert('无法识别的二维码');
+    onClose();
   };
 
   return (

@@ -113,6 +113,7 @@ fun AppRoot() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    LaunchedEffect(user) { com.wh.peiwana.net.Session.walletFeature = user?.features?.wallet == true }
     LaunchedEffect(user?.id) {
         user?.let {
             com.wh.peiwana.net.Session.uid = it.id
@@ -260,6 +261,7 @@ fun AppRoot() {
                     onOpenWallet = if (walletOk) ({ path -> nav.navigate(chainWalletRoute(path)) }) else null,
                     walletResult = walletResult,
                     onWalletResultUsed = { entry.savedStateHandle["walletResult"] = null },
+                    onNav = { nav.navigate(it) },
                 )
             }
             page("group-info/{groupId}", listOf(navArgument("groupId") { type = NavType.StringType })) { entry ->
@@ -383,7 +385,9 @@ fun AppRoot() {
                 TaskDetailScreen(entry.arguments!!.getString("id")!!, user?.gender ?: 1, onBack = { nav.popBackStack() })
             }
             page("wallet") { WalletScreen(onBack = { nav.popBackStack() }, onNav = { nav.navigate(it) }) }
-            page("transfer") { TransferScreen(user?.shortId, onBack = { nav.popBackStack() }) }
+            page("transfer?sid={sid}", listOf(navArgument("sid") { type = NavType.StringType; defaultValue = "" })) { entry ->
+                TransferScreen(user?.shortId, initialSid = entry.arguments?.getString("sid").orEmpty(), onBack = { nav.popBackStack() })
+            }
             page("edit-profile") { EditProfileScreen(onBack = { nav.popBackStack() }) }
             page("invite-card") { InviteCardScreen(me = user, onBack = { nav.popBackStack() }) }
             page("guide-apply") { GuideApplyScreen(onBack = { nav.popBackStack() }) }

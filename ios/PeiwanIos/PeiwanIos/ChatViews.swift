@@ -4,6 +4,7 @@ import PhotosUI
 import AVFoundation
 import Combine
 import WebKit
+import CoreImage
 
 struct PeerBrief: Codable, Hashable {
     var id: String = ""
@@ -139,6 +140,7 @@ struct MessagesView: View {
                 .fullBg()
                 .withRoutes()
                 .routePush($pushRoute)
+                .scanFlow(isPresented: $showScan)
             }
             if showSearch {
                 ChatSearchView(
@@ -163,7 +165,6 @@ struct MessagesView: View {
             }
         }
         .animation(.easeOut(duration: 0.18), value: showSearch)
-        .scanFlow(isPresented: $showScan)
         .fullScreenCover(item: $chatTarget) { t in
             ChatRoomSheet(target: t)
         }
@@ -549,6 +550,7 @@ struct ChatRoomView: View {
     @State private var walletRoute: Route?
     @State private var transferAddr: ChainAddr?
     @State private var transferPick: String?
+    @State private var scannedQr: String?
 
     private var myId: String { state.user?.id ?? "" }
     private var isGroupAdmin: Bool { convType == 2 && (myRole == "owner" || myRole == "admin") }
@@ -576,6 +578,7 @@ struct ChatRoomView: View {
                 }
                 .compatDetents(height: 430)
             }
+            .scanHandler($scannedQr)
     }
 
     /// 聊天里「转账」：先查对方公开的收款地址，两条链都有就让选，再打开钱包转账页（ret=1 转完交回结果）
@@ -818,10 +821,15 @@ struct ChatRoomView: View {
         }
         .fullScreenCover(item: $fullImage) { img in
             let imgs = messages.filter { $0.type == "image" }.map(\.content)
-            ImageViewerView(images: imgs.isEmpty ? [img] : imgs, initial: max(0, imgs.firstIndex(of: img) ?? 0)) {
+            ImageViewerView(images: imgs.isEmpty ? [img] : imgs, initial: max(0, imgs.firstIndex(of: img) ?? 0), onScanQr: onImageQr) {
                 fullImage = nil
             }
         }
+    }
+
+    /// 大图里认出的二维码：等查看器收起再交给统一的扫码处理
+    private func onImageQr(_ text: String) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { scannedQr = text }
     }
 
     private func clearChat() {
@@ -1731,16 +1739,20 @@ struct GiftSheetView: View {
     }
 }
 
-/// 图片查看器：左右翻页 + 双指缩放 + 关闭按钮
+/// 图片查看器：左右翻页 + 双指缩放 + 关闭按钮；传了 onScanQr 时底部多一个「识别二维码」（认出来就关掉查看器，交给统一的扫码处理）
 struct ImageViewerView: View {
     let images: [String]
     let initial: Int
+    var onScanQr: ((String) -> Void)?
     var onClose: () -> Void
     @State private var page: Int
+    @State private var scanning = false
+    @State private var toastMsg: String?
 
-    init(images: [String], initial: Int, onClose: @escaping () -> Void) {
+    init(images: [String], initial: Int, onScanQr: ((String) -> Void)? = nil, onClose: @escaping () -> Void) {
         self.images = images
         self.initial = initial
+        self.onScanQr = onScanQr
         self.onClose = onClose
         _page = State(initialValue: initial)
     }
@@ -1764,7 +1776,51 @@ struct ImageViewerView: View {
             .buttonStyle(.plain)
             .padding(16)
         }
+        .overlay(alignment: .bottom) { scanButton }
+        .toast($toastMsg)
     }
+
+    @ViewBuilder private var scanButton: some View {
+        if onScanQr != nil {
+            Button { scanCurrent() } label: {
+                Text(scanning ? "识别中…" : "识别二维码")
+                    .font(.system(size: 14)).foregroundStyle(.white)
+                    .padding(.horizontal, 16).padding(.vertical, 9)
+                    .background(Capsule().fill(.white.opacity(0.18)))
+            }
+            .buttonStyle(.plain)
+            .padding(.bottom, 48)
+        }
+    }
+
+    private func scanCurrent() {
+        guard !scanning, images.indices.contains(page), let url = URL(string: Api.fullUrl(images[page])) else { return }
+        scanning = true
+        Task { @MainActor in
+            var text: String?
+            if let pair = try? await URLSession.shared.data(from: url), let img = UIImage(data: pair.0) {
+                text = detectQrCode(img)
+            }
+            scanning = false
+            guard let t = text else {
+                toastMsg = "图片里没有认出二维码"
+                return
+            }
+            onClose()
+            onScanQr?(t)
+        }
+    }
+}
+
+/// 识别图片里的二维码（CIDetector，高精度）；没有返回 nil
+func detectQrCode(_ image: UIImage) -> String? {
+    guard let ci = CIImage(image: image) else { return nil }
+    let options: [String: Any] = [CIDetectorAccuracy: CIDetectorAccuracyHigh]
+    guard let detector = CIDetector(ofType: CIDetectorTypeQRCode, context: nil, options: options) else { return nil }
+    for f in detector.features(in: ci) {
+        if let q = f as? CIQRCodeFeature, let s = q.messageString, !s.isEmpty { return s }
+    }
+    return nil
 }
 
 /// 可缩放图片（双指缩放 + 双击还原/放大）

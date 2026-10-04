@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { createWalletClient, encodeFunctionData, erc20Abi, formatUnits, getAddress, http, isAddress, parseUnits, type Address, type Hex } from "viem";
 import { AddressBook, CaretDown, ClipboardText, Info, Lightning, Scan, ShieldCheck, SlidersHorizontal, Warning } from "@phosphor-icons/react";
@@ -14,12 +14,12 @@ import { isTronAddress } from "@/lib/wallet/tron";
 import { isTonAddress } from "@/lib/wallet/ton";
 import { hasFeature, reportResult, returnsToApp, scanQr } from "@/lib/wallet/native";
 import { transferMessage } from "@/lib/wallet/payee";
-import { parseScanned } from "@/lib/wallet/scan";
+import { parsePayment, parseScanned, sendLinkOf } from "@/lib/wallet/scan";
 import { familyOf, pushRecent, useAddressBook } from "@/lib/wallet/address-book";
 import { useAssets, type Asset } from "@/lib/wallet/assets";
 import { isSolAddress } from "@/lib/wallet/sol";
 import { useVault } from "@/components/wallet/wallet-context";
-import { BookPicker, Result, Row, useSendLink, type Sent } from "@/components/wallet/send-parts";
+import { BookPicker, Result, Row, useScanSwitch, useSendLink, type Sent } from "@/components/wallet/send-parts";
 import { SolSend } from "@/components/wallet/sol-send";
 import { TronSend } from "@/components/wallet/tron-send";
 import { TonSend } from "@/components/wallet/ton-send";
@@ -64,9 +64,21 @@ export default function SendPage() {
   );
 }
 
-/** A new link (other recipient / coin) starts from a clean form. */
+/** A new link (other recipient / coin) starts from a clean form; `scan=<QR text>` (the App's 扫一扫, any chain) is turned
+ * into the regular link parameters first. */
 function Keyed() {
-  return <LinkedSend key={useSearchParams().toString()} />;
+  const sp = useSearchParams();
+  const router = useRouter();
+  const scanText = sp.get("scan");
+  useEffect(() => {
+    if (scanText == null) return;
+    const p = parsePayment(scanText);
+    if (!p) toast.error("没认出收款地址，请换一个二维码或手动粘贴");
+    else if (p.unknownChainId) toast.warning(`二维码指定的链（ID ${p.unknownChainId}）钱包暂不支持，请选择网络`);
+    router.replace(p ? sendLinkOf(p) : "/wallet/send");
+  }, [scanText, router]);
+  if (scanText != null) return null;
+  return <LinkedSend key={sp.toString()} />;
 }
 
 function LinkedSend() {
@@ -127,6 +139,14 @@ function EvmSend() {
   const canScan = useSyncExternalStore(noSubscribe, () => hasFeature("scan"), () => false);
   // coin / amount from a scanned EIP-681 link, applied once that chain's asset list is in
   const [scanned, setScanned] = useState<{ chainId: number; token?: string; raw?: bigint } | null>(null);
+  const switchToScanned = useScanSwitch();
+  // a bare 0x address from the App's 扫一扫: the user says which EVM network
+  const pick = link.pick;
+  useEffect(() => {
+    if (!pick) return;
+    const t = setTimeout(() => setSheet("chain"), 0);
+    return () => clearTimeout(t);
+  }, [pick]);
 
   const nc = chain.chain.nativeCurrency;
 
@@ -158,7 +178,7 @@ function EvmSend() {
     }
     if (!text) return;
     const p = parseScanned(text);
-    if (!p) return void toast.error("没认出收款地址，请换一个二维码或手动粘贴");
+    if (!p) return void (switchToScanned(text) || toast.error("没认出收款地址，请换一个二维码或手动粘贴"));
     let target = chain;
     if (p.chainId && p.chainId !== chain.chain.id) {
       const c = chainById(p.chainId);

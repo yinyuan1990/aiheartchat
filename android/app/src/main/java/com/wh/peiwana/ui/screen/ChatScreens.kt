@@ -477,7 +477,10 @@ fun ChatRoomScreen(
     /** 钱包交回的转账结果（JSON），处理完调 onWalletResultUsed 清掉 */
     walletResult: String? = null,
     onWalletResultUsed: () -> Unit = {},
+    /** 跳到 App 内的页面（聊天图片「识别二维码」后交给统一的扫码处理） */
+    onNav: (String) -> Unit = {},
 ) {
+    val handleScan = rememberScanHandler(onNav)
     var messages by remember { mutableStateOf<List<MsgItem>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
     var bot by remember { mutableStateOf<BotPublic?>(null) }
@@ -1112,7 +1115,7 @@ fun ChatRoomScreen(
     fullImage?.let { u ->
         androidx.compose.ui.window.Dialog(onDismissRequest = { fullImage = null }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
             val imgs = messages.filter { it.type == "image" }.map { it.content }
-            ImageViewer(imgs.ifEmpty { listOf(u) }, imgs.indexOf(u).coerceAtLeast(0)) { fullImage = null }
+            ImageViewer(imgs.ifEmpty { listOf(u) }, imgs.indexOf(u).coerceAtLeast(0), onScanQr = handleScan) { fullImage = null }
         }
     }
 }

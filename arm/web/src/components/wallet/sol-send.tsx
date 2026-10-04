@@ -37,7 +37,7 @@ import {
   type Instruction,
 } from "@/lib/wallet/sol";
 import { useVault } from "@/components/wallet/wallet-context";
-import { BookPicker, Result, Row, useSendLink, type Sent } from "@/components/wallet/send-parts";
+import { BookPicker, Result, Row, useScanSwitch, useSendLink, type Sent } from "@/components/wallet/send-parts";
 import { BottomSheet, ChainGlyph, ChainPill, GhostButton, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
 
 const SPEEDS = [
@@ -85,6 +85,7 @@ export function SolSend() {
   const full = useAddressBook();
   const book = { contacts: full.contacts.filter((c) => isSolEntry(c.address)), recent: full.recent.filter(isSolEntry) };
   const canScan = useSyncExternalStore(noSubscribe, () => hasFeature("scan"), () => false);
+  const switchToScanned = useScanSwitch();
 
   const wantedTo = link.to;
   useEffect(() => {
@@ -174,7 +175,7 @@ export function SolSend() {
     }
     if (!text) return;
     const p = parseScannedSol(text);
-    if (!p) return void toast.error(/^0x|ethereum:/i.test(text.trim()) ? "这是 EVM 地址，请切换到对应的 EVM 网络再转" : "没认出 Solana 收款地址，请换一个二维码或手动粘贴");
+    if (!p) return void (switchToScanned(text) || toast.error("没认出 Solana 收款地址，请换一个二维码或手动粘贴"));
     setTo(p.to);
     if (p.mint || p.amount) setScanned({ mint: p.mint, amount: p.amount });
   };

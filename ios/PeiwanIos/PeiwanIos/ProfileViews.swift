@@ -15,9 +15,9 @@ struct MeView: View {
             content
                 .fullBg()
                 .withRoutes()
+                // 扫一扫（统一处理见 QrViews.swift ScanHandlerModifier）；放在导航栈里面，扫到钱包地址 / 收款码才能 push
+                .scanFlow(isPresented: $showScan)
         }
-        // 扫一扫：邀请名片 → 私聊；语音房邀请 → 进房；群邀请码 → 加群；收款码 → 提示
-        .scanFlow(isPresented: $showScan)
         .task {
             if let u: UserProfile = try? await Api.request("/user/me") {
                 me = u
@@ -349,6 +349,7 @@ struct WalletView: View {
 struct TransferView: View {
     @EnvironmentObject var state: AppState
     @Environment(\.dismiss) private var dismiss
+    private let initialSid: String
     @State private var sid = ""
     @State private var target: LookupUser?
     @State private var amount = ""
@@ -356,6 +357,10 @@ struct TransferView: View {
     @State private var toastMsg: String?
     @State private var showScan = false
     @State private var showMyQr = false
+
+    init(initialSid: String = "") {
+        self.initialSid = initialSid
+    }
 
     var body: some View {
         ScrollView {
@@ -485,6 +490,8 @@ struct TransferView: View {
             MyQrCodeView().compatDetents(height: 480)
         }
         .task {
+            // 从扫一扫进来（扫到收款码）：直接填好，onChange 会去查对方
+            if sid.isEmpty, initialSid.count == 6 { sid = initialSid }
             if let w: WalletData = try? await Api.request("/wallet") { balance = w.balance ?? "0" }
         }
     }

@@ -197,6 +197,8 @@ enum Route: Hashable {
     case taskPost, taskHall, taskMine
     case task(String)
     case wallet, transfer, editProfile, guideApply, giftsReceived, myMoments, followMoments
+    /// 积分转赠并填好对方 ID（扫一扫扫到收款码）
+    case transferTo(String)
     case createGroup
     /// 加入群聊（扫码/输邀请码），关联值为预填的邀请码
     case joinGroup(String?)
@@ -248,6 +250,7 @@ func routeView(_ route: Route) -> some View {
     case .task(let id): TaskDetailView(taskId: id)
     case .wallet: WalletView()
     case .transfer: TransferView()
+    case .transferTo(let sid): TransferView(initialSid: sid)
     case .editProfile: EditProfileView()
     case .guideApply: GuideApplyView()
     case .giftsReceived: GiftsReceivedView()

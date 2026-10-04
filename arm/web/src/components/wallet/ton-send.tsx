@@ -16,7 +16,7 @@ import { useAssets, type Asset } from "@/lib/wallet/assets";
 import { parseScannedTon } from "@/lib/wallet/scan";
 import { JETTON_ATTACH, estimateTonFee, isTonAddress, sameTonAddress, sendTon, signTonText, tonOf, waitTon } from "@/lib/wallet/ton";
 import { useVault } from "@/components/wallet/wallet-context";
-import { BookPicker, Result, Row, useSendLink, type Sent } from "@/components/wallet/send-parts";
+import { BookPicker, Result, Row, useScanSwitch, useSendLink, type Sent } from "@/components/wallet/send-parts";
 import { BottomSheet, ChainGlyph, ChainPill, GhostButton, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
 
 const noSubscribe = () => () => {};
@@ -46,6 +46,12 @@ export function TonSend() {
   const full = useAddressBook();
   const book = { contacts: full.contacts.filter((c) => isTonEntry(c.address)), recent: full.recent.filter(isTonEntry) };
   const canScan = useSyncExternalStore(noSubscribe, () => hasFeature("scan"), () => false);
+  const switchToScanned = useScanSwitch();
+  useEffect(() => {
+    if (!link.memo) return;
+    const t = setTimeout(() => setMemo((cur) => cur || link.memo!), 0);
+    return () => clearTimeout(t);
+  }, [link.memo]);
 
   const wantedTo = link.to;
   useEffect(() => {
@@ -104,7 +110,7 @@ export function TonSend() {
     }
     if (!text) return;
     const p = parseScannedTon(text);
-    if (!p) return void toast.error(/^0x|ethereum:/i.test(text.trim()) ? "这是 EVM 地址，请切换到对应的 EVM 网络再转" : "没认出 TON 收款地址，请换一个二维码或手动粘贴");
+    if (!p) return void (switchToScanned(text) || toast.error("没认出 TON 收款地址，请换一个二维码或手动粘贴"));
     setTo(p.to);
     if (p.text) setMemo(p.text.slice(0, MEMO_MAX));
     const want = p.jetton ? assets.find((a) => a.jetton && sameTonAddress(a.jetton, p.jetton)) : gram;

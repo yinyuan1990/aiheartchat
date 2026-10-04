@@ -15,7 +15,7 @@ import { isTronEntry, pushRecent, useAddressBook } from "@/lib/wallet/address-bo
 import { useAssets, type Asset } from "@/lib/wallet/assets";
 import { SUN, estimateTronFee, isTronAddress, sendTron, waitTron } from "@/lib/wallet/tron";
 import { useVault } from "@/components/wallet/wallet-context";
-import { BookPicker, Result, Row, useSendLink, type Sent } from "@/components/wallet/send-parts";
+import { BookPicker, Result, Row, useScanSwitch, useSendLink, type Sent } from "@/components/wallet/send-parts";
 import { BottomSheet, ChainGlyph, ChainPill, GhostButton, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
 
 const noSubscribe = () => () => {};
@@ -48,6 +48,7 @@ export function TronSend() {
   const full = useAddressBook();
   const book = { contacts: full.contacts.filter((c) => isTronEntry(c.address)), recent: full.recent.filter(isTronEntry) };
   const canScan = useSyncExternalStore(noSubscribe, () => hasFeature("scan"), () => false);
+  const switchToScanned = useScanSwitch();
 
   const wantedTo = link.to;
   useEffect(() => {
@@ -98,7 +99,7 @@ export function TronSend() {
     }
     if (!text) return;
     const p = parseScannedTron(text);
-    if (!p) return void toast.error(/^0x|ethereum:/i.test(text.trim()) ? "这是 EVM 地址，请切换到对应的 EVM 网络再转" : "没认出波场收款地址，请换一个二维码或手动粘贴");
+    if (!p) return void (switchToScanned(text) || toast.error("没认出波场收款地址，请换一个二维码或手动粘贴"));
     setTo(p);
   };
   const paste = async () => {

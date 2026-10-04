@@ -1,6 +1,8 @@
 import { getAddress, isAddress, type Address } from "viem";
 import { isSolAddress } from "./sol";
 import { isTonAddress } from "./ton-cell";
+import { isTronAddress } from "./tron";
+import { chainById } from "./chains";
 
 /**
  * What a scanned payment QR asks for. Accepts a bare 0x address and EIP-681 links:
@@ -55,6 +57,39 @@ export function parseScannedTon(text: string): ScannedTon | null {
   const jetton = q.get("jetton");
   const t = q.get("text");
   return { to: m[1], raw: toBig(q.get("amount")), jetton: jetton && isTonAddress(jetton) ? jetton : undefined, text: t ? t.slice(0, 120) : undefined };
+}
+
+/**
+ * Any payment QR the wallet understands, on any chain: what `/wallet/send?scan=` turns into send-page parameters.
+ * `chain` is the wallet chain key, or undefined for a bare 0x address (the user picks the EVM network).
+ * `raw` is in base units of the native coin / the token; `amount` is already decimal (Solana Pay).
+ */
+export type ScannedPayment = { chain?: string; to: string; token?: string; raw?: bigint; amount?: string; memo?: string; unknownChainId?: number };
+
+export function parsePayment(text: string): ScannedPayment | null {
+  const s = text.trim();
+  const tron = s.match(/^(?:tron:)?(T[1-9A-HJ-NP-Za-km-z]{33})(?:\?.*)?$/i);
+  if (tron && isTronAddress(tron[1])) return { chain: "trx", to: tron[1] };
+  const ton = parseScannedTon(s);
+  if (ton) return { chain: "ton", to: ton.to, token: ton.jetton, raw: ton.raw, memo: ton.text };
+  const sol = parseScannedSol(s);
+  if (sol) return { chain: "sol", to: sol.to, token: sol.mint, amount: sol.amount };
+  const evm = parseScanned(s);
+  if (!evm) return null;
+  const c = evm.chainId != null ? chainById(evm.chainId) : undefined;
+  return { chain: c?.key, to: evm.to, token: evm.token, raw: evm.raw, unknownChainId: evm.chainId != null && !c ? evm.chainId : undefined };
+}
+
+/** `/wallet/send` link with the payment filled in */
+export function sendLinkOf(p: ScannedPayment): string {
+  const q = new URLSearchParams({ to: p.to });
+  if (p.chain) q.set("chain", p.chain);
+  else q.set("pick", "1");
+  if (p.token) q.set("token", p.token);
+  if (p.raw != null) q.set("raw", p.raw.toString());
+  else if (p.amount) q.set("amount", p.amount);
+  if (p.memo) q.set("memo", p.memo);
+  return `/wallet/send?${q}`;
 }
 
 export function parseScanned(text: string): ScannedPay | null {

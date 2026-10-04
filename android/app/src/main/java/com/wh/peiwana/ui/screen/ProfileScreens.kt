@@ -32,7 +32,7 @@ fun MeScreen(modifier: Modifier = Modifier, initialUser: UserProfile?, onNav: (S
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val meScope = rememberCoroutineScope()
 
-    // 扫一扫：邀请名片 → 私聊；语音房邀请 → 进房；群邀请码 → 加群；收款码 → 提示
+    // 扫一扫（统一处理见 QrScan.kt rememberScanHandler）：名片、语音房、群码、收款码、钱包地址
     val startScan = rememberQrScan(onNav)
     val u = me ?: return
 
@@ -388,7 +388,7 @@ fun RealnameScreen(onBack: () -> Unit) {
 }
 
 @Composable
-fun TransferScreen(myShortId: String?, onBack: () -> Unit) {
+fun TransferScreen(myShortId: String?, initialSid: String = "", onBack: () -> Unit) {
     var sid by remember { mutableStateOf("") }
     var target by remember { mutableStateOf<LookupUser?>(null) }
     var amount by remember { mutableStateOf("") }
@@ -403,6 +403,8 @@ fun TransferScreen(myShortId: String?, onBack: () -> Unit) {
         target = null
         scope.launch { target = runCatching { Api.getObj<LookupUser>("/wallet/lookup/$s") }.getOrNull() }
     }
+    // 从扫一扫进来（扫到收款码）：直接填好
+    LaunchedEffect(initialSid) { if (Regex("^\\d{6}$").matches(initialSid)) applySid(initialSid) }
 
     val scanLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         com.journeyapps.barcodescanner.ScanContract(),

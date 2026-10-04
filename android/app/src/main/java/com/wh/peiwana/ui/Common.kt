@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.composed
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -293,11 +294,17 @@ private fun MediaVideoPage(url: String, active: Boolean) {
     )
 }
 
-/** 全屏图片查看器（Telephoto）：双指/双击缩放 + 平移，横滑切换，单击关闭 */
+/**
+ * 全屏图片查看器（Telephoto）：双指/双击缩放 + 平移，横滑切换，单击关闭。
+ * 传了 onScanQr 时底部多一个「识别二维码」：认出来就关掉查看器，把内容交给统一的扫码处理。
+ */
 @Composable
-fun ImageViewer(urls: List<String>, startIndex: Int = 0, onClose: () -> Unit) {
+fun ImageViewer(urls: List<String>, startIndex: Int = 0, onScanQr: ((String) -> Unit)? = null, onClose: () -> Unit) {
     if (urls.isEmpty()) return
     val pager = rememberPagerState(initialPage = startIndex.coerceIn(0, urls.size - 1)) { urls.size }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var scanning by remember { mutableStateOf(false) }
 
     androidx.compose.foundation.layout.Box(
         modifier = Modifier.fillMaxSize().background(Color.Black),
@@ -319,6 +326,30 @@ fun ImageViewer(urls: List<String>, startIndex: Int = 0, onClose: () -> Unit) {
                 .clip(CircleShape).background(Color.White.copy(alpha = 0.18f)).noRippleClick(onClose),
             contentAlignment = Alignment.Center,
         ) { Text("×", color = Color.White, fontSize = 22.sp) }
+        if (onScanQr != null) {
+            Row(
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 48.dp)
+                    .clip(RoundedCornerShape(20.dp)).background(Color.White.copy(alpha = 0.18f))
+                    .noRippleClick {
+                        if (scanning) return@noRippleClick
+                        scanning = true
+                        scope.launch {
+                            val text = runCatching { com.wh.peiwana.ui.screen.decodeQrFromUrl(ctx, Api.fullUrl(urls[pager.currentPage])) }.getOrNull()
+                            scanning = false
+                            if (text == null) android.widget.Toast.makeText(ctx, "图片里没有认出二维码", android.widget.Toast.LENGTH_SHORT).show()
+                            else {
+                                onClose()
+                                onScanQr(text)
+                            }
+                        }
+                    }
+                    .padding(horizontal = 16.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ScanIcon(Color.White, 16.dp)
+                Text(if (scanning) "  识别中…" else "  识别二维码", color = Color.White, fontSize = 14.sp)
+            }
+        }
     }
 }
 

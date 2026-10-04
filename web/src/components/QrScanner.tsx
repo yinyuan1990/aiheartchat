@@ -16,6 +16,46 @@ export function parseInviteCode(text: string): string | null {
   return m ? m[1] : null;
 }
 
+/**
+ * 看起来像链上钱包地址或收款链接（0x / EIP-681、Solana、波场 T…、TON、solana: / tron: / ton:// 链接）。
+ * 和 App 里的判断一样；网页版没有钱包，只提示去 App 里转账。
+ */
+export function looksLikeWalletPayment(text: string): boolean {
+  const t = text.trim();
+  return (
+    /^(ethereum|solana|tron|ton|tonkeeper):/i.test(t) ||
+    t.startsWith('https://app.tonkeeper.com/transfer/') ||
+    /0x[0-9a-fA-F]{40}(?![0-9a-fA-F])/.test(t) ||
+    /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(t) ||
+    /^[A-Za-z0-9_+/-]{48}$/.test(t) ||
+    /^-?[01]:[0-9a-fA-F]{64}$/.test(t)
+  );
+}
+
+/**
+ * 识别一张图片里的二维码（聊天大图「识别二维码」）。图片在 /res/ 下，同一台服务器对哪个域名都转发 /res/，
+ * 所以换成本站同源的地址去取，不受跨域限制（canvas 才能读像素）。
+ */
+export async function decodeQrFromImage(src: string): Promise<string | null> {
+  let url = src;
+  try {
+    const u = new URL(src, location.href);
+    if (u.origin !== location.origin && u.pathname.startsWith('/res/')) url = location.origin + u.pathname + u.search;
+  } catch {}
+  const blob = await (await fetch(url)).blob();
+  const bmp = await createImageBitmap(blob);
+  const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+  const w = Math.max(1, Math.round(bmp.width * scale));
+  const h = Math.max(1, Math.round(bmp.height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(bmp, 0, 0, w, h);
+  const img = ctx.getImageData(0, 0, w, h);
+  return jsQR(img.data, w, h, { inversionAttempts: 'attemptBoth' })?.data || null;
+}
+
 /** 全屏相机取景（getUserMedia + jsQR），识别到二维码即回调并关闭相机 */
 export function QrScanner({ hint, onResult, onClose }: { hint: string; onResult: (text: string) => void; onClose: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);

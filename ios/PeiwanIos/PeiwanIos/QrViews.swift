@@ -47,11 +47,48 @@ func parseInviteCode(_ text: String) -> String? {
     return String(text[range].dropFirst(3))
 }
 
-/// 扫一扫（我的页 / 消息页搜索共用）：邀请名片 → 直接打开私聊；语音房邀请 → 免密入群进房；群邀请码 → 加入群聊；收款码 → 提示
+/// 看起来像链上钱包地址或收款链接（0x / EIP-681、Solana、波场 T…、TON、solana: / tron: / ton:// 链接）。
+/// 这里只粗判，真正的解析（哪条链、币种、金额、备注，格式不对就提示）在钱包网页 /wallet/send?scan= 里统一做。
+func looksLikeWalletPayment(_ raw: String) -> Bool {
+    let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    let patterns = [
+        #"^(?i)(ethereum|solana|tron|ton|tonkeeper):"#,
+        #"^https://app\.tonkeeper\.com/transfer/"#,
+        #"0x[0-9a-fA-F]{40}(?![0-9a-fA-F])"#,
+        #"^[1-9A-HJ-NP-Za-km-z]{32,44}$"#,
+        #"^[A-Za-z0-9_+/-]{48}$"#,
+        #"^-?[01]:[0-9a-fA-F]{64}$"#,
+    ]
+    for p in patterns where t.range(of: p, options: .regularExpression) != nil { return true }
+    return false
+}
+
+/// 扫一扫（我的页 / 消息页「+」和搜索框共用）：相机扫到的内容交给 scanHandler
 struct ScanFlowModifier: ViewModifier {
     @Binding var isPresented: Bool
+    @State private var scanned: String?
+
+    func body(content: Content) -> some View {
+        content
+            .fullScreenCover(isPresented: $isPresented) {
+                QrScanView(hint: "扫名片、群码、收款码或钱包地址") { text in
+                    // 等扫码页收起再处理，免得下一页的弹出 / push 被吞
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { scanned = text }
+                }
+            }
+            .scanHandler($scanned)
+    }
+}
+
+/// 扫到的二维码统一在这里处理（扫一扫、聊天图片「识别二维码」共用），text 置非 nil 即处理：
+/// 邀请名片 → 私聊；语音房邀请 → 免密入群进房；收款码 → 积分转赠页并填好；群邀请码 → 加群；
+/// 钱包地址 / 收款链接 → 钱包转账页（自动选链并填好，0x 地址让用户选网络）。
+struct ScanHandlerModifier: ViewModifier {
+    @Binding var text: String?
+    @EnvironmentObject var state: AppState
     @State private var joinCode: ScannedCode?
     @State private var chat: ChatTarget?
+    @State private var route: Route?
     @State private var toast: String?
 
     struct ScannedCode: Identifiable {
@@ -62,28 +99,45 @@ struct ScanFlowModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .toast($toast)
-            .fullScreenCover(isPresented: $isPresented) {
-                QrScanView(hint: "对准邀请名片或群二维码") { text in handle(text) }
-            }
             .sheet(item: $joinCode) { s in
                 NavStack { JoinGroupView(initialCode: s.code) }
             }
             .fullScreenCover(item: $chat) { t in
                 ChatRoomSheet(target: t)
             }
+            .routePush($route)
+            .onChange(of: text) { v in
+                guard let t = v else { return }
+                text = nil
+                handle(t.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
     }
 
     private func handle(_ text: String) {
+        let wallet = looksLikeWalletPayment(text)
         if let code = parseInviteCode(text) {
             openByInvite(code)
-        } else if text.contains("pay?sid=") {
-            toast = "这是收款码，请到「积分转赠 - 扫一扫」使用"
         } else if let v = parseVroomQr(text) {
             joinVroomByQr(v.groupId, v.token)
-        } else if let c = parseGroupCode(text) {
+        } else if text.contains("pay?sid=") {
+            if let s = parsePaySid(text) { route = .transferTo(s) } else { toast = "收款码不完整" }
+        } else if !wallet, let c = parseGroupCode(text) {
             joinCode = ScannedCode(code: c)
+        } else if wallet {
+            openWallet(text)
         } else {
             toast = "无法识别的二维码"
+        }
+    }
+
+    private func openWallet(_ text: String) {
+        Task { @MainActor in
+            guard await ChainWallet.visible(state.user) else {
+                toast = "这是链上钱包地址，当前版本不能在 App 里转账"
+                return
+            }
+            let enc = text.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
+            route = .chainWalletPath("/wallet/send?scan=" + enc)
         }
     }
 
@@ -93,8 +147,6 @@ struct ScanFlowModifier: ViewModifier {
             struct Resp: Codable { var conversationId: String; var peer: Peer }
             do {
                 let r: Resp = try await Api.request("/im/conversations/open-by-code", method: "POST", body: ["code": code])
-                // 等扫码页的 fullScreenCover 收起后再弹聊天页
-                try? await Task.sleep(nanoseconds: 450_000_000)
                 chat = ChatTarget(convId: r.conversationId, convType: 1, targetId: r.peer.id, title: r.peer.nickname ?? "")
             } catch {
                 toast = error.localizedDescription
@@ -143,6 +195,7 @@ struct ScanFlowModifier: ViewModifier {
 
 extension View {
     func scanFlow(isPresented: Binding<Bool>) -> some View { modifier(ScanFlowModifier(isPresented: isPresented)) }
+    func scanHandler(_ text: Binding<String?>) -> some View { modifier(ScanHandlerModifier(text: text)) }
 }
 
 /// 生成二维码图片

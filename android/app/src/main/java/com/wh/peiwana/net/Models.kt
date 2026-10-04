@@ -113,6 +113,8 @@ data class MeetUser(
 object Session {
     var uid: String = ""
     var gender: Int = 0
+    /** 后台给这个账号开了链上钱包（/user/me features.wallet），扫码时决定钱包地址能不能直接去转账 */
+    var walletFeature: Boolean = false
     /** App 是否在前台（MainActivity 生命周期维护），后台来电用通知提醒 */
     @Volatile var foreground: Boolean = true
 }

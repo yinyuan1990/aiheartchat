@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useState, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { formatUnits } from "viem";
-import { ArrowDown, ArrowUp, ArrowsLeftRight, CaretDown, CheckCircle, Copy, Eye, EyeSlash, GasPump, GearSix, Lock, Plus, ArrowSquareOut, Wallet as WalletIcon } from "@phosphor-icons/react";
+import { ArrowDown, ArrowUp, ArrowsLeftRight, CaretDown, CheckCircle, Copy, Eye, EyeSlash, GasPump, GearSix, Lock, Plus, ArrowSquareOut, Scan, Wallet as WalletIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { TokenAvatar, WalletDot } from "@/components/shared";
 import { useWallet } from "@/lib/api";
@@ -12,7 +13,8 @@ import { fmtSmall, shortAddr, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { WALLET_CHAINS, explorerAddr, explorerTx, isEvm, isSolana, isTon, probeChainNode, probeNode, publicClientFor, rpcOf, useNodes, type WalletChain } from "@/lib/wallet/chains";
 import { absUrl, useAssets, type Asset } from "@/lib/wallet/assets";
-import { copyText } from "@/lib/wallet/native";
+import { copyText, hasFeature, scanQr } from "@/lib/wallet/native";
+import { parsePayment, sendLinkOf } from "@/lib/wallet/scan";
 import { addressOn, useVault } from "@/components/wallet/wallet-context";
 import { AddTokenSheet } from "@/components/wallet/add-token";
 import { BottomNav, BottomSheet, ChainGlyph, ChainPill, IconButton, Num, Pct, WalletFrame } from "@/components/wallet/ui";
@@ -20,6 +22,7 @@ import { BottomNav, BottomSheet, ChainGlyph, ChainPill, IconButton, Num, Pct, Wa
 const usd = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const amt = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? n.toLocaleString("en-US", { maximumFractionDigits: 0 }) : n.toLocaleString("en-US", { maximumFractionDigits: n < 1 ? 6 : 2 }));
 const price = (p: number) => (p >= 1 ? usd(p) : `$${fmtSmall(p)}`);
+const noSubscribe = () => () => {};
 
 export default function WalletHome() {
   const { active, chain, setChain, wallets, switchTo, lock, address } = useVault();
@@ -35,6 +38,20 @@ export default function WalletHome() {
   const copy = async () => {
     if (address && (await copyText(address))) toast.success("地址已复制");
   };
+  const router = useRouter();
+  const canScan = useSyncExternalStore(noSubscribe, () => hasFeature("scan"), () => false);
+  /** any chain's address / payment link → the send page of that chain, filled in */
+  const scan = async () => {
+    try {
+      const text = await scanQr();
+      if (!text) return;
+      const p = parsePayment(text);
+      if (!p) return void toast.error("没认出收款地址，请换一个二维码");
+      router.push(sendLinkOf(p));
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
 
   return (
     <WalletFrame>
@@ -46,6 +63,11 @@ export default function WalletHome() {
         </button>
         <div className="ml-auto flex items-center gap-1">
           <ChainPill chain={chain} onClick={() => setSheet("chain")} />
+          {canScan && (
+            <IconButton label="扫一扫" onClick={scan}>
+              <Scan size={21} />
+            </IconButton>
+          )}
           <IconButton label="锁定" onClick={lock}>
             <Lock size={21} />
           </IconButton>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import QRCode from 'qrcode';
 import jsQR from 'jsqr';
 import { api, fmtPoints, toFen } from '../api';
@@ -108,6 +108,15 @@ export function TransferPage() {
       showToast('未找到该 ID');
     }
   };
+  // 从扫一扫进来（扫到收款码 /transfer?sid=）：直接填好
+  const [sp] = useSearchParams();
+  const sidParam = sp.get('sid');
+  useEffect(() => {
+    if (!sidParam || !/^\d{6}$/.test(sidParam)) return;
+    setShortId(sidParam);
+    lookup(sidParam);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sidParam]);
 
   const submit = async () => {
     if (!target) return showToast('请先输入正确的对方 ID');

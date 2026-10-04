@@ -9,13 +9,15 @@ import { shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { MAX_NAME, saveContact, type Contact } from "@/lib/wallet/address-book";
 import { closeWallet, returnsToApp } from "@/lib/wallet/native";
-import { isEvm, isSolana, isTon, isTron, type WalletChain } from "@/lib/wallet/chains";
+import { chainByKey, isEvm, isSolana, isTon, isTron, type WalletChain } from "@/lib/wallet/chains";
 import { isTronAddress, trc20Meta } from "@/lib/wallet/tron";
 import { sameTonAddress, tonJettonMeta } from "@/lib/wallet/ton";
 import type { Asset } from "@/lib/wallet/assets";
 import { rememberToken } from "@/lib/wallet/market";
 import { lookupToken } from "@/lib/wallet/swap";
-import { useSearchParams } from "next/navigation";
+import { parsePayment, sendLinkOf } from "@/lib/wallet/scan";
+import { formatUnits } from "viem";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export type Sent = { hash: string; status: "pending" | "success" | "reverted" | "error"; error?: string };
 
@@ -137,7 +139,35 @@ export function useSendLink(chain: WalletChain, assets: Asset[], loading: boolea
     };
   }, [missing, sol, token, chain]);
   const req = sp.get("req");
-  return { wantedId, to: sp.get("to"), amount: amount && /^\d*\.?\d+$/.test(amount) ? amount : null, name: name?.slice(0, 24) || null, notHeld: missing && sol, req: req && /^\d{1,19}$/.test(req) ? req : undefined };
+  // `raw=` (base units, from a scanned link): the native coin's decimals, or the token's once it is listed
+  const rawParam = sp.get("raw");
+  const raw = rawParam && /^\d{1,40}$/.test(rawParam) ? BigInt(rawParam) : null;
+  const wanted = assets.find(match);
+  const fromRaw = raw == null ? null : !token || token === "native" ? formatUnits(raw, chain.chain.nativeCurrency.decimals) : wanted ? formatUnits(raw, wanted.decimals) : null;
+  const decimal = amount && /^\d*\.?\d+$/.test(amount) ? amount : null;
+  return {
+    wantedId,
+    to: sp.get("to"),
+    amount: fromRaw ?? decimal,
+    name: name?.slice(0, 24) || null,
+    notHeld: missing && sol,
+    req: req && /^\d{1,19}$/.test(req) ? req : undefined,
+    memo: sp.get("memo")?.slice(0, 120) || null,
+    pick: sp.get("pick") === "1",
+  };
+}
+
+/** In-page 扫一扫 found an address of another chain: open the send page for that chain with it filled in. */
+export function useScanSwitch() {
+  const router = useRouter();
+  return (text: string): boolean => {
+    const p = parsePayment(text);
+    if (!p) return false;
+    const c = p.chain ? chainByKey(p.chain) : null;
+    toast.info(c ? `这是 ${c.name} 的地址，已切换到 ${c.name}` : "这是 EVM 地址，请选择网络");
+    router.replace(sendLinkOf(p));
+    return true;
+  };
 }
 
 export function Result({ sent, explorer, to, saved }: { sent: Sent; explorer: string; to?: string; saved: boolean }) {

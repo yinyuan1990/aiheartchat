@@ -17,6 +17,8 @@ import {
 } from '../components/MsgActions';
 import { AddBotSheet, BotPublic, botInfo, InlineKeyboard, InlineMarkup } from './Bots';
 import { dustThen, undust } from '../dust';
+import { decodeQrFromImage, ScanIcon } from '../components/QrScanner';
+import { ScanFlow } from './ChatList';
 
 /** 消息气泡那一行（不含上面的时间分隔），删除时化成灰 */
 const msgEl = (id: string) => document.getElementById(`msg-${id}`)?.querySelector('.bubble-row');
@@ -550,6 +552,9 @@ export function ChatRoomPage() {
   const [showSticker, setShowSticker] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const [fullImage, setFullImage] = useState<string | null>(null);
+  /** 大图里认出的二维码，交给 ScanFlow 统一处理 */
+  const [scanText, setScanText] = useState<string | null>(null);
+  const [qrBusy, setQrBusy] = useState(false);
   const [toast, setToast] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -1014,8 +1019,25 @@ export function ChatRoomPage() {
           <span
             style={{ position: 'fixed', top: 16, right: 16, width: 36, height: 36, borderRadius: 18, background: 'rgba(255,255,255,0.15)', color: '#fff', fontSize: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
           >×</span>
+          <span
+            onClick={async (e) => {
+              e.stopPropagation();
+              if (qrBusy) return;
+              setQrBusy(true);
+              const text = await decodeQrFromImage(fullImage).catch(() => null);
+              setQrBusy(false);
+              if (!text) return showToast('图片里没有认出二维码');
+              setFullImage(null);
+              setScanText(text);
+            }}
+            style={{ position: 'fixed', bottom: 48, left: '50%', transform: 'translateX(-50%)', padding: '9px 16px', borderRadius: 20, background: 'rgba(255,255,255,0.18)', color: '#fff', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', whiteSpace: 'nowrap' }}
+          >
+            <ScanIcon size={16} color="#fff" />
+            {qrBusy ? '识别中…' : '识别二维码'}
+          </span>
         </div>
       )}
+      {scanText && <ScanFlow text={scanText} onClose={() => setScanText(null)} />}
       {menu && (
         <MsgMenu
           m={menu.m}
