@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { chainByKey, explorerTx, publicClientFor, rpcOf } from "@/lib/wallet/chains";
 import { ARB_USDC, HL_BRIDGE, MIN_DEPOSIT, WITHDRAW_FEE, withdraw, type HlAsset } from "@/lib/wallet/hl";
-import { AI_PROVIDERS, DEFAULT_RISK, aiChat, providerOf, type AiConfig, type AiResult } from "@/lib/wallet/ai-trade";
+import { AI_PROVIDERS, DEFAULT_RISK, providerOf, testAi, type AiConfig, type AiResult } from "@/lib/wallet/ai-trade";
 import { GhostButton, PrimaryButton } from "./ui";
 
 /** Inline gradient: Tailwind 4 gradient utilities don't render in Chromium 99. */
@@ -160,8 +160,8 @@ export function AiSettingsSheet({ cfg, onSave, onClear }: { cfg: AiConfig | null
   const test = async () => {
     setBusy("test");
     try {
-      const r = await aiChat(draft, [{ role: "user", content: '只回复 JSON：{"ok":true}' }], 20);
-      toast.success(`连通了（用了 ${r.usage.total} 个 token）`);
+      const r = await testAi(draft);
+      toast.success(`连通了（模型 ${r.model}）`);
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -230,7 +230,7 @@ export function AiSettingsSheet({ cfg, onSave, onClear }: { cfg: AiConfig | null
   );
 }
 
-function Slider({ label, value, min, max, step = 1, unit, onChange }: { label: string; value: number; min: number; max: number; step?: number; unit: string; onChange: (v: number) => void }) {
+export function Slider({ label, value, min, max, step = 1, unit, onChange }: { label: string; value: number; min: number; max: number; step?: number; unit: string; onChange: (v: number) => void }) {
   return (
     <label className="mt-3 block">
       <span className="flex justify-between text-[13px]">

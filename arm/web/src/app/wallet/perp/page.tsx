@@ -12,6 +12,7 @@ import { AI_CONFIG_KEY, analyze, parseAiConfig, type AiConfig, type AiResult } f
 import { useVault } from "@/components/wallet/wallet-context";
 import { AI_GRADIENT, AiCard, AiSettingsSheet, CoinPicker, DepositSheet, RiskGate, Spinner, WithdrawSheet, px, usd } from "@/components/wallet/perp-parts";
 import { BottomNav, BottomSheet, GhostButton, IconButton, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
+import { HostedCard } from "@/components/wallet/aibot-parts";
 
 type Sheet = null | "risk" | "deposit" | "withdraw" | "ai" | "coin" | "confirm" | "close";
 type LogItem = { at: number; coin: string; action: string; price: number; confidence: number; summary: string };
@@ -170,7 +171,7 @@ export default function PerpPage() {
     if (!aiCfg) return setSheet("ai");
     setBusy("ai");
     try {
-      const r = await analyze(aiCfg, asset, acct ?? null);
+      const r = await analyze(aiCfg, asset.name, user);
       setAi(r);
       const next = [{ at: r.at, coin: r.coin, action: r.decision.action, price: r.price, confidence: r.decision.confidence, summary: r.decision.summary }, ...log].slice(0, 20);
       setLog(next);
@@ -298,10 +299,12 @@ export default function PerpPage() {
           </div>
         </section>
 
-        {/* AI */}
+        {user && <HostedCard main={main} user={user} list={list.data ?? []} aiCfg={aiCfg} funded={funded} onNeedAi={() => setSheet("ai")} />}
+
+        {/* AI, manual: one analysis, the user confirms */}
         <button type="button" disabled={!asset || busy === "ai"} onClick={() => void runAi()} style={{ background: AI_GRADIENT }} className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl text-[16px] font-semibold text-white disabled:opacity-60">
           {busy === "ai" ? <Spinner /> : <Sparkle size={20} weight="fill" />}
-          {busy === "ai" ? "AI 正在分析行情…" : aiCfg ? `让 AI 分析 ${coin}` : "设置 AI（用你自己的大模型 key）"}
+          {busy === "ai" ? "AI 正在分析行情…" : aiCfg ? `手动：让 AI 分析一次 ${coin}` : "设置 AI（用你自己的大模型 key）"}
         </button>
         {ai && <AiCard r={ai} onApply={ready && (ai.decision.action === "long" || ai.decision.action === "short" || ai.decision.action === "close") ? applyAi : undefined} onClose={() => setAi(null)} />}
 

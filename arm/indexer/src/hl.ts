@@ -1,9 +1,7 @@
 /**
  * Wallet relays for 「AI 合约」 (wallet plan §5.8): Hyperliquid's info / exchange endpoints (api.hyperliquid.xyz is not reliably
- * reachable from mainland China) and the user's own LLM key. Nothing here holds keys or funds:
- *  - /api/hl/exchange forwards actions the wallet already signed (agent key or main wallet), so the relay cannot change them;
- *  - /api/ai/chat forwards an OpenAI-compatible chat call with the key the user typed into their wallet, to an allow-listed
- *    provider only (not an open proxy). The key is never logged or stored.
+ * reachable from mainland China). /api/hl/exchange forwards actions the wallet already signed (agent key or main wallet),
+ * so the relay cannot change them. AI analysis and 托管 live in ./aibot/.
  */
 
 const HL = "https://api.hyperliquid.xyz";
@@ -33,10 +31,9 @@ function limiter(perMin: number) {
 }
 const infoLimit = limiter(300);
 const exchangeLimit = limiter(60);
-const aiLimit = limiter(30);
 
-async function post(url: string, body: unknown, headers: Record<string, string> = {}, timeout = 15_000): Promise<Reply> {
-  const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body), signal: AbortSignal.timeout(timeout) });
+async function post(url: string, body: unknown): Promise<Reply> {
+  const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(15_000) });
   const text = await r.text();
   let json: unknown;
   try {
@@ -73,32 +70,6 @@ export async function hlExchange(body: unknown, ip: string): Promise<Reply> {
   if (!exchangeLimit(ip)) return { status: 429, json: { error: "rate limited" } };
   try {
     return await post(`${HL}/exchange`, body);
-  } catch (e) {
-    return { status: 502, json: { error: (e as Error).message.slice(0, 120) } };
-  }
-}
-
-/** OpenAI-compatible providers the relay may call; anything else the wallet calls directly from the device. */
-export const AI_PROVIDERS: Record<string, string> = {
-  deepseek: "https://api.deepseek.com",
-  siliconflow: "https://api.siliconflow.cn/v1",
-  moonshot: "https://api.moonshot.cn/v1",
-  zhipu: "https://open.bigmodel.cn/api/paas/v4",
-  qwen: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-  openrouter: "https://openrouter.ai/api/v1",
-  openai: "https://api.openai.com/v1",
-};
-
-export async function aiChat(body: unknown, key: string | undefined, ip: string): Promise<Reply> {
-  const b = body as { provider?: unknown; model?: unknown; messages?: unknown; temperature?: unknown; response_format?: unknown; max_tokens?: unknown };
-  const base = typeof b?.provider === "string" ? AI_PROVIDERS[b.provider] : undefined;
-  if (!base) return { status: 400, json: { error: "provider not allowed" } };
-  if (!key || key.length > 300) return { status: 400, json: { error: "missing key" } };
-  if (typeof b.model !== "string" || !Array.isArray(b.messages) || JSON.stringify(b.messages).length > 120_000) return { status: 400, json: { error: "bad request" } };
-  if (!aiLimit(ip)) return { status: 429, json: { error: "rate limited" } };
-  const payload = { model: b.model, messages: b.messages, temperature: typeof b.temperature === "number" ? b.temperature : 0.3, max_tokens: typeof b.max_tokens === "number" ? Math.min(b.max_tokens, 4000) : 1500, ...(b.response_format ? { response_format: b.response_format } : {}) };
-  try {
-    return await post(`${base}/chat/completions`, payload, { authorization: `Bearer ${key}` }, 90_000);
   } catch (e) {
     return { status: 502, json: { error: (e as Error).message.slice(0, 120) } };
   }

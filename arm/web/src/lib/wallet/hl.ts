@@ -238,10 +238,13 @@ export function formatSz(sz: number, szDecimals: number): string {
 // ---------- agent key ----------
 
 export type Agent = { key: Hex; address: Address; validUntil: number; name: string };
-export const newAgent = (): Agent => {
+/** Hyperliquid keeps one agent per name: this phone's key and the AI 托管 key live side by side */
+export const PHONE_AGENT = "xinzhiyin";
+export const HOSTED_AGENT = "xinzhiyin-ai";
+export const newAgent = (name = PHONE_AGENT): Agent => {
   const key = generatePrivateKey();
   const validUntil = Date.now() + AGENT_DAYS * 86_400_000;
-  return { key, address: privateKeyToAccount(key).address, validUntil, name: "xinzhiyin" };
+  return { key, address: privateKeyToAccount(key).address, validUntil, name };
 };
 export const agentSigner = (a: Agent) => privateKeyToAccount(a.key);
 

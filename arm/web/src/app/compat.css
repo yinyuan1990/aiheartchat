@@ -85,6 +85,7 @@
   .bg-down\/15{background-color:rgb(var(--wc-down) / calc(var(--wa-down, 1) * 0.15))}
   .bg-down\/70{background-color:rgb(var(--wc-down) / calc(var(--wa-down, 1) * 0.7))}
   .bg-emerald-500\/20{background-color:rgb(0 187 127 / 0.2)}
+  .bg-foreground\/10{background-color:rgb(var(--wc-foreground) / calc(var(--wa-foreground, 1) * 0.1))}
   .bg-foreground\/15{background-color:rgb(var(--wc-foreground) / calc(var(--wa-foreground, 1) * 0.15))}
   .bg-foreground\/\[0\.03\]{background-color:rgb(var(--wc-foreground) / calc(var(--wa-foreground, 1) * 0.03))}
   .bg-foreground\/\[0\.04\]{background-color:rgb(var(--wc-foreground) / calc(var(--wa-foreground, 1) * 0.04))}

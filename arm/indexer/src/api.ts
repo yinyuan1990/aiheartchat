@@ -27,7 +27,9 @@ import { isAvatarAddress, walletAvatar } from "./avatars.js";
 import { claimOf, verifyTransfer } from "./verify.js";
 import { tronRelay } from "./tron.js";
 import { tonJettons, tonRelay } from "./ton.js";
-import { aiChat, hlExchange, hlInfo } from "./hl.js";
+import { hlExchange, hlInfo } from "./hl.js";
+import { aiAnalyze, aiTest } from "./aibot/manual.js";
+import { botControl, botGet, botStart, botUpdate } from "./aibot/bots.js";
 import { calloutCaller, calloutCallers, calloutFeed, pinCaller } from "./callouts.js";
 import { isMint, pumpCandles, pumpCoin, pumpHolders, pumpList, pumpTrades } from "./pump.js";
 import { isEvmAddr, isMarketChain, kyberBuild, kyberQuote, marketCandles, marketList, marketPrices, marketSearch, marketToken, marketTrades } from "./markets.js";
@@ -816,8 +818,29 @@ app.post("/api/hl/exchange", async (c) => {
   const r = await hlExchange(await c.req.json().catch(() => null), clientIp(c) || "?");
   return c.json(r.json as object, r.status as 200);
 });
-app.post("/api/ai/chat", async (c) => {
-  const r = await aiChat(await c.req.json().catch(() => null), c.req.header("x-ai-key"), clientIp(c) || "?");
+app.post("/api/ai/test", async (c) => {
+  const r = await aiTest(await c.req.json().catch(() => null), c.req.header("x-ai-key"), clientIp(c) || "?");
+  return c.json(r.json as object, r.status as 200);
+});
+app.post("/api/ai/analyze", async (c) => {
+  const r = await aiAnalyze(await c.req.json().catch(() => null), c.req.header("x-ai-key"), clientIp(c) || "?");
+  return c.json(r.json as object, r.status as 200);
+});
+// AI 托管 (aibot/bots.ts): every call carries `x-aibot-auth: <ts>.<main wallet signature>`
+app.get("/api/aibot/:user", async (c) => {
+  const r = await botGet(c.req.param("user"), c.req.header("x-aibot-auth"));
+  return c.json(r.json as object, r.status as 200);
+});
+app.post("/api/aibot/:user/start", async (c) => {
+  const r = await botStart(c.req.param("user"), c.req.header("x-aibot-auth"), await c.req.json().catch(() => null));
+  return c.json(r.json as object, r.status as 200);
+});
+app.post("/api/aibot/:user/config", async (c) => {
+  const r = await botUpdate(c.req.param("user"), c.req.header("x-aibot-auth"), await c.req.json().catch(() => null));
+  return c.json(r.json as object, r.status as 200);
+});
+app.post("/api/aibot/:user/control", async (c) => {
+  const r = await botControl(c.req.param("user"), c.req.header("x-aibot-auth"), await c.req.json().catch(() => null));
   return c.json(r.json as object, r.status as 200);
 });
 app.get("/api/perp/market", async (c) => c.json(await perpMarket()));

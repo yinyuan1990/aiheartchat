@@ -15,9 +15,11 @@ import { ensureCalloutTables, startCallouts } from "./callouts.js";
 import { bus } from "./bus.js";
 import { config } from "./config.js";
 import { loadQuotePrices, refreshQuotePrices } from "./quotes.js";
+import { ensureAiBotTables, startAiBots } from "./aibot/bots.js";
 
 await migrate();
 await ensureCalloutTables();
+await ensureAiBotTables();
 // stock generation: USDC prices of the whitelisted quote assets must be known before the first stock swap is indexed
 await loadQuotePrices().catch((e) => console.error("[quotes]", e.message));
 
@@ -56,3 +58,5 @@ startMarketWarmer();
 warmMarkets();
 // pump.fun callouts for the wallet's 喊单 pages (inert without PUMP_AUTH_KEY)
 startCallouts();
+// AI 托管 for the wallet's 「AI 合约」 (inert without AI_BOT_SECRET)
+startAiBots();
