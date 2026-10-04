@@ -18,6 +18,9 @@ export const usd = (n: number, d = 2) => `$${n.toLocaleString("en-US", { minimum
 export const sUsd = (n: number, d = 2) => `${n >= 0 ? "+" : "-"}${usd(Math.abs(n), d)}`;
 export const px = (n: number) => (n >= 1000 ? n.toLocaleString("en-US", { maximumFractionDigits: 1 }) : n >= 1 ? n.toLocaleString("en-US", { maximumFractionDigits: 4 }) : n.toPrecision(4));
 
+/** Hyperliquid fill `dir` → 中文 */
+export const DIR: Record<string, string> = { "Open Long": "开多", "Close Long": "平多", "Open Short": "开空", "Close Short": "平空", "Long > Short": "多转空", "Short > Long": "空转多", Settlement: "结算" };
+
 export function RiskGate({ onAccept }: { onAccept: () => void }) {
   const [ok, setOk] = useState(false);
   return (

@@ -1,17 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Address, LocalAccount } from "viem";
-import { ArrowDown, ArrowUp, CaretDown, ChatsCircle, CheckCircle, Megaphone, Robot, Sparkle, X } from "@phosphor-icons/react";
+import { ArrowDown, ArrowUp, CaretDown, CaretRight, ChatsCircle, CheckCircle, Megaphone, Robot, Sparkle, X } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { canCoinGroup, canPerpCall, openCoinGroup, storeRead, storeWrite } from "@/lib/wallet/native";
 import { parseFollow, postPerpCall, type Follow, type PerpCallCard } from "@/lib/wallet/perp-call";
-import { HL_BUILDER, account, agentActive, agentExtraKey, approveAgent, approveBuilder, assets, MARGIN_SAFETY, TAKER_FEE, builderApproved, cancelOrder, closePosition, formatPx, trades, newAgent, openOrders, openPosition, parseAgent, setLeverage, type HlAccount, type HlAsset, type HlOrder, type HlPosition, type HlTrade } from "@/lib/wallet/hl";
+import { HL_BUILDER, account, agentActive, agentExtraKey, approveAgent, approveBuilder, assets, MARGIN_SAFETY, TAKER_FEE, builderApproved, cancelOrder, closePosition, formatPx, trades, newAgent, openOrders, openPosition, parseAgent, setLeverage, type HlAccount, type HlAsset, type HlOrder, type HlPosition } from "@/lib/wallet/hl";
 import { AI_CONFIG_KEY, analyze, parseAiConfig, type AiConfig, type AiResult } from "@/lib/wallet/ai-trade";
 import { useVault } from "@/components/wallet/wallet-context";
-import { AI_GRADIENT, AiCard, AiSettingsSheet, CoinPicker, DepositSheet, RiskGate, Spinner, WithdrawSheet, px, sUsd, usd } from "@/components/wallet/perp-parts";
+import { AI_GRADIENT, AiCard, AiSettingsSheet, CoinPicker, DIR, DepositSheet, RiskGate, Spinner, WithdrawSheet, px, sUsd, usd } from "@/components/wallet/perp-parts";
 import { BottomNav, BottomSheet, GhostButton, IconButton, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
 import { HostedCard } from "@/components/wallet/aibot-parts";
 import { PerpChart, type ChartLine } from "@/components/wallet/perp-chart";
@@ -70,7 +71,8 @@ export default function PerpPage() {
   const asset = list.data?.find((a) => a.name === coin);
   const acctQ = useQuery({ queryKey: ["hl", "acct", user], queryFn: () => account(user!), enabled: !!user, refetchInterval: 5_000 });
   const ordersQ = useQuery({ queryKey: ["hl", "orders", user], queryFn: () => openOrders(user!), enabled: !!user, refetchInterval: 8_000 });
-  const tradesQ = useQuery({ queryKey: ["hl", "trades", user], queryFn: () => trades(user!), enabled: !!user, refetchInterval: 15_000 });
+  const tradesQ = useQuery({ queryKey: ["hl", "trades", user], queryFn: () => trades(user!), enabled: !!user, refetchInterval: 30_000 });
+  const lastTrade = tradesQ.data?.[0];
   const acct = acctQ.data;
   const available = acct?.available ?? 0;
   const funded = !!acct && (acct.equity > 0 || acct.positions.length > 0);
@@ -194,7 +196,7 @@ export default function PerpPage() {
     const orders = qc.getQueryData<HlOrder[]>(["hl", "orders", user]) ?? [];
     const trig = (k: "tp" | "sl") => orders.find((o) => o.coin === c && o.trigger === k)?.triggerPx ?? null;
     const card: PerpCallCard | undefined = pos ? { coin: c, side: pos.side, lev: pos.leverage, entry: pos.entry, orderType: "market", tp: trig("tp"), sl: trig("sl") } : placed;
-    if (!card) return void toast.error("这个币现在没有仓位");
+    if (!card) return void toast.error(`你现在没有 ${c} 仓位，开仓后才能喊单`);
     setCallCard(card);
     setCallNote("");
     setSheet("call");
@@ -352,18 +354,12 @@ export default function PerpPage() {
         {/* market */}
         <section className="rounded-[22px] bg-card p-4 ring-1 ring-border/60">
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setSheet("coin")} className="flex items-center gap-1 text-[20px] font-bold">
-              {coin}-USD
-              <CaretDown size={14} weight="bold" className="text-muted-foreground" />
+            <button type="button" onClick={() => setSheet("coin")} className="flex min-w-0 items-center gap-1 whitespace-nowrap text-[20px] font-bold">
+              <span className="truncate">{coin}-USD</span>
+              <CaretDown size={14} weight="bold" className="shrink-0 text-muted-foreground" />
             </button>
-            <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">最高 {maxLev}x</span>
-            {canGroup && (
-              <button type="button" onClick={() => openCoinGroup({ chain: "hl", address: coin, symbol: coin })} className="flex items-center gap-0.5 rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium">
-                <ChatsCircle size={13} weight="fill" />
-                合约群
-              </button>
-            )}
-            <span className="ml-auto text-right">
+            <span className="shrink-0 whitespace-nowrap rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">最高 {maxLev}x</span>
+            <span className="ml-auto shrink-0 whitespace-nowrap text-right">
               <span className="block font-mono text-[18px] font-semibold">{shownPx ? px(shownPx) : "…"}</span>
               <span className={cn("block font-mono text-[12px]", ch >= 0 ? "text-up" : "text-down")}>
                 {ch >= 0 ? "+" : ""}
@@ -390,6 +386,18 @@ export default function PerpPage() {
               </button>
             ))}
           </div>
+          {canGroup && (
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => openCoinGroup({ chain: "hl", address: coin, symbol: coin })} className="flex h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-muted text-[14px] font-semibold">
+                <ChatsCircle size={17} weight="fill" />
+                {coin} 合约群
+              </button>
+              <button type="button" onClick={() => (canCall ? callFor(coin) : toast.info("喊单要更新到最新版心之音 App"))} className="flex h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-[#7c3aed]/12 text-[14px] font-semibold text-[#6d28d9] dark:text-[#c4b5fd]">
+                <Megaphone size={17} weight="fill" />
+                喊单
+              </button>
+            </div>
+          )}
         </section>
 
         {user && <HostedCard main={main} user={user} list={list.data ?? []} aiCfg={aiCfg} funded={funded} onNeedAi={() => setSheet("ai")} />}
@@ -487,7 +495,7 @@ export default function PerpPage() {
                   <li key={p.coin} className="rounded-2xl bg-muted/60 p-3">
                     <div className="flex items-center gap-2">
                       <span className="text-[15px] font-semibold">{p.coin}</span>
-                      <span className={cn("rounded px-1.5 py-0.5 text-[11px] font-semibold", p.side === "long" ? "bg-up/15 text-up" : "bg-down/15 text-down")}>
+                      <span className={cn("shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold", p.side === "long" ? "bg-up/15 text-up" : "bg-down/15 text-down")}>
                         {p.side === "long" ? "多" : "空"} {p.leverage}x {p.cross ? "全仓" : "逐仓"}
                       </span>
                       <span className={cn("ml-auto font-mono text-[14px] font-semibold", p.upnl >= 0 ? "text-up" : "text-down")}>
@@ -551,7 +559,15 @@ export default function PerpPage() {
         )}
 
         {/* trade history */}
-        {(tradesQ.data?.length ?? 0) > 0 && <TradeList rows={tradesQ.data!} />}
+        {lastTrade && (
+          <Link href="/wallet/perp/trades" className="flex items-center gap-2 rounded-[22px] bg-card px-4 py-3.5 ring-1 ring-border/60">
+            <span className="shrink-0 text-[15px] font-semibold">成交记录</span>
+            <span className="min-w-0 flex-1 truncate text-right text-[12px] text-muted-foreground">
+              最近 {lastTrade.coin} {DIR[lastTrade.dir] ?? lastTrade.dir} · {new Date(lastTrade.time).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+            </span>
+            <CaretRight size={14} weight="bold" className="shrink-0 text-muted-foreground" />
+          </Link>
+        )}
 
         {/* AI history */}
         {log.length > 0 && (
@@ -691,62 +707,6 @@ export default function PerpPage() {
         )}
       </BottomSheet>
     </WalletFrame>
-  );
-}
-
-const DIR: Record<string, string> = { "Open Long": "开多", "Close Long": "平多", "Open Short": "开空", "Close Short": "平空", "Long > Short": "多转空", "Short > Long": "空转多" };
-const REASON: Record<HlTrade["reason"], { label: string; cls: string }> = {
-  tp: { label: "止盈触发", cls: "bg-up/15 text-up" },
-  sl: { label: "止损触发", cls: "bg-down/15 text-down" },
-  liq: { label: "强平", cls: "bg-down text-white" },
-  market: { label: "市价", cls: "bg-muted text-muted-foreground" },
-  limit: { label: "限价", cls: "bg-muted text-muted-foreground" },
-};
-
-function TradeList({ rows }: { rows: HlTrade[] }) {
-  const [all, setAll] = useState(false);
-  const shown = all ? rows.slice(0, 50) : rows.slice(0, 6);
-  return (
-    <section className="rounded-[22px] bg-card p-4 ring-1 ring-border/60">
-      <div className="mb-1 text-[15px] font-semibold">成交记录</div>
-      <ul className="divide-y divide-border/50">
-        {shown.map((t) => {
-          const closing = /^Close|>/.test(t.dir);
-          const net = t.pnl - t.fee - t.openFee;
-          const r = REASON[t.reason];
-          return (
-            <li key={t.oid} className="py-2.5 text-[12px]">
-              <div className="flex items-center gap-2">
-                <span className="text-[13px] font-semibold">{t.coin}</span>
-                <span className={["Open Long", "Close Short", "Short > Long"].includes(t.dir) ? "text-up" : "text-down"}>{DIR[t.dir] ?? t.dir}</span>
-                <span className={cn("rounded px-1.5 py-0.5 text-[11px] font-semibold", r.cls)}>{r.label}</span>
-                {closing && (
-                  <span className={cn("ml-auto font-mono text-[13px] font-semibold", net >= 0 ? "text-up" : "text-down")}>
-                    {sUsd(net)}
-                  </span>
-                )}
-              </div>
-              <div className="mt-0.5 flex gap-3 font-mono text-muted-foreground">
-                <span>{new Date(t.time).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
-                <span>@ {px(t.px)}</span>
-                <span>{t.size}</span>
-                <span>手续费 {usd(t.fee, 3)}</span>
-              </div>
-              {closing && (
-                <div className="mt-0.5 text-muted-foreground">
-                  价差盈亏 {sUsd(t.pnl, 3)}，扣开平仓手续费 {usd(t.fee + t.openFee, 3)} 后 {sUsd(net, 3)}
-                </div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-      {rows.length > 6 && (
-        <button type="button" onClick={() => setAll((v) => !v)} className="mt-1 text-[12px] text-muted-foreground underline underline-offset-4">
-          {all ? "收起" : `查看更多（共 ${Math.min(rows.length, 50)} 条）`}
-        </button>
-      )}
-    </section>
   );
 }
 
