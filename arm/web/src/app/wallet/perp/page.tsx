@@ -7,7 +7,7 @@ import { ArrowDown, ArrowUp, CaretDown, CheckCircle, Robot, Sparkle } from "@pho
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { storeRead, storeWrite } from "@/lib/wallet/native";
-import { HL_BUILDER, account, agentActive, agentExtraKey, approveAgent, approveBuilder, assets, TAKER_FEE, builderApproved, cancelOrder, closePosition, formatPx, trades, newAgent, openOrders, openPosition, parseAgent, setLeverage, type HlAsset, type HlPosition, type HlTrade } from "@/lib/wallet/hl";
+import { HL_BUILDER, account, agentActive, agentExtraKey, approveAgent, approveBuilder, assets, MARGIN_SAFETY, TAKER_FEE, builderApproved, cancelOrder, closePosition, formatPx, trades, newAgent, openOrders, openPosition, parseAgent, setLeverage, type HlAsset, type HlPosition, type HlTrade } from "@/lib/wallet/hl";
 import { AI_CONFIG_KEY, analyze, parseAiConfig, type AiConfig, type AiResult } from "@/lib/wallet/ai-trade";
 import { useVault } from "@/components/wallet/wallet-context";
 import { AI_GRADIENT, AiCard, AiSettingsSheet, CoinPicker, DepositSheet, RiskGate, Spinner, WithdrawSheet, px, sUsd, usd } from "@/components/wallet/perp-parts";
@@ -96,16 +96,21 @@ export default function PerpPage() {
   const levUsed = Math.min(lev, maxLev);
   const refPx = type === "limit" && Number(limitPx) > 0 ? Number(limitPx) : (asset?.mark ?? 0);
   const m = Number(margin) || 0;
-  const notional = m * levUsed;
-  const size = refPx ? notional / refPx : 0;
+  // Hyperliquid checks margin at the higher of the order price and the mark, and wants the opening fee on top
+  const marginPx = Math.max(refPx, asset?.mark ?? 0);
+  const size = marginPx ? (m * levUsed) / marginPx : 0;
+  const notional = size * refPx;
+  const usable = Math.floor(((available * MARGIN_SAFETY) / (1 + levUsed * TAKER_FEE)) * 100) / 100;
   const tpN = Number(tp) || 0, slN = Number(sl) || 0;
   const isLong = side === "long";
   // isolated margin: maintenance margin is half the initial margin at max leverage
   const liqEst = refPx && m ? refPx * (isLong ? 1 - 1 / levUsed + 0.5 / maxLev : 1 + 1 / levUsed - 0.5 / maxLev) : 0;
   const problem = !m
     ? null
-    : m > available + 1e-9
-      ? "可用余额不够"
+    : m > usable + 1e-9
+      ? m > available + 1e-9
+        ? "可用余额不够"
+        : `要留一点给开仓手续费和价格变动，${levUsed} 倍下保证金最多 ${usd(usable)}`
       : notional < 10
         ? "每笔至少 10 美元（保证金 × 杠杆）"
         : tpN && (isLong ? tpN <= refPx : tpN >= refPx)
@@ -221,7 +226,7 @@ export default function PerpPage() {
     setLev(d.leverage);
     setType(d.entry ? "limit" : "market");
     setLimitPx(d.entry ? String(d.entry) : "");
-    setMargin(((available * d.sizePct) / 100).toFixed(2));
+    setMargin((Math.floor(usable * d.sizePct) / 100).toFixed(2));
     setTp(d.takeProfit ? String(d.takeProfit) : "");
     setSl(d.stopLoss ? String(d.stopLoss) : "");
     document.getElementById("order")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -359,7 +364,7 @@ export default function PerpPage() {
           <Field label="保证金" value={margin} onChange={setMargin} unit="USDC" placeholder="0" />
           <div className="mt-2 grid grid-cols-4 gap-2">
             {[0.1, 0.25, 0.5, 1].map((p) => (
-              <button key={p} type="button" onClick={() => setMargin((Math.floor(available * p * 100) / 100).toString())} className="h-8 rounded-lg bg-muted text-[12px] font-medium">
+              <button key={p} type="button" onClick={() => setMargin((Math.floor(usable * p * 100) / 100).toString())} className="h-8 rounded-lg bg-muted text-[12px] font-medium">
                 {p === 1 ? "全部" : `${p * 100}%`}
               </button>
             ))}

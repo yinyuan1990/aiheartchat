@@ -138,7 +138,7 @@ export async function exchange(action: unknown, nonce: number, signature: Sig): 
 
 function explain(m: string): string {
   if (/does not exist/i.test(m)) return "交易授权失效了（代理钥匙未授权或已过期），请重新开通交易";
-  if (/insufficient margin|Insufficient margin/i.test(m)) return "保证金不够";
+  if (/insufficient margin|perpMarginRejected/i.test(m)) return "保证金不够：Hyperliquid 要多留一点给开仓手续费和价格变动，把保证金调小一点再试";
   if (/minimum value of \$?10/i.test(m)) return "下单金额太小，Hyperliquid 每笔至少 10 美元";
   if (/Builder fee has not been approved/i.test(m)) return "还没授权手续费，请先在合约页完成授权";
   if (/could not immediately match/i.test(m)) return "没有成交（价格变动太快），可以再试一次";
@@ -271,6 +271,8 @@ export async function trades(user: Address): Promise<HlTrade[]> {
 
 /** Hyperliquid's base taker fee (0.045%), for estimates */
 export const TAKER_FEE = 0.00045;
+/** share of the free margin an order may use: the rest absorbs the gap between order price and mark */
+export const MARGIN_SAFETY = 0.995;
 
 export const builderApproved = async (user: Address) => (HL_BUILDER ? (await info<number>({ type: "maxBuilderFee", user, builder: HL_BUILDER })) >= BUILDER_FEE : true);
 

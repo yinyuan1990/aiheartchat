@@ -29,7 +29,9 @@ export function plan(d: AiDecision, pos: HlPosition | undefined, available: numb
   const liq = isLong ? mark * (1 - 1 / lev + 0.5 / asset.maxLeverage) : mark * (1 + 1 / lev - 0.5 / asset.maxLeverage);
   if (isLong ? sl <= liq : sl >= liq) return skip("止损在强平价之外，不开仓");
   const tp = d.takeProfit && (isLong ? d.takeProfit > mark : d.takeProfit < mark) ? d.takeProfit : null;
-  const margin = (available * Math.max(0, Math.min(d.sizePct, cfg.maxPct))) / 100;
+  // Hyperliquid wants the opening fee on top of the margin; the rest of the headroom absorbs price moves
+  const usable = (available * 0.995) / (1 + lev * 0.00045);
+  const margin = Math.min((available * Math.max(0, Math.min(d.sizePct, cfg.maxPct))) / 100, usable);
   if (margin * lev < MIN_NOTIONAL) return skip(`仓位太小（$${(margin * lev).toFixed(2)}，Hyperliquid 每笔至少 10 美元），不开仓`);
   return { ...out, open: { isLong, lev, margin, size: (margin * lev) / mark, sl, tp } };
 }

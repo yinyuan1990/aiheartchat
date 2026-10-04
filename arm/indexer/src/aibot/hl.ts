@@ -90,7 +90,7 @@ export async function info<T>(body: Record<string, unknown>, ttl = 0): Promise<T
 
 export function explain(m: string): string {
   if (/does not exist/i.test(m)) return "托管的交易授权失效了（过期或被撤销），请在钱包里重新开启托管";
-  if (/insufficient margin/i.test(m)) return "保证金不够";
+  if (/insufficient margin|perpMarginRejected/i.test(m)) return "保证金不够";
   if (/minimum value of \$?10/i.test(m)) return "下单金额太小，Hyperliquid 每笔至少 10 美元";
   if (/Builder fee has not been approved/i.test(m)) return "还没授权平台手续费";
   if (/could not immediately match/i.test(m)) return "没有成交（价格变动太快）";
