@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { formatUnits } from "viem";
-import { ArrowDown, ArrowUp, ArrowsLeftRight, CaretDown, CheckCircle, Copy, Eye, EyeSlash, GasPump, GearSix, Lock, Plus, ArrowSquareOut, Scan, Wallet as WalletIcon } from "@phosphor-icons/react";
+import { ArrowDown, ArrowUp, ArrowsLeftRight, CaretDown, CheckCircle, Copy, Eye, EyeSlash, GasPump, GearSix, Key, Lock, PencilSimple, Plus, ArrowSquareOut, Scan, Trash, Wallet as WalletIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { TokenAvatar, WalletDot } from "@/components/shared";
 import { useWallet } from "@/lib/api";
@@ -17,6 +17,7 @@ import { copyText, hasFeature, scanQr } from "@/lib/wallet/native";
 import { parsePayment, sendLinkOf } from "@/lib/wallet/scan";
 import { addressOn, useVault } from "@/components/wallet/wallet-context";
 import { AddTokenSheet } from "@/components/wallet/add-token";
+import { ManageBody, type ManageAction } from "@/components/wallet/wallet-manage";
 import { BottomNav, BottomSheet, ChainGlyph, ChainPill, IconButton, Num, Pct, WalletFrame } from "@/components/wallet/ui";
 
 const usd = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -32,6 +33,12 @@ export default function WalletHome() {
   const [hidden, setHidden] = useState(false);
   const [tab, setTab] = useState<"tokens" | "activity">("tokens");
   const [sheet, setSheet] = useState<null | "chain" | "wallet" | "add">(null);
+  /** 「我的钱包」里某个钱包的改名 / 导出 / 删除：先收起列表再弹 */
+  const [manage, setManage] = useState<ManageAction | null>(null);
+  const openManage = (a: ManageAction) => {
+    setSheet(null);
+    setManage(a);
+  };
   const [int, dec] = usd(total).split(".");
   const pct = total > change ? (change / (total - change)) * 100 : 0;
 
@@ -226,18 +233,21 @@ export default function WalletHome() {
         <div className="mb-3 text-center text-[17px] font-semibold">我的钱包</div>
         <ul className="space-y-1">
           {wallets.map((w) => (
-            <li key={w.id}>
+            <li key={w.id} className={cn("flex items-center rounded-2xl pr-1", w.id === active?.id ? "bg-muted" : "hover:bg-muted/60")}>
               <button
                 type="button"
                 onClick={async () => {
                   await switchTo(w.id);
                   setSheet(null);
                 }}
-                className={cn("flex w-full items-center gap-3 rounded-2xl px-3 py-3 transition active:scale-[0.99]", w.id === active?.id ? "bg-muted" : "hover:bg-muted/60")}
+                className="flex min-w-0 flex-1 items-center gap-3 py-3 pl-3 transition active:scale-[0.99]"
               >
                 <WalletDot address={w.address} size={36} />
                 <span className="min-w-0 flex-1 text-left">
-                  <span className="block truncate text-[15px] font-semibold">{w.name}</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="truncate text-[15px] font-semibold">{w.name}</span>
+                    {w.id === active?.id && <CheckCircle size={16} weight="fill" className="shrink-0" />}
+                  </span>
                   <span className="block font-mono text-[12px] text-muted-foreground">
                     {(() => {
                       const a = addressOn(w, chain);
@@ -246,7 +256,15 @@ export default function WalletHome() {
                     · {w.kind === "mnemonic" ? "助记词" : "私钥"}
                   </span>
                 </span>
-                {w.id === active?.id && <CheckCircle size={22} weight="fill" />}
+              </button>
+              <button type="button" aria-label={`改名 ${w.name}`} onClick={() => openManage({ kind: "rename", wallet: w })} className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-card">
+                <PencilSimple size={18} />
+              </button>
+              <button type="button" aria-label={`导出 ${w.name}`} onClick={() => openManage({ kind: "export", wallet: w })} className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-card">
+                <Key size={18} />
+              </button>
+              <button type="button" aria-label={`删除 ${w.name}`} onClick={() => openManage({ kind: "delete", wallet: w })} className="flex size-9 shrink-0 items-center justify-center rounded-full text-down hover:bg-down/10">
+                <Trash size={18} />
               </button>
             </li>
           ))}
@@ -261,6 +279,10 @@ export default function WalletHome() {
             导入
           </Link>
         </div>
+      </BottomSheet>
+
+      <BottomSheet open={!!manage} onClose={() => setManage(null)}>
+        {manage && <ManageBody action={manage} onDone={() => setManage(null)} />}
       </BottomSheet>
 
       {!isSolana(chain) && <AddTokenSheet chain={chain} open={sheet === "add"} onClose={() => setSheet(null)} known={assets.flatMap((a) => (a.token ? [a.token] : a.trc20 ? [a.trc20] : a.jetton ? [a.jetton] : []))} />}
