@@ -470,6 +470,8 @@ export class ShootEngine {
     if (t >= 90) types.push(["mixed", 2]);
     types.push(["fruit", 3]);
     if (t >= 25) types.push(["melon", 1.5]);
+    // local only, for promo clips: ?waves=fruit plays nothing but fruit
+    if (this.local && this.params.get("waves") === "fruit") types.splice(0, types.length, ["fruit", 3], ["melon", 1.2]);
     let r = Math.random() * types.reduce((s, x) => s + x[1], 0);
     let type = types[0][0];
     for (const [k, w] of types) { r -= w; if (r <= 0) { type = k; break; } }
