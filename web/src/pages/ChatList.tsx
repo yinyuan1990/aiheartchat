@@ -70,6 +70,7 @@ function previewText(msg?: ConversationItem['lastMsg']): string {
     case 'location': return '[位置]';
     case 'transfer':
     case 'callout':
+    case 'perp':
     case 'payreq': return chainCardPreview(msg.type, msg.content) ?? '';
     default: return msg.type.startsWith('call') ? '[通话]' : '';
   }

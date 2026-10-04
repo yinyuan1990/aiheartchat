@@ -72,7 +72,7 @@ fun msgSnippet(type: String, content: String): String = when (type) {
     "sticker" -> "[表情]"
     "location" -> "[位置]"
     "gift" -> "[礼物]"
-    "transfer", "callout", "payreq" -> chainCardPreview(type, content) ?: "[消息]"
+    "transfer", "callout", "payreq", "perp" -> chainCardPreview(type, content) ?: "[消息]"
     else -> if (type.startsWith("call")) "[通话]" else "[消息]"
 }
 

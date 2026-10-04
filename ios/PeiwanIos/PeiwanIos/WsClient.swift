@@ -58,6 +58,8 @@ final class WsClient: NSObject {
         task = URLSession.shared.webSocketTask(with: url)
         task?.resume()
         receiveLoop()
+        // 合约喊单卡片：重连后服务端不记得在看哪些卡片，重新告诉它
+        if let w = perpWatching { sendFrame(w) }
 
         DispatchQueue.main.async { [weak self] in
             self?.heartbeatTimer?.invalidate()
@@ -100,6 +102,20 @@ final class WsClient: NSObject {
 
     func markRead(conversationId: String, msgId: String) {
         sendFrame(["op": "read", "conversationId": conversationId, "msgId": msgId])
+    }
+
+    /// 正在看的会话里的合约喊单卡片（服务端据此每 3 秒推 perpTick，见后端 perp-watch.service.ts）
+    private var perpWatching: [String: Any]?
+
+    func perpWatch(conversationId: String, ids: [String]) {
+        let frame: [String: Any] = ["op": "perpWatch", "conversationId": conversationId, "ids": Array(ids.suffix(100))]
+        perpWatching = frame
+        sendFrame(frame)
+    }
+
+    func perpUnwatch(conversationId: String) {
+        if (perpWatching?["conversationId"] as? String) == conversationId { perpWatching = nil }
+        sendFrame(["op": "perpUnwatch", "conversationId": conversationId])
     }
 
     private func sendFrame(_ dict: [String: Any]) {

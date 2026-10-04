@@ -789,6 +789,19 @@ final class ChainWalletModel: NSObject, ObservableObject {
                 }
             }
             send(true)
+        case "perpCall":
+            // 合约喊单：用 App 的登录态发到这个合约的群（后端 /im/perp-call 验钱包签名），成功后进那个群
+            guard let o = arg as? [String: Any] else { send(error: "bad arg"); return }
+            Task { @MainActor in
+                struct Resp: Codable { var groupId: String; var conversationId: String?; var name: String }
+                do {
+                    let r: Resp = try await Api.request("/im/perp-call", method: "POST", body: o)
+                    send(["groupId": r.groupId, "name": r.name])
+                    if let conv = r.conversationId { chatRoute = .chatRoom(conv, 2, r.groupId, r.name) }
+                } catch {
+                    send(error: error.localizedDescription)
+                }
+            }
         default:
             send(error: "unknown method \(method)")
         }
@@ -910,12 +923,13 @@ private let walletBridgeJS = #"""
   }
   window.ArmWalletNative = {
     platform: 'ios',
-    features: ['dapp', 'store', 'scan', 'bio', 'result', 'chat', 'payreq'],
+    features: ['dapp', 'store', 'scan', 'bio', 'result', 'chat', 'payreq', 'perpcall'],
     walletResult: function(r){ call('walletResult', r); },
     walletClose: function(){ call('walletClose'); },
     chainAddress: function(a){ return call('chainAddress', a == null ? null : a); },
     shareCard: function(c){ call('shareCard', c); },
     openCoinGroup: function(c){ call('openCoinGroup', c); },
+    perpCall: function(c){ return call('perpCall', c); },
     vaultGet: function(){ return call('vaultGet'); },
     vaultSet: function(v){ return call('vaultSet', String(v)); },
     vaultClear: function(){ return call('vaultClear'); },

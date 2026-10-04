@@ -152,7 +152,7 @@ internal fun preview(msg: LastMsg?): String = when {
     msg.type == "audio" -> "[语音]"
     msg.type == "location" -> "[位置]"
     msg.type == "gift" -> "[礼物]"
-    msg.type == "transfer" || msg.type == "callout" || msg.type == "payreq" -> chainCardPreview(msg.type, msg.content).orEmpty()
+    msg.type == "transfer" || msg.type == "callout" || msg.type == "payreq" || msg.type == "perp" -> chainCardPreview(msg.type, msg.content).orEmpty()
     msg.type.startsWith("call") -> "[通话]"
     else -> ""
 }
@@ -598,6 +598,13 @@ fun ChatRoomScreen(
         WsClient.connect()
         // 空会话或对方发过机器人消息：查一下对方是不是机器人（简介卡片 / 开始按钮 / 命令菜单）
         if (convType == 1 && (messages.isEmpty() || messages.any { it.senderIsBot && it.senderId == targetId })) bot = BotInfoCache.get(targetId)
+    }
+    // 合约喊单卡片：告诉服务端这个聊天里在看哪些卡片，它每 3 秒推实时状态（PerpLive）
+    val perpIds = messages.filter { it.type == "perp" && !it.pending }.map { it.id }
+    LaunchedEffect(convId, perpIds) { if (perpIds.isNotEmpty()) WsClient.perpWatch(convId, perpIds) }
+    DisposableEffect(convId) {
+        val remove = WsClient.addListener { PerpLive.onFrame(it) }
+        onDispose { remove(); WsClient.perpUnwatch(convId) }
     }
     DisposableEffect(convId) {
         val remove = WsClient.addListener { frame ->
@@ -1213,6 +1220,7 @@ private fun Bubble(
                 }
                 "transfer" -> TransferCard(m.content, mine)
                 "callout" -> CalloutCard(m.content, canWallet = onOpenWallet != null) { onOpenWallet?.invoke(it) }
+                "perp" -> PerpCard(m.id, m.content, canWallet = onOpenWallet != null) { perpFollowPath(m.content, m.senderNickname)?.let { onOpenWallet?.invoke(it) } }
                 "payreq" -> PayreqCard(m.content, mine, onOpenWallet?.let { open -> { payreqPath(m.content, m.id, m.senderNickname)?.let(open) } })
                 "call" -> {
                     val obj = runCatching { WsClient.json.parseToJsonElement(m.content).jsonObject }.getOrNull()

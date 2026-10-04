@@ -68,6 +68,10 @@ enum ChainCards {
             return "[转账] \(amount(o["amount"] as? String, dec)) \(o["symbol"] as? String ?? "")"
         case "callout":
             return "[喊单] $\(o["symbol"] as? String ?? "")"
+        case "perp":
+            let side = (o["side"] as? String) == "short" ? "做空" : "做多"
+            let lev = Int(PerpLive.num(o["lev"]) ?? 0)
+            return "[合约喊单] \(side) \(o["coin"] as? String ?? "") \(lev)x"
         case "payreq":
             if let a = o["amount"] as? String { return "[收款] \(amount(a, (o["decimals"] as? Int) ?? 0)) \(o["symbol"] as? String ?? "")" }
             return "[收款] \(chainName(o["chain"] as? String ?? ""))"
@@ -220,6 +224,169 @@ struct CalloutCardView: View {
             .background(RoundedRectangle(cornerRadius: 14).fill(Color(red: 0.06, green: 0.07, blue: 0.08)))
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// 合约喊单（msgType perp，后端 perp-call.service.ts）的实时状态：聊天页打开时 WsClient.perpWatch 告诉服务端在看哪些卡片，
+/// 服务端每 3 秒推 perpTick（行情价 + 变了的卡片状态，见 perp-watch.service.ts），这里存着给卡片读。
+final class PerpLive: ObservableObject {
+    static let shared = PerpLive()
+    @Published var statuses: [String: [String: Any]] = [:]
+    @Published var marks: [String: Double] = [:]
+
+    static func num(_ v: Any?) -> Double? {
+        if let n = v as? NSNumber { return n.doubleValue }
+        if let s = v as? String { return Double(s) }
+        return nil
+    }
+
+    func onFrame(_ f: [String: Any]) {
+        guard f["op"] as? String == "perpTick" else { return }
+        if let m = f["marks"] as? [String: Any] {
+            for (k, v) in m { if let d = PerpLive.num(v) { marks[k] = d } }
+        }
+        if let s = f["statuses"] as? [String: Any] {
+            for (k, v) in s { if let o = v as? [String: Any] { statuses[k] = o } }
+        }
+    }
+
+    /// 卡片上的「跟单」：钱包合约页按喊单填好方向、杠杆、止盈止损，保证金自己定
+    static func followPath(_ content: String, name: String) -> String? {
+        let o = ChainCards.obj(content)
+        guard let coin = o["coin"] as? String, let side = o["side"] as? String else { return nil }
+        var f: [String: Any] = ["coin": coin, "side": side, "name": String(name.prefix(24))]
+        for k in ["lev", "entry", "tp", "sl"] { if let v = num(o[k]) { f[k] = v } }
+        guard let d = try? JSONSerialization.data(withJSONObject: f), let s = String(data: d, encoding: .utf8) else { return nil }
+        let enc = s.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
+        return "/wallet/perp?follow=" + enc
+    }
+
+    static func px(_ v: Double) -> String {
+        if v >= 1000 {
+            let f = NumberFormatter()
+            f.numberStyle = .decimal
+            f.maximumFractionDigits = 1
+            return f.string(from: NSNumber(value: v)) ?? String(v)
+        }
+        if v >= 1 { return String(format: "%.4g", v) }
+        return String(format: "%.4g", v)
+    }
+
+    /// 保证金收益率（%）：价格变动 × 杠杆，空单反过来
+    static func roe(entry: Double, price: Double, lev: Double, long: Bool) -> Double {
+        let r = (price / entry - 1) * lev * 100
+        return long ? r : -r
+    }
+
+    static func pct(_ v: Double) -> String { (v >= 0 ? "+" : "") + String(format: "%.1f", v) + "%" }
+}
+
+private struct PerpLine {
+    let label: String
+    let value: String
+    let color: Color
+}
+
+struct PerpCardView: View {
+    let msgId: String
+    let content: String
+    let canWallet: Bool
+    let onFollow: () -> Void
+    @ObservedObject private var live = PerpLive.shared
+
+    private static let up = Color(red: 0.13, green: 0.77, blue: 0.37)
+    private static let down = Color(red: 0.94, green: 0.27, blue: 0.27)
+    private static let dim = Color.white.opacity(0.55)
+
+    private func line(_ o: [String: Any], _ st: [String: Any]) -> PerpLine {
+        let long = (o["side"] as? String) != "short"
+        let lev = PerpLive.num(o["lev"]) ?? 1
+        let entry = PerpLive.num(o["entry"]) ?? 0
+        let coin = o["coin"] as? String ?? ""
+        let state = st["state"] as? String ?? ""
+        if state == "open" {
+            let e = PerpLive.num(st["entry"]) ?? entry
+            let l = PerpLive.num(st["lev"]) ?? lev
+            var r = PerpLive.num(st["roe"]) ?? 0
+            if let mark = live.marks[coin], e > 0 { r = PerpLive.roe(entry: e, price: mark, lev: l, long: long) }
+            return PerpLine(label: "持仓中", value: PerpLive.pct(r), color: r >= 0 ? PerpCardView.up : PerpCardView.down)
+        }
+        if state == "closed" {
+            let reason = st["reason"] as? String ?? ""
+            let exit = PerpLive.num(st["exit"]) ?? 0
+            let r = entry > 0 && exit > 0 ? PerpLive.roe(entry: entry, price: exit, lev: lev, long: long) : 0
+            var why = "已平仓"
+            if reason == "tp" { why = "止盈出局" }
+            if reason == "sl" { why = "止损出局" }
+            if reason == "liq" { return PerpLine(label: "已强平", value: "-100%", color: PerpCardView.down) }
+            return PerpLine(label: why, value: PerpLive.pct(r), color: r >= 0 ? PerpCardView.up : PerpCardView.down)
+        }
+        if state == "pending" {
+            let p = PerpLive.num(st["px"]).map { "@ " + PerpLive.px($0) } ?? ""
+            return PerpLine(label: "挂单中", value: p, color: .white.opacity(0.7))
+        }
+        if state == "none" { return PerpLine(label: "未成交 / 已撤单", value: "", color: PerpCardView.dim) }
+        return PerpLine(label: "读取实时状态…", value: "", color: PerpCardView.dim)
+    }
+
+    private func cell(_ k: String, _ v: Double?) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(k).font(.system(size: 10)).foregroundStyle(.white.opacity(0.5))
+            Text(v.map { PerpLive.px($0) } ?? "—").font(.system(size: 12, weight: .medium)).foregroundStyle(.white).lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    var body: some View {
+        let o = ChainCards.obj(content)
+        let coin = o["coin"] as? String ?? ""
+        let long = (o["side"] as? String) != "short"
+        let lev = Int(PerpLive.num(o["lev"]) ?? 1)
+        let sideColor = long ? PerpCardView.up : PerpCardView.down
+        let st = live.statuses[msgId] ?? [:]
+        let l = line(o, st)
+        let closed = (st["state"] as? String) == "closed"
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Text("\(coin)-USD").font(.system(size: 16, weight: .bold)).foregroundStyle(.white)
+                Text("\(long ? "做多" : "做空") \(lev)x").font(.system(size: 11, weight: .semibold)).foregroundStyle(sideColor)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(sideColor.opacity(0.18)))
+                Spacer(minLength: 0)
+                if let m = live.marks[coin] { Text(PerpLive.px(m)).font(.system(size: 12)).foregroundStyle(.white.opacity(0.7)) }
+            }
+            HStack(spacing: 4) {
+                cell((o["orderType"] as? String) == "limit" ? "挂单" : "开仓", PerpLive.num(o["entry"]))
+                cell("止盈", PerpLive.num(o["tp"]))
+                cell("止损", PerpLive.num(o["sl"]))
+            }
+            HStack {
+                Text(l.label).font(.system(size: 12)).foregroundStyle(.white.opacity(0.75))
+                Spacer(minLength: 0)
+                Text(l.value).font(.system(size: 18, weight: .bold)).foregroundStyle(l.color)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 8)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color(red: 0.106, green: 0.122, blue: 0.153)))
+            if let note = o["note"] as? String, !note.isEmpty {
+                Text(note).font(.system(size: 13)).foregroundStyle(.white).multilineTextAlignment(.leading)
+            }
+            HStack(spacing: 4) {
+                Image(systemName: "megaphone.fill").font(.system(size: 11)).foregroundStyle(Color(red: 0.29, green: 0.87, blue: 0.5))
+                Text("合约喊单 · 收益率实时").font(.system(size: 11)).foregroundStyle(PerpCardView.dim)
+                Spacer()
+                if canWallet && !closed {
+                    Button(action: onFollow) {
+                        Text("跟单").font(.system(size: 12, weight: .semibold)).foregroundStyle(.black)
+                            .padding(.horizontal, 12).padding(.vertical, 4)
+                            .background(Capsule().fill(Color(red: 0.29, green: 0.87, blue: 0.5)))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(12)
+        .frame(width: 240, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 14).fill(Color(red: 0.06, green: 0.07, blue: 0.08)))
     }
 }
 

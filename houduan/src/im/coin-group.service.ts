@@ -4,7 +4,7 @@ import { Wallet } from 'ethers';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto.service';
 import { GroupService } from './group.service';
-import { cleanText, isCardChain } from './card-content';
+import { cleanText, isCardChain, isPerpCoin } from './card-content';
 
 /**
  * 每个币一个讨论群（钱包代币页「讨论群」），按「点了才建」做：第一个人点的时候才建群，之后的人直接加入。
@@ -17,6 +17,9 @@ const SYSTEM_DEVICE = 'sys_coin_groups';
 const NEW_PER_DAY = 10;
 const MEMBER_LIMIT = 2000;
 export const COIN_GROUP_COLD_MS = 7 * 86_400_000;
+/** coin_group.chain for Hyperliquid perps (address = the perp's name) */
+export const PERP_CHAIN = 'hl';
+const ARM_API = (process.env.ARM_API_BASE ?? 'https://arm.yyheart.com/api').replace(/\/$/, '');
 
 export type CoinGroupBody = { chain?: string; address?: string; symbol?: string; name?: string; image?: string };
 
@@ -58,12 +61,31 @@ export class CoinGroupService {
     }
   }
 
+  /** Hyperliquid 上真有这个合约（经 Arm indexer 的价格接口，结果缓存 10 分钟） */
+  private perpCoins = new Map<string, { at: number; ok: boolean }>();
+  private async perpExists(coin: string): Promise<boolean> {
+    const hit = this.perpCoins.get(coin);
+    if (hit && Date.now() - hit.at < 600_000) return hit.ok;
+    const r = await fetch(`${ARM_API}/hl/mids?coins=${encodeURIComponent(coin)}`, { signal: AbortSignal.timeout(10_000) });
+    if (!r.ok) throw new BadRequestException('查不到合约行情，稍后再试');
+    const ok = !!((await r.json()) as { mids?: Record<string, number> }).mids?.[coin];
+    if (this.perpCoins.size > 2000) this.perpCoins.clear();
+    this.perpCoins.set(coin, { at: Date.now(), ok });
+    return ok;
+  }
+
   async open(userId: bigint, b: CoinGroupBody) {
     const chain = String(b.chain ?? '');
     const raw = String(b.address ?? '').trim();
-    if (!isCardChain(chain)) throw new BadRequestException('不支持的链');
-    if (!(chain === 'sol' ? /^[1-9A-HJ-NP-Za-km-z]{32,44}$/ : /^0x[0-9a-fA-F]{40}$/).test(raw)) throw new BadRequestException('代币地址不对');
-    const address = chain === 'sol' ? raw : raw.toLowerCase();
+    // chain "hl" = Hyperliquid 永续合约，一个合约一个群（address 是合约名，原样存）
+    const perp = chain === PERP_CHAIN;
+    if (perp) {
+      if (!isPerpCoin(raw)) throw new BadRequestException('合约名不对');
+    } else {
+      if (!isCardChain(chain)) throw new BadRequestException('不支持的链');
+      if (!(chain === 'sol' ? /^[1-9A-HJ-NP-Za-km-z]{32,44}$/ : /^0x[0-9a-fA-F]{40}$/).test(raw)) throw new BadRequestException('代币地址不对');
+    }
+    const address = chain === 'sol' || perp ? raw : raw.toLowerCase();
 
     let row = await this.prisma.coinGroup.findUnique({ where: { chain_address: { chain, address } } });
     if (row) {
@@ -73,16 +95,17 @@ export class CoinGroupService {
     } else {
       const recent = await this.prisma.coinGroup.count({ where: { creatorId: userId, createdAt: { gt: new Date(Date.now() - 86_400_000) } } });
       if (recent >= NEW_PER_DAY) throw new BadRequestException('今天新建的币群太多了，明天再来');
-      const symbol = cleanText(b.symbol, 20) || '?';
+      if (perp && !(await this.perpExists(raw))) throw new BadRequestException('Hyperliquid 上没有这个合约');
+      const symbol = perp ? raw : cleanText(b.symbol, 20) || '?';
       const name = cleanText(b.name, 40);
       const image = typeof b.image === 'string' && /^https:\/\/[^\s"'<>]{1,240}$/.test(b.image) ? b.image : '';
       const owner = await this.systemOwner();
-      const created = await this.groups.createGroup(owner, `$${symbol} 讨论群`.slice(0, 50), [userId], image);
+      const created = await this.groups.createGroup(owner, (perp ? `${symbol} 合约群` : `$${symbol} 讨论群`).slice(0, 50), [userId], image);
       const groupId = BigInt(created.id);
-      await this.prisma.chatGroup.update({
-        where: { id: groupId },
-        data: { memberLimit: MEMBER_LIMIT, notice: `${name || symbol} 的讨论群（${chain}）。喊单不构成投资建议；陌生链接、私聊「客服」、让你签名授权的，基本都是骗局。`.slice(0, 500) },
-      });
+      const notice = perp
+        ? `${symbol} 永续合约（Hyperliquid）讨论群。喊单卡片显示的是喊单者自己的真实仓位，跟单盈亏自负，不构成投资建议；陌生链接、私聊「客服」、让你签名授权的，基本都是骗局。`
+        : `${name || symbol} 的讨论群（${chain}）。喊单不构成投资建议；陌生链接、私聊「客服」、让你签名授权的，基本都是骗局。`;
+      await this.prisma.chatGroup.update({ where: { id: groupId }, data: { memberLimit: MEMBER_LIMIT, notice: notice.slice(0, 500) } });
       try {
         row = await this.prisma.coinGroup.create({ data: { chain, address, groupId, creatorId: userId } });
       } catch {

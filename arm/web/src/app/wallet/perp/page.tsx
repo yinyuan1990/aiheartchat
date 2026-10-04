@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Address, LocalAccount } from "viem";
-import { ArrowDown, ArrowUp, CaretDown, CheckCircle, Robot, Sparkle } from "@phosphor-icons/react";
+import { ArrowDown, ArrowUp, CaretDown, ChatsCircle, CheckCircle, Megaphone, Robot, Sparkle, X } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { storeRead, storeWrite } from "@/lib/wallet/native";
-import { HL_BUILDER, account, agentActive, agentExtraKey, approveAgent, approveBuilder, assets, MARGIN_SAFETY, TAKER_FEE, builderApproved, cancelOrder, closePosition, formatPx, trades, newAgent, openOrders, openPosition, parseAgent, setLeverage, type HlAsset, type HlPosition, type HlTrade } from "@/lib/wallet/hl";
+import { canCoinGroup, canPerpCall, openCoinGroup, storeRead, storeWrite } from "@/lib/wallet/native";
+import { parseFollow, postPerpCall, type Follow, type PerpCallCard } from "@/lib/wallet/perp-call";
+import { HL_BUILDER, account, agentActive, agentExtraKey, approveAgent, approveBuilder, assets, MARGIN_SAFETY, TAKER_FEE, builderApproved, cancelOrder, closePosition, formatPx, trades, newAgent, openOrders, openPosition, parseAgent, setLeverage, type HlAccount, type HlAsset, type HlOrder, type HlPosition, type HlTrade } from "@/lib/wallet/hl";
 import { AI_CONFIG_KEY, analyze, parseAiConfig, type AiConfig, type AiResult } from "@/lib/wallet/ai-trade";
 import { useVault } from "@/components/wallet/wallet-context";
 import { AI_GRADIENT, AiCard, AiSettingsSheet, CoinPicker, DepositSheet, RiskGate, Spinner, WithdrawSheet, px, sUsd, usd } from "@/components/wallet/perp-parts";
@@ -15,9 +16,10 @@ import { BottomNav, BottomSheet, GhostButton, IconButton, PrimaryButton, TopBar,
 import { HostedCard } from "@/components/wallet/aibot-parts";
 import { PerpChart, type ChartLine } from "@/components/wallet/perp-chart";
 
-type Sheet = null | "risk" | "deposit" | "withdraw" | "ai" | "coin" | "confirm" | "close";
+type Sheet = null | "risk" | "deposit" | "withdraw" | "ai" | "coin" | "confirm" | "close" | "call";
 type LogItem = { at: number; coin: string; action: string; price: number; confidence: number; summary: string };
 const QUICK = ["BTC", "ETH", "SOL", "HYPE"];
+const noSubscribe = () => () => {};
 const LOG_KEY = "perp.aiLog";
 
 /** 「AI 合约」: Hyperliquid perps from the wallet; the AI (user's own key) suggests, the user confirms every order. */
@@ -32,9 +34,20 @@ export default function PerpPage() {
 
   // risk notice once; last coin
   const [coin, setCoinState] = useState("BTC");
+  const [follow, setFollow] = useState<Follow | null>(null);
   useEffect(() => {
     void storeRead("perp.risk").then((v) => v !== "1" && setSheet("risk"));
-    void storeRead("perp.coin").then((v) => v && setCoinState(v));
+    // 跟单 link from a chat card: the caller's setup, margin left to the follower
+    const f = parseFollow(new URLSearchParams(location.search).get("follow"));
+    if (f) {
+      setFollow(f);
+      setCoinState(f.coin);
+      setSide(f.side);
+      setType("market");
+      setLev(f.lev);
+      setTp(f.tp ? String(f.tp) : "");
+      setSl(f.sl ? String(f.sl) : "");
+    } else void storeRead("perp.coin").then((v) => v && setCoinState(v));
     void storeRead(LOG_KEY).then((v) => {
       try {
         if (v) setLog(JSON.parse(v) as LogItem[]);
@@ -42,6 +55,13 @@ export default function PerpPage() {
     });
   }, []);
   const setCoin = (c: string) => {
+    if (c !== coin) {
+      // prices typed for the previous coin mean nothing for this one
+      setLimitPx("");
+      setTp("");
+      setSl("");
+      setFollow(null);
+    }
     setCoinState(c);
     void storeWrite("perp.coin", c);
   };
@@ -149,12 +169,43 @@ export default function PerpPage() {
     try {
       await setLeverage(agent, asset, levUsed, false);
       await openPosition(agent, { asset, isBuy: isLong, size, limitPx: type === "limit" ? Number(limitPx) : undefined, tp: tpN || undefined, sl: slN || undefined });
-      toast.success(type === "market" ? `已${isLong ? "开多" : "开空"} ${asset.name}` : "限价单已挂出");
+      const placed: PerpCallCard = { coin: asset.name, side, lev: levUsed, entry: refPx, orderType: type, tp: tpN || null, sl: slN || null };
+      toast.success(type === "market" ? `已${isLong ? "开多" : "开空"} ${asset.name}` : "限价单已挂出", canCall ? { duration: 10_000, action: { label: "喊单到群", onClick: () => callFor(asset.name, placed) } } : undefined);
       setSheet(null);
       setMargin("");
       setTp("");
       setSl("");
       refresh();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy("");
+    }
+  };
+
+  // ---------- 喊单 into the perp's group chat ----------
+  const canCall = useSyncExternalStore(noSubscribe, canPerpCall, () => false);
+  const canGroup = useSyncExternalStore(noSubscribe, canCoinGroup, () => false);
+  const [callCard, setCallCard] = useState<PerpCallCard | null>(null);
+  const [callNote, setCallNote] = useState("");
+  /** the live position (entry, leverage, TP / SL orders) when there is one, else what was just ordered */
+  const callFor = (c: string, placed?: PerpCallCard) => {
+    const pos = qc.getQueryData<HlAccount>(["hl", "acct", user])?.positions.find((x) => x.coin === c);
+    const orders = qc.getQueryData<HlOrder[]>(["hl", "orders", user]) ?? [];
+    const trig = (k: "tp" | "sl") => orders.find((o) => o.coin === c && o.trigger === k)?.triggerPx ?? null;
+    const card: PerpCallCard | undefined = pos ? { coin: c, side: pos.side, lev: pos.leverage, entry: pos.entry, orderType: "market", tp: trig("tp"), sl: trig("sl") } : placed;
+    if (!card) return void toast.error("这个币现在没有仓位");
+    setCallCard(card);
+    setCallNote("");
+    setSheet("call");
+  };
+  const sendCall = async () => {
+    if (!callCard) return;
+    setBusy("call");
+    try {
+      await postPerpCall(main(), { ...callCard, note: callNote.trim() });
+      toast.success(`已喊单到 ${callCard.coin} 合约群`);
+      setSheet(null);
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -306,6 +357,12 @@ export default function PerpPage() {
               <CaretDown size={14} weight="bold" className="text-muted-foreground" />
             </button>
             <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">最高 {maxLev}x</span>
+            {canGroup && (
+              <button type="button" onClick={() => openCoinGroup({ chain: "hl", address: coin, symbol: coin })} className="flex items-center gap-0.5 rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium">
+                <ChatsCircle size={13} weight="fill" />
+                合约群
+              </button>
+            )}
             <span className="ml-auto text-right">
               <span className="block font-mono text-[18px] font-semibold">{shownPx ? px(shownPx) : "…"}</span>
               <span className={cn("block font-mono text-[12px]", ch >= 0 ? "text-up" : "text-down")}>
@@ -346,6 +403,18 @@ export default function PerpPage() {
 
         {/* order */}
         <section id="order" className="rounded-[22px] bg-card p-4 ring-1 ring-border/60">
+          {follow && follow.coin === coin && (
+            <div className="mb-3 flex items-start gap-2 rounded-xl bg-[#7c3aed]/10 px-3 py-2 text-[12px] leading-5">
+              <Megaphone size={16} weight="fill" className="mt-0.5 shrink-0 text-[#6d28d9]" />
+              <span className="flex-1">
+                跟单{follow.name ? ` ${follow.name}` : ""}：{follow.side === "long" ? "做多" : "做空"} {follow.coin} {follow.lev}x
+                {follow.entry ? `，喊单开仓价 ${px(follow.entry)}` : ""}。方向、杠杆、止盈止损已按喊单填好，保证金你自己定，确认后才下单。
+              </span>
+              <button type="button" aria-label="不跟了" onClick={() => setFollow(null)} className="text-muted-foreground">
+                <X size={14} />
+              </button>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-1 rounded-2xl bg-muted p-1">
             {(["long", "short"] as const).map((s) => (
               <button key={s} type="button" onClick={() => setSide(s)} className={cn("h-10 rounded-xl text-[15px] font-semibold", side === s ? (s === "long" ? "bg-up text-white" : "bg-down text-white") : "text-muted-foreground")}>
@@ -446,6 +515,12 @@ export default function PerpPage() {
                       >
                         市价平仓
                       </button>
+                      {canCall && (
+                        <button type="button" onClick={() => callFor(p.coin)} className="flex h-8 flex-1 items-center justify-center gap-1 rounded-lg bg-card text-[12px] font-medium">
+                          <Megaphone size={14} weight="fill" />
+                          喊单
+                        </button>
+                      )}
                     </div>
                   </li>
                 );
@@ -574,6 +649,26 @@ export default function PerpPage() {
       <BottomSheet open={sheet === "confirm"} onClose={() => setSheet(null)}>
         {sheet === "confirm" && asset && (
           <Confirm asset={asset} isLong={isLong} type={type} price={refPx} margin={m} lev={levUsed} notional={notional} size={size} tp={tpN} sl={slN} tpOut={tpOut} slOut={slOut} liq={liqEst} busy={busy === "order"} onCancel={() => setSheet(null)} onOk={() => void place()} />
+        )}
+      </BottomSheet>
+      <BottomSheet open={sheet === "call"} onClose={() => setSheet(null)}>
+        {sheet === "call" && callCard && (
+          <>
+            <div className="flex items-center justify-center gap-1.5 text-[17px] font-semibold">
+              <Megaphone size={19} weight="fill" />
+              喊单到 {callCard.coin} 合约群
+            </div>
+            <div className="mt-4 space-y-2 rounded-2xl bg-muted/60 p-4 text-[14px]">
+              <Line k="方向" v={`${callCard.side === "long" ? "做多" : "做空"} ${callCard.lev}x`} />
+              <Line k={callCard.orderType === "limit" ? "挂单价" : "开仓价"} v={px(callCard.entry)} />
+              <Line k="止盈 / 止损" v={`${callCard.tp ? px(callCard.tp) : "—"} / ${callCard.sl ? px(callCard.sl) : "—"}`} />
+            </div>
+            <textarea value={callNote} onChange={(e) => setCallNote(e.target.value.slice(0, 200))} placeholder="说两句理由（选填）" rows={2} className="mt-3 w-full resize-none rounded-xl bg-muted px-3 py-2 text-[14px] outline-none" />
+            <p className="mt-2 text-[12px] leading-5 text-muted-foreground">群友会看到你这个仓位的实时状态：持仓中 / 止盈 / 止损 / 平仓 / 强平，以及收益率（不显示金额）。主钱包会签一次名，证明是你自己的仓位。</p>
+            <PrimaryButton className="mt-4" disabled={busy === "call"} onClick={() => void sendCall()}>
+              {busy === "call" ? "发送中…" : "喊单"}
+            </PrimaryButton>
+          </>
         )}
       </BottomSheet>
       <BottomSheet open={sheet === "close"} onClose={() => setSheet(null)}>

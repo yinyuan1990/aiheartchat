@@ -58,6 +58,8 @@ class WsManager {
       const pending = this.queue;
       this.queue = [];
       pending.forEach((f) => this.ws?.send(f));
+      // 合约喊单卡片：重连后服务端不记得在看哪些卡片，重新告诉它
+      if (this.perpWatching && !pending.some((f) => f.includes('"perpWatch"'))) this.ws?.send(JSON.stringify(this.perpWatching));
     };
     this.ws.onmessage = (e) => {
       try {
@@ -96,6 +98,19 @@ class WsManager {
 
   markRead(conversationId: string, msgId: string) {
     this.raw({ op: 'read', conversationId, msgId });
+  }
+
+  /** 正在看的会话里的合约喊单卡片（服务端据此每 3 秒推 perpTick，见后端 perp-watch.service.ts） */
+  private perpWatching: { op: string; conversationId: string; ids: string[] } | null = null;
+
+  perpWatch(conversationId: string, ids: string[]) {
+    this.perpWatching = { op: 'perpWatch', conversationId, ids: ids.slice(-100) };
+    this.raw(this.perpWatching);
+  }
+
+  perpUnwatch(conversationId: string) {
+    if (this.perpWatching?.conversationId === conversationId) this.perpWatching = null;
+    this.raw({ op: 'perpUnwatch', conversationId });
   }
 
   /** 没连上时 send / read 先排队，连上后补发（刚打开页面就发消息不会丢） */

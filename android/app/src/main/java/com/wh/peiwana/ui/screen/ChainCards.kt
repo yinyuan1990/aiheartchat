@@ -89,6 +89,7 @@ fun chainCardPreview(type: String, content: String): String? {
     return when (type) {
         "transfer" -> "[转账] ${tokenAmount(o?.str("amount"), o?.str("decimals")?.toIntOrNull() ?: 0)} ${o?.str("symbol") ?: ""}".trim()
         "callout" -> "[喊单] $${o?.str("symbol") ?: ""}"
+        "perp" -> perpPreview(content)
         "payreq" -> o?.str("amount")?.let { "[收款] ${tokenAmount(it, o.str("decimals")?.toIntOrNull() ?: 0)} ${o.str("symbol").orEmpty()}".trim() } ?: "[收款] ${chainName(o?.str("chain").orEmpty())}"
         else -> null
     }
@@ -326,6 +327,123 @@ private fun ChainChoice(title: String, sub: String, address: String, onClick: ()
             Text(sub, color = TextSub, fontSize = 11.sp)
         }
         Text("${address.take(6)}…${address.takeLast(4)}", color = TextSub, fontSize = 12.sp)
+    }
+}
+
+/**
+ * 合约喊单（msgType perp，后端 perp-call.service.ts）的实时状态：聊天页打开时 WsClient.perpWatch 告诉服务端在看哪些卡片，
+ * 服务端每 3 秒推 perpTick（行情价 + 变了的卡片状态，见 perp-watch.service.ts），这里存着给卡片读。
+ */
+object PerpLive {
+    val statuses = mutableStateMapOf<String, JsonObject>()
+    val marks = mutableStateMapOf<String, Double>()
+
+    fun onFrame(frame: JsonObject) {
+        if (frame.str("op") != "perpTick") return
+        (frame["marks"] as? JsonObject)?.forEach { (coin, v) -> v.jsonPrimitive.doubleOrNull?.let { marks[coin] = it } }
+        (frame["statuses"] as? JsonObject)?.forEach { (id, v) -> (v as? JsonObject)?.let { statuses[id] = it } }
+    }
+}
+
+private val PerpUp = Color(0xFF22C55E)
+private val PerpDown = Color(0xFFEF4444)
+
+private fun perpPx(v: Double): String = when {
+    v >= 1000 -> "%,.1f".format(v).removeSuffix(".0")
+    v >= 1 -> BigDecimal(v).setScale(4, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()
+    else -> BigDecimal(v).round(java.math.MathContext(4)).stripTrailingZeros().toPlainString()
+}
+
+/** 保证金收益率（%）：价格变动 × 杠杆，空单反过来 */
+private fun perpRoe(entry: Double, price: Double, lev: Double, long: Boolean) = (price / entry - 1) * lev * (if (long) 100 else -100)
+private fun pct(v: Double) = (if (v >= 0) "+" else "") + "%.1f".format(v) + "%"
+
+fun perpPreview(content: String): String {
+    val o = obj(content)
+    return "[合约喊单] ${if (o?.str("side") == "short") "做空" else "做多"} ${o?.str("coin").orEmpty()} ${o?.num("lev")?.toInt() ?: 0}x"
+}
+
+/** 卡片上的「跟单」：钱包合约页按喊单填好方向、杠杆、止盈止损，保证金自己定 */
+fun perpFollowPath(content: String, name: String): String? {
+    val o = obj(content) ?: return null
+    val coin = o.str("coin") ?: return null
+    val side = o.str("side") ?: return null
+    val follow = buildJsonObject {
+        put("coin", coin)
+        put("side", side)
+        o.num("lev")?.let { put("lev", it) }
+        o.num("entry")?.let { put("entry", it) }
+        o.num("tp")?.let { put("tp", it) }
+        o.num("sl")?.let { put("sl", it) }
+        put("name", name.take(24))
+    }
+    return "/wallet/perp?follow=" + Uri.encode(follow.toString())
+}
+
+@Composable
+fun PerpCard(msgId: String, content: String, canWallet: Boolean, onFollow: () -> Unit) {
+    val o = remember(content) { obj(content) } ?: return
+    val coin = o.str("coin").orEmpty()
+    val long = o.str("side") != "short"
+    val lev = o.num("lev") ?: 1.0
+    val entry = o.num("entry") ?: 0.0
+    val st = PerpLive.statuses[msgId] ?: JsonObject(emptyMap())
+    val mark = PerpLive.marks[coin]
+    val state = st.str("state")
+    val sideColor = if (long) PerpUp else PerpDown
+    Column(Modifier.width(240.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFF0F1115)).padding(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("$coin-USD", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.width(6.dp))
+            Box(Modifier.clip(RoundedCornerShape(6.dp)).background(sideColor.copy(alpha = 0.18f)).padding(6.dp, 2.dp)) {
+                Text("${if (long) "做多" else "做空"} ${lev.toInt()}x", color = sideColor, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(Modifier.weight(1f))
+            mark?.let { Text(perpPx(it), color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp) }
+        }
+        Row(Modifier.padding(top = 8.dp)) {
+            PerpCell("${if (o.str("orderType") == "limit") "挂单" else "开仓"}", if (entry > 0) perpPx(entry) else "—", Modifier.weight(1f))
+            PerpCell("止盈", o.num("tp")?.let { perpPx(it) } ?: "—", Modifier.weight(1f))
+            PerpCell("止损", o.num("sl")?.let { perpPx(it) } ?: "—", Modifier.weight(1f))
+        }
+        // 实时状态：持仓中用最新价算收益率；结束了显示怎么结束的、最终收益率
+        val (label, value, color) = when (state) {
+            "open" -> {
+                val e = st.num("entry") ?: entry
+                val l = st.num("lev") ?: lev
+                val roe = if (mark != null && e > 0) perpRoe(e, mark, l, long) else st.num("roe") ?: 0.0
+                Triple("持仓中", pct(roe), if (roe >= 0) PerpUp else PerpDown)
+            }
+            "closed" -> {
+                val exit = st.num("exit") ?: 0.0
+                val roe = if (entry > 0 && exit > 0) perpRoe(entry, exit, lev, long) else 0.0
+                val why = when (st.str("reason")) { "tp" -> "止盈出局"; "sl" -> "止损出局"; "liq" -> "已强平"; else -> "已平仓" }
+                Triple(why, if (st.str("reason") == "liq") "-100%" else pct(roe), if (roe >= 0 && st.str("reason") != "liq") PerpUp else PerpDown)
+            }
+            "pending" -> Triple("挂单中", st.num("px")?.let { "@ ${perpPx(it)}" } ?: "", Color.White.copy(alpha = 0.7f))
+            "none" -> Triple("未成交 / 已撤单", "", Color.White.copy(alpha = 0.5f))
+            else -> Triple("读取实时状态…", "", Color.White.copy(alpha = 0.5f))
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF1B1F27)).padding(10.dp, 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, color = Color.White.copy(alpha = 0.75f), fontSize = 12.sp, modifier = Modifier.weight(1f))
+            Text(value, color = color, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        }
+        o.str("note")?.takeIf { it.isNotBlank() }?.let { Text(it, color = Color.White, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 8.dp)) }
+        Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            MegaphoneIcon(Color(0xFF4ADE80), 13.dp)
+            Text(" 合约喊单 · 收益率实时", color = Color.White.copy(alpha = 0.55f), fontSize = 11.sp, modifier = Modifier.weight(1f))
+            if (canWallet && state != "closed") Box(Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xFF4ADE80)).noRippleClick(onFollow).padding(12.dp, 4.dp)) {
+                Text("跟单", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PerpCell(k: String, v: String, modifier: Modifier) {
+    Column(modifier) {
+        Text(k, color = Color.White.copy(alpha = 0.5f), fontSize = 10.sp)
+        Text(v, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
     }
 }
 

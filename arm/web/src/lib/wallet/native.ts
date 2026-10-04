@@ -55,6 +55,8 @@ type Bridge = {
   shareCard?: (card: object) => MaybePromise<unknown>;
   /** Feature `chat`: open (creating on first use) the coin's discussion group in the App's chat. */
   openCoinGroup?: (coin: object) => MaybePromise<unknown>;
+  /** Feature `perpcall`: post a signed 合约喊单 card into the perp's group (houduan POST /im/perp-call) and open that chat. */
+  perpCall?: (card: object) => Promise<unknown>;
 };
 
 /**
@@ -131,6 +133,7 @@ function wrapSync(raw: SyncBridge): Bridge {
     chainAddress: typeof raw.chainAddress === "function" ? (a) => callAsync("chainAddress", json(a)) : undefined,
     shareCard: typeof raw.shareCard === "function" ? (c) => call("shareCard", json(c)) : undefined,
     openCoinGroup: typeof raw.openCoinGroup === "function" ? (c) => call("openCoinGroup", json(c)) : undefined,
+    perpCall: typeof raw.perpCall === "function" ? (c) => callAsync("perpCall", json(c)) : undefined,
   };
   // bridgeInfo() answers "{}" until the shell has seen this page's origin: don't cache that, ask again next time
   if (info.features?.length) wrapped = { raw, bridge };
@@ -186,6 +189,7 @@ export const canSharePayreq = () => canShareCard() && hasFeature("payreq");
 export const shareCard = (card: object) => void nativeBridge()?.shareCard?.(card);
 export const canCoinGroup = () => typeof window !== "undefined" && hasFeature("chat") && !!nativeBridge()?.openCoinGroup;
 export const openCoinGroup = (coin: object) => void nativeBridge()?.openCoinGroup?.(coin);
+export const canPerpCall = () => typeof window !== "undefined" && hasFeature("perpcall") && !!nativeBridge()?.perpCall && !!nativeBridge()?.chainAddress;
 
 /** Camera scan through the App shell; null when unavailable or cancelled. */
 export async function scanQr(): Promise<string | null> {

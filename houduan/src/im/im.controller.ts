@@ -9,6 +9,7 @@ import { BotService } from './bot.service';
 import { MessageService } from './message.service';
 import { ChainCardService, type TransferBody } from './chain-card.service';
 import { CoinGroupService, type CoinGroupBody } from './coin-group.service';
+import { PerpCallService, type PerpCallBody } from './perp-call.service';
 import { CreateGroupDto, GroupInfoDto, MemberIdsDto } from './im.dto';
 
 function toId(v: unknown): bigint {
@@ -33,12 +34,19 @@ export class ImController {
     private readonly msgs: MessageService,
     private readonly cards: ChainCardService,
     private readonly coinGroups: CoinGroupService,
+    private readonly perpCalls: PerpCallService,
   ) {}
 
   /** 币的讨论群：没有就建（系统账号当群主），然后加入；返回群和会话 id。见 coin-group.service.ts */
   @Post('coin-group')
   coinGroup(@CurrentUser() userId: bigint, @Body() body: CoinGroupBody) {
     return this.coinGroups.open(userId, body ?? {});
+  }
+
+  /** 合约喊单：卡片发进这个合约的群（没有就建），喊单者地址从主钱包签名恢复，见 perp-call.service.ts */
+  @Post('perp-call')
+  perpCall(@CurrentUser() userId: bigint, @Body() body: PerpCallBody) {
+    return this.perpCalls.call(userId, body ?? {});
   }
 
   /** 链上钱包转账成功后发转账卡片（单聊）；服务端到链上核对过才发，见 chain-card.service.ts */

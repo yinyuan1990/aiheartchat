@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
+import { wsManager } from '../ws';
 
 /**
  * 链上钱包的聊天卡片（和 Android ChainCards.kt、iOS ChainCards.swift 同一套字段）。网页版没有钱包：
@@ -47,6 +48,7 @@ export function chainCardPreview(type: string, content: string): string | null {
   const o = parse(content);
   if (type === 'transfer') return `[转账] ${tokenAmount(o.amount, Number(o.decimals) || 0)} ${o.symbol ?? ''}`.trim();
   if (type === 'callout') return `[喊单] $${o.symbol ?? ''}`;
+  if (type === 'perp') return `[合约喊单] ${o.side === 'short' ? '做空' : '做多'} ${o.coin ?? ''} ${o.lev ?? ''}x`;
   if (type === 'payreq') return o.amount ? `[收款] ${tokenAmount(o.amount, Number(o.decimals) || 0)} ${o.symbol ?? ''}`.trim() : `[收款] ${CHAIN_NAMES[o.chain] ?? o.chain ?? ''}`;
   return null;
 }
@@ -113,6 +115,78 @@ export function TransferCard({ content, mine }: { content: string; mine: boolean
       <span style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 14px', background: '#fff4de', fontSize: 11, color: '#9a5b00' }}>
         <span>链上转账 · {CHAIN_NAMES[o.chain] ?? o.chain}</span>
         {o.verified && <span style={{ color: '#16a34a' }}>已到账 ✓</span>}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * 合约喊单（msgType perp）：喊单者真实仓位的实时状态。聊天页 wsManager.perpWatch 告诉服务端在看哪些卡片，服务端每 3 秒
+ * 推 perpTick（行情价 + 变了的状态）；持仓中的收益率用最新价现算。网页版没有钱包，跟单要在 App 里点。
+ */
+const perpStatuses = new Map<string, Record<string, any>>();
+const perpMarks = new Map<string, number>();
+wsManager.on((f) => {
+  if (f?.op !== 'perpTick') return;
+  for (const [k, v] of Object.entries((f.marks ?? {}) as Record<string, number>)) perpMarks.set(k, v);
+  for (const [k, v] of Object.entries((f.statuses ?? {}) as Record<string, Record<string, any>>)) perpStatuses.set(k, v);
+});
+
+const perpPx = (v: number) => (v >= 1000 ? v.toLocaleString('en-US', { maximumFractionDigits: 1 }) : v >= 1 ? String(Number(v.toFixed(4))) : String(Number(v.toPrecision(4))));
+const pct = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`;
+const roe = (entry: number, price: number, lev: number, long: boolean) => (price / entry - 1) * lev * (long ? 100 : -100);
+
+export function PerpCard({ id, content }: { id: string; content: string }) {
+  const o = parse(content);
+  const [, redraw] = useState(0);
+  useEffect(() => wsManager.on((f) => f?.op === 'perpTick' && (f.statuses?.[id] || f.marks?.[o.coin]) && redraw((n) => n + 1)), [id, o.coin]);
+  const long = o.side !== 'short';
+  const lev = Number(o.lev) || 1;
+  const entry = Number(o.entry) || 0;
+  const st = perpStatuses.get(id) ?? {};
+  const mark = perpMarks.get(o.coin);
+  const up = '#22c55e', down = '#ef4444';
+  let label = '读取实时状态…', value = '', color = 'rgba(255,255,255,.5)';
+  if (st.state === 'open') {
+    const e = Number(st.entry) || entry;
+    const r = mark && e ? roe(e, mark, Number(st.lev) || lev, long) : Number(st.roe) || 0;
+    [label, value, color] = ['持仓中', pct(r), r >= 0 ? up : down];
+  } else if (st.state === 'closed') {
+    const r = entry && st.exit ? roe(entry, Number(st.exit), lev, long) : 0;
+    const why = ({ tp: '止盈出局', sl: '止损出局', liq: '已强平' } as Record<string, string>)[st.reason] ?? '已平仓';
+    [label, value, color] = st.reason === 'liq' ? [why, '-100%', down] : [why, pct(r), r >= 0 ? up : down];
+  } else if (st.state === 'pending') [label, value, color] = ['挂单中', st.px ? `@ ${perpPx(Number(st.px))}` : '', 'rgba(255,255,255,.7)'];
+  else if (st.state === 'none') label = '未成交 / 已撤单';
+  const cell = (k: string, v: unknown) => (
+    <span style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+      <span style={{ fontSize: 10, opacity: 0.5 }}>{k}</span>
+      <span style={{ fontSize: 12, fontWeight: 500 }}>{typeof v === 'number' && v > 0 ? perpPx(v) : '—'}</span>
+    </span>
+  );
+  return (
+    <span className="no-menu" style={{ display: 'flex', flexDirection: 'column', gap: 8, width: 240, padding: 12, borderRadius: 14, background: '#0f1115', color: '#fff' }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontSize: 16, fontWeight: 700 }}>{o.coin}-USD</span>
+        <span style={{ fontSize: 11, fontWeight: 600, color: long ? up : down, background: long ? 'rgba(34,197,94,.18)' : 'rgba(239,68,68,.18)', borderRadius: 6, padding: '2px 6px' }}>
+          {long ? '做多' : '做空'} {lev}x
+        </span>
+        <span style={{ flex: 1 }} />
+        {mark && <span style={{ fontSize: 12, opacity: 0.7 }}>{perpPx(mark)}</span>}
+      </span>
+      <span style={{ display: 'flex', gap: 4 }}>
+        {cell(o.orderType === 'limit' ? '挂单' : '开仓', o.entry)}
+        {cell('止盈', o.tp)}
+        {cell('止损', o.sl)}
+      </span>
+      <span style={{ display: 'flex', alignItems: 'center', background: '#1b1f27', borderRadius: 10, padding: '8px 10px' }}>
+        <span style={{ fontSize: 12, opacity: 0.75, flex: 1 }}>{label}</span>
+        <span style={{ fontSize: 18, fontWeight: 700, color }}>{value}</span>
+      </span>
+      {o.note && <span style={{ fontSize: 13, lineHeight: '18px', whiteSpace: 'pre-wrap' }}>{o.note}</span>}
+      <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
+        <span style={{ color: '#4ade80' }}>📣</span>
+        <span style={{ opacity: 0.55, flex: 1 }}>合约喊单 · 收益率实时</span>
+        {st.state !== 'closed' && <span style={{ opacity: 0.55 }}>跟单请在 App 里点</span>}
       </span>
     </span>
   );

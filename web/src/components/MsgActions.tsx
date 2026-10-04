@@ -30,6 +30,7 @@ export function msgSnippet(type: string, content: string): string {
     case 'gift': return '[礼物]';
     case 'transfer':
     case 'callout':
+    case 'perp':
     case 'payreq': return chainCardPreview(type, content) ?? '[消息]';
     default: return type.startsWith('call') ? '[通话]' : '[消息]';
   }

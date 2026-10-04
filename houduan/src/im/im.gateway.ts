@@ -9,6 +9,7 @@ import type { IncomingMessage } from 'http';
 import type { WebSocket } from 'ws';
 import { ConnectionRegistry } from './connection.registry';
 import { ImService } from './im.service';
+import { PerpWatchService } from './perp-watch.service';
 import { ReadFrame, SendFrame } from './im.types';
 
 @WebSocketGateway({ path: '/ws', maxPayload: 128 * 1024 })
@@ -21,12 +22,13 @@ export class ImGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private static readonly MAX_CONN_PER_USER = 8;
   private static readonly MAX_FRAMES_PER_SEC = 25;
   private static readonly MAX_CONTENT_LEN = 8000;
-  private static readonly SERVER_ONLY_TYPES = new Set(['transfer']);
+  private static readonly SERVER_ONLY_TYPES = new Set(['transfer', 'perp']);
 
   constructor(
     private readonly jwt: JwtService,
     private readonly registry: ConnectionRegistry,
     private readonly im: ImService,
+    private readonly perpWatch: PerpWatchService,
   ) {}
 
   async handleConnection(ws: WebSocket, req: IncomingMessage) {
@@ -54,6 +56,7 @@ export class ImGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   async handleDisconnect(ws: WebSocket) {
+    this.perpWatch.drop(ws);
     const userId = this.socketUser.get(ws);
     if (userId !== undefined) {
       await this.registry.unregister(userId, ws);
@@ -90,7 +93,7 @@ export class ImGateway implements OnGatewayConnection, OnGatewayDisconnect {
           delete f.fwdFrom;
           if (!f.targetId || !f.msgType || typeof f.content !== 'string') return;
           if (f.content.length > ImGateway.MAX_CONTENT_LEN) return;
-          // 转账卡片只能由服务端核对链上交易后发（POST /im/transfer）
+          // 转账卡片只能由服务端核对链上交易后发（POST /im/transfer），合约喊单只能经 POST /im/perp-call
           if (ImGateway.SERVER_ONLY_TYPES.has(f.msgType)) throw new Error('这种消息不能直接发送');
           const payload = await this.im.sendMessage(userId, f);
           ws.send(
@@ -104,6 +107,13 @@ export class ImGateway implements OnGatewayConnection, OnGatewayDisconnect {
           );
           break;
         }
+        // 合约喊单卡片：打开 / 离开聊天时告诉服务端在看哪些卡片，之后由 perp-watch.service.ts 推 perpTick
+        case 'perpWatch':
+          await this.perpWatch.watch(ws, userId, frame.conversationId, frame.ids);
+          break;
+        case 'perpUnwatch':
+          this.perpWatch.unwatch(ws, frame.conversationId);
+          break;
         case 'read': {
           const f = frame as ReadFrame;
           if (!f.conversationId || !f.msgId) return;

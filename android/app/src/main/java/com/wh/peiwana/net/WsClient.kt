@@ -72,6 +72,11 @@ object WsClient {
         ws = client.newWebSocket(
             Request.Builder().url(url).build(),
             object : WebSocketListener() {
+                override fun onOpen(webSocket: WebSocket, response: Response) {
+                    // 合约喊单卡片：重连后服务端不记得在看哪些卡片，重新告诉它
+                    perpWatching?.let { webSocket.send(it.toString()) }
+                }
+
                 override fun onMessage(webSocket: WebSocket, text: String) {
                     val frame = try {
                         json.parseToJsonElement(text) as? JsonObject
@@ -126,6 +131,24 @@ object WsClient {
         }
         ws?.send(frame.toString())
         return tempId
+    }
+
+    /** 正在看的会话里的合约喊单卡片（服务端据此每 3 秒推 perpTick，见后端 perp-watch.service.ts） */
+    @Volatile private var perpWatching: JsonObject? = null
+
+    fun perpWatch(conversationId: String, ids: List<String>) {
+        val frame = buildJsonObject {
+            put("op", "perpWatch")
+            put("conversationId", conversationId)
+            put("ids", kotlinx.serialization.json.JsonArray(ids.takeLast(100).map { kotlinx.serialization.json.JsonPrimitive(it) }))
+        }
+        perpWatching = frame
+        ws?.send(frame.toString())
+    }
+
+    fun perpUnwatch(conversationId: String) {
+        if (perpWatching?.get("conversationId")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content } == conversationId) perpWatching = null
+        ws?.send(buildJsonObject { put("op", "perpUnwatch"); put("conversationId", conversationId) }.toString())
     }
 
     fun markRead(conversationId: String, msgId: String) {

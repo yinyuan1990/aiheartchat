@@ -27,7 +27,7 @@ import { isAvatarAddress, walletAvatar } from "./avatars.js";
 import { claimOf, verifyTransfer } from "./verify.js";
 import { tronRelay } from "./tron.js";
 import { tonJettons, tonRelay } from "./ton.js";
-import { hlExchange, hlInfo, hlMids } from "./hl.js";
+import { hlCallStatus, hlCallStatusBatch, hlExchange, hlInfo, hlMids } from "./hl.js";
 import { aiAnalyze, aiTest } from "./aibot/manual.js";
 import { botControl, botGet, botStart, botUpdate } from "./aibot/bots.js";
 import { calloutCaller, calloutCallers, calloutFeed, pinCaller } from "./callouts.js";
@@ -816,6 +816,15 @@ app.post("/api/hl/info", async (c) => {
 });
 app.get("/api/hl/mids", async (c) => {
   const r = await hlMids((c.req.query("coins") ?? "").split(",").filter(Boolean));
+  return c.json(r.json as object, r.status as 200);
+});
+// 合约喊单卡片的状态：心之音后端每 3 秒批量问一次（只问有人正打开着的群里的卡片），再走 IM WebSocket 推给手机
+app.post("/api/hl/call-status", async (c) => {
+  const r = await hlCallStatusBatch(await c.req.json().catch(() => null), clientIp(c) || "?");
+  return c.json(r.json as object, r.status as 200);
+});
+app.get("/api/hl/call-status", async (c) => {
+  const r = await hlCallStatus(c.req.query("user") ?? "", c.req.query("coin") ?? "", Number(c.req.query("since")));
   return c.json(r.json as object, r.status as 200);
 });
 app.post("/api/hl/exchange", async (c) => {

@@ -10,7 +10,7 @@ import { EmojiPanel } from '../components/EmojiPanel';
 import { StickerView } from '../components/StickerView';
 import { AttachSheet, AttachAction } from '../components/AttachSheet';
 import { LinkText } from '../components/LinkText';
-import { CalloutCard, PayreqCard, TransferCard } from '../components/ChainCards';
+import { CalloutCard, PayreqCard, PerpCard, TransferCard } from '../components/ChainCards';
 import {
   DeleteDialog, FORWARDABLE, ForwardSheet, MenuActions, MsgMenu, PinBar, PinItem,
   ReactionChips, ReplyBar, ReplyQuote, ReportSheet, saveMedia,
@@ -416,7 +416,7 @@ function MsgBubble({ m, mine, convType, myId, onImage, onMenu, onReact, onJump }
 }) {
   const press = useRef<ReturnType<typeof setTimeout>>();
   const pressed = useRef(false);
-  const isMedia = m.type === 'image' || m.type === 'video' || m.type === 'sticker' || m.type === 'transfer' || m.type === 'callout' || m.type === 'payreq';
+  const isMedia = m.type === 'image' || m.type === 'video' || m.type === 'sticker' || m.type === 'transfer' || m.type === 'callout' || m.type === 'payreq' || m.type === 'perp';
   let body: JSX.Element;
   switch (m.type) {
     case 'image':
@@ -471,6 +471,9 @@ function MsgBubble({ m, mine, convType, myId, onImage, onMenu, onReact, onJump }
       break;
     case 'callout':
       body = <CalloutCard content={m.content} />;
+      break;
+    case 'perp':
+      body = <PerpCard id={m.id} content={m.content} />;
       break;
     case 'payreq':
       body = <PayreqCard content={m.content} mine={mine} />;
@@ -543,6 +546,12 @@ export function ChatRoomPage() {
   const [messages, setMessages] = useState<MsgItem[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [bot, setBot] = useState<BotPublic | null>(null);
+  // 合约喊单卡片：告诉服务端这个聊天里在看哪些卡片，它每 3 秒推实时状态（PerpCard 收 perpTick）
+  const perpIds = messages.filter((m) => m.type === 'perp' && !m.id.startsWith('t_')).map((m) => m.id).join(',');
+  useEffect(() => {
+    if (conversationId && perpIds) wsManager.perpWatch(conversationId, perpIds.split(','));
+  }, [conversationId, perpIds]);
+  useEffect(() => () => void (conversationId && wsManager.perpUnwatch(conversationId)), [conversationId]);
   const [showCmds, setShowCmds] = useState(false);
   const [input, setInput] = useState('');
   const [showDownload, setShowDownload] = useState(false);

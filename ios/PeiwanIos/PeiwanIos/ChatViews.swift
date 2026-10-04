@@ -72,7 +72,7 @@ func previewOf(_ msg: LastMsg?) -> String {
     case "audio": return "[语音]"
     case "location": return "[位置]"
     case "gift": return "[礼物]"
-    case "transfer", "callout", "payreq": return ChainCards.preview(type, msg.content ?? "") ?? ""
+    case "transfer", "callout", "payreq", "perp": return ChainCards.preview(type, msg.content ?? "") ?? ""
     default: return type.hasPrefix("call") ? "[通话]" : ""
     }
 }
@@ -511,6 +511,7 @@ struct ChatRoomView: View {
 
     @EnvironmentObject var state: AppState
     @State private var messages: [MsgItem] = []
+    @State private var removePerpListener: (() -> Void)?
     @State private var loaded = false
     /// 对方是机器人时的公开资料（简介卡片 / 开始按钮 / 命令菜单）
     @State private var bot: BotPublic?
@@ -555,13 +556,26 @@ struct ChatRoomView: View {
     private var myId: String { state.user?.id ?? "" }
     private var isGroupAdmin: Bool { convType == 2 && (myRole == "owner" || myRole == "admin") }
     private var canPin: Bool { convType == 1 || isGroupAdmin }
+    private var perpIds: [String] { messages.filter { $0.type == "perp" && !$0.pending }.map { $0.id } }
 
     // body 拆成几段，整块写在一起 Swift 类型检查会超时
     var body: some View {
         decorated(msgActionLayers(mainColumn))
             .task { await onLoad() }
             .task { walletOk = await ChainWallet.visible(state.user) }
-            .onDisappear { removeListener?() }
+            .onDisappear {
+                removeListener?()
+                removePerpListener?()
+                WsClient.shared.perpUnwatch(conversationId: convId)
+            }
+            // 合约喊单卡片：告诉服务端这个聊天里在看哪些卡片，它每 3 秒推实时状态（PerpLive）
+            .onChange(of: perpIds) { ids in
+                if !ids.isEmpty { WsClient.shared.perpWatch(conversationId: convId, ids: ids) }
+            }
+            .onAppear {
+                removePerpListener = WsClient.shared.addListener { frame in PerpLive.shared.onFrame(frame) }
+                if !perpIds.isEmpty { WsClient.shared.perpWatch(conversationId: convId, ids: perpIds) }
+            }
             .routePush($walletRoute)
             .onReceive(NotificationCenter.default.publisher(for: ChainWallet.resultNotification)) { n in
                 if let s = n.userInfo?["json"] as? String { onWalletResult(s) }
@@ -1614,6 +1628,10 @@ struct MsgBubble: View {
             TransferCardView(content: m.content, mine: mine)
         case "callout":
             CalloutCardView(content: m.content, canWallet: onOpenWallet != nil) { onOpenWallet?($0) }
+        case "perp":
+            PerpCardView(msgId: m.id, content: m.content, canWallet: onOpenWallet != nil) {
+                if let p = PerpLive.followPath(m.content, name: m.senderNickname ?? "") { onOpenWallet?(p) }
+            }
         case "payreq":
             PayreqCardView(content: m.content, mine: mine, onPay: payreqAction)
         case "call":

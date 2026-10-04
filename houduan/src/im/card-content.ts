@@ -48,6 +48,37 @@ export function sanitizePayreq(content: string): string {
   });
 }
 
+/** Hyperliquid 合约名（BTC、kPEPE 这种），也是合约群的 coin_group.address */
+export const isPerpCoin = (c: string) => /^[A-Za-z0-9]{1,16}$/.test(c);
+
+/**
+ * 合约喊单卡片（msgType perp）：只由服务端发（POST /im/perp-call，perp-call.service.ts），address 是服务端从
+ * 主钱包签名里恢复出来的，客户端据此去 Hyperliquid 查喊单者现在的仓位和结果。数字是喊单那一刻的。
+ */
+export function sanitizePerp(b: Record<string, unknown>, coin: string, side: 'long' | 'short', address: string): string {
+  const pos = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null);
+  const entry = pos(b.entry);
+  if (!entry) throw new BadRequestException('开仓价不对');
+  const lev = Math.round(Number(b.lev));
+  if (!Number.isFinite(lev) || lev < 1 || lev > 100) throw new BadRequestException('杠杆不对');
+  let tp = pos(b.tp);
+  let sl = pos(b.sl);
+  if (tp && (side === 'long' ? tp <= entry : tp >= entry)) tp = null;
+  if (sl && (side === 'long' ? sl >= entry : sl <= entry)) sl = null;
+  return JSON.stringify({
+    coin,
+    side,
+    lev,
+    entry,
+    orderType: b.orderType === 'limit' ? 'limit' : 'market',
+    tp,
+    sl,
+    note: cleanText(b.note, 200),
+    address,
+    at: Date.now(),
+  });
+}
+
 /**
  * 喊单 / 分享代币卡片（msgType callout）的内容：只留认识的字段，链必须是钱包支持的，图片只收 https。
  * 价格、市值是发的那一刻的快照，客户端打开代币页看实时行情。
