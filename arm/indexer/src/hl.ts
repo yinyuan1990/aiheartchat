@@ -47,11 +47,12 @@ async function post(url: string, body: unknown): Promise<Reply> {
 export async function hlInfo(body: unknown, ip: string): Promise<Reply> {
   const type = (body as { type?: unknown })?.type;
   if (typeof type !== "string" || !INFO_TYPES.has(type)) return { status: 400, json: { error: "info type not allowed" } };
-  if (!infoLimit(ip)) return { status: 429, json: { error: "rate limited" } };
   const ttl = INFO_TTL[type] ?? 0;
   const key = ttl ? JSON.stringify(body) : "";
   const hit = key ? cache.get(key) : undefined;
+  // shared answers cost Hyperliquid nothing: only misses count (phones behind one carrier NAT share an IP)
   if (hit && Date.now() - hit.at < ttl) return hit.v;
+  if (!infoLimit(ip)) return { status: 429, json: { error: "rate limited" } };
   try {
     const v = await post(`${HL}/info`, body);
     if (key && v.status === 200) {

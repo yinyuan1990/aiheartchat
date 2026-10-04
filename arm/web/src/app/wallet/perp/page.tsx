@@ -7,7 +7,7 @@ import { ArrowDown, ArrowUp, CaretDown, CheckCircle, Robot, Sparkle } from "@pho
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { storeRead, storeWrite } from "@/lib/wallet/native";
-import { HL_BUILDER, account, agentActive, agentExtraKey, approveAgent, approveBuilder, assets, TAKER_FEE, builderApproved, cancelOrder, closePosition, trades, newAgent, openOrders, openPosition, parseAgent, setLeverage, type HlAsset, type HlPosition, type HlTrade } from "@/lib/wallet/hl";
+import { HL_BUILDER, account, agentActive, agentExtraKey, approveAgent, approveBuilder, assets, TAKER_FEE, builderApproved, cancelOrder, closePosition, formatPx, trades, newAgent, openOrders, openPosition, parseAgent, setLeverage, type HlAsset, type HlPosition, type HlTrade } from "@/lib/wallet/hl";
 import { AI_CONFIG_KEY, analyze, parseAiConfig, type AiConfig, type AiResult } from "@/lib/wallet/ai-trade";
 import { useVault } from "@/components/wallet/wallet-context";
 import { AI_GRADIENT, AiCard, AiSettingsSheet, CoinPicker, DepositSheet, RiskGate, Spinner, WithdrawSheet, px, sUsd, usd } from "@/components/wallet/perp-parts";
@@ -118,8 +118,22 @@ export default function PerpPage() {
               ? "止损价在强平价之外，会先被强平"
               : null;
   const fee = notional * TAKER_FEE * 2;
+  /** what the position makes / loses if it is closed at `price`: price move × size, ROE on the margin, net of both fees */
+  const outcome = (price: number) => {
+    if (!price || !size || !m) return null;
+    const pnl = (isLong ? price - refPx : refPx - price) * size;
+    return { pnl, roe: (pnl / m) * 100, net: pnl - notional * TAKER_FEE - price * size * TAKER_FEE };
+  };
+  const tpOut = outcome(tpN);
+  const slOut = outcome(slN);
+  /** the price at which the margin gains (+) / loses (−) `roe` percent at this leverage */
+  const priceAtRoe = (roe: number) => (asset && refPx ? formatPx(refPx * (1 + ((isLong ? 1 : -1) * roe) / 100 / levUsed), asset.szDecimals) : "");
+  const beyondLiq = (roe: number) => {
+    const p = Number(priceAtRoe(-roe));
+    return !p || !liqEst || (isLong ? p <= liqEst * 1.002 : p >= liqEst * 0.998);
+  };
   const hints = [
-    levUsed >= 20 ? `${levUsed} 倍杠杆：价格反向波动约 ${(100 / levUsed).toFixed(1)}% 就会亏光这笔保证金（强平）` : "",
+    levUsed >= 20 && liqEst ? `${levUsed} 倍杠杆：价格反向波动约 ${(Math.abs(liqEst / refPx - 1) * 100).toFixed(2)}% 就会被强平，这笔保证金全亏` : "",
     slN && Math.abs(slN / refPx - 1) < 0.002 ? "止损离开仓价不到 0.2%，正常波动就可能被打掉" : "",
     m && fee > m * 0.05 ? `开仓加平仓手续费约 ${usd(fee)}，占保证金 ${((fee / m) * 100).toFixed(0)}%` : "",
   ].filter(Boolean);
@@ -358,9 +372,16 @@ export default function PerpPage() {
             <input type="range" min={1} max={maxLev} value={levUsed} onChange={(e) => setLev(Number(e.target.value))} className="mt-1 w-full accent-foreground" />
           </label>
           <div className="mt-2 grid grid-cols-2 gap-2">
-            <Field label="止盈价（选填）" value={tp} onChange={setTp} unit="" placeholder="—" small />
-            <Field label="止损价（选填）" value={sl} onChange={setSl} unit="" placeholder="—" small />
+            <div>
+              <Field label="止盈价（选填）" value={tp} onChange={setTp} unit="" placeholder="—" small sub={tpOut && <Outcome o={tpOut} />} />
+              <RoeChips values={[25, 50, 100]} sign="+" disabled={!m || !asset} onPick={(r) => setTp(priceAtRoe(r))} />
+            </div>
+            <div>
+              <Field label="止损价（选填）" value={sl} onChange={setSl} unit="" placeholder="—" small sub={slOut && <Outcome o={slOut} />} />
+              <RoeChips values={[10, 25, 50]} sign="-" disabled={!m || !asset} isOff={beyondLiq} onPick={(r) => setSl(priceAtRoe(-r))} />
+            </div>
           </div>
+          {m > 0 && <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">按钮按保证金的收益率算价格：{levUsed} 倍下价格每动 1%，保证金盈亏 {levUsed}%。灰掉的止损档位已经超过强平价。</p>}
           <div className="mt-3 space-y-1 rounded-xl bg-muted/60 px-3 py-2 text-[12px] text-muted-foreground">
             <Line k="仓位价值" v={notional ? usd(notional) : "—"} />
             <Line k="数量" v={size ? `${size.toPrecision(4)} ${coin}` : "—"} />
@@ -547,7 +568,7 @@ export default function PerpPage() {
       </BottomSheet>
       <BottomSheet open={sheet === "confirm"} onClose={() => setSheet(null)}>
         {sheet === "confirm" && asset && (
-          <Confirm asset={asset} isLong={isLong} type={type} price={refPx} margin={m} lev={levUsed} notional={notional} size={size} tp={tpN} sl={slN} liq={liqEst} busy={busy === "order"} onCancel={() => setSheet(null)} onOk={() => void place()} />
+          <Confirm asset={asset} isLong={isLong} type={type} price={refPx} margin={m} lev={levUsed} notional={notional} size={size} tp={tpN} sl={slN} tpOut={tpOut} slOut={slOut} liq={liqEst} busy={busy === "order"} onCancel={() => setSheet(null)} onOk={() => void place()} />
         )}
       </BottomSheet>
       <BottomSheet open={sheet === "close"} onClose={() => setSheet(null)}>
@@ -650,7 +671,31 @@ function SmallBtn({ children, onClick, disabled }: { children: React.ReactNode; 
   );
 }
 
-function Field({ label, value, onChange, unit, placeholder, small }: { label: string; value: string; onChange: (v: string) => void; unit: string; placeholder: string; small?: boolean }) {
+function Outcome({ o }: { o: { pnl: number; roe: number; net: number } }) {
+  return (
+    <span className={cn("block text-[11px] leading-4", o.net >= 0 ? "text-up" : "text-down")}>
+      {o.pnl >= 0 ? "赚" : "亏"} {sUsd(o.pnl)}（{o.roe >= 0 ? "+" : ""}
+      {o.roe.toFixed(0)}%）
+      <br />
+      扣手续费 {sUsd(o.net)}
+    </span>
+  );
+}
+
+function RoeChips({ values, sign, disabled, isOff, onPick }: { values: number[]; sign: "+" | "-"; disabled: boolean; isOff?: (r: number) => boolean; onPick: (r: number) => void }) {
+  return (
+    <div className="mt-1.5 grid grid-cols-3 gap-1">
+      {values.map((r) => (
+        <button key={r} type="button" disabled={disabled || isOff?.(r)} onClick={() => onPick(r)} className={cn("h-7 rounded-lg bg-muted text-[11px] font-medium disabled:opacity-35", sign === "+" ? "text-up" : "text-down")}>
+          {sign}
+          {r}%
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Field({ label, value, onChange, unit, placeholder, small, sub }: { label: string; value: string; onChange: (v: string) => void; unit: string; placeholder: string; small?: boolean; sub?: React.ReactNode }) {
   return (
     <label className="mt-3 block rounded-xl bg-muted/70 px-3 py-2">
       <span className="block text-[11px] text-muted-foreground">{label}</span>
@@ -658,6 +703,7 @@ function Field({ label, value, onChange, unit, placeholder, small }: { label: st
         <input value={value} onChange={(e) => onChange(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder={placeholder} className={cn("w-0 flex-1 bg-transparent font-mono font-semibold outline-none", small ? "text-[15px]" : "text-[20px]")} />
         {unit && <span className="text-[12px] text-muted-foreground">{unit}</span>}
       </span>
+      {sub}
     </label>
   );
 }
@@ -669,7 +715,8 @@ const Line = ({ k, v }: { k: string; v: string }) => (
   </div>
 );
 
-function Confirm(p: { asset: HlAsset; isLong: boolean; type: string; price: number; margin: number; lev: number; notional: number; size: number; tp: number; sl: number; liq: number; busy: boolean; onCancel: () => void; onOk: () => void }) {
+type Out = { pnl: number; roe: number; net: number } | null;
+function Confirm(p: { asset: HlAsset; isLong: boolean; type: string; price: number; margin: number; lev: number; notional: number; size: number; tp: number; sl: number; tpOut: Out; slOut: Out; liq: number; busy: boolean; onCancel: () => void; onOk: () => void }) {
   return (
     <>
       <div className="text-center text-[17px] font-semibold">
@@ -681,6 +728,8 @@ function Confirm(p: { asset: HlAsset; isLong: boolean; type: string; price: numb
         <Line k="仓位价值" v={usd(p.notional)} />
         <Line k="数量" v={`${p.size.toPrecision(4)} ${p.asset.name}`} />
         <Line k="止盈 / 止损" v={`${p.tp ? px(p.tp) : "—"} / ${p.sl ? px(p.sl) : "—"}`} />
+        {p.tpOut && <Line k="到止盈（扣手续费）" v={`${sUsd(p.tpOut.net)}（${p.tpOut.roe >= 0 ? "+" : ""}${p.tpOut.roe.toFixed(0)}%）`} />}
+        {p.slOut && <Line k="到止损（扣手续费）" v={`${sUsd(p.slOut.net)}（${p.slOut.roe.toFixed(0)}%）`} />}
         <Line k="预估强平价" v={p.liq ? px(p.liq) : "—"} />
         <Line k="手续费（开 + 平，约）" v={usd(p.notional * TAKER_FEE * 2)} />
       </div>
