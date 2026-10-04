@@ -36,7 +36,7 @@ export type BoatInfo = {
   priceUsdc?: number;
   mcapUsdc?: number;
   rate: number;
-  rules: { welcome: number; entry: number; maxReward: number; runsPerDay: number; playerDailyCap: number; globalDailyCap: number };
+  rules: { welcome: number; entry: number; maxReward: number; runsPerDay: number; playerDailyCap: number; globalDailyCap: number; shootPointsPerBoat?: number };
 };
 
 export type BoatMe = {
@@ -86,7 +86,7 @@ export class BoatError extends Error {
 
 export const boatLogin = (wallet: string, ts: number, sig: string) =>
   call<{ token: string; welcomed: boolean; me: BoatMe }>("/login", { method: "POST", body: { wallet, ts, sig } });
-export type BoatGame = "boat" | "race";
+export type BoatGame = "boat" | "race" | "shoot";
 export const boatRunStart = (token: string, game: BoatGame = "boat") => call<BoatRun>("/run", { method: "POST", token, body: { game } });
 export const boatRunEnd = (token: string, id: string, meters: number) => call<BoatRunEnd>(`/run/${id}/end`, { method: "POST", token, body: { meters } });
 export const boatWithdrawSig = (token: string) => call<BoatClaim>("/withdraw", { method: "POST", token, body: {} });

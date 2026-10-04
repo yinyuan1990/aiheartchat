@@ -9,7 +9,7 @@ import { deployments } from "./config.js";
  * Speedboat game ledger ($BOAT, 10.2). On-chain: BoatVault (arm/contracts/src/game) holds the reward pool, the locked
  * v4 liquidity and pays withdrawals against a cumulative total signed here. Off-chain (this file): balances.
  *   bonus = the 100 welcome tokens, playable only; cash = winnings + deposits, withdrawable.
- * A ranked run costs 10 (bonus first) and pays floor(min(m, 300) · rate); rate = rewardPool / 100M, clamped to
+ * A ranked run costs 10 (bonus first) and pays floor(min(m, 300) · rate) (Neon Strike: m = points / 10); rate = rewardPool / 100M, clamped to
  * [0.1, 1], so the payout shrinks before the pool can run dry. Daily: 10 ranked runs per wallet, 30 per IP.
  * The server can't stop a client from lying about its distance, only bound it: a run can't be longer than its
  * wall-clock time at top speed allows.
@@ -49,10 +49,23 @@ const vaultAbi = parseAbi([
 ]);
 const stateViewAbi = parseAbi(["function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96, int24 tick, uint24 protocolFee, uint24 lpFee)"]);
 
-/** Games paid from the same $BOAT ledger. Both run at the same world scale, so MAX_MPS bounds either; the daily
- *  ranked-run limits are shared between them. */
-const GAMES = ["boat", "race"] as const;
-const gameOf = (g?: string) => (GAMES as readonly string[]).includes(g ?? "") ? (g as (typeof GAMES)[number]) : "boat";
+/** Games paid from the same $BOAT ledger; the daily ranked-run limits are shared between them. boat and race run at
+ *  the same world scale, so MAX_MPS bounds either. shoot (Neon Strike) scores points, stored in the same `meters`
+ *  column. */
+const GAMES = ["boat", "race", "shoot"] as const;
+type Game = (typeof GAMES)[number];
+const gameOf = (g?: string): Game => (GAMES as readonly string[]).includes(g ?? "") ? (g as Game) : "boat";
+
+/** Neon Strike only spawns enemies while their summed base points stay under this budget (same formula as
+ *  web/src/components/shoot/engine.ts `spawnBudget`): 40 up front, then 15 points/s rising to 45 over two minutes. */
+const shootBudget = (s: number) => 40 + (s <= 120 ? 15 * s + 0.125 * s * s : 3600 + 45 * (s - 120));
+/** top combo multiplier, so a perfect run can't score more than this × the budget */
+const SHOOT_MAX_MULT = 3;
+const SHOOT_POINTS_PER_BOAT = 10;
+const maxScore = (game: Game, secs: number) =>
+  Math.floor(game === "shoot" ? SHOOT_MAX_MULT * shootBudget(secs) : secs * MAX_MPS);
+/** reward units before the pool rate: metres for boat / race, every 10 points for shoot */
+const rewardUnits = (game: Game, score: number) => (game === "shoot" ? Math.floor(score / SHOOT_POINTS_PER_BOAT) : score);
 
 export const loginMessage = (wallet: string, ts: number) => `Arm · Speedboat\nWallet: ${getAddress(wallet)}\nTime: ${ts}`;
 /** Same day boundary as BoatVault.today(): 00:00 UTC+8. */
@@ -248,15 +261,18 @@ export async function boatRunEnd(token: string | undefined, runId: string, meter
   const c = await chainState().catch(() => null);
   const rate = rateFor(c?.rewardPool ?? 0);
   const out = await sql.begin(async (tx) => {
-    const [r] = await tx<{ ranked: boolean; started_at: Date; ended_at: Date | null }[]>`
-      select ranked, started_at, ended_at from boat_runs where id = ${runId} and wallet = ${wallet} for update`;
+    const [r] = await tx<{ ranked: boolean; started_at: Date; ended_at: Date | null; game: string }[]>`
+      select ranked, started_at, ended_at, game from boat_runs where id = ${runId} and wallet = ${wallet} for update`;
     if (!r) return { error: "not found" as const };
     if (r.ended_at) return { error: "ended" as const };
+    const game = gameOf(r.game);
     const secs = (Date.now() - r.started_at.getTime()) / 1000;
-    const meters = Math.max(0, Math.min(Math.floor(Number(metersIn) || 0), Math.floor(secs * MAX_MPS)));
-    const reward = r.ranked ? Math.floor(Math.min(meters, MAX_REWARD) * rate) : 0;
+    const meters = Math.max(0, Math.min(Math.floor(Number(metersIn) || 0), maxScore(game, secs)));
+    const reward = r.ranked ? Math.floor(Math.min(rewardUnits(game, meters), MAX_REWARD) * rate) : 0;
     await tx`update boat_runs set ended_at = now(), meters = ${meters}, reward = ${reward} where id = ${runId}`;
-    await tx`update boat_players set cash = cash + ${reward}, earned = earned + ${reward}, best = greatest(best, ${meters}) where wallet = ${wallet}`;
+    // `best` is shown as metres, so points don't go in it
+    const best = game === "shoot" ? 0 : meters;
+    await tx`update boat_players set cash = cash + ${reward}, earned = earned + ${reward}, best = greatest(best, ${best}) where wallet = ${wallet}`;
     return { meters, reward, ranked: r.ranked, capped: meters < Math.floor(Number(metersIn) || 0) };
   });
   if ("error" in out) return out;
@@ -316,7 +332,10 @@ export async function boatInfo() {
     vault: VAULT,
     ...(c ?? {}),
     rate: rateFor(c?.rewardPool ?? 0),
-    rules: { welcome: WELCOME, entry: ENTRY, maxReward: MAX_REWARD, runsPerDay: RUNS_PER_DAY, playerDailyCap: PLAYER_DAILY_CAP, globalDailyCap: 1_000_000 },
+    rules: {
+      welcome: WELCOME, entry: ENTRY, maxReward: MAX_REWARD, runsPerDay: RUNS_PER_DAY, playerDailyCap: PLAYER_DAILY_CAP, globalDailyCap: 1_000_000,
+      shootPointsPerBoat: SHOOT_POINTS_PER_BOAT,
+    },
   };
 }
 

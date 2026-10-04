@@ -50,6 +50,7 @@
   .border-border\/60{border-color:rgb(var(--wc-border) / calc(var(--wa-border, 1) * 0.6))}
   .border-down\/30{border-color:rgb(var(--wc-down) / calc(var(--wa-down, 1) * 0.3))}
   .border-down\/40{border-color:rgb(var(--wc-down) / calc(var(--wa-down, 1) * 0.4))}
+  .border-emerald-400\/70{border-color:rgb(0 210 148 / 0.7)}
   .border-foreground\/15{border-color:rgb(var(--wc-foreground) / calc(var(--wa-foreground, 1) * 0.15))}
   .border-gold\/40{border-color:rgb(var(--wc-gold) / calc(var(--wa-gold, 1) * 0.4))}
   .border-gold\/50{border-color:rgb(var(--wc-gold) / calc(var(--wa-gold, 1) * 0.5))}
@@ -59,6 +60,7 @@
   .border-up\/15{border-color:rgb(var(--wc-up) / calc(var(--wa-up, 1) * 0.15))}
   .border-up\/25{border-color:rgb(var(--wc-up) / calc(var(--wa-up, 1) * 0.25))}
   .border-up\/40{border-color:rgb(var(--wc-up) / calc(var(--wa-up, 1) * 0.4))}
+  .border-white\/20{border-color:rgb(255 255 255 / 0.2)}
   .bg-amber-400\/90{background-color:rgb(252 187 0 / 0.9)}
   .bg-background\/40{background-color:rgb(var(--wc-background) / calc(var(--wa-background, 1) * 0.4))}
   .bg-background\/60{background-color:rgb(var(--wc-background) / calc(var(--wa-background, 1) * 0.6))}
@@ -73,6 +75,7 @@
   .bg-black\/40{background-color:rgb(0 0 0 / 0.4)}
   .bg-black\/45{background-color:rgb(0 0 0 / 0.45)}
   .bg-black\/50{background-color:rgb(0 0 0 / 0.5)}
+  .bg-black\/55{background-color:rgb(0 0 0 / 0.55)}
   .bg-card\/90{background-color:rgb(var(--wc-card) / calc(var(--wa-card, 1) * 0.9))}
   .bg-destructive\/10{background-color:rgb(var(--wc-destructive) / calc(var(--wa-destructive, 1) * 0.1))}
   .bg-destructive\/15{background-color:rgb(var(--wc-destructive) / calc(var(--wa-destructive, 1) * 0.15))}
@@ -81,6 +84,7 @@
   .bg-down\/12{background-color:rgb(var(--wc-down) / calc(var(--wa-down, 1) * 0.12))}
   .bg-down\/15{background-color:rgb(var(--wc-down) / calc(var(--wa-down, 1) * 0.15))}
   .bg-down\/70{background-color:rgb(var(--wc-down) / calc(var(--wa-down, 1) * 0.7))}
+  .bg-emerald-500\/20{background-color:rgb(0 187 127 / 0.2)}
   .bg-foreground\/15{background-color:rgb(var(--wc-foreground) / calc(var(--wa-foreground, 1) * 0.15))}
   .bg-foreground\/\[0\.03\]{background-color:rgb(var(--wc-foreground) / calc(var(--wa-foreground, 1) * 0.03))}
   .bg-foreground\/\[0\.04\]{background-color:rgb(var(--wc-foreground) / calc(var(--wa-foreground, 1) * 0.04))}
@@ -117,6 +121,7 @@
   .bg-\[radial-gradient\(circle\,color-mix\(in_oklch\,var\(--up\)_10\%\,transparent\)\,transparent_70\%\)\]{background-image:radial-gradient(circle,rgb(var(--wc-up) / calc(var(--wa-up, 1) * 0.1)),transparent 70%)}
   .from-black\/45{--tw-gradient-from:rgb(0 0 0 / 0.45)}
   .from-black\/60{--tw-gradient-from:rgb(0 0 0 / 0.6)}
+  .from-black\/70{--tw-gradient-from:rgb(0 0 0 / 0.7)}
   .from-up\/15{--tw-gradient-from:rgb(var(--wc-up) / calc(var(--wa-up, 1) * 0.15))}
   .from-up\/70{--tw-gradient-from:rgb(var(--wc-up) / calc(var(--wa-up, 1) * 0.7))}
   .via-black\/10{--tw-gradient-via:rgb(0 0 0 / 0.1)}
@@ -202,6 +207,7 @@
   .blur-3xl{filter:blur(var(--blur-3xl))}
   .blur-md{filter:blur(var(--blur-md))}
   .drop-shadow{filter:drop-shadow(0 1px 2px var(--tw-drop-shadow-color,#0000001a)) drop-shadow(0 1px 1px var(--tw-drop-shadow-color,#0000000f)) drop-shadow(0 1px 2px #0000001a) drop-shadow(0 1px 1px #0000000f)}
+  .drop-shadow-\[0_0_18px_rgba\(56\,232\,255\,0\.7\)\]{filter:drop-shadow(0 0 18px var(--tw-drop-shadow-color,#38e8ffb3)) var(--tw-drop-shadow-size)}
   .drop-shadow-\[0_2px_6px_rgba\(0\,0\,0\,0\.45\)\]{filter:drop-shadow(0 2px 6px var(--tw-drop-shadow-color,#00000073)) var(--tw-drop-shadow-size)}
   .drop-shadow-\[0_2px_6px_rgba\(0\,0\,0\,0\.55\)\]{filter:drop-shadow(0 2px 6px var(--tw-drop-shadow-color,#0000008c)) var(--tw-drop-shadow-size)}
   .drop-shadow-\[0_2px_8px_rgba\(0\,0\,0\,0\.6\)\]{filter:drop-shadow(0 2px 8px var(--tw-drop-shadow-color,#0009)) var(--tw-drop-shadow-size)}

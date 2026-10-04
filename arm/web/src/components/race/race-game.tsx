@@ -24,7 +24,7 @@ const CAR_NAMES: Record<PlayerCar, [string, string]> = {
 const practiceText = (why: "runs" | "ip" | "balance" | null, zh: boolean) =>
   why === "balance" ? (zh ? "余额不足 10，这局是练习，不扣不奖" : "Balance under 10: practice run, no fee, no reward")
   : why === "ip" ? (zh ? "这个网络今天的计分局数满了，这局是练习" : "This network used up today's ranked runs: practice run")
-  : (zh ? "今天 10 局计分用完了（快艇和赛车合计），这局是练习，明天 0 点再来" : "Today's 10 ranked runs (boat + race) are used: practice run. Back at 00:00 UTC+8");
+  : (zh ? "今天 10 局计分用完了（几款游戏合计），这局是练习，明天 0 点再来" : "Today's 10 ranked runs (all games) are used: practice run. Back at 00:00 UTC+8");
 
 export default function RaceGame() {
   const { locale } = useApp();
