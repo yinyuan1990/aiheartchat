@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { formatUnits } from "viem";
-import { ArrowDown, ArrowUp, ArrowsLeftRight, CaretDown, CheckCircle, Copy, Eye, EyeSlash, GasPump, GearSix, Key, Lock, PencilSimple, Plus, ArrowSquareOut, Scan, Trash, Wallet as WalletIcon } from "@phosphor-icons/react";
+import { ArrowDown, ArrowUp, ArrowsLeftRight, CaretDown, CheckCircle, Copy, Eye, EyeSlash, GasPump, Key, PencilSimple, Plus, ArrowSquareOut, Scan, Trash, Wallet as WalletIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { TokenAvatar, WalletDot } from "@/components/shared";
 import { useWallet } from "@/lib/api";
@@ -26,7 +26,7 @@ const price = (p: number) => (p >= 1 ? usd(p) : `$${fmtSmall(p)}`);
 const noSubscribe = () => () => {};
 
 export default function WalletHome() {
-  const { active, chain, setChain, wallets, switchTo, lock, address } = useVault();
+  const { active, chain, setChain, wallets, switchTo, address } = useVault();
   const { assets, total, change, loading: loadingAssets } = useAssets(chain, address);
   const noSol = (isSolana(chain) || isTon(chain)) && !address && active?.kind === "key";
   const loading = loadingAssets && !noSol;
@@ -75,12 +75,6 @@ export default function WalletHome() {
               <Scan size={21} />
             </IconButton>
           )}
-          <IconButton label="锁定" onClick={lock}>
-            <Lock size={21} />
-          </IconButton>
-          <Link href="/wallet/me" aria-label="设置" className="flex size-10 items-center justify-center rounded-full text-foreground/80 transition active:scale-90 hover:bg-muted">
-            <GearSix size={22} />
-          </Link>
         </div>
       </header>
 

@@ -32,7 +32,7 @@ import { aiAnalyze, aiTest } from "./aibot/manual.js";
 import { botControl, botGet, botStart, botUpdate } from "./aibot/bots.js";
 import { calloutCaller, calloutCallers, calloutFeed, pinCaller } from "./callouts.js";
 import { isMint, pumpCandles, pumpCoin, pumpHolders, pumpList, pumpTrades } from "./pump.js";
-import { isEvmAddr, isMarketChain, kyberBuild, kyberQuote, marketCandles, marketList, marketPrices, marketSearch, marketToken, marketTrades } from "./markets.js";
+import { isEvmAddr, isMarketChain, kyberBuild, kyberQuote, marketCandles, marketList, marketPrices, marketSearch, marketToken, marketTrades, type MarketPrice } from "./markets.js";
 
 export const app = new Hono();
 // paged list endpoints report the full row count in X-Total-Count; expose it so the browser can read it
@@ -772,7 +772,8 @@ app.post("/api/view", async (c) => {
 
 // EVM token markets for the wallet (markets.ts): GeckoTerminal lists / candles / trades, DexScreener details, Kyber routes
 const mktRoute = <T>(load: () => Promise<T>) => load().then((v) => ({ ok: true as const, v })).catch((e: { status?: number; message?: string }) => ({ ok: false as const, status: (e.status === 404 ? 404 : 502) as 404 | 502, error: e.message ?? "upstream error" }));
-app.use("/api/mkt/:chain/*", async (c, next) => (isMarketChain(c.req.param("chain")) ? next() : c.json({ error: "unknown chain" }, 400)));
+// prices also cover Arc (own index) and TRON (DexScreener) for hand-added tokens
+app.use("/api/mkt/:chain/*", async (c, next) => (isMarketChain(c.req.param("chain")) || (c.req.path.endsWith("/prices") && ["arc", "tron"].includes(c.req.param("chain"))) ? next() : c.json({ error: "unknown chain" }, 400)));
 app.get("/api/mkt/:chain/coins", async (c) => {
   const chain = c.req.param("chain");
   const q = c.req.query("q") ?? "";
@@ -798,7 +799,23 @@ app.get("/api/mkt/:chain/trades", async (c) => {
   const r = await mktRoute(() => marketTrades(c.req.param("chain"), pool, token));
   return r.ok ? c.json(r.v) : c.json({ error: r.error }, r.status);
 });
-app.get("/api/mkt/:chain/prices", async (c) => c.json(await marketPrices(c.req.param("chain"), (c.req.query("addrs") ?? "").split(","))));
+app.get("/api/mkt/:chain/prices", async (c) => {
+  const addrs = (c.req.query("addrs") ?? "").split(",");
+  if (c.req.param("chain") !== "arc") return c.json(await marketPrices(c.req.param("chain"), addrs));
+  // Arc: Arm tokens from our own index (DexScreener does not cover Arc); keys lowercase like the EVM chains
+  const list = [...new Set(addrs.filter(isEvmAddr).map((a) => getAddress(a)))].slice(0, 60);
+  const rows = list.length
+    ? await sql`select t.address, t.symbol, t.name, t.logo, t.last_price,
+        (select price from trades where token = t.address and ts <= now() - interval '24 hours' order by ts desc limit 1) as price_24h_ago
+        from tokens t where t.address in ${sql(list)}`
+    : [];
+  const out: Record<string, MarketPrice | null> = Object.fromEntries(list.map((a) => [a.toLowerCase(), null]));
+  for (const r of rows) {
+    const price = Number(r.last_price), ago = Number(r.price_24h_ago);
+    out[String(r.address).toLowerCase()] = { priceUsd: price || null, change24h: ago ? ((price - ago) / ago) * 100 : null, symbol: r.symbol, name: r.name, image: r.logo || null };
+  }
+  return c.json(out);
+});
 app.get("/api/mkt/:chain/quote", async (c) => {
   const r = await kyberQuote(c.req.param("chain"), c.req.query());
   return c.json(r.json as object, r.status as 200);

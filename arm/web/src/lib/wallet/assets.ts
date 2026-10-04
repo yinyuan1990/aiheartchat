@@ -178,6 +178,11 @@ function useArcAssets(address?: Address, enabled = true): { assets: Asset[]; loa
     queryFn: () => Promise.all(added.map((t) => publicClientFor(chainByKey("arc")).readContract({ address: t.address as Address, abi: erc20Abi, functionName: "balanceOf", args: [address!] }).catch(() => 0n))),
     refetchInterval: 20_000,
   });
+  const addedPx = useMarketPrices(
+    "arc",
+    added.map((t) => t.address),
+    enabled,
+  );
   const assets: Asset[] = [];
   if (w.data) {
     const raw = BigInt(w.data.usdcBalance);
@@ -211,7 +216,10 @@ function useArcAssets(address?: Address, enabled = true): { assets: Asset[]; loa
     added.forEach((t, i) => {
       if (assets.some((a) => a.token?.toLowerCase() === t.address.toLowerCase())) return;
       const raw = addedBal.data?.[i] ?? 0n;
-      assets.push({ id: t.address, symbol: t.symbol, name: t.name, logo: iconUrl(t.image), seed: t.address, decimals: t.decimals, raw, amount: Number(formatUnits(raw, t.decimals)), priceUsd: null, valueUsd: null, change24h: null, token: getAddress(t.address) });
+      const amount = Number(formatUnits(raw, t.decimals));
+      const p = addedPx.data?.[t.address.toLowerCase()];
+      const price = p?.priceUsd ?? null;
+      assets.push({ id: t.address, symbol: t.symbol, name: t.name, logo: iconUrl(t.image ?? p?.image), seed: t.address, decimals: t.decimals, raw, amount, priceUsd: price, valueUsd: price != null ? amount * price : null, change24h: p?.change24h ?? null, token: getAddress(t.address) });
     });
   }
   return { assets, loading: w.isLoading, error: w.isError };
@@ -252,7 +260,7 @@ function useEvmAssets(chain: WalletChain, address?: Address, enabled = true) {
       const raw = q.data!.tokens[i] ?? 0n;
       if (raw === 0n && !t.added) return;
       const amount = Number(formatUnits(raw, t.decimals));
-      const p = mp.data?.[t.address];
+      const p = mp.data?.[t.address.toLowerCase()];
       const price = p?.priceUsd ?? null;
       assets.push({ id: t.address, symbol: t.symbol, name: t.name, logo: iconUrl(p?.image ?? t.image), seed: t.address, decimals: t.decimals, raw, amount, priceUsd: price, valueUsd: price != null ? amount * price : null, change24h: p?.change24h ?? null, token: getAddress(t.address), market: true });
     });
@@ -274,6 +282,11 @@ function useTronAssets(owner?: string, enabled = true): { assets: Asset[]; loadi
     queryFn: () => tronAccount(owner!, tokens.map((t) => t.address)),
     refetchInterval: 30_000,
   });
+  const addedPx = useMarketPrices(
+    "tron",
+    added.map((t) => t.address),
+    enabled,
+  );
   const assets: Asset[] = [];
   if (q.data) {
     const p = prices.data?.tron;
@@ -282,8 +295,10 @@ function useTronAssets(owner?: string, enabled = true): { assets: Asset[]; loadi
     for (const t of tokens) {
       const raw = q.data.trc20[t.address] ?? 0n;
       const amount = Number(formatUnits(raw, t.decimals));
-      const usd = t.address === USDT_TRC20 ? 1 : null;
-      assets.push({ id: t.address, symbol: t.symbol, name: t.name, logo: t.image ?? undefined, seed: t.address, decimals: t.decimals, raw, amount, priceUsd: usd, valueUsd: usd != null ? amount : null, change24h: usd != null ? 0 : null, trc20: t.address });
+      const usdt = t.address === USDT_TRC20;
+      const m = usdt ? null : addedPx.data?.[t.address];
+      const usd = usdt ? 1 : (m?.priceUsd ?? null);
+      assets.push({ id: t.address, symbol: t.symbol, name: t.name, logo: t.image ?? (m?.image ? iconUrl(m.image) : undefined), seed: t.address, decimals: t.decimals, raw, amount, priceUsd: usd, valueUsd: usd != null ? amount * usd : null, change24h: usdt ? 0 : (m?.change24h ?? null), trc20: t.address });
     }
   }
   return { assets, loading: q.isLoading, error: q.isError };

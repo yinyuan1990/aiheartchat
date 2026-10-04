@@ -262,7 +262,10 @@ function bestPair(pairs: DsPair[], token: string): DsPair | null {
   return (own.length ? own : pairs).sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0))[0] ?? null;
 }
 
-const dsTokens = (chain: string, addrs: string[]) => getJson<DsPair[]>(`${DS}/tokens/v1/${CHAINS[chain].ds}/${addrs.join(",")}`);
+/** chains priced through DexScreener only (no lists / trading here) */
+const DS_ONLY: Record<string, string> = { tron: "tron" };
+const isTronAddr = (s: string) => /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(s);
+const dsTokens = (chain: string, addrs: string[]) => getJson<DsPair[]>(`${DS}/tokens/v1/${CHAINS[chain]?.ds ?? DS_ONLY[chain]}/${addrs.join(",")}`);
 
 export type MarketToken = {
   address: string;
@@ -372,16 +375,21 @@ export async function marketSearch(chain: string, q: string): Promise<MarketRow[
 
 export type MarketPrice = { priceUsd: number | null; change24h: number | null; symbol: string; name: string; image: string | null };
 
-/** Prices for the wallet's asset list (tokens bought through the 交易 tab), 30 per DexScreener call. */
+/**
+ * Prices for the wallet's asset list (tokens bought through the 交易 tab or added by hand), 30 per DexScreener call.
+ * Keys are lowercase for EVM chains; TRON addresses are case-sensitive and come back as sent.
+ */
 export async function marketPrices(chain: string, addrs: string[]): Promise<Record<string, MarketPrice | null>> {
-  const want = [...new Set(addrs.map((a) => a.toLowerCase()).filter(isEvmAddr))].slice(0, 60);
+  const tron = chain === "tron";
+  if (!tron && !isMarketChain(chain)) return {};
+  const want = [...new Set(addrs.map((a) => (tron ? a.trim() : a.toLowerCase())).filter(tron ? isTronAddr : isEvmAddr))].slice(0, 60);
   const out: Record<string, MarketPrice | null> = {};
   for (let i = 0; i < want.length; i += 30) {
     const chunk = want.slice(i, i + 30);
     const pairs = await cached(`prices:${chain}:${chunk.join(",")}`, 30_000, () => dsTokens(chain, chunk)).catch(() => [] as DsPair[]);
     for (const a of chunk) {
       const p = bestPair(
-        pairs.filter((x) => x.baseToken.address.toLowerCase() === a),
+        pairs.filter((x) => x.baseToken.address.toLowerCase() === a.toLowerCase()),
         a,
       );
       out[a] = p ? { priceUsd: num(p.priceUsd), change24h: num(p.priceChange?.h24), symbol: p.baseToken.symbol, name: p.baseToken.name, image: p.info?.imageUrl ?? null } : null;
