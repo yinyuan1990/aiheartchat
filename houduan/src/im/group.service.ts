@@ -291,6 +291,13 @@ export class GroupService {
     return this.getGroup(operatorId, groupId);
   }
 
+  /** 系统换群头像（币群头像转存好之后），群成员刷新会话列表 */
+  async setAvatar(groupId: bigint, avatar: string) {
+    await this.prisma.chatGroup.update({ where: { id: groupId }, data: { avatar } });
+    const members = await this.prisma.groupMember.findMany({ where: { groupId }, select: { userId: true } });
+    this.notifyConvRefresh(members.map((m) => m.userId));
+  }
+
   private async mustGroup(groupId: bigint) {
     const group = await this.prisma.chatGroup.findUnique({ where: { id: groupId } });
     if (!group || group.status !== 0) throw new NotFoundException('群不存在');

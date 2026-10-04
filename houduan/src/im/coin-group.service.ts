@@ -4,6 +4,7 @@ import { Wallet } from 'ethers';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto.service';
 import { GroupService } from './group.service';
+import { CoinAvatarService } from './coin-avatar.service';
 import { cleanText, isCardChain, isPerpCoin } from './card-content';
 
 /**
@@ -29,6 +30,7 @@ export class CoinGroupService {
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
     private readonly groups: GroupService,
+    private readonly avatars: CoinAvatarService,
   ) {}
 
   private ownerId: bigint | null = null;
@@ -87,18 +89,20 @@ export class CoinGroupService {
     }
     const address = chain === 'sol' || perp ? raw : raw.toLowerCase();
 
+    const image = typeof b.image === 'string' && /^https:\/\/[^\s"'<>]{1,240}$/.test(b.image) ? b.image : '';
+    const avatarJob = (groupId: bigint) => ({ groupId, key: `${chain}:${address}`, perp, symbol: perp ? raw : cleanText(b.symbol, 20) || '?', name: cleanText(b.name, 40), image });
     let row = await this.prisma.coinGroup.findUnique({ where: { chain_address: { chain, address } } });
     if (row) {
-      const g = await this.prisma.chatGroup.findUnique({ where: { id: row.groupId }, select: { status: true } });
+      const g = await this.prisma.chatGroup.findUnique({ where: { id: row.groupId }, select: { status: true, avatar: true } });
       // 后台封了这个群：不能再进，也不重建
       if (!g || g.status !== 0) throw new BadRequestException('这个币的讨论群已关闭');
+      this.avatars.ensure(avatarJob(row.groupId), g.avatar);
     } else {
       const recent = await this.prisma.coinGroup.count({ where: { creatorId: userId, createdAt: { gt: new Date(Date.now() - 86_400_000) } } });
       if (recent >= NEW_PER_DAY) throw new BadRequestException('今天新建的币群太多了，明天再来');
       if (perp && !(await this.perpExists(raw))) throw new BadRequestException('Hyperliquid 上没有这个合约');
       const symbol = perp ? raw : cleanText(b.symbol, 20) || '?';
       const name = cleanText(b.name, 40);
-      const image = typeof b.image === 'string' && /^https:\/\/[^\s"'<>]{1,240}$/.test(b.image) ? b.image : '';
       const owner = await this.systemOwner();
       const created = await this.groups.createGroup(owner, (perp ? `${symbol} 合约群` : `$${symbol} 讨论群`).slice(0, 50), [userId], image);
       const groupId = BigInt(created.id);
@@ -108,6 +112,7 @@ export class CoinGroupService {
       await this.prisma.chatGroup.update({ where: { id: groupId }, data: { memberLimit: MEMBER_LIMIT, notice: notice.slice(0, 500) } });
       try {
         row = await this.prisma.coinGroup.create({ data: { chain, address, groupId, creatorId: userId } });
+        this.avatars.ensure(avatarJob(groupId));
       } catch {
         // 两个人同时点：留先建好的那个，刚建的群作废
         await this.prisma.chatGroup.update({ where: { id: groupId }, data: { status: 1 } }).catch(() => {});
