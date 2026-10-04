@@ -10,6 +10,7 @@ import { RedisService } from '../redis/redis.service';
 import { UploadService } from '../upload/upload.service';
 import { ConnectionRegistry } from './connection.registry';
 import { ChannelService } from './channel.service';
+import { BotAvatarService } from './bot-avatar.service';
 
 /**
  * 机器人平台（Telegram Bot API 兼容）：
@@ -64,6 +65,7 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
     private readonly redis: RedisService,
     private readonly uploads: UploadService,
     private readonly channels: ChannelService,
+    private readonly avatars: BotAvatarService,
   ) {}
 
   onModuleInit() {
@@ -105,6 +107,7 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
     const token = this.genToken(user.id);
     try {
       const bot = await this.prisma.bot.create({ data: { id: user.id, ownerId, username, description, tokenHash: this.hash(token) } });
+      if (!user.avatar) this.avatars.ensure(user.id);
       return { ...this.view(bot, user), token };
     } catch (e) {
       await this.prisma.user.update({ where: { id: user.id }, data: { status: 1 } });
