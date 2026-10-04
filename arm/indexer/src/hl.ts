@@ -64,6 +64,29 @@ export async function hlInfo(body: unknown, ip: string): Promise<Reply> {
   }
 }
 
+/** Latest mids for a few coins: one shared allMids fetch a second for everybody, a few bytes per phone (live chart tick) */
+let mids: { at: number; v: Record<string, string> } | null = null;
+let midsInflight: Promise<Record<string, string>> | null = null;
+export async function hlMids(coins: string[]): Promise<Reply> {
+  if (!mids || Date.now() - mids.at > 1_000) {
+    midsInflight ??= post(`${HL}/info`, { type: "allMids" })
+      .then((r) => {
+        if (r.status !== 200) throw new Error(`HTTP ${r.status}`);
+        mids = { at: Date.now(), v: r.json as Record<string, string> };
+        return mids.v;
+      })
+      .finally(() => (midsInflight = null));
+    try {
+      await midsInflight;
+    } catch (e) {
+      if (!mids) return { status: 502, json: { error: (e as Error).message.slice(0, 120) } };
+    }
+  }
+  const out: Record<string, number> = {};
+  for (const c of coins.slice(0, 10)) if (mids!.v[c]) out[c] = Number(mids!.v[c]);
+  return { status: 200, json: { at: mids!.at, mids: out } };
+}
+
 export async function hlExchange(body: unknown, ip: string): Promise<Reply> {
   const b = body as { action?: { type?: unknown }; nonce?: unknown; signature?: { r?: unknown; s?: unknown; v?: unknown } };
   if (!b?.action || typeof b.action.type !== "string" || typeof b.nonce !== "number" || typeof b.signature?.r !== "string") return { status: 400, json: { error: "bad request" } };

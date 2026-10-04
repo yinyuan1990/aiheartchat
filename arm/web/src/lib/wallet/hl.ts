@@ -170,11 +170,21 @@ export async function assets(maxAgeMs = 3_000): Promise<HlAsset[]> {
 }
 
 export type Candle = { t: number; o: number; h: number; l: number; c: number; v: number };
-export async function candles(coin: string, interval: "15m" | "1h" | "4h" | "1d", count: number): Promise<Candle[]> {
-  const ms = { "15m": 900_000, "1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000 }[interval];
-  const end = Date.now();
+export const CANDLE_MS = { "1m": 60_000, "5m": 300_000, "15m": 900_000, "1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000 } as const;
+export type CandleInterval = keyof typeof CANDLE_MS;
+export async function candles(coin: string, interval: CandleInterval, count: number): Promise<Candle[]> {
+  const ms = CANDLE_MS[interval];
+  // rounded up to the minute so everybody's request is the same one the relay already cached
+  const end = Math.ceil(Date.now() / 60_000) * 60_000;
   const rows = await info<{ t: number; o: string; h: string; l: string; c: string; v: string }[]>({ type: "candleSnapshot", req: { coin, interval, startTime: end - ms * count, endTime: end } });
   return rows.map((r) => ({ t: r.t, o: +r.o, h: +r.h, l: +r.l, c: +r.c, v: +r.v }));
+}
+
+/** Latest mid prices (the relay refreshes them once a second for everybody) */
+export async function mids(coins: string[]): Promise<Record<string, number>> {
+  const r = await fetch(`${HL_API}/mids?coins=${encodeURIComponent(coins.join(","))}`);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return ((await r.json()) as { mids: Record<string, number> }).mids;
 }
 
 // ---------- account ----------

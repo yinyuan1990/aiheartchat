@@ -7,12 +7,13 @@ import { ArrowDown, ArrowUp, CaretDown, CheckCircle, Robot, Sparkle } from "@pho
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { storeRead, storeWrite } from "@/lib/wallet/native";
-import { HL_BUILDER, account, agentActive, agentExtraKey, approveAgent, approveBuilder, assets, builderApproved, cancelOrder, candles, closePosition, newAgent, openOrders, openPosition, parseAgent, setLeverage, type HlAsset, type HlPosition } from "@/lib/wallet/hl";
+import { HL_BUILDER, account, agentActive, agentExtraKey, approveAgent, approveBuilder, assets, builderApproved, cancelOrder, closePosition, newAgent, openOrders, openPosition, parseAgent, setLeverage, type HlAsset, type HlPosition } from "@/lib/wallet/hl";
 import { AI_CONFIG_KEY, analyze, parseAiConfig, type AiConfig, type AiResult } from "@/lib/wallet/ai-trade";
 import { useVault } from "@/components/wallet/wallet-context";
 import { AI_GRADIENT, AiCard, AiSettingsSheet, CoinPicker, DepositSheet, RiskGate, Spinner, WithdrawSheet, px, usd } from "@/components/wallet/perp-parts";
 import { BottomNav, BottomSheet, GhostButton, IconButton, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
 import { HostedCard } from "@/components/wallet/aibot-parts";
+import { PerpChart, type ChartLine } from "@/components/wallet/perp-chart";
 
 type Sheet = null | "risk" | "deposit" | "withdraw" | "ai" | "coin" | "confirm" | "close";
 type LogItem = { at: number; coin: string; action: string; price: number; confidence: number; summary: string };
@@ -49,7 +50,6 @@ export default function PerpPage() {
   const asset = list.data?.find((a) => a.name === coin);
   const acctQ = useQuery({ queryKey: ["hl", "acct", user], queryFn: () => account(user!), enabled: !!user, refetchInterval: 5_000 });
   const ordersQ = useQuery({ queryKey: ["hl", "orders", user], queryFn: () => openOrders(user!), enabled: !!user, refetchInterval: 8_000 });
-  const spark = useQuery({ queryKey: ["hl", "spark", coin], queryFn: () => candles(coin, "1h", 48), refetchInterval: 60_000 });
   const acct = acctQ.data;
   const available = acct?.available ?? 0;
   const funded = !!acct && (acct.equity > 0 || acct.positions.length > 0);
@@ -211,8 +211,16 @@ export default function PerpPage() {
     toast.success("AI 设置已保存");
   };
 
-  const ch = asset && asset.prevDay ? (asset.mark / asset.prevDay - 1) * 100 : 0;
   const myOrders = ordersQ.data ?? [];
+  const [live, setLive] = useState<{ coin: string; px: number } | null>(null);
+  const setLivePx = (px: number) => setLive({ coin, px });
+  const shownPx = live?.coin === coin ? live.px : asset?.mark;
+  const ch = asset && asset.prevDay && shownPx ? (shownPx / asset.prevDay - 1) * 100 : 0;
+  const myPos = acct?.positions.find((p) => p.coin === coin);
+  const chartLines: ChartLine[] = [
+    ...(myPos ? [{ price: myPos.entry, color: "#3b82f6", title: "开仓" }, { price: myPos.liq ?? 0, color: "#f59e0b", title: "强平" }] : []),
+    ...myOrders.filter((o) => o.coin === coin && o.trigger).map((o) => ({ price: o.triggerPx ?? 0, color: o.trigger === "tp" ? "#16a34a" : "#dc2626", title: o.trigger === "tp" ? "止盈" : "止损" })),
+  ];
 
   return (
     <WalletFrame>
@@ -271,14 +279,14 @@ export default function PerpPage() {
             </button>
             <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">最高 {maxLev}x</span>
             <span className="ml-auto text-right">
-              <span className="block font-mono text-[18px] font-semibold">{asset ? px(asset.mark) : "…"}</span>
+              <span className="block font-mono text-[18px] font-semibold">{shownPx ? px(shownPx) : "…"}</span>
               <span className={cn("block font-mono text-[12px]", ch >= 0 ? "text-up" : "text-down")}>
                 {ch >= 0 ? "+" : ""}
                 {ch.toFixed(2)}%
               </span>
             </span>
           </div>
-          <Spark data={spark.data?.map((c) => c.c) ?? []} up={ch >= 0} />
+          <PerpChart coin={coin} lines={chartLines} onPrice={setLivePx} className="mt-3 -mx-1" />
           <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-muted-foreground">
             <span>
               资金费 <b className="font-mono text-foreground">{asset ? (asset.funding * 100).toFixed(4) : "…"}%</b>/时
@@ -586,17 +594,6 @@ const Line = ({ k, v }: { k: string; v: string }) => (
     <span className="font-mono text-foreground">{v}</span>
   </div>
 );
-
-function Spark({ data, up }: { data: number[]; up: boolean }) {
-  if (data.length < 2) return <div className="mt-3 h-16 animate-pulse rounded-xl bg-muted/60" />;
-  const lo = Math.min(...data), hi = Math.max(...data);
-  const pts = data.map((v, i) => `${(i / (data.length - 1)) * 300},${58 - ((v - lo) / (hi - lo || 1)) * 52}`).join(" ");
-  return (
-    <svg viewBox="0 0 300 60" className="mt-3 h-16 w-full" preserveAspectRatio="none">
-      <polyline points={pts} fill="none" stroke={up ? "var(--up, #16a34a)" : "var(--down, #dc2626)"} strokeWidth="2" vectorEffect="non-scaling-stroke" />
-    </svg>
-  );
-}
 
 function Confirm(p: { asset: HlAsset; isLong: boolean; type: string; price: number; margin: number; lev: number; notional: number; size: number; tp: number; sl: number; liq: number; busy: boolean; onCancel: () => void; onOk: () => void }) {
   return (
