@@ -1,0 +1,231 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0 }
+html, body { width: 1080px; height: 1920px; overflow: hidden; background: #04060a; font-family: "Microsoft YaHei", "Segoe UI", sans-serif; color: #fff }
+.bg { position: absolute; inset: 0; overflow: hidden }
+.blob { position: absolute; border-radius: 50%; filter: blur(140px); opacity: .30 }
+.b1 { width: 1000px; height: 1000px; background: #00e676; left: -460px; top: -320px; animation: d1 13s ease-in-out infinite alternate }
+.b2 { width: 900px; height: 900px; background: #ff2e88; right: -420px; bottom: 60px; animation: d2 16s ease-in-out infinite alternate }
+@keyframes d1 { to { transform: translate(340px, 560px) scale(1.15) } }
+@keyframes d2 { to { transform: translate(-280px, -600px) scale(.9) } }
+.grid { position: absolute; inset: 0; background-image: linear-gradient(rgba(0,230,118,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(0,230,118,.07) 1px, transparent 1px); background-size: 60px 60px; mask-image: radial-gradient(ellipse at 50% 40%, #000 30%, transparent 75%) }
+.vig { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 45%, transparent 45%, rgba(0,0,0,.75)) }
+
+#stage { position: absolute; inset: 0 }
+.scene { position: absolute; inset: 0; display: none }
+.center { position: absolute; left: 0; right: 0; text-align: center }
+.rise { animation: rise .6s cubic-bezier(.2,.8,.2,1) both; animation-delay: var(--d, 0s) }
+.pop { animation: pop .55s cubic-bezier(.2,.8,.2,1) both; animation-delay: var(--d, 0s) }
+.slam { animation: slam .45s cubic-bezier(.2,.9,.3,1.2) both; animation-delay: var(--d, 0s) }
+@keyframes rise { from { opacity: 0; transform: translateY(60px) } to { opacity: 1; transform: none } }
+@keyframes pop { 0% { opacity: 0; transform: scale(.4) } 60% { opacity: 1; transform: scale(1.08) } 100% { opacity: 1; transform: scale(1) } }
+@keyframes slam { 0% { opacity: 0; transform: scale(2.6) } 100% { opacity: 1; transform: scale(1) } }
+.green { color: #00f07a } .pink { color: #ff2e88 } .gold { color: #ffd166 } .dim { color: rgba(255,255,255,.5) }
+.gg { text-shadow: 0 0 50px rgba(0,240,122,.7) } .pg { text-shadow: 0 0 50px rgba(255,46,136,.8) }
+.huge { font-weight: 900; line-height: 1.05 }
+.num { font-family: "Segoe UI", "Microsoft YaHei"; font-weight: 900; font-variant-numeric: tabular-nums; line-height: 1 }
+.src { font-size: 26px; color: rgba(255,255,255,.4); letter-spacing: 1px; line-height: 1.6 }
+.tag { display: inline-block; border: 3px solid #00f07a; color: #00f07a; border-radius: 14px; padding: 6px 26px; font: 900 42px "Segoe UI", "Microsoft YaHei"; letter-spacing: 4px }
+.chips { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap }
+.chip { padding: 12px 28px; border-radius: 40px; background: rgba(255,255,255,.08); border: 2px solid rgba(255,255,255,.18); font-size: 36px; font-weight: 800 }
+
+.card { position: absolute; left: 70px; right: 70px; padding: 34px 40px; border-radius: 32px; background: rgba(255,255,255,.06); border: 2px solid rgba(255,255,255,.14); display: flex; align-items: center; gap: 32px }
+.card .logo { width: 150px; height: 150px; border-radius: 50%; object-fit: cover; flex: none; border: 4px solid rgba(255,255,255,.2) }
+.card .letter { width: 150px; height: 150px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; font: 900 64px "Segoe UI"; background: linear-gradient(135deg, #00f07a, #ffd166); color: #04140a }
+.card .nm { font-size: 58px; font-weight: 900; line-height: 1.1 }
+.card .meta { font-size: 34px; color: rgba(255,255,255,.6); margin-top: 10px; font-weight: 700 }
+.badge { display: inline-block; font-size: 28px; font-weight: 900; padding: 4px 16px; border-radius: 10px; margin-left: 12px; vertical-align: middle; background: #f0b90b; color: #111 }
+.badge.sol { background: linear-gradient(90deg, #9945ff, #14f195); color: #fff }
+.badge.eth { background: #627eea; color: #fff }
+
+.fund { position: absolute; left: 70px; right: 70px; height: 210px; padding: 0 40px; border-radius: 30px; background: rgba(255,255,255,.06); border: 2px solid rgba(255,255,255,.14); display: flex; align-items: center; gap: 30px }
+.fund img { width: 140px; height: 140px; border-radius: 24px; object-fit: cover; flex: none }
+.fund .t { flex: 1; min-width: 0 }
+.fund .nm { font-size: 46px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.fund .age { font-size: 32px; color: rgba(255,255,255,.55); font-weight: 700; margin-top: 8px }
+.fund .mc { font: 900 64px "Segoe UI", "Microsoft YaHei"; color: #00f07a; text-shadow: 0 0 30px rgba(0,240,122,.5); white-space: nowrap }
+
+.bars { position: absolute; left: 90px; right: 90px; top: 560px }
+.br { margin-bottom: 70px }
+.br .h { display: flex; justify-content: space-between; align-items: baseline; font-size: 50px; font-weight: 900 }
+.br .bar { height: 70px; margin-top: 22px; border-radius: 18px; background: rgba(255,255,255,.08); overflow: hidden }
+.br .bar i { display: block; height: 100%; border-radius: 18px; transform-origin: left; animation: grow 1s cubic-bezier(.2,.8,.2,1) both; animation-delay: var(--d, 0s) }
+@keyframes grow { from { transform: scaleX(0) } to { transform: scaleX(1) } }
+
+#rain { position: absolute; left: 90px; top: 840px; width: 900px; height: 600px }
+#rain i { position: absolute; width: 18px; height: 18px; border-radius: 50%; background: #00f07a; box-shadow: 0 0 12px #00f07a }
+
+.chk { position: absolute; left: 90px; right: 90px; padding: 34px 44px; border-radius: 28px; background: rgba(255,255,255,.06); border: 2px solid rgba(255,255,255,.14); font-size: 64px; font-weight: 900; display: flex; align-items: center; gap: 30px }
+.chk b { width: 90px; height: 90px; border-radius: 50%; background: #00f07a; color: #04140a; display: flex; align-items: center; justify-content: center; font: 900 50px "Segoe UI"; flex: none }
+
+#sub { position: absolute; left: 50px; right: 50px; bottom: 150px; text-align: center }
+#sub span { display: inline-block; background: rgba(0,0,0,.72); border-radius: 18px; padding: 14px 34px; font-size: 52px; font-weight: 900; color: #fff; text-shadow: 0 2px 6px #000; border-bottom: 5px solid #00f07a }
+#flash { position: absolute; inset: 0; opacity: 0; pointer-events: none; background: radial-gradient(circle at 50% 50%, rgba(255,46,136,.08), rgba(255,46,136,.6)) }
+#corner { position: absolute; top: 60px; left: 60px; display: flex; align-items: center; gap: 16px; font: 900 34px "Segoe UI", "Microsoft YaHei"; color: rgba(255,255,255,.75) }
+#corner img { width: 56px; height: 56px; border-radius: 14px }
+</style>
+</head>
+<body>
+<div class="bg" id="bg"><div class="blob b1"></div><div class="blob b2"></div><div class="grid"></div><div class="vig"></div></div>
+<div id="corner"><img src="out/img/arm.png" alt=""><span>MEME 速报 · 10.04</span></div>
+
+<div id="stage">
+<section class="scene" id="s0">
+  <div class="center rise" style="top:430px"><span class="tag">2026 · 10 · 04</span></div>
+  <div class="center slam huge" style="--d:.15s;top:600px;font-size:220px">今日</div>
+  <div class="center slam huge green gg" data-at="meme" style="top:850px;font-size:250px">MEME</div>
+  <div class="center rise" data-at="30秒" style="top:1150px"><div class="chips"><span class="chip">BSC</span><span class="chip">Solana</span><span class="chip">以太坊</span><span class="chip">pump.fun</span></div></div>
+</section>
+
+<section class="scene" id="s1">
+  <div class="card rise" style="top:300px"><div class="letter">GM</div><div><div class="nm">GREEN MORNING<span class="badge">BSC</span></div><div class="meta">$GM · 上线 8 小时</div></div></div>
+  <div class="center rise" data-at="市值" style="top:640px;font-size:52px;font-weight:900" >市值</div>
+  <div class="center" style="top:720px"><span id="c1" class="num green gg" style="font-size:230px">$0</span></div>
+  <div class="center rise" data-at="一天" style="top:1030px;font-size:52px;font-weight:900">24 小时涨幅</div>
+  <div class="center slam" data-at="5000倍" style="top:1110px"><span class="num gold" style="font-size:150px;text-shadow:0 0 50px rgba(255,209,102,.6)">+492,349%</span></div>
+  <div class="center src rise" style="--d:1s;top:1320px">来源：GeckoTerminal（PancakeSwap 池）</div>
+</section>
+
+<section class="scene" id="s2">
+  <div class="center rise huge" style="top:300px;font-size:100px">但是……</div>
+  <div class="bars">
+    <div class="br rise" data-at="池子"><div class="h"><span>市值</span><span class="green num">$1.23 亿</span></div><div class="bar"><i style="width:100%;background:linear-gradient(90deg,#00f07a,#ffd166)"></i></div></div>
+    <div class="br rise" data-at="200万"><div class="h"><span>池子（流动性）</span><span class="pink num">$200 万</span></div><div class="bar"><i style="width:1.6%;background:#ff2e88;box-shadow:0 0 30px #ff2e88"></i></div></div>
+  </div>
+  <div class="center rise dim" data-at="两百万" style="top:1010px;font-size:40px">池子只有市值的 <b class="pink">1.6%</b></div>
+  <div class="center slam huge pink pg" data-at="卖不动" style="top:1120px;font-size:210px">卖不动</div>
+</section>
+
+<section class="scene" id="s3">
+  <div class="center rise huge" style="top:220px;font-size:76px">Solana 在炒</div>
+  <div class="center slam huge pink pg" data-at="假基金" style="top:320px;font-size:150px">「假基金」</div>
+  <div class="fund rise" data-at="世界石油" style="top:560px"><img src="out/img/WOTF.img" alt=""><div class="t"><div class="nm">世界石油信托基金</div><div class="age">$WOTF · 上线 4 天</div></div><div class="mc">$1.59亿</div></div>
+  <div class="fund rise" data-at="全球石油" style="top:800px"><img src="out/img/GOIF.img" alt=""><div class="t"><div class="nm">全球石油机构基金</div><div class="age">$GOIF · 上线 5 天</div></div><div class="mc">$1100万</div></div>
+  <div class="fund rise" data-at="先锋领航" style="top:1040px"><img src="out/img/VWA.img" alt=""><div class="t"><div class="nm">Vanguard 先锋领航</div><div class="age">$VWA · 不到 3 小时</div></div><div class="mc">$540万</div></div>
+  <div class="center src rise" style="--d:1.5s;top:1290px">都是 pump.fun 上的 meme，和真基金没有关系 · 来源：pump.fun</div>
+</section>
+
+<section class="scene" id="s4">
+  <div class="card rise" style="top:300px"><img class="logo" src="out/img/ZC.img" alt=""><div><div class="nm">zipcoin<span class="badge eth">ETH</span></div><div class="meta">$ZC · 市值 $3,320 万</div></div></div>
+  <div class="center rise" style="top:640px;font-size:52px;font-weight:900">24 小时</div>
+  <div class="center" style="top:720px"><span id="c4" class="num green gg" style="font-size:260px">+0%</span></div>
+  <svg class="center" style="top:1040px;left:90px;width:900px" width="900" height="300" viewBox="0 0 900 300"><path id="zline" d="M0 270 L90 255 L170 262 L250 230 L330 238 L410 196 L490 205 L570 150 L650 160 L730 92 L810 70 L900 20" fill="none" stroke="#00f07a" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" style="filter:drop-shadow(0 0 12px #00f07a)"/></svg>
+  <div class="center src rise" style="--d:1s;top:1370px">来源：GeckoTerminal（Uniswap v4 池）</div>
+</section>
+
+<section class="scene" id="s5">
+  <div class="center rise" style="top:260px;font-size:60px;font-weight:900">pump.fun 每分钟发</div>
+  <div class="center" style="top:350px"><span id="c5a" class="num green gg" style="font-size:240px">0</span><span style="font-size:70px;font-weight:900"> 个新币</span></div>
+  <div class="center rise" data-at="一天" style="top:630px"><span style="font-size:56px;font-weight:900">一天 </span><span id="c5b" class="num pink pg" style="font-size:130px">0</span><span style="font-size:56px;font-weight:900"> 个</span></div>
+  <div id="rain"></div>
+  <div class="center src rise" style="--d:1s;top:1480px">按 10.04 傍晚 pump.fun「新币」列表：56 秒 30 个</div>
+</section>
+
+<section class="scene" id="s6">
+  <div class="center rise huge" style="top:380px;font-size:84px">热点换得比翻书还快</div>
+  <div class="center rise huge green gg" data-at="三样" style="top:510px;font-size:110px">追之前，先看三样</div>
+  <div class="chk rise" data-at="池子" style="top:800px"><b>1</b>池子有多深</div>
+  <div class="chk rise" data-at="筹码" style="top:1010px"><b>2</b>筹码在谁手里</div>
+  <div class="chk rise" data-at="喊单" style="top:1220px"><b>3</b>是谁在喊单</div>
+</section>
+
+<section class="scene" id="s7">
+  <div class="center slam huge green gg" data-at="关注我" style="top:420px;font-size:230px">关注我</div>
+  <div class="center rise" data-at="每天" style="top:720px;font-size:80px;font-weight:900">每天一条 <span class="green">MEME 速报</span></div>
+  <div class="center pop" data-at="每天" style="--d:.5s;top:930px"><img src="out/img/logo-arm.png" alt="" style="height:150px;border-radius:30px;background:#fff;padding:14px 34px"></div>
+  <div class="center rise src" data-at="不构成" style="top:1180px">数据：GeckoTerminal · pump.fun · 截至 10.04 19:00（北京时间）<br>仅供参考，不构成投资建议</div>
+</section>
+</div>
+
+<div id="sub"><span></span></div>
+<div id="flash"></div>
+
+<script src="out/meme/timeline.js"></script>
+<script>
+const TL = window.TL;
+const $ = (id) => document.getElementById(id);
+const clamp = (x) => Math.max(0, Math.min(1, x));
+const ease = (x) => 1 - Math.pow(1 - clamp(x), 3);
+const at = (sc, word) => { const i = sc.text.indexOf(word); return i >= 0 ? sc.vo + sc.ct[i] : null };
+
+for (const sc of TL.scenes) {
+  $(sc.id).querySelectorAll('[data-at]').forEach((n) => {
+    const w = at(sc, n.dataset.at);
+    n.style.setProperty('--d', ((w ?? 0) - 0.12).toFixed(2) + 's');
+    n.querySelectorAll('.bar i').forEach((b) => b.style.setProperty('--d', ((w ?? 0) + 0.15).toFixed(2) + 's'));
+  });
+}
+
+// pump 新币雨：一格一个点，按时间陆续亮起
+const rain = [];
+let seed = 7;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+for (let i = 0; i < 600; i++) {
+  const d = document.createElement('i');
+  d.style.left = (i % 30) * 30 + 'px';
+  d.style.top = Math.floor(i / 30) * 30 + 'px';
+  $('rain').appendChild(d);
+  rain.push({ el: d, r: rnd() });
+}
+
+const HITS = { s1: ['5000倍'], s2: ['卖不动'], s3: ['假基金'], s5: ['四万多'] };
+const fmtYi = (v) => (v >= 1 ? '$' + v.toFixed(2) + ' 亿' : '$' + Math.round(v * 10000).toLocaleString() + ' 万');
+
+const hooks = {
+  s1(lt, sc) {
+    const t1 = at(sc, '1.2亿');
+    $('c1').textContent = fmtYi(1.23 * Math.pow(clamp((lt - 0.8) / (t1 - 0.8)), 2));
+  },
+  s4(lt, sc) {
+    const t1 = at(sc, '184%');
+    $('c4').textContent = '+' + Math.round(184 * ease((lt - 0.5) / (t1 - 0.5))) + '%';
+    const p = $('zline'), L = p.getTotalLength();
+    p.style.strokeDasharray = L;
+    p.style.strokeDashoffset = L * (1 - ease((lt - 0.6) / 2.2));
+  },
+  s5(lt, sc) {
+    const t1 = at(sc, '32个'), t2 = at(sc, '四万多');
+    $('c5a').textContent = Math.round(32 * ease((lt - 0.3) / (t1 - 0.3)));
+    $('c5b').textContent = Math.round(46080 * ease((lt - (t1 + 0.3)) / (t2 - t1))).toLocaleString();
+    rain.forEach((d) => {
+      const on = lt > 0.4 + d.r * (sc.dur - 1.2);
+      d.el.style.opacity = on ? 1 : 0;
+      d.el.style.transform = on ? 'scale(1)' : 'scale(0)';
+    });
+  },
+};
+
+function seek(t) {
+  $('bg').getAnimations({ subtree: true }).forEach((a) => { a.pause(); a.currentTime = t * 1000 });
+  let cur = null, curLt = 0;
+  for (const sc of TL.scenes) {
+    const el = $(sc.id), lt = t - sc.start;
+    const on = lt >= 0 && lt < sc.dur;
+    el.style.display = on ? 'block' : 'none';
+    if (!on) continue;
+    cur = sc; curLt = lt;
+    el.getAnimations({ subtree: true }).forEach((a) => { a.pause(); a.currentTime = lt * 1000 });
+    const fin = clamp(lt / 0.18), fout = sc.last ? 1 : clamp((sc.dur - lt) / 0.18);
+    el.style.opacity = Math.min(fin, fout);
+    if (hooks[sc.id]) hooks[sc.id](lt, sc);
+  }
+  let fl = 0;
+  if (cur) for (const w of HITS[cur.id] || []) {
+    const tt = at(cur, w);
+    if (tt !== null && curLt > tt && curLt < tt + 0.5) fl = Math.max(fl, 1 - (curLt - tt) / 0.5);
+  }
+  $('flash').style.opacity = fl * 0.85;
+  const sh = 20 * fl;
+  $('stage').style.translate = `${sh * Math.sin(t * 97)}px ${sh * Math.cos(t * 71)}px`;
+  const sub = TL.subs.find((s) => t >= s.t0 && t < s.t1);
+  $('sub').firstElementChild.textContent = sub ? sub.text : '';
+  $('sub').style.display = sub ? 'block' : 'none';
+}
+window.seek = seek;
+seek(0);
+</script>
+</body>
+</html>

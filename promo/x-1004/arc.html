@@ -1,0 +1,205 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0 }
+html, body { width: 1080px; height: 1920px; overflow: hidden; background: #050914; font-family: "Microsoft YaHei", "Segoe UI", sans-serif; color: #fff }
+.bg { position: absolute; inset: 0; overflow: hidden }
+.blob { position: absolute; border-radius: 50%; filter: blur(150px); opacity: .34 }
+.b1 { width: 1050px; height: 1050px; background: #2775ca; left: -460px; top: -340px; animation: d1 14s ease-in-out infinite alternate }
+.b2 { width: 900px; height: 900px; background: #22d3ee; right: -440px; bottom: 120px; opacity: .2; animation: d2 17s ease-in-out infinite alternate }
+@keyframes d1 { to { transform: translate(320px, 560px) scale(1.12) } }
+@keyframes d2 { to { transform: translate(-260px, -560px) scale(.9) } }
+.lines { position: absolute; inset: 0; background: repeating-linear-gradient(115deg, rgba(120,170,255,.05) 0 2px, transparent 2px 46px); mask-image: radial-gradient(ellipse at 50% 40%, #000 25%, transparent 75%) }
+.vig { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 45%, transparent 45%, rgba(0,0,0,.7)) }
+
+#stage { position: absolute; inset: 0 }
+.scene { position: absolute; inset: 0; display: none }
+.center { position: absolute; left: 0; right: 0; text-align: center }
+.rise { animation: rise .6s cubic-bezier(.2,.8,.2,1) both; animation-delay: var(--d, 0s) }
+.pop { animation: pop .55s cubic-bezier(.2,.8,.2,1) both; animation-delay: var(--d, 0s) }
+.slam { animation: slam .45s cubic-bezier(.2,.9,.3,1.2) both; animation-delay: var(--d, 0s) }
+@keyframes rise { from { opacity: 0; transform: translateY(60px) } to { opacity: 1; transform: none } }
+@keyframes pop { 0% { opacity: 0; transform: scale(.4) } 60% { opacity: 1; transform: scale(1.08) } 100% { opacity: 1; transform: scale(1) } }
+@keyframes slam { 0% { opacity: 0; transform: scale(2.6) } 100% { opacity: 1; transform: scale(1) } }
+.blue { color: #5ea8ff } .cyan { color: #3ee6ff } .btc { color: #f7931a } .dim { color: rgba(255,255,255,.55) }
+.bg2 { text-shadow: 0 0 50px rgba(62,140,255,.75) } .cg { text-shadow: 0 0 50px rgba(62,230,255,.7) }
+.huge { font-weight: 900; line-height: 1.05 }
+.num { font-family: "Segoe UI", "Microsoft YaHei"; font-weight: 900; font-variant-numeric: tabular-nums; line-height: 1 }
+.src { font-size: 26px; color: rgba(255,255,255,.42); letter-spacing: 1px; line-height: 1.6 }
+.tag { display: inline-block; border: 3px solid #5ea8ff; color: #5ea8ff; border-radius: 14px; padding: 6px 26px; font: 900 42px "Segoe UI", "Microsoft YaHei"; letter-spacing: 3px }
+.chips { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap }
+.chip { padding: 14px 30px; border-radius: 40px; background: rgba(94,168,255,.12); border: 2px solid rgba(94,168,255,.4); font-size: 40px; font-weight: 800 }
+
+.panel { position: absolute; left: 70px; right: 70px; padding: 36px 44px; border-radius: 32px; background: rgba(255,255,255,.06); border: 2px solid rgba(120,170,255,.22) }
+.row { display: flex; justify-content: space-between; align-items: baseline }
+.row .k { font-size: 46px; font-weight: 800; color: rgba(255,255,255,.75) }
+.row .v { font: 900 96px "Segoe UI", "Microsoft YaHei" }
+
+.fund { position: absolute; left: 70px; right: 70px; padding: 30px 40px; border-radius: 28px; background: rgba(255,255,255,.06); border: 2px solid rgba(120,170,255,.22); display: flex; align-items: center; gap: 30px }
+.fund .tk { width: 210px; flex: none; font: 900 52px "Segoe UI"; color: #3ee6ff }
+.fund .nm { font-size: 50px; font-weight: 900 }
+.fund .who { font-size: 32px; color: rgba(255,255,255,.55); font-weight: 700; margin-top: 6px }
+
+.feat { display: inline-flex; align-items: center; gap: 14px; margin: 12px; padding: 22px 38px; border-radius: 28px; font-size: 52px; font-weight: 900; background: rgba(255,255,255,.07); border: 3px solid rgba(255,255,255,.25) }
+
+#sub { position: absolute; left: 50px; right: 50px; bottom: 150px; text-align: center }
+#sub span { display: inline-block; background: rgba(0,0,0,.72); border-radius: 18px; padding: 14px 34px; font-size: 52px; font-weight: 900; color: #fff; text-shadow: 0 2px 6px #000; border-bottom: 5px solid #5ea8ff }
+#flash { position: absolute; inset: 0; opacity: 0; pointer-events: none; background: radial-gradient(circle at 50% 50%, rgba(62,170,255,.08), rgba(62,170,255,.55)) }
+#corner { position: absolute; top: 60px; left: 60px; display: flex; align-items: center; gap: 16px; font: 900 34px "Segoe UI", "Microsoft YaHei"; color: rgba(255,255,255,.75) }
+#corner img { width: 56px; height: 56px; border-radius: 50% }
+</style>
+</head>
+<body>
+<div class="bg" id="bg"><div class="blob b1"></div><div class="blob b2"></div><div class="lines"></div><div class="vig"></div></div>
+<div id="corner"><img src="out/img/arc.png" alt=""><span>ARC 周报 · 10.04</span></div>
+
+<div id="stage">
+<section class="scene" id="s0">
+  <div class="center pop" style="top:330px"><img src="out/img/arc.png" alt="" style="width:220px;height:220px;border-radius:50%;box-shadow:0 0 80px rgba(94,168,255,.6)"></div>
+  <div class="center rise" style="--d:.2s;top:600px;font-size:60px;font-weight:900">Circle 的公链</div>
+  <div class="center slam huge blue bg2" style="--d:.35s;top:690px;font-size:260px">ARC</div>
+  <div class="center rise" data-at="18天" style="top:990px"><span class="tag">主网上线 18 天 · 9.16 → 10.04</span></div>
+  <div class="center slam huge cyan cg" data-at="往里冲" style="top:1120px;font-size:130px">钱在往里冲</div>
+</section>
+
+<section class="scene" id="s1">
+  <div class="center rise" style="top:420px;font-size:64px;font-weight:900">Arc 链上锁仓（TVL）</div>
+  <div class="center" style="top:560px"><span id="c1" class="num blue bg2" style="font-size:300px">$0</span></div>
+  <div class="center rise dim" data-at="5.6亿" style="top:900px;font-size:44px">上线第 18 天</div>
+  <div class="center src rise" style="--d:1s;top:1000px">来源：DefiLlama（10.04）</div>
+</section>
+
+<section class="scene" id="s2">
+  <div class="center rise huge" style="top:230px;font-size:90px">光 <span class="cyan">Morpho</span> 一家</div>
+  <div class="panel rise" data-at="存款" style="top:420px">
+    <div class="row"><span class="k">存款</span><span id="c2a" class="v cyan">$0</span></div>
+    <div class="row rise" data-at="借出去" style="margin-top:26px"><span class="k">借出</span><span id="c2b" class="v">$0</span></div>
+  </div>
+  <svg class="center pop" data-at="86%" style="top:860px;left:340px;width:400px" width="400" height="400" viewBox="0 0 400 400">
+    <circle cx="200" cy="200" r="160" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="56"/>
+    <circle id="donut" cx="200" cy="200" r="160" fill="none" stroke="#f7931a" stroke-width="56" stroke-linecap="round" transform="rotate(-90 200 200)" style="filter:drop-shadow(0 0 16px rgba(247,147,26,.7))"/>
+    <text x="200" y="225" text-anchor="middle" font-family="Segoe UI" font-weight="900" font-size="96" fill="#fff" id="donutTxt">0%</text>
+  </svg>
+  <div class="center rise" data-at="比特币" style="top:1300px;font-size:54px;font-weight:900">拿 <span class="btc">比特币</span> 抵押，借 <span class="blue">USDC</span></div>
+  <div class="center src rise" style="--d:1.5s;top:1400px">上线约两周半 · 来源：Crypto Briefing（10.02）</div>
+</section>
+
+<section class="scene" id="s3">
+  <div class="center rise" style="top:300px;font-size:60px;font-weight:900">Circle 刚推出</div>
+  <div class="center slam" data-at="cirBTC" style="top:400px"><span style="display:inline-flex;align-items:center;gap:30px"><span style="width:180px;height:180px;border-radius:50%;background:#f7931a;display:inline-flex;align-items:center;justify-content:center;font:900 120px 'Segoe UI';color:#fff;box-shadow:0 0 70px rgba(247,147,26,.6)">₿</span><span class="num" style="font-size:170px">cirBTC</span></span></div>
+  <div class="center" style="top:720px;display:flex;flex-direction:column;align-items:center;gap:30px">
+    <span class="chip rise" data-at="一比一">1 : 1 锚定比特币</span>
+    <span class="chip rise" data-at="信托">Circle 信托托管</span>
+    <span class="chip rise" data-at="Chainlink">Chainlink 链上证明储备</span>
+  </div>
+  <div class="center rise dim" data-at="Chainlink" style="--d2:.4s;top:1180px;font-size:42px">同时上线以太坊和 Arc</div>
+  <div class="center src rise" style="--d:1.5s;top:1270px">来源：Circle 官方博客（10.02）</div>
+</section>
+
+<section class="scene" id="s4">
+  <div class="center rise huge" style="top:250px;font-size:84px">传统金融也来了</div>
+  <div class="center pop" data-at="21X" style="top:420px"><span class="num" style="font-size:230px;background:linear-gradient(90deg,#fff,#5ea8ff);-webkit-background-clip:text;color:transparent">21X</span></div>
+  <div class="center rise" data-at="欧盟持牌" style="top:700px;font-size:52px;font-weight:900">欧盟持牌的代币化证券平台</div>
+  <div class="center rise" data-at="首发" style="top:790px"><span class="tag">Arc 首发合作伙伴</span></div>
+  <div class="center rise" data-at="原子结算" style="top:940px;font-size:52px;font-weight:900"><span class="blue">USDC</span> 原子结算</div>
+  <div class="center slam" data-at="不到1秒" style="top:1030px"><span class="num cyan cg" style="font-size:240px">&lt; 1 秒</span></div>
+  <div class="center src rise" style="--d:1.5s;top:1330px">来源：Chainwire（10.01）</div>
+</section>
+
+<section class="scene" id="s5">
+  <div class="center rise huge" style="top:250px;font-size:80px"><span class="cyan">Centrifuge</span> 搬上 Arc 的</div>
+  <div class="center rise huge" style="top:360px;font-size:80px">机构基金</div>
+  <div class="fund rise" data-at="美债" style="top:560px"><div class="tk">JTRSY</div><div><div class="nm">短期美国国债</div><div class="who">骏利亨德森 Janus Henderson</div></div></div>
+  <div class="fund rise" data-at="AAA" style="top:780px"><div class="tk">JAAA</div><div><div class="nm">AAA 级 CLO</div><div class="who">骏利亨德森 Janus Henderson</div></div></div>
+  <div class="fund rise" data-at="纽约人寿" style="top:1000px"><div class="tk">HYB</div><div><div class="nm">美国高收益公司债</div><div class="who">纽约人寿投资 New York Life</div></div></div>
+  <div class="center src rise" style="--d:2s;top:1240px">来源：The Chain Observer · Arc 官方</div>
+</section>
+
+<section class="scene" id="s6">
+  <div class="center rise huge" style="top:420px;font-size:100px">机构 → <span class="blue">做金融</span></div>
+  <div class="center rise huge" data-at="普通人" style="top:600px;font-size:100px">普通人 → </div>
+  <div class="center slam huge cyan cg" data-at="玩什么" style="top:760px;font-size:380px;font-family:'Segoe UI'">?</div>
+</section>
+
+<section class="scene" id="s7">
+  <div class="center pop" style="top:330px"><img src="out/img/logo-arm.png" alt="" style="height:190px;border-radius:36px;background:#fff;padding:18px 40px"></div>
+  <div class="center rise" style="--d:.3s;top:610px;font-size:58px;font-weight:900">Arc 上的 meme 发射台</div>
+  <div class="center" style="top:740px">
+    <span class="feat pop" data-at="发币">🚀 一键发币</span><span class="feat pop" data-at="买卖">📈 买卖</span><br>
+    <span class="feat pop" data-at="小游戏" style="border-color:#3ee6ff">🎮 快艇 · 赛车 · 射击 赚 $BOAT</span>
+  </div>
+  <div class="center rise" data-at="关注我" style="top:1120px"><span style="display:inline-block;background:#2775ca;border-radius:60px;padding:18px 60px;font-size:60px;font-weight:900;box-shadow:0 0 50px rgba(39,117,202,.6)">arm.yyheart.com</span></div>
+  <div class="center rise" data-at="持续跟踪" style="top:1290px;font-size:48px;font-weight:900">关注我，持续跟踪 <span class="blue">Arc</span></div>
+  <div class="center rise src" style="--d:3s;top:1380px">资料：Circle · Crypto Briefing · Chainwire · The Chain Observer · DefiLlama<br>仅供参考，不构成投资建议</div>
+</section>
+</div>
+
+<div id="sub"><span></span></div>
+<div id="flash"></div>
+
+<script src="out/arc/timeline.js"></script>
+<script>
+const TL = window.TL;
+const $ = (id) => document.getElementById(id);
+const clamp = (x) => Math.max(0, Math.min(1, x));
+const ease = (x) => 1 - Math.pow(1 - clamp(x), 3);
+const at = (sc, word) => { const i = sc.text.indexOf(word); return i >= 0 ? sc.vo + sc.ct[i] : null };
+
+for (const sc of TL.scenes) {
+  $(sc.id).querySelectorAll('[data-at]').forEach((n) => {
+    const w = at(sc, n.dataset.at);
+    n.style.setProperty('--d', ((w ?? 0) - 0.12).toFixed(2) + 's');
+  });
+}
+
+const HITS = { s0: ['往里冲'], s1: ['5.6亿'], s4: ['不到1秒'], s6: ['玩什么'] };
+const yi = (v, d = 1) => '$' + v.toFixed(d) + ' 亿';
+
+const hooks = {
+  s1(lt, sc) {
+    const t1 = at(sc, '5.6亿');
+    $('c1').textContent = yi(5.6 * Math.pow(clamp((lt - 0.3) / (t1 - 0.3)), 1.6));
+  },
+  s2(lt, sc) {
+    const ta = at(sc, '5亿'), tb = at(sc, '1.9亿'), tc = at(sc, '86%');
+    $('c2a').textContent = yi(5.0 * ease((lt - 0.6) / (ta - 0.6)));
+    $('c2b').textContent = yi(1.9 * ease((lt - ta) / (tb - ta)));
+    const p = ease((lt - tc + 0.2) / 0.9) * 0.86, C = 2 * Math.PI * 160;
+    $('donut').style.strokeDasharray = `${C * p} ${C}`;
+    $('donutTxt').textContent = Math.round(p * 100) + '%';
+  },
+};
+
+function seek(t) {
+  $('bg').getAnimations({ subtree: true }).forEach((a) => { a.pause(); a.currentTime = t * 1000 });
+  let cur = null, curLt = 0;
+  for (const sc of TL.scenes) {
+    const el = $(sc.id), lt = t - sc.start;
+    const on = lt >= 0 && lt < sc.dur;
+    el.style.display = on ? 'block' : 'none';
+    if (!on) continue;
+    cur = sc; curLt = lt;
+    el.getAnimations({ subtree: true }).forEach((a) => { a.pause(); a.currentTime = lt * 1000 });
+    const fin = clamp(lt / 0.18), fout = sc.last ? 1 : clamp((sc.dur - lt) / 0.18);
+    el.style.opacity = Math.min(fin, fout);
+    if (hooks[sc.id]) hooks[sc.id](lt, sc);
+  }
+  let fl = 0;
+  if (cur) for (const w of HITS[cur.id] || []) {
+    const tt = at(cur, w);
+    if (tt !== null && curLt > tt && curLt < tt + 0.5) fl = Math.max(fl, 1 - (curLt - tt) / 0.5);
+  }
+  $('flash').style.opacity = fl * 0.8;
+  const sh = 16 * fl;
+  $('stage').style.translate = `${sh * Math.sin(t * 97)}px ${sh * Math.cos(t * 71)}px`;
+  const sub = TL.subs.find((s) => t >= s.t0 && t < s.t1);
+  $('sub').firstElementChild.textContent = sub ? sub.text : '';
+  $('sub').style.display = sub ? 'block' : 'none';
+}
+window.seek = seek;
+seek(0);
+</script>
+</body>
+</html>
