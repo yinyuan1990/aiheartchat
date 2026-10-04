@@ -557,6 +557,7 @@ export function ChatRoomPage() {
   const [showDownload, setShowDownload] = useState(false);
   const [showGift, setShowGift] = useState(false);
   const [showGroupInfo, setShowGroupInfo] = useState(false);
+  const [navMenu, setNavMenu] = useState(false);
   const [showAttach, setShowAttach] = useState(false);
   const [showSticker, setShowSticker] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -864,29 +865,37 @@ export function ChatRoomPage() {
     <div className="app">
       <div className="navbar">
         <span className="back" onClick={() => nav(-1)}>‹</span>
-        <span className="title">{state.title ?? '聊天'}{bot && <span className="bot-tag">机器人</span>}</span>
-        <span
-          className="action"
-          style={{ color: 'var(--text-2)' }}
-          onClick={async () => {
-            const tip = state.convType === 1
-              ? '清空后双方的聊天记录都将删除，不可恢复。确定清空吗？'
-              : '将删除我在本群发送的全部消息，所有成员都将不再看到。确定清空吗？';
-            if (!window.confirm(tip)) return;
-            try {
-              await api(`/im/conversations/${conversationId}/clear`, { method: 'POST' });
-              const list = await api<MsgItem[]>(`/im/messages?conversationId=${conversationId}`);
-              setMessages(list);
-            } catch (e: any) {
-              alert(e.message);
-            }
-          }}
-        >
-          清空
+        <span className="title ellipsis">{state.title ?? '聊天'}{bot && <span className="bot-tag">机器人</span>}</span>
+        <span className="nav-more">
+          <span className="nav-more-btn" onClick={() => setNavMenu(true)}>···</span>
+          {navMenu && (
+            <>
+              <div className="nav-menu-mask" onClick={() => setNavMenu(false)} />
+              <div className="nav-menu">
+                {state.convType === 2 && <div onClick={() => { setNavMenu(false); setShowGroupInfo(true); }}>群信息</div>}
+                <div
+                  className="danger"
+                  onClick={async () => {
+                    setNavMenu(false);
+                    const tip = state.convType === 1
+                      ? '清空后双方的聊天记录都将删除，不可恢复。确定清空吗？'
+                      : '将删除我在本群发送的全部消息，所有成员都将不再看到。确定清空吗？';
+                    if (!window.confirm(tip)) return;
+                    try {
+                      await api(`/im/conversations/${conversationId}/clear`, { method: 'POST' });
+                      const list = await api<MsgItem[]>(`/im/messages?conversationId=${conversationId}`);
+                      setMessages(list);
+                    } catch (e: any) {
+                      alert(e.message);
+                    }
+                  }}
+                >
+                  清空聊天记录
+                </div>
+              </div>
+            </>
+          )}
         </span>
-        {state.convType === 2 && (
-          <span className="action" onClick={() => setShowGroupInfo(true)}>群信息</span>
-        )}
       </div>
       {pins.length > 0 && (
         <PinBar

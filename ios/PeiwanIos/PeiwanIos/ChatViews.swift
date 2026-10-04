@@ -765,6 +765,11 @@ struct ChatRoomView: View {
         .toolbar { toolbarItems }
     }
 
+    private var voiceRoomLabel: String {
+        let n = vroom.memberCount(targetId)
+        return n > 0 ? "语音房 · \(n) 人在聊" : "语音房"
+    }
+
     @ToolbarContentBuilder
     private var toolbarItems: some ToolbarContent {
         // ToolbarContentBuilder 里的 if 要 iOS 16，所以 principal 一直放，分支写在里面
@@ -775,29 +780,34 @@ struct ChatRoomView: View {
             }
         }
         ToolbarItem(placement: .navigationBarTrailing) {
-            HStack(spacing: 14) {
-                Button {
-                    showClearConfirm = true
-                } label: {
-                    Text("清空").font(.system(size: 13)).foregroundStyle(Theme.textSub)
-                }
+            Menu {
                 if convType == 2 {
                     Button {
                         showVoiceRoom = true
                     } label: {
-                        HStack(spacing: 3) {
-                            Image(systemName: "waveform").font(.system(size: 11))
-                            Text(vroom.memberCount(targetId) > 0 ? "语音房·\(vroom.memberCount(targetId))" : "语音房")
-                                .font(.system(size: 13))
-                        }
-                        .foregroundStyle(vroom.joinedGroupId == targetId ? Theme.accent : Theme.text)
+                        Label(voiceRoomLabel, systemImage: "waveform")
                     }
-                    NavigationLink {
-                        LazyView(GroupInfoView(groupId: targetId))
+                    Button {
+                        walletRoute = .groupInfo(targetId)
                     } label: {
-                        Text("群信息").font(.system(size: 13)).foregroundStyle(Theme.accent)
+                        Label("群信息", systemImage: "person.3")
                     }
                 }
+                Button(role: .destructive) {
+                    showClearConfirm = true
+                } label: {
+                    Label("清空聊天记录", systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Theme.text)
+                    .frame(width: 32, height: 32)
+                    .overlay(alignment: .topTrailing) {
+                        if convType == 2 && vroom.memberCount(targetId) > 0 {
+                            Circle().fill(Color.red).frame(width: 7, height: 7).offset(x: -2, y: 4)
+                        }
+                    }
             }
         }
     }

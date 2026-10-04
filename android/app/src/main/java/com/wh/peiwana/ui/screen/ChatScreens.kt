@@ -828,16 +828,22 @@ fun ChatRoomScreen(
                 Text(title, color = TextMain, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 if (bot != null) BotTag()
             }
-            Text("清空", color = TextSub, fontSize = 13.sp, modifier = Modifier.noRippleClick { showClearConfirm = true })
-            if (convType == 2) {
-                Spacer(Modifier.width(14.dp))
-                Text(
-                    if (vrCount > 0) "语音房·$vrCount" else "语音房",
-                    color = if (vrJoinedGid == targetId) Accent else TextMain, fontSize = 13.sp,
-                    modifier = Modifier.noRippleClick { showVoiceRoom = true },
-                )
-                Spacer(Modifier.width(14.dp))
-                Text("群信息", color = Accent, fontSize = 13.sp, modifier = Modifier.noRippleClick(onGroupInfo))
+            var menu by remember { mutableStateOf(false) }
+            Box {
+                Box(Modifier.size(40.dp).noRippleClick { menu = true }, contentAlignment = Alignment.Center) {
+                    Text("···", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    if (convType == 2 && vrCount > 0) Box(Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 6.dp).size(7.dp).background(Danger, CircleShape))
+                }
+                androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = Bg2) {
+                    if (convType == 2) {
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(if (vrCount > 0) "语音房 · $vrCount 人在聊" else "语音房", fontSize = 14.sp, color = if (vrJoinedGid == targetId) Accent else TextMain) },
+                            onClick = { menu = false; showVoiceRoom = true },
+                        )
+                        androidx.compose.material3.DropdownMenuItem(text = { Text("群信息", fontSize = 14.sp, color = TextMain) }, onClick = { menu = false; onGroupInfo() })
+                    }
+                    androidx.compose.material3.DropdownMenuItem(text = { Text("清空聊天记录", fontSize = 14.sp, color = Danger) }, onClick = { menu = false; showClearConfirm = true })
+                }
             }
         }
 

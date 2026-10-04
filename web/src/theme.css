@@ -230,6 +230,19 @@ textarea.input { resize: none; min-height: 90px; }
 .navbar .title { flex: 1; text-align: center; font-size: 16px; font-weight: 600; }
 .navbar .action { color: var(--accent); cursor: pointer; font-size: 14px; }
 
+/* 顶栏「···」下拉菜单 */
+.nav-more { position: relative; flex-shrink: 0; }
+.nav-more-btn { color: var(--text); cursor: pointer; font-size: 18px; font-weight: 700; padding: 0 6px; line-height: 1; }
+.nav-more-dot { position: absolute; top: -2px; right: 2px; width: 7px; height: 7px; border-radius: 50%; background: var(--danger); }
+.nav-menu-mask { position: fixed; inset: 0; z-index: 90; }
+.nav-menu {
+  position: absolute; right: 0; top: calc(100% + 10px); z-index: 91; min-width: 150px; padding: 6px 0;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+.nav-menu div { padding: 10px 16px; font-size: 14px; cursor: pointer; white-space: nowrap; }
+.nav-menu div:hover { background: var(--bg-card); }
+.nav-menu .danger { color: var(--danger); }
+
 /* 弹层 */
 .mask { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.75); display: flex; align-items: center; justify-content: center; z-index: 100; }
 .mask.bottom { align-items: flex-end; }
