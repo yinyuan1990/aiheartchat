@@ -13,7 +13,8 @@ export type Secret = { kind: "mnemonic"; phrase: string } | { kind: "key"; key: 
 /** `sol`: Solana address on Phantom's path (mnemonic wallets only); `trx`: TRON address on TronLink's path (or the private
  * key itself); `ton`: TON W5 address on m/44'/607'/0' (mnemonic wallets only). Filled in on first unlock for older vaults. */
 export type WalletMeta = { id: string; name: string; kind: Secret["kind"]; address: Address; sol?: string; trx?: string; ton?: string; createdAt: number };
-type VaultPlain = { secrets: Record<string, Secret> };
+/** `extras`: other secrets sealed with the same password (Hyperliquid agent keys, the user's own AI API key) */
+type VaultPlain = { secrets: Record<string, Secret>; extras?: Record<string, string> };
 /**
  * `quick`: 「免密码使用」 — the wallet password kept next to the ciphertext so the vault opens without asking. Only allowed
  * when the record lives in the App shell's Keystore / Keychain storage (never in a browser's localStorage).
@@ -172,7 +173,7 @@ export async function addWallet(u: Unlocked, wallets: WalletMeta[], name: string
   const dup = wallets.find((w) => w.address === address);
   if (dup) return { duplicate: dup };
   const id = newId();
-  const plain: VaultPlain = { secrets: { ...u.plain.secrets, [id]: secret } };
+  const plain: VaultPlain = { ...u.plain, secrets: { ...u.plain.secrets, [id]: secret } };
   const next: Unlocked = { ...u, plain };
   const meta: WalletMeta = { id, name, kind: secret.kind, address, sol: solAddressOf(secret) ?? undefined, trx: tronAddressOf(secret), ton: tonAddressOf(secret) ?? undefined, createdAt: Date.now() };
   const list = [...wallets, meta];
@@ -192,9 +193,19 @@ export async function removeWallet(u: Unlocked, wallets: WalletMeta[], id: strin
     await store.clear();
     return null;
   }
-  const next: Unlocked = { ...u, plain: { secrets } };
+  const next: Unlocked = { ...u, plain: { ...u.plain, secrets } };
   await store.set(JSON.stringify(await seal(next, list, list[0].id)));
   return { unlocked: next, wallets: list, active: list[0].id };
+}
+
+/** Sets (or with null removes) one sealed extra; needs the vault unlocked. */
+export async function setExtra(u: Unlocked, wallets: WalletMeta[], active: string, key: string, value: string | null, store = vaultStore()): Promise<Unlocked> {
+  const extras = { ...(u.plain.extras ?? {}) };
+  if (value == null) delete extras[key];
+  else extras[key] = value;
+  const next: Unlocked = { ...u, plain: { ...u.plain, extras } };
+  await store.set(JSON.stringify(await seal(next, wallets, active)));
+  return next;
 }
 
 export async function changePassword(u: Unlocked, wallets: WalletMeta[], active: string, next: string, store = vaultStore()) {

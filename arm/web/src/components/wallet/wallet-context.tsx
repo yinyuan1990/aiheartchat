@@ -9,6 +9,7 @@ import {
   readStored,
   setQuick as vaultSetQuick,
   removeWallet as vaultRemove,
+  setExtra as vaultSetExtra,
   saveMeta,
   unlockVault,
   type Secret,
@@ -51,6 +52,9 @@ type Ctx = {
   /** TON signer of the active wallet; throws while locked or for private-key wallets. */
   tonKey: () => TonKey;
   secretOf: (id: string) => Secret | null;
+  /** extra secrets sealed in the vault (agent keys, the AI key); null while locked */
+  extra: (key: string) => string | null;
+  saveExtra: (key: string, value: string | null) => Promise<void>;
   /** 免密码使用: opens without the password and does not auto-lock in the background */
   quick: boolean;
   /** password (already verified) = on, null = off */
@@ -246,6 +250,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         return k;
       },
       secretOf: (id) => unlocked.current?.plain.secrets[id] ?? null,
+      extra: (key) => unlocked.current?.plain.extras?.[key] ?? null,
+      saveExtra: async (key, value) => {
+        if (!unlocked.current) throw new Error("locked");
+        unlocked.current = await vaultSetExtra(unlocked.current, wallets, activeId, key, value);
+      },
       quick: quickOn,
       setQuick,
     };

@@ -27,6 +27,7 @@ import { isAvatarAddress, walletAvatar } from "./avatars.js";
 import { claimOf, verifyTransfer } from "./verify.js";
 import { tronRelay } from "./tron.js";
 import { tonJettons, tonRelay } from "./ton.js";
+import { aiChat, hlExchange, hlInfo } from "./hl.js";
 import { calloutCaller, calloutCallers, calloutFeed, pinCaller } from "./callouts.js";
 import { isMint, pumpCandles, pumpCoin, pumpHolders, pumpList, pumpTrades } from "./pump.js";
 import { isEvmAddr, isMarketChain, kyberBuild, kyberQuote, marketCandles, marketList, marketPrices, marketSearch, marketToken, marketTrades } from "./markets.js";
@@ -806,6 +807,19 @@ app.post("/api/mkt/:chain/build", async (c) => {
 });
 
 // Perp radar (10.2): Hyperliquid funding / OI dashboard + whale positions and liquidation map.
+// 「AI 合约」 relays (hl.ts): Hyperliquid info / signed exchange actions, and the user's own LLM key (never stored)
+app.post("/api/hl/info", async (c) => {
+  const r = await hlInfo(await c.req.json().catch(() => null), clientIp(c) || "?");
+  return c.json(r.json as object, r.status as 200);
+});
+app.post("/api/hl/exchange", async (c) => {
+  const r = await hlExchange(await c.req.json().catch(() => null), clientIp(c) || "?");
+  return c.json(r.json as object, r.status as 200);
+});
+app.post("/api/ai/chat", async (c) => {
+  const r = await aiChat(await c.req.json().catch(() => null), c.req.header("x-ai-key"), clientIp(c) || "?");
+  return c.json(r.json as object, r.status as 200);
+});
 app.get("/api/perp/market", async (c) => c.json(await perpMarket()));
 app.get("/api/perp/whales", (c) => c.json(perpWhales()));
 

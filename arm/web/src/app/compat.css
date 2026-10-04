@@ -116,6 +116,7 @@
   .bg-up\/70{background-color:rgb(var(--wc-up) / calc(var(--wa-up, 1) * 0.7))}
   .bg-up\/80{background-color:rgb(var(--wc-up) / calc(var(--wa-up, 1) * 0.8))}
   .bg-white\/10{background-color:rgb(255 255 255 / 0.1)}
+  .bg-white\/12{background-color:rgb(255 255 255 / 0.12)}
   .bg-white\/30{background-color:rgb(255 255 255 / 0.3)}
   .bg-yellow-400\/90{background-color:rgb(250 200 0 / 0.9)}
   .bg-\[radial-gradient\(circle\,color-mix\(in_oklch\,var\(--up\)_10\%\,transparent\)\,transparent_70\%\)\]{background-image:radial-gradient(circle,rgb(var(--wc-up) / calc(var(--wa-up, 1) * 0.1)),transparent 70%)}

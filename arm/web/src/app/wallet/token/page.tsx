@@ -24,6 +24,8 @@ import { useVault } from "@/components/wallet/wallet-context";
 import { AboutCard, CoinChartPanel, CoinFrame, CoinHeader, CoinTabs, CoinTopBar, CommentBox, groupWorthy, CurveCard, HolderRows, MarkerSheet, PositionCard, StatsCard, TradeBar, TradeRows, allInterval, compactUsd, quickAmount, setQuickAmount, usd, useMarkers, type MarkTrade } from "@/components/wallet/coin";
 import { costBasis, useStar, useViewers } from "@/lib/wallet/positions";
 import { BottomNav, BottomSheet, ChainGlyph, ChainPill, Num, Pct, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
+
+const AI_GRADIENT = "linear-gradient(90deg, #7c3aed, #2563eb)";
 import { MARKET_CHAINS, isMarketChain, useMarketList, type MarketChainKey, type MarketTab } from "@/lib/wallet/market";
 
 export default function TokenRoute() {
@@ -75,7 +77,17 @@ function Markets() {
   };
   return (
     <WalletFrame>
-      <TopBar title="交易" right={<ChainPill chain={{ ...chainByKey(info.chain), name: info.label }} onClick={() => setPicker(true)} />} />
+      <TopBar
+        title="交易"
+        right={
+          <>
+            <Link href="/wallet/perp" style={{ background: AI_GRADIENT }} className="flex h-9 items-center gap-1 rounded-full px-3 text-[13px] font-semibold whitespace-nowrap text-white">
+              AI 合约
+            </Link>
+            <ChainPill chain={{ ...chainByKey(info.chain), name: info.label }} onClick={() => setPicker(true)} />
+          </>
+        }
+      />
       {cur === "pump" ? <PumpList /> : cur === "arm" ? <TokenList /> : <EvmList key={cur} chain={cur} />}
       <BottomNav />
       <BottomSheet open={picker} onClose={() => setPicker(false)}>
@@ -94,6 +106,13 @@ function Markets() {
             </li>
           ))}
         </ul>
+        <Link href="/wallet/perp" style={{ background: "linear-gradient(90deg, rgba(124,58,237,0.1), rgba(37,99,235,0.1))" }} className="mt-2 flex items-center gap-3 rounded-2xl px-3 py-2.5">
+          <span style={{ background: AI_GRADIENT }} className="flex size-[30px] items-center justify-center rounded-full text-[13px] font-bold text-white">AI</span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15px] font-semibold">AI 合约</span>
+            <span className="block truncate text-[12px] text-muted-foreground">Hyperliquid 永续合约，AI 帮你分析，你确认才下单</span>
+          </span>
+        </Link>
       </BottomSheet>
     </WalletFrame>
   );
