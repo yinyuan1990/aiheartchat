@@ -72,5 +72,8 @@ export function localizeServer<T>(v: T): T {
 export function t(key: string, args?: Record<string, string | number>): string {
   let s = tables[current]?.[key] ?? tables.zh?.[key] ?? key;
   if (args) for (const [k, v] of Object.entries(args)) s = s.split(`{${k}}`).join(String(v));
-  return s;
+  return current === 'en' && args && Object.values(args).some((v) => String(v) === '1') ? singular(s) : s;
 }
+
+/** English "1 comments" → "1 comment" (words after a bare 1; -ies → -y, -s dropped, -ss kept) */
+export const singular = (s: string) => s.replace(/\b1 ([A-Za-z]*?[a-rt-zA-RT-Z])(ies|s)\b/g, (_, w: string, suf: string) => `1 ${w}${suf === 'ies' ? 'y' : ''}`);

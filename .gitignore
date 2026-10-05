@@ -45,4 +45,4 @@ demo-video/youtube-banner-*.jpg
 
 # i18n merge scratch (see i18n/merge-parts.mjs)
 i18n/_parts/
-i18n/_left.txt
+i18n/_left*.txt

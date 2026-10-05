@@ -58,9 +58,25 @@ final class I18nStore: @unchecked Sendable {
     }
 
     func text(_ key: String, _ args: [String: Any]) -> String {
-        var s = tables[lang]?[key] ?? tables[I18nStore.fallback]?[key] ?? key
+        let l = lang
+        var s = tables[l]?[key] ?? tables[I18nStore.fallback]?[key] ?? key
         for (k, v) in args { s = s.replacingOccurrences(of: "{\(k)}", with: "\(v)") }
+        if l == "en", args.values.contains(where: { "\($0)" == "1" }) { s = I18nStore.singular(s) }
         return s
+    }
+
+    /// 英文「1 comments」→「1 comment」：紧跟在单独的 1 后面的词，-ies → -y，去掉 -s（-ss 不动）
+    private static let singularRe = try? NSRegularExpression(pattern: "\\b1 ([A-Za-z]*?[a-rt-zA-RT-Z])(ies|s)\\b")
+    static func singular(_ s: String) -> String {
+        guard let re = singularRe else { return s }
+        let ns = s as NSString
+        var out = s
+        for m in re.matches(in: s, range: NSRange(location: 0, length: ns.length)).reversed() {
+            let word = ns.substring(with: m.range(at: 1))
+            let suffix = ns.substring(with: m.range(at: 2))
+            out = (out as NSString).replacingCharacters(in: m.range, with: "1 " + word + (suffix == "ies" ? "y" : ""))
+        }
+        return out
     }
 
     // MARK: 服务端生成、全群共用的中文（币群名 / 群公告 / 系统昵称）：按 zh 模板匹配，换成当前语言

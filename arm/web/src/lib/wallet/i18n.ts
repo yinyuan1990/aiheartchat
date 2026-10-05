@@ -27,5 +27,7 @@ export function t(key: string, args?: Record<string, string | number>): string {
   const lang = walletLang();
   let s = tables[lang]?.[key] ?? tables[FALLBACK][key] ?? key;
   if (args) for (const [k, v] of Object.entries(args)) s = s.split(`{${k}}`).join(String(v));
+  // English "1 trades" → "1 trade" (words after a bare 1; -ies → -y, -s dropped, -ss kept)
+  if (lang === "en" && args && Object.values(args).some((v) => String(v) === "1")) s = s.replace(/\b1 ([A-Za-z]*?[a-rt-zA-RT-Z])(ies|s)\b/g, (_, w: string, suf: string) => `1 ${w}${suf === "ies" ? "y" : ""}`);
   return s;
 }

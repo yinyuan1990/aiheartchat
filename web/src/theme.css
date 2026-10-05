@@ -39,8 +39,9 @@ body {
 .page-pad { padding: 16px; }
 
 /* 顶部文字 tab（附近|推荐） */
-.top-tabs { display: flex; gap: 24px; padding: 14px 16px 10px; align-items: center; }
-.top-tab { color: var(--text-2); font-size: 16px; cursor: pointer; position: relative; padding-bottom: 6px; }
+.top-tabs { display: flex; gap: 24px; padding: 14px 16px 10px; align-items: center; overflow-x: auto; scrollbar-width: none; }
+.top-tabs::-webkit-scrollbar { display: none; }
+.top-tab { color: var(--text-2); font-size: 16px; cursor: pointer; position: relative; padding-bottom: 6px; white-space: nowrap; flex-shrink: 0; }
 .top-tab.active { color: var(--text); font-weight: 600; font-size: 17px; }
 .top-tab.active::after {
   content: ""; position: absolute; left: 50%; transform: translateX(-50%);

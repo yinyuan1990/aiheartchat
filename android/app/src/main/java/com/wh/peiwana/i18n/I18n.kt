@@ -85,10 +85,15 @@ object I18n {
     }
 
     fun text(key: String, args: Array<out Pair<String, Any?>>): String {
-        var s = tables[lang]?.get(key) ?: tables[FALLBACK]?.get(key) ?: key
+        val l = lang
+        var s = tables[l]?.get(key) ?: tables[FALLBACK]?.get(key) ?: key
         for ((k, v) in args) s = s.replace("{$k}", v.toString())
+        // 英文「1 comments」→「1 comment」：紧跟在单独的 1 后面的词，-ies → -y，去掉 -s（-ss 不动）
+        if (l == "en" && args.any { it.second?.toString() == "1" }) s = SINGULAR.replace(s) { m -> "1 " + m.groupValues[1] + if (m.groupValues[2] == "ies") "y" else "" }
         return s
     }
+
+    private val SINGULAR = Regex("\\b1 ([A-Za-z]*?[a-rt-zA-RT-Z])(ies|s)\\b")
 }
 
 /** t("me.frozen", "n" to 12) */

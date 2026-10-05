@@ -351,12 +351,13 @@ struct PerpCardView: View {
         let closed = (st["state"] as? String) == "closed"
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Text("\(coin)-USD").font(.system(size: 16, weight: .bold)).foregroundStyle(.white)
+                Text("\(coin)-USD").font(.system(size: 16, weight: .bold)).foregroundStyle(.white).lineLimit(1)
                 Text("\(long ? t("card.long") : t("card.short")) \(lev)x").font(.system(size: 11, weight: .semibold)).foregroundStyle(sideColor)
+                    .lineLimit(1).fixedSize()
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(RoundedRectangle(cornerRadius: 6).fill(sideColor.opacity(0.18)))
                 Spacer(minLength: 0)
-                if let m = live.marks[coin] { Text(PerpLive.px(m)).font(.system(size: 12)).foregroundStyle(.white.opacity(0.7)) }
+                if let m = live.marks[coin] { Text(PerpLive.px(m)).font(.system(size: 12)).foregroundStyle(.white.opacity(0.7)).lineLimit(1).fixedSize() }
             }
             HStack(spacing: 4) {
                 cell((o["orderType"] as? String) == "limit" ? t("card.limit") : t("card.entry"), PerpLive.num(o["entry"]))

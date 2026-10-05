@@ -167,12 +167,12 @@ export function PerpCard({ id, content }: { id: string; content: string }) {
   return (
     <span className="no-menu" style={{ display: 'flex', flexDirection: 'column', gap: 8, width: 240, padding: 12, borderRadius: 14, background: '#0f1115', color: '#fff' }}>
       <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontSize: 16, fontWeight: 700 }}>{o.coin}-USD</span>
-        <span style={{ fontSize: 11, fontWeight: 600, color: long ? up : down, background: long ? 'rgba(34,197,94,.18)' : 'rgba(239,68,68,.18)', borderRadius: 6, padding: '2px 6px' }}>
+        <span style={{ fontSize: 16, fontWeight: 700, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.coin}-USD</span>
+        <span style={{ fontSize: 11, fontWeight: 600, color: long ? up : down, background: long ? 'rgba(34,197,94,.18)' : 'rgba(239,68,68,.18)', borderRadius: 6, padding: '2px 6px', whiteSpace: 'nowrap', flexShrink: 0 }}>
           {long ? t('card.long') : t('card.short')} {lev}x
         </span>
         <span style={{ flex: 1 }} />
-        {mark && <span style={{ fontSize: 12, opacity: 0.7 }}>{perpPx(mark)}</span>}
+        {mark && <span style={{ fontSize: 12, opacity: 0.7, whiteSpace: 'nowrap', flexShrink: 0 }}>{perpPx(mark)}</span>}
       </span>
       <span style={{ display: 'flex', gap: 4 }}>
         {cell(o.orderType === 'limit' ? t('card.perp.limit') : t('card.perp.entry'), o.entry)}

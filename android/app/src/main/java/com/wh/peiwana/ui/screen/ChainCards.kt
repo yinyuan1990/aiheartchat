@@ -394,13 +394,15 @@ fun PerpCard(msgId: String, content: String, canWallet: Boolean, onFollow: () ->
     val sideColor = if (long) PerpUp else PerpDown
     Column(Modifier.width(240.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFF0F1115)).padding(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("$coin-USD", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.width(6.dp))
-            Box(Modifier.clip(RoundedCornerShape(6.dp)).background(sideColor.copy(alpha = 0.18f)).padding(6.dp, 2.dp)) {
-                Text("${if (long) t("card.long") else t("card.short")} ${lev.toInt()}x", color = sideColor, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            // 价格先占位、不换行；币名太长时省略号（英文「Long 40x」比「做多 40x」长）
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                Text("$coin-USD", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                Spacer(Modifier.width(6.dp))
+                Box(Modifier.clip(RoundedCornerShape(6.dp)).background(sideColor.copy(alpha = 0.18f)).padding(6.dp, 2.dp)) {
+                    Text("${if (long) t("card.long") else t("card.short")} ${lev.toInt()}x", color = sideColor, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
+                }
             }
-            Spacer(Modifier.weight(1f))
-            mark?.let { Text(perpPx(it), color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp) }
+            mark?.let { Text(perpPx(it), color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp, maxLines = 1, softWrap = false, modifier = Modifier.padding(start = 6.dp)) }
         }
         Row(Modifier.padding(top = 8.dp)) {
             PerpCell(if (o.str("orderType") == "limit") t("card.limit") else t("card.entry"), if (entry > 0) perpPx(entry) else "—", Modifier.weight(1f))

@@ -72,8 +72,8 @@ export default function MePage() {
         <section className="divide-y divide-border/60 rounded-[22px] bg-card ring-1 ring-border/60">
           <button type="button" onClick={lock} className="flex w-full items-center gap-3 px-4 py-4 text-left">
             <Lock size={20} />
-            <span className="flex-1 text-[15px]">{t("cw.me.lockNow")}</span>
-            <span className="text-[12px] text-muted-foreground">{quick ? t("cw.me.noAutoLock") : t("cw.me.autoLock")}</span>
+            <span className="flex-1 whitespace-nowrap text-[15px]">{t("cw.me.lockNow")}</span>
+            <span className="min-w-0 text-right text-[12px] text-muted-foreground">{quick ? t("cw.me.noAutoLock") : t("cw.me.autoLock")}</span>
           </button>
           {canQuick && (
             <button type="button" role="switch" aria-checked={!quick} onClick={() => void toggleQuick()} className="flex w-full items-center gap-3 px-4 py-4 text-left">
@@ -102,14 +102,14 @@ export default function MePage() {
           <PayeeRow />
           <Link href="/wallet/addresses" className="flex items-center gap-3 px-4 py-4">
             <AddressBook size={20} />
-            <span className="flex-1 text-[15px]">{t("cw.send.book")}</span>
-            <span className="text-[12px] text-muted-foreground">{t("cw.me.bookDesc")}</span>
+            <span className="flex-1 whitespace-nowrap text-[15px]">{t("cw.send.book")}</span>
+            <span className="min-w-0 text-right text-[12px] text-muted-foreground">{t("cw.me.bookDesc")}</span>
             <CaretRight size={16} className="text-muted-foreground" />
           </Link>
           <Link href="/wallet/nodes" className="flex items-center gap-3 px-4 py-4">
             <TreeStructure size={20} />
-            <span className="flex-1 text-[15px]">{t("cw.nodes.title")}</span>
-            <span className="text-[12px] text-muted-foreground">{t("cw.me.nodesDesc")}</span>
+            <span className="flex-1 whitespace-nowrap text-[15px]">{t("cw.nodes.title")}</span>
+            <span className="min-w-0 text-right text-[12px] text-muted-foreground">{t("cw.me.nodesDesc")}</span>
             <CaretRight size={16} className="text-muted-foreground" />
           </Link>
           <Link href="/" className="flex items-center gap-3 px-4 py-4">
