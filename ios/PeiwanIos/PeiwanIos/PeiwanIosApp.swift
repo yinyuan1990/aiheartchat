@@ -138,6 +138,7 @@ final class AppState: ObservableObject {
 struct RootView: View {
     @StateObject private var state = AppState()
     @ObservedObject private var callManager = CallManager.shared
+    @ObservedObject private var i18n = I18n.shared
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -147,7 +148,8 @@ struct RootView: View {
             case .boot: BootView()
             case .register: RegisterView()
             case .login: LoginView()
-            case .main: MainTabView()
+            // 换语言后整棵主界面重建，所有 t() 文字一起换
+            case .main: MainTabView().id(i18n.choice)
             }
             // 通话界面由 CallWindow（独立 UIWindow）承载，可盖住任何弹层
             // 版本更新弹框（强制时不可关闭）

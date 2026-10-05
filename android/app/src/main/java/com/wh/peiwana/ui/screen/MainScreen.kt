@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import com.wh.peiwana.net.UserProfile
 import com.wh.peiwana.ui.AccentBrush
 import com.wh.peiwana.ui.theme.*
+import com.wh.peiwana.i18n.t
 import kotlinx.coroutines.launch
 
 /** 抖音式底部导航：广场 大厅 [+] 消息 我的 */
@@ -69,16 +70,16 @@ fun MainScreen(
                 modifier = Modifier.fillMaxWidth().background(Bg2).padding(vertical = 8.dp).navigationBarsPadding(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TabText("广场", tab == 0, Modifier.weight(1f)) { tab = 0 }
-                TabText("大厅", tab == 1, Modifier.weight(1f)) { tab = 1 }
+                TabText(t("tab.plaza"), tab == 0, Modifier.weight(1f)) { tab = 0 }
+                TabText(t("tab.hall"), tab == 1, Modifier.weight(1f)) { tab = 1 }
                 Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                     // 发布按钮：玫红渐变 + 白色加号（对齐 iOS）
                     Box(modifier = Modifier.size(44.dp, 30.dp).clip(RoundedCornerShape(8.dp)).background(AccentBrush).clickable { onNav("publish") }, contentAlignment = Alignment.Center) {
                         Text("+", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     }
                 }
-                TabText("消息", tab == 2, Modifier.weight(1f), badge = unreadTotal) { tab = 2 }
-                TabText("我的", tab == 3, Modifier.weight(1f)) {
+                TabText(t("tab.messages"), tab == 2, Modifier.weight(1f), badge = unreadTotal) { tab = 2 }
+                TabText(t("tab.me"), tab == 3, Modifier.weight(1f)) {
                     if (tab != 3) meKey++
                     tab = 3
                 }

@@ -4,12 +4,14 @@ import { api, fmtPoints, UserProfile } from '../api';
 import { useApp } from '../store';
 import { ScanFlow } from './ChatList';
 import { ScanIcon } from '../components/QrScanner';
+import { SYSTEM, langChoice, languages, setLang, t } from '../i18n';
 
 export function MePage() {
   const nav = useNavigate();
   const { user, setUser } = useApp();
   const [me, setMe] = useState<UserProfile | null>(user);
   const [scanning, setScanning] = useState(false);
+  const [picking, setPicking] = useState(false);
 
   useEffect(() => {
     api<UserProfile>('/user/me').then((u) => {
@@ -18,7 +20,9 @@ export function MePage() {
     }).catch(() => {});
   }, []);
 
-  if (!me) return <div className="empty">加载中…</div>;
+  if (!me) return <div className="empty">{t('common.loading')}</div>;
+  const choice = langChoice();
+  const langName = choice === SYSTEM ? t('lang.system') : languages.find((l) => l.code === choice)?.name ?? choice;
 
   return (
     <div className="no-scrollbar" style={{ overflowY: 'auto', height: '100%' }}>
@@ -36,9 +40,9 @@ export function MePage() {
                 background: me.gender === 1 ? 'rgba(64,156,255,0.18)' : 'rgba(254,44,85,0.18)',
                 color: me.gender === 1 ? '#6db3ff' : '#ff7a95',
               }}>
-                {me.gender === 1 ? '男' : '女'} {me.age}
+                {me.gender === 1 ? t('me.male') : t('me.female')} {me.age}
               </span>
-              {me.isGuide && <span className="tag tag-accent">认证</span>}
+              {me.isGuide && <span className="tag tag-accent">{t('me.verified')}</span>}
               {me.cityName && <span className="tag tag-muted">{me.cityName}</span>}
             </div>
             {me.shortId && (
@@ -47,13 +51,13 @@ export function MePage() {
                 style={{ marginTop: 6, cursor: 'pointer' }}
                 onClick={() => navigator.clipboard?.writeText(me.shortId!)}
               >
-                ID：{me.shortId}（点击复制）
+                {t('me.idCopy', { id: me.shortId })}
               </div>
             )}
           </div>
           {/* 扫一扫（邀请名片 / 群二维码） */}
           <div
-            title="扫一扫"
+            title={t('me.scan')}
             onClick={() => setScanning(true)}
             style={{
               width: 38, height: 38, borderRadius: 19, flexShrink: 0, marginTop: 4,
@@ -66,16 +70,16 @@ export function MePage() {
         </div>
 
         <div className="muted" style={{ marginTop: 14, fontSize: 13, lineHeight: 1.6 }}>
-          {me.signature || '还没有签名，写一句介绍自己吧'}
+          {me.signature || t('me.noSignatureHint')}
         </div>
 
         {/* 关注 / 粉丝：点击进列表 */}
         <div className="row" style={{ gap: 26, marginTop: 16 }}>
           <span style={{ fontSize: 13, cursor: 'pointer' }} className="muted" onClick={() => nav('/follows/following')}>
-            <b style={{ fontSize: 17, color: 'var(--text)', marginRight: 4 }}>{me.following ?? 0}</b>关注
+            <b style={{ fontSize: 17, color: 'var(--text)', marginRight: 4 }}>{me.following ?? 0}</b>{t('me.following')}
           </span>
           <span style={{ fontSize: 13, cursor: 'pointer' }} className="muted" onClick={() => nav('/follows/fans')}>
-            <b style={{ fontSize: 17, color: 'var(--text)', marginRight: 4 }}>{me.fans ?? 0}</b>粉丝
+            <b style={{ fontSize: 17, color: 'var(--text)', marginRight: 4 }}>{me.fans ?? 0}</b>{t('me.fans')}
           </span>
         </div>
 
@@ -90,35 +94,54 @@ export function MePage() {
           }}
         >
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 11, color: 'var(--text-2)' }}>积分余额</div>
+            <div style={{ fontSize: 11, color: 'var(--text-2)' }}>{t('me.balance')}</div>
             <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--accent)' }}>{fmtPoints(me.balance)}</div>
           </div>
           <div style={{ textAlign: 'right', color: 'var(--text-2)' }}>
-            <div style={{ fontSize: 11 }}>冻结 {fmtPoints(me.frozen)}</div>
-            <div style={{ fontSize: 13, marginTop: 6 }}>明细 ›</div>
+            <div style={{ fontSize: 11 }}>{t('me.frozen', { n: fmtPoints(me.frozen) })}</div>
+            <div style={{ fontSize: 13, marginTop: 6 }}>{t('me.details')}</div>
           </div>
         </div>
       </div>
 
       {/* 菜单分组 */}
       <div className="card" style={{ margin: '14px 16px 0', padding: '4px 0' }}>
-        <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/edit-profile')}>编辑资料</div>
-        <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/invite-card')}>我的邀请名片</div>
-        <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/my-moments')}>我的动态</div>
-        <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/follow-moments')}>关注动态</div>
-        <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/task/mine')}>{me.gender === 2 ? '我的接单' : '我的约单'}</div>
-        <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/gifts-received')}>收到的礼物</div>
-        <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/bots')}>我的机器人</div>
+        <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/edit-profile')}>{t('me.editProfile')}</div>
+        <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/invite-card')}>{t('me.inviteCard')}</div>
+        <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/my-moments')}>{t('me.myMoments')}</div>
+        <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/follow-moments')}>{t('me.followMoments')}</div>
+        <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/task/mine')}>{me.gender === 2 ? t('me.myTasksGuide') : t('me.myTasks')}</div>
+        <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/gifts-received')}>{t('me.gifts')}</div>
+        <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/bots')}>{t('me.bots')}</div>
+        <div className="list-row" style={{ border: 'none', display: 'flex' }} onClick={() => setPicking(true)}>
+          <span style={{ flex: 1 }}>{t('lang.title')}</span>
+          <span className="muted" style={{ fontSize: 14, marginRight: 6 }}>{langName}</span>
+        </div>
       </div>
       {/* 搭子认证已合并实名认证（申请时提交姓名+身份证，审核通过即实名） */}
       {!me.isGuide && (
         <div className="card" style={{ margin: '10px 16px 24px', padding: '4px 0' }}>
-          <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/guide-apply')}>搭子认证</div>
+          <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/guide-apply')}>{t('me.guideApply')}</div>
         </div>
       )}
 
       {/* 扫一扫：邀请名片 → 私聊；群邀请码 → 加群；收款码 → 提示 */}
       {scanning && <ScanFlow onClose={() => setScanning(false)} />}
+
+      {/* 语言：跟随系统 + 打包进来的每种语言（名字用各自的语言写） */}
+      {picking && (
+        <div className="mask" onClick={() => setPicking(false)}>
+          <div className="card" style={{ width: 280, padding: '8px 0' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ padding: '12px 20px', fontSize: 16, fontWeight: 600 }}>{t('lang.title')}</div>
+            {[{ code: SYSTEM, name: t('lang.system') }, ...languages].map((l) => (
+              <div key={l.code} style={{ display: 'flex', padding: '14px 20px', fontSize: 15, cursor: 'pointer' }} onClick={() => (l.code === choice ? setPicking(false) : setLang(l.code))}>
+                <span style={{ flex: 1 }}>{l.name}</span>
+                {l.code === choice && <span style={{ color: 'var(--accent)', fontWeight: 700 }}>✓</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

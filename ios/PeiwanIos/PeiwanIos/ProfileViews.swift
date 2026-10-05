@@ -9,6 +9,7 @@ struct MeView: View {
     @State private var camDefaultOn = UserDefaults.standard.bool(forKey: "camDefaultOn")
     @State private var showScan = false
     @State private var chainWalletVisible = false
+    @State private var showLanguage = false
 
     var body: some View {
         NavStack {
@@ -40,19 +41,19 @@ struct MeView: View {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(u.nickname).font(.system(size: 21, weight: .bold)).foregroundStyle(Theme.text)
                                 HStack(spacing: 6) {
-                                    Text("\(u.gender == 1 ? "男" : "女") \(u.age)")
+                                    Text("\(u.gender == 1 ? t("me.male") : t("me.female")) \(u.age)")
                                         .font(.system(size: 11))
                                         .foregroundStyle(u.gender == 1 ? Color(red: 0.43, green: 0.70, blue: 1.0) : Color(red: 1.0, green: 0.48, blue: 0.58))
                                         .padding(.horizontal, 10).padding(.vertical, 2)
                                         .background(Capsule().fill(Theme.bg3))
                                     if u.isGuide {
-                                        Text("认证").font(.system(size: 11)).foregroundStyle(Theme.accent)
+                                        Text(t("me.verified")).font(.system(size: 11)).foregroundStyle(Theme.accent)
                                             .padding(.horizontal, 8).padding(.vertical, 2)
                                             .background(RoundedRectangle(cornerRadius: 4).fill(Theme.bg3))
                                     }
                                 }
                                 if let sid = u.shortId {
-                                    Text("ID：\(sid)").font(.system(size: 12)).foregroundStyle(Theme.textSub)
+                                    Text(t("me.id", ["id": sid])).font(.system(size: 12)).foregroundStyle(Theme.textSub)
                                 }
                             }
                             .padding(.top, 4)
@@ -70,7 +71,7 @@ struct MeView: View {
                             .buttonStyle(.plain)
                             .padding(.top, 4)
                         }
-                        Text(u.signature.isEmpty ? "还没有签名" : u.signature)
+                        Text(u.signature.isEmpty ? t("me.noSignature") : u.signature)
                             .font(.system(size: 13)).foregroundStyle(Theme.textSub)
                             .padding(.top, 14)
                         // 点击进关注/粉丝列表
@@ -78,7 +79,7 @@ struct MeView: View {
                             RouteLink(.followList("following")) {
                                 HStack(spacing: 6) {
                                     Text("\(u.following ?? 0)").font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.text)
-                                    Text("关注").font(.system(size: 13)).foregroundStyle(Theme.textSub)
+                                    Text(t("me.following")).font(.system(size: 13)).foregroundStyle(Theme.textSub)
                                 }
                             }
                             .buttonStyle(.plain)
@@ -86,7 +87,7 @@ struct MeView: View {
                             RouteLink(.followList("fans")) {
                                 HStack(spacing: 6) {
                                     Text("\(u.fans ?? 0)").font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.text)
-                                    Text("粉丝").font(.system(size: 13)).foregroundStyle(Theme.textSub)
+                                    Text(t("me.fans")).font(.system(size: 13)).foregroundStyle(Theme.textSub)
                                 }
                             }
                             .buttonStyle(.plain)
@@ -97,13 +98,13 @@ struct MeView: View {
                         RouteLink(.wallet) {
                             HStack(alignment: .center) {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("积分余额").font(.system(size: 11)).foregroundStyle(Theme.textSub)
+                                    Text(t("me.balance")).font(.system(size: 11)).foregroundStyle(Theme.textSub)
                                     Text(fmtPoints(u.balance)).font(.system(size: 26, weight: .bold)).foregroundStyle(Theme.accent)
                                 }
                                 Spacer()
                                 VStack(alignment: .trailing, spacing: 6) {
-                                    Text("冻结 \(fmtPoints(u.frozen))").font(.system(size: 11)).foregroundStyle(Theme.textSub)
-                                    Text("明细 ›").font(.system(size: 13)).foregroundStyle(Theme.textSub)
+                                    Text(t("me.frozen", ["n": fmtPoints(u.frozen)])).font(.system(size: 11)).foregroundStyle(Theme.textSub)
+                                    Text(t("me.details")).font(.system(size: 13)).foregroundStyle(Theme.textSub)
                                 }
                             }
                             .padding(.horizontal, 16).padding(.vertical, 12)
@@ -122,8 +123,8 @@ struct MeView: View {
                         VStack(spacing: 0) {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("视频通话开启我的画面").font(.system(size: 15)).foregroundStyle(Theme.text)
-                                    Text("默认关闭，通话中可随时手动开启").font(.system(size: 11)).foregroundStyle(Theme.textDim)
+                                    Text(t("me.camDefault")).font(.system(size: 15)).foregroundStyle(Theme.text)
+                                    Text(t("me.camDefaultSub")).font(.system(size: 11)).foregroundStyle(Theme.textDim)
                                 }
                                 Spacer()
                                 Toggle("", isOn: $camDefaultOn)
@@ -138,23 +139,52 @@ struct MeView: View {
                         }
                     }
                     // 菜单
-                    menuRow("编辑资料", .editProfile)
+                    menuRow(t("me.editProfile"), .editProfile)
                     // 专属邀请网页（链接 + 二维码）：女生发给男生 / 男生发给女生，下载后自动归因到我
-                    if !state.reviewMode { menuRow("我的邀请名片", .inviteCard) }
-                    menuRow("我的动态", .myMoments)
+                    if !state.reviewMode { menuRow(t("me.inviteCard"), .inviteCard) }
+                    menuRow(t("me.myMoments"), .myMoments)
                     // 关注的人动态（原主页「关注」tab 移到这里）
-                    menuRow("关注动态", .followMoments)
-                    menuRow(u.gender == 2 ? "我的接单" : "我的约单", .taskMine)
-                    menuRow("收到的礼物", .giftsReceived)
-                    menuRow("我的机器人", .bots)
+                    menuRow(t("me.followMoments"), .followMoments)
+                    menuRow(u.gender == 2 ? t("me.myTasksGuide") : t("me.myTasks"), .taskMine)
+                    menuRow(t("me.gifts"), .giftsReceived)
+                    menuRow(t("me.bots"), .bots)
                     // 链上钱包：App Store 非中国区 + 后台开关（或本机已有钱包）
-                    if chainWalletVisible { menuRow("链上钱包", .chainWallet) }
+                    if chainWalletVisible { menuRow(t("me.chainWallet"), .chainWallet) }
                     // 搭子认证已合并实名认证（申请时提交姓名+身份证，审核通过即实名）
-                    if !u.isGuide { menuRow("搭子认证", .guideApply) }
+                    if !u.isGuide { menuRow(t("me.guideApply"), .guideApply) }
+                    languageRow
                 }
             }
         } else {
-            EmptyHint(text: "加载中…")
+            EmptyHint(text: t("common.loading"))
+        }
+    }
+
+    /// 语言：跟随系统 + 打包进来的每种语言（名字用各自的语言写）
+    private var languageRow: some View {
+        let i18n = I18n.shared
+        let current = i18n.choice == I18n.system ? t("lang.system") : (i18n.languages.first { $0.code == i18n.choice }?.name ?? i18n.choice)
+        return Button {
+            showLanguage = true
+        } label: {
+            VStack(spacing: 0) {
+                HStack {
+                    Text(t("lang.title")).font(.system(size: 15)).foregroundStyle(Theme.text)
+                    Spacer()
+                    Text(current).font(.system(size: 14)).foregroundStyle(Theme.textSub)
+                    Text("›").font(.system(size: 18)).foregroundStyle(Theme.textDim)
+                }
+                .padding(.horizontal, 16).padding(.vertical, 15)
+                Rectangle().fill(Theme.line).frame(height: 1)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .confirmationDialog(t("lang.title"), isPresented: $showLanguage, titleVisibility: .visible) {
+            Button(t("lang.system")) { i18n.select(I18n.system) }
+            ForEach(i18n.languages, id: \.code) { l in
+                Button(l.name) { i18n.select(l.code) }
+            }
         }
     }
 

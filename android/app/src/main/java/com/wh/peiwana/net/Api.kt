@@ -113,6 +113,8 @@ object Api {
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
+        // 服务端按这个语言返回报错 / 配置项文字
+        .addInterceptor { chain -> chain.proceed(chain.request().newBuilder().header("Accept-Language", com.wh.peiwana.i18n.I18n.lang).build()) }
         .build()
     private val jsonMedia = "application/json; charset=utf-8".toMediaType()
 

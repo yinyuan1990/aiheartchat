@@ -1,3 +1,5 @@
+import { lang } from './i18n';
+
 // http 环境（非安全上下文）没有 crypto.randomUUID，做降级
 function randomId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -32,7 +34,7 @@ export function setToken(token: string | null) {
 }
 
 export async function api<T = any>(path: string, options: { method?: string; body?: any } = {}): Promise<T> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', 'Accept-Language': lang() };
   const token = getToken();
   if (token) headers['Authorization'] = `Bearer ${token}`;
   const res = await fetch(`/api${path}`, {
@@ -68,7 +70,7 @@ export async function uploadFile(kind: 'image' | 'video', file: File): Promise<s
   form.append('file', file);
   const res = await fetch(`/api/upload/${kind}`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${getToken()}` },
+    headers: { Authorization: `Bearer ${getToken()}`, 'Accept-Language': lang() },
     body: form,
   });
   const json = await res.json();

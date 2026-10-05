@@ -59,8 +59,8 @@ struct MainTabView: View {
 
     private var bottomBar: some View {
         HStack(spacing: 0) {
-            tabItem("广场", 0)
-            tabItem("大厅", 1)
+            tabItem(t("tab.plaza"), 0)
+            tabItem(t("tab.hall"), 1)
             Button { showPublish = true } label: {
                 Text("+")
                     .font(.system(size: 24, weight: .semibold))
@@ -70,8 +70,8 @@ struct MainTabView: View {
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity)
-            tabItem("消息", 2, badge: unreadTotal)
-            tabItem("我的", 3)
+            tabItem(t("tab.messages"), 2, badge: unreadTotal)
+            tabItem(t("tab.me"), 3)
         }
         .padding(.top, 10)
         .padding(.bottom, 4)

@@ -36,6 +36,7 @@ import { AgreementPage } from './pages/Agreement';
 import { UserHomePage } from './pages/UserHome';
 import { TreeholeDetailPage, TreeholePublishPage, TreeholeSharePage } from './pages/Treehole';
 import { markEmbedded } from './bridge';
+import { t } from './i18n';
 
 function Shell() {
   const nav = useNavigate();
@@ -75,16 +76,16 @@ function Shell() {
         <Outlet />
       </div>
       <nav className="tabbar">
-        <NavLink to="/plaza" className={({ isActive }) => `tab${isActive ? ' active' : ''}`}>广场</NavLink>
-        <NavLink to="/hall" className={({ isActive }) => `tab${isActive ? ' active' : ''}`}>大厅</NavLink>
+        <NavLink to="/plaza" className={({ isActive }) => `tab${isActive ? ' active' : ''}`}>{t('tab.plaza')}</NavLink>
+        <NavLink to="/hall" className={({ isActive }) => `tab${isActive ? ' active' : ''}`}>{t('tab.hall')}</NavLink>
         <div className="tab-plus" onClick={() => nav('/publish')}>
           <div className="plus-box">+</div>
         </div>
         <NavLink to="/chat" className={({ isActive }) => `tab${isActive ? ' active' : ''}`}>
-          消息
+          {t('tab.messages')}
           {unread > 0 && <span className="badge">{unread > 99 ? '99+' : unread}</span>}
         </NavLink>
-        <NavLink to="/me" className={({ isActive }) => `tab${isActive ? ' active' : ''}`}>我的</NavLink>
+        <NavLink to="/me" className={({ isActive }) => `tab${isActive ? ' active' : ''}`}>{t('tab.me')}</NavLink>
       </nav>
     </div>
   );

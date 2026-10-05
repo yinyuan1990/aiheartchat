@@ -19,6 +19,7 @@ import { AddBotSheet, BotPublic, botInfo, InlineKeyboard, InlineMarkup } from '.
 import { dustThen, undust } from '../dust';
 import { decodeQrFromImage, ScanIcon } from '../components/QrScanner';
 import { ScanFlow } from './ChatList';
+import { t } from '../i18n';
 
 /** 消息气泡那一行（不含上面的时间分隔），删除时化成灰 */
 const msgEl = (id: string) => document.getElementById(`msg-${id}`)?.querySelector('.bubble-row');
@@ -872,7 +873,7 @@ export function ChatRoomPage() {
             <>
               <div className="nav-menu-mask" onClick={() => setNavMenu(false)} />
               <div className="nav-menu">
-                {state.convType === 2 && <div onClick={() => { setNavMenu(false); setShowGroupInfo(true); }}>群信息</div>}
+                {state.convType === 2 && <div onClick={() => { setNavMenu(false); setShowGroupInfo(true); }}>{t('chat.menu.groupInfo')}</div>}
                 <div
                   className="danger"
                   onClick={async () => {
@@ -890,7 +891,7 @@ export function ChatRoomPage() {
                     }
                   }}
                 >
-                  清空聊天记录
+                  {t('chat.menu.clear')}
                 </div>
               </div>
             </>

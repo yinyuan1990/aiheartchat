@@ -1,0 +1,68 @@
+package com.wh.peiwana.i18n
+
+import android.content.Context
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import java.util.Locale
+
+/**
+ * 界面文字多语言：assets/i18n/<语言>.json（仓库根目录 i18n/ 里维护，node i18n/sync.mjs 复制过来）。
+ * `choice` 是 Compose 状态：组合里调用 t() 的界面在切换语言后自动重组，不用重启。缺的 key 显示中文。
+ */
+object I18n {
+    const val SYSTEM = "system"
+    private const val FALLBACK = "zh"
+
+    private var tables: Map<String, Map<String, String>> = emptyMap()
+    private lateinit var prefs: android.content.SharedPreferences
+
+    /** "system" 或语言代码 */
+    var choice by mutableStateOf(SYSTEM)
+        private set
+
+    /** 打包进来的语言：代码 → 本语言里的名字（"简体中文"、"English"），中文排第一 */
+    val languages: List<Pair<String, String>>
+        get() = tables.map { (code, t) -> code to (t["lang.name"] ?: code) }.sortedWith(compareBy({ it.first != FALLBACK }, { it.first }))
+
+    /** 当前生效的语言代码 */
+    val lang: String
+        get() = choice.takeIf { it != SYSTEM && it in tables } ?: systemLang()
+
+    fun init(context: Context) {
+        prefs = context.getSharedPreferences("peiwan", Context.MODE_PRIVATE)
+        val assets = context.assets
+        tables = (assets.list("i18n") ?: emptyArray()).filter { it.endsWith(".json") }.associate { f ->
+            val obj = Json.parseToJsonElement(assets.open("i18n/$f").bufferedReader().use { it.readText() }) as JsonObject
+            f.removeSuffix(".json") to obj.mapValues { it.value.jsonPrimitive.content }
+        }
+        choice = prefs.getString("lang", SYSTEM) ?: SYSTEM
+    }
+
+    fun select(code: String) {
+        choice = code
+        prefs.edit().putString("lang", code).apply()
+    }
+
+    /** 系统是中文（含繁体）就用中文，有对应语言包就用它，其它一律英文 */
+    private fun systemLang(): String {
+        val sys = Locale.getDefault().language
+        return when {
+            sys == "zh" -> "zh"
+            sys in tables -> sys
+            else -> "en"
+        }
+    }
+
+    fun text(key: String, args: Array<out Pair<String, Any?>>): String {
+        var s = tables[lang]?.get(key) ?: tables[FALLBACK]?.get(key) ?: key
+        for ((k, v) in args) s = s.replace("{$k}", v.toString())
+        return s
+    }
+}
+
+/** t("me.frozen", "n" to 12) */
+fun t(key: String, vararg args: Pair<String, Any?>): String = I18n.text(key, args)

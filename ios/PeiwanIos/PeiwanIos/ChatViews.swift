@@ -767,7 +767,7 @@ struct ChatRoomView: View {
 
     private var voiceRoomLabel: String {
         let n = vroom.memberCount(targetId)
-        return n > 0 ? "语音房 · \(n) 人在聊" : "语音房"
+        return n > 0 ? t("chat.menu.voiceRoomN", ["n": n]) : t("chat.menu.voiceRoom")
     }
 
     @ToolbarContentBuilder
@@ -790,13 +790,13 @@ struct ChatRoomView: View {
                     Button {
                         walletRoute = .groupInfo(targetId)
                     } label: {
-                        Label("群信息", systemImage: "person.3")
+                        Label(t("chat.menu.groupInfo"), systemImage: "person.3")
                     }
                 }
                 Button(role: .destructive) {
                     showClearConfirm = true
                 } label: {
-                    Label("清空聊天记录", systemImage: "trash")
+                    Label(t("chat.menu.clear"), systemImage: "trash")
                 }
             } label: {
                 Image(systemName: "ellipsis")

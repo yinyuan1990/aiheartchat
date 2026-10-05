@@ -837,12 +837,12 @@ fun ChatRoomScreen(
                 androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = Bg2) {
                     if (convType == 2) {
                         androidx.compose.material3.DropdownMenuItem(
-                            text = { Text(if (vrCount > 0) "语音房 · $vrCount 人在聊" else "语音房", fontSize = 14.sp, color = if (vrJoinedGid == targetId) Accent else TextMain) },
+                            text = { Text(if (vrCount > 0) com.wh.peiwana.i18n.t("chat.menu.voiceRoomN", "n" to vrCount) else com.wh.peiwana.i18n.t("chat.menu.voiceRoom"), fontSize = 14.sp, color = if (vrJoinedGid == targetId) Accent else TextMain) },
                             onClick = { menu = false; showVoiceRoom = true },
                         )
-                        androidx.compose.material3.DropdownMenuItem(text = { Text("群信息", fontSize = 14.sp, color = TextMain) }, onClick = { menu = false; onGroupInfo() })
+                        androidx.compose.material3.DropdownMenuItem(text = { Text(com.wh.peiwana.i18n.t("chat.menu.groupInfo"), fontSize = 14.sp, color = TextMain) }, onClick = { menu = false; onGroupInfo() })
                     }
-                    androidx.compose.material3.DropdownMenuItem(text = { Text("清空聊天记录", fontSize = 14.sp, color = Danger) }, onClick = { menu = false; showClearConfirm = true })
+                    androidx.compose.material3.DropdownMenuItem(text = { Text(com.wh.peiwana.i18n.t("chat.menu.clear"), fontSize = 14.sp, color = Danger) }, onClick = { menu = false; showClearConfirm = true })
                 }
             }
         }

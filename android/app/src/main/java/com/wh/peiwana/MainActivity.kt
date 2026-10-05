@@ -46,6 +46,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Api.init(applicationContext)
+        com.wh.peiwana.i18n.I18n.init(applicationContext)
         // 全局图片缓存：内存 25% + 磁盘 512MB，忽略服务端缓存头（资源为 UUID 文件名不会变）
         coil.Coil.setImageLoader(
             coil.ImageLoader.Builder(applicationContext)

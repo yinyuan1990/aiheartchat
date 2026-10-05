@@ -24,6 +24,8 @@ import com.wh.peiwana.net.*
 import com.wh.peiwana.ui.*
 import com.wh.peiwana.ui.theme.*
 import kotlinx.coroutines.launch
+import com.wh.peiwana.i18n.I18n
+import com.wh.peiwana.i18n.t
 
 @Composable
 fun MeScreen(modifier: Modifier = Modifier, initialUser: UserProfile?, onNav: (String) -> Unit) {
@@ -45,13 +47,13 @@ fun MeScreen(modifier: Modifier = Modifier, initialUser: UserProfile?, onNav: (S
                         Text(u.nickname, color = TextMain, fontSize = 21.sp, fontWeight = FontWeight.Bold)
                         Row(modifier = Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(
-                                "${if (u.gender == 1) "男" else "女"} ${u.age}",
+                                "${if (u.gender == 1) t("me.male") else t("me.female")} ${u.age}",
                                 color = if (u.gender == 1) Color(0xFF6DB3FF) else Color(0xFFFF7A95), fontSize = 11.sp,
                                 modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(Bg3).padding(horizontal = 10.dp, vertical = 2.dp),
                             )
-                            if (u.isGuide) Text("认证", color = Accent, fontSize = 11.sp, modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Bg3).padding(horizontal = 8.dp, vertical = 2.dp))
+                            if (u.isGuide) Text(t("me.verified"), color = Accent, fontSize = 11.sp, modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Bg3).padding(horizontal = 8.dp, vertical = 2.dp))
                         }
-                        if (u.shortId != null) Text("ID：${u.shortId}", color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+                        if (u.shortId != null) Text(t("me.id", "id" to u.shortId), color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
                     }
                     // 扫一扫（邀请名片 / 群二维码）
                     Box(
@@ -60,16 +62,16 @@ fun MeScreen(modifier: Modifier = Modifier, initialUser: UserProfile?, onNav: (S
                         contentAlignment = Alignment.Center,
                     ) { ScanIcon(TextMain, 18.dp) }
                 }
-                Text(if (u.signature.isNotEmpty()) u.signature else "还没有签名", color = TextSub, fontSize = 13.sp, modifier = Modifier.padding(top = 14.dp))
+                Text(u.signature.ifEmpty { t("me.noSignature") }, color = TextSub, fontSize = 13.sp, modifier = Modifier.padding(top = 14.dp))
                 // 点击进关注/粉丝列表
                 Row(modifier = Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(26.dp)) {
                     Row(Modifier.noRippleClick { onNav("follows/following") }, verticalAlignment = Alignment.CenterVertically) {
                         Text("${u.following}", color = TextMain, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                        Text(" 关注", color = TextSub, fontSize = 13.sp)
+                        Text(" " + t("me.following"), color = TextSub, fontSize = 13.sp)
                     }
                     Row(Modifier.noRippleClick { onNav("follows/fans") }, verticalAlignment = Alignment.CenterVertically) {
                         Text("${u.fans}", color = TextMain, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                        Text(" 粉丝", color = TextSub, fontSize = 13.sp)
+                        Text(" " + t("me.fans"), color = TextSub, fontSize = 13.sp)
                     }
                 }
                 // 积分余额：融合进头部（玻璃质感行，点击进钱包）
@@ -83,29 +85,29 @@ fun MeScreen(modifier: Modifier = Modifier, initialUser: UserProfile?, onNav: (S
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("积分余额", color = TextSub, fontSize = 11.sp)
+                        Text(t("me.balance"), color = TextSub, fontSize = 11.sp)
                         Text(fmtPoints(u.balance), color = Accent, fontSize = 26.sp, fontWeight = FontWeight.Bold)
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text("冻结 ${fmtPoints(u.frozen)}", color = TextSub, fontSize = 11.sp)
-                        Text("明细 ›", color = TextSub, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
+                        Text(t("me.frozen", "n" to fmtPoints(u.frozen)), color = TextSub, fontSize = 11.sp)
+                        Text(t("me.details"), color = TextSub, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
                     }
                 }
             }
         }
         val rows = buildList {
-            add("编辑资料" to "edit-profile")
+            add(t("me.editProfile") to "edit-profile")
             // 专属邀请网页（链接 + 二维码）：女生发给男生 / 男生发给女生，下载后自动归因到我
-            add("我的邀请名片" to "invite-card")
-            add("我的动态" to "my-moments")
+            add(t("me.inviteCard") to "invite-card")
+            add(t("me.myMoments") to "my-moments")
             // 关注的人动态（原主页「关注」tab 移到这里）
-            add("关注动态" to "follow-moments")
-            add((if (u.gender == 2) "我的接单" else "我的约单") to "task/mine")
-            add("收到的礼物" to "gifts-received")
-            add("我的机器人" to "bots")
-            if (chainWalletVisible(ctx, u)) add("链上钱包" to "chain-wallet")
+            add(t("me.followMoments") to "follow-moments")
+            add((if (u.gender == 2) t("me.myTasksGuide") else t("me.myTasks")) to "task/mine")
+            add(t("me.gifts") to "gifts-received")
+            add(t("me.bots") to "bots")
+            if (chainWalletVisible(ctx, u)) add(t("me.chainWallet") to "chain-wallet")
             // 搭子认证已合并实名认证（申请时提交姓名+身份证，审核通过即实名）
-            if (!u.isGuide) add("搭子认证" to "guide-apply")
+            if (!u.isGuide) add(t("me.guideApply") to "guide-apply")
         }
         items(rows) { (label, route) ->
             Row(modifier = Modifier.fillMaxWidth().clickable { onNav(route) }.padding(16.dp, 15.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -114,14 +116,25 @@ fun MeScreen(modifier: Modifier = Modifier, initialUser: UserProfile?, onNav: (S
             }
             Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Line))
         }
+        item {
+            var picking by remember { mutableStateOf(false) }
+            val current = if (I18n.choice == I18n.SYSTEM) t("lang.system") else I18n.languages.firstOrNull { it.first == I18n.choice }?.second.orEmpty()
+            Row(modifier = Modifier.fillMaxWidth().clickable { picking = true }.padding(16.dp, 15.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(t("lang.title"), color = TextMain, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                Text(current, color = TextSub, fontSize = 14.sp)
+                Text("  ›", color = TextDim, fontSize = 18.sp)
+            }
+            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Line))
+            if (picking) LanguageDialog { picking = false }
+        }
         // 男方专属：视频通话默认是否开启自己画面（默认关闭；女方无此设置）
         if (u.gender == 1) {
             item {
                 var camOn by remember { mutableStateOf(Api.camDefaultOn) }
                 Row(modifier = Modifier.fillMaxWidth().padding(16.dp, 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("视频通话开启我的画面", color = TextMain, fontSize = 15.sp)
-                        Text("默认关闭，通话中可随时手动开启", color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
+                        Text(t("me.camDefault"), color = TextMain, fontSize = 15.sp)
+                        Text(t("me.camDefaultSub"), color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
                     }
                     androidx.compose.material3.Switch(
                         checked = camOn,
@@ -135,10 +148,29 @@ fun MeScreen(modifier: Modifier = Modifier, initialUser: UserProfile?, onNav: (S
     }
 }
 
+/** 语言选择：跟随系统 + 打包进来的每种语言（名字用各自的语言写） */
+@Composable
+private fun LanguageDialog(onDismiss: () -> Unit) {
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Bg2).padding(vertical = 8.dp)) {
+            Text(t("lang.title"), color = TextMain, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(20.dp, 12.dp))
+            (listOf(I18n.SYSTEM to t("lang.system")) + I18n.languages).forEach { (code, name) ->
+                Row(
+                    Modifier.fillMaxWidth().clickable { I18n.select(code); onDismiss() }.padding(20.dp, 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(name, color = TextMain, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                    if (I18n.choice == code) Text("✓", color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
 /** 关注/粉丝列表（我的页面点击数字进入） */
 @Composable
 fun FollowListScreen(type: String, onBack: () -> Unit, onOpenUser: (String) -> Unit) {
-    val title = if (type == "fans") "粉丝" else "关注"
+    val title = if (type == "fans") t("me.fans") else t("me.following")
     var list by remember { mutableStateOf<List<FollowUser>?>(null) }
     LaunchedEffect(type) {
         list = runCatching { Api.getList<FollowUser>("/user/follows/list?type=$type") }.getOrDefault(emptyList())
@@ -148,10 +180,10 @@ fun FollowListScreen(type: String, onBack: () -> Unit, onOpenUser: (String) -> U
         val items = list
         when {
             items == null -> Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
-                Text("加载中…", color = TextDim, fontSize = 13.sp)
+                Text(t("common.loading"), color = TextDim, fontSize = 13.sp)
             }
             items.isEmpty() -> Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
-                Text(if (type == "fans") "还没有粉丝" else "还没有关注的人", color = TextDim, fontSize = 13.sp)
+                Text(if (type == "fans") t("me.noFans") else t("me.noFollowing"), color = TextDim, fontSize = 13.sp)
             }
             else -> LazyColumn(Modifier.fillMaxSize()) {
                 items(items, key = { it.id }) { u ->
