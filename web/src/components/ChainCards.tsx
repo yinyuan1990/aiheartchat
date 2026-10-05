@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { wsManager } from '../ws';
+import { t } from '../i18n';
 
 /**
  * 链上钱包的聊天卡片（和 Android ChainCards.kt、iOS ChainCards.swift 同一套字段）。网页版没有钱包：
@@ -46,10 +47,10 @@ const usd = (v: unknown) => {
 /** 会话列表 / 引用里的一行预览；不是卡片返回 null */
 export function chainCardPreview(type: string, content: string): string | null {
   const o = parse(content);
-  if (type === 'transfer') return `[转账] ${tokenAmount(o.amount, Number(o.decimals) || 0)} ${o.symbol ?? ''}`.trim();
-  if (type === 'callout') return `[喊单] $${o.symbol ?? ''}`;
-  if (type === 'perp') return `[合约喊单] ${o.side === 'short' ? '做空' : '做多'} ${o.coin ?? ''} ${o.lev ?? ''}x`;
-  if (type === 'payreq') return o.amount ? `[收款] ${tokenAmount(o.amount, Number(o.decimals) || 0)} ${o.symbol ?? ''}`.trim() : `[收款] ${CHAIN_NAMES[o.chain] ?? o.chain ?? ''}`;
+  if (type === 'transfer') return t('card.preview.transfer', { amount: tokenAmount(o.amount, Number(o.decimals) || 0), symbol: o.symbol ?? '' }).trim();
+  if (type === 'callout') return t('card.preview.callout', { symbol: o.symbol ?? '' });
+  if (type === 'perp') return t('card.preview.perp', { side: o.side === 'short' ? t('card.short') : t('card.long'), coin: o.coin ?? '', lev: o.lev ?? '' });
+  if (type === 'payreq') return o.amount ? t('card.preview.payreq', { amount: tokenAmount(o.amount, Number(o.decimals) || 0), symbol: o.symbol ?? '' }).trim() : t('card.preview.payreqChain', { chain: CHAIN_NAMES[o.chain] ?? o.chain ?? '' });
   return null;
 }
 
@@ -70,18 +71,18 @@ export function PayreqCard({ content, mine }: { content: string; mine: boolean }
   const amount = o.amount ? `${tokenAmount(o.amount, Number(o.decimals) || 0)} ${o.symbol ?? ''}` : null;
   return (
     <span className="no-menu" style={{ display: 'flex', flexDirection: 'column', width: 230, borderRadius: 14, overflow: 'hidden', background: '#fff', border: '1px solid #f59e0b' }}>
-      <span style={{ padding: '9px 12px', background: '#f59e0b', color: '#fff', fontSize: 13, fontWeight: 600 }}>⇄ 收款 · {chain}</span>
+      <span style={{ padding: '9px 12px', background: '#f59e0b', color: '#fff', fontSize: 13, fontWeight: 600 }}>⇄ {t('card.payreq.title', { chain })}</span>
       <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: 12, color: '#111' }}>
-        <span style={{ fontSize: amount ? 20 : 14, fontWeight: 600 }}>{amount ?? (o.symbol ? `收 ${o.symbol}` : '金额由付款人填写')}</span>
+        <span style={{ fontSize: amount ? 20 : 14, fontWeight: 600 }}>{amount ?? (o.symbol ? t('card.payreq.receive', { symbol: o.symbol }) : t('card.payreq.anyAmount'))}</span>
         {o.note && <span style={{ fontSize: 12, color: '#555' }}>{o.note}</span>}
-        {qr && <img src={qr} alt="收款二维码" style={{ width: 140, height: 140 }} />}
+        {qr && <img src={qr} alt={t('card.payreq.qrAlt')} style={{ width: 140, height: 140 }} />}
         <span
           onClick={() => void navigator.clipboard?.writeText(address).then(() => setCopied(true))}
           style={{ fontSize: 11, wordBreak: 'break-all', textAlign: 'center', background: '#f4f4f5', borderRadius: 8, padding: '6px 8px', cursor: 'pointer' }}
         >
           {address}
         </span>
-        <span style={{ fontSize: 10, color: '#888' }}>{copied ? '地址已复制' : `点地址复制 · 只收 ${chain} 上的币${mine ? '' : ' · 在 App 里可以直接转账'}`}</span>
+        <span style={{ fontSize: 10, color: '#888' }}>{copied ? t('card.payreq.copied') : `${t('card.payreq.tip', { chain })}${mine ? '' : ` · ${t('card.payreq.appTip')}`}`}</span>
       </span>
     </span>
   );
@@ -109,12 +110,12 @@ export function TransferCard({ content, mine }: { content: string; mine: boolean
           <span style={{ fontSize: 17, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {tokenAmount(o.amount, Number(o.decimals) || 0)} {o.symbol}
           </span>
-          <span style={{ fontSize: 12, opacity: 0.85 }}>{mine ? '已转账给对方' : '对方给你转账'}</span>
+          <span style={{ fontSize: 12, opacity: 0.85 }}>{mine ? t('card.transfer.sent') : t('card.transfer.received')}</span>
         </span>
       </span>
       <span style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 14px', background: '#fff4de', fontSize: 11, color: '#9a5b00' }}>
-        <span>链上转账 · {CHAIN_NAMES[o.chain] ?? o.chain}</span>
-        {o.verified && <span style={{ color: '#16a34a' }}>已到账 ✓</span>}
+        <span>{t('card.transfer.onchain', { chain: CHAIN_NAMES[o.chain] ?? o.chain })}</span>
+        {o.verified && <span style={{ color: '#16a34a' }}>{t('card.transfer.verified')}</span>}
       </span>
     </span>
   );
@@ -146,17 +147,17 @@ export function PerpCard({ id, content }: { id: string; content: string }) {
   const st = perpStatuses.get(id) ?? {};
   const mark = perpMarks.get(o.coin);
   const up = '#22c55e', down = '#ef4444';
-  let label = '读取实时状态…', value = '', color = 'rgba(255,255,255,.5)';
+  let label = t('card.perp.loading'), value = '', color = 'rgba(255,255,255,.5)';
   if (st.state === 'open') {
     const e = Number(st.entry) || entry;
     const r = mark && e ? roe(e, mark, Number(st.lev) || lev, long) : Number(st.roe) || 0;
-    [label, value, color] = ['持仓中', pct(r), r >= 0 ? up : down];
+    [label, value, color] = [t('card.perp.open'), pct(r), r >= 0 ? up : down];
   } else if (st.state === 'closed') {
     const r = entry && st.exit ? roe(entry, Number(st.exit), lev, long) : 0;
-    const why = ({ tp: '止盈出局', sl: '止损出局', liq: '已强平' } as Record<string, string>)[st.reason] ?? '已平仓';
+    const why = ({ tp: t('card.perp.tpHit'), sl: t('card.perp.slHit'), liq: t('card.perp.liq') } as Record<string, string>)[st.reason] ?? t('card.perp.closed');
     [label, value, color] = st.reason === 'liq' ? [why, '-100%', down] : [why, pct(r), r >= 0 ? up : down];
-  } else if (st.state === 'pending') [label, value, color] = ['挂单中', st.px ? `@ ${perpPx(Number(st.px))}` : '', 'rgba(255,255,255,.7)'];
-  else if (st.state === 'none') label = '未成交 / 已撤单';
+  } else if (st.state === 'pending') [label, value, color] = [t('card.perp.pending'), st.px ? `@ ${perpPx(Number(st.px))}` : '', 'rgba(255,255,255,.7)'];
+  else if (st.state === 'none') label = t('card.perp.none');
   const cell = (k: string, v: unknown) => (
     <span style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
       <span style={{ fontSize: 10, opacity: 0.5 }}>{k}</span>
@@ -168,15 +169,15 @@ export function PerpCard({ id, content }: { id: string; content: string }) {
       <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ fontSize: 16, fontWeight: 700 }}>{o.coin}-USD</span>
         <span style={{ fontSize: 11, fontWeight: 600, color: long ? up : down, background: long ? 'rgba(34,197,94,.18)' : 'rgba(239,68,68,.18)', borderRadius: 6, padding: '2px 6px' }}>
-          {long ? '做多' : '做空'} {lev}x
+          {long ? t('card.long') : t('card.short')} {lev}x
         </span>
         <span style={{ flex: 1 }} />
         {mark && <span style={{ fontSize: 12, opacity: 0.7 }}>{perpPx(mark)}</span>}
       </span>
       <span style={{ display: 'flex', gap: 4 }}>
-        {cell(o.orderType === 'limit' ? '挂单' : '开仓', o.entry)}
-        {cell('止盈', o.tp)}
-        {cell('止损', o.sl)}
+        {cell(o.orderType === 'limit' ? t('card.perp.limit') : t('card.perp.entry'), o.entry)}
+        {cell(t('card.perp.tp'), o.tp)}
+        {cell(t('card.perp.sl'), o.sl)}
       </span>
       <span style={{ display: 'flex', alignItems: 'center', background: '#1b1f27', borderRadius: 10, padding: '8px 10px' }}>
         <span style={{ fontSize: 12, opacity: 0.75, flex: 1 }}>{label}</span>
@@ -185,8 +186,8 @@ export function PerpCard({ id, content }: { id: string; content: string }) {
       {o.note && <span style={{ fontSize: 13, lineHeight: '18px', whiteSpace: 'pre-wrap' }}>{o.note}</span>}
       <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
         <span style={{ color: '#4ade80' }}>📣</span>
-        <span style={{ opacity: 0.55, flex: 1 }}>合约喊单 · 收益率实时</span>
-        {st.state !== 'closed' && <span style={{ opacity: 0.55 }}>跟单请在 App 里点</span>}
+        <span style={{ opacity: 0.55, flex: 1 }}>{t('card.perp.footer')}</span>
+        {st.state !== 'closed' && <span style={{ opacity: 0.55 }}>{t('card.perp.copyInApp')}</span>}
       </span>
     </span>
   );
@@ -212,14 +213,14 @@ export function CalloutCard({ content }: { content: string }) {
         </span>
         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
           {usd(o.priceUsd) && <span style={{ fontSize: 12 }}>{usd(o.priceUsd)}</span>}
-          {usd(o.mcapUsd) && <span style={{ fontSize: 10, opacity: 0.55 }}>市值 {usd(o.mcapUsd)}</span>}
+          {usd(o.mcapUsd) && <span style={{ fontSize: 10, opacity: 0.55 }}>{t('card.callout.mcap', { v: usd(o.mcapUsd) ?? '' })}</span>}
         </span>
       </span>
       {o.note && <span style={{ fontSize: 13, lineHeight: '18px', whiteSpace: 'pre-wrap' }}>{o.note}</span>}
       <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
         <span style={{ color: '#4ade80' }}>📣</span>
-        <span style={{ opacity: 0.55, flex: 1 }}>喊单 · {CHAIN_NAMES[o.chain] ?? o.chain}</span>
-        <span style={{ background: '#4ade80', color: '#000', borderRadius: 12, padding: '3px 10px', fontSize: 12, fontWeight: 600 }}>看行情</span>
+        <span style={{ opacity: 0.55, flex: 1 }}>{t('card.callout.footer', { chain: CHAIN_NAMES[o.chain] ?? o.chain })}</span>
+        <span style={{ background: '#4ade80', color: '#000', borderRadius: 12, padding: '3px 10px', fontSize: 12, fontWeight: 600 }}>{t('card.callout.view')}</span>
       </span>
     </span>
   );

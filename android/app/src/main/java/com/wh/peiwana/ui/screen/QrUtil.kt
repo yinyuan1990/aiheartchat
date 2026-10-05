@@ -6,6 +6,7 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
 import com.journeyapps.barcodescanner.CaptureActivity
+import com.wh.peiwana.i18n.t
 
 /** 竖屏扫码页（zxing-embedded 默认横屏） */
 class PortraitCaptureActivity : CaptureActivity()
@@ -97,7 +98,7 @@ fun saveQrToGallery(context: android.content.Context, bitmap: Bitmap, namePrefix
 }.getOrDefault(false)
 
 /** 调系统分享面板分享图片 */
-fun shareQr(context: android.content.Context, bitmap: Bitmap, title: String = "分享收款码") {
+fun shareQr(context: android.content.Context, bitmap: Bitmap, title: String = t("qr.sharePayCode")) {
     runCatching {
         val file = java.io.File(context.cacheDir, "share_qr.png")
         file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }

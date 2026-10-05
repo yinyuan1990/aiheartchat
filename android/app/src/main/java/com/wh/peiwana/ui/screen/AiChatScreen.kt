@@ -20,6 +20,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.Api
 import com.wh.peiwana.ui.EmptyHint
 import com.wh.peiwana.ui.NavBar
@@ -79,15 +80,15 @@ fun AiChatScreen(myAvatar: String, onBack: () -> Unit) {
             }.onSuccess { reply ->
                 messages = messages + reply
             }.onFailure { e ->
-                android.widget.Toast.makeText(ctx, e.message ?: "AI 暂时不可用", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(ctx, e.message ?: t("ai.unavailable"), android.widget.Toast.LENGTH_SHORT).show()
             }
             thinking = false
         }
     }
 
     Column(Modifier.fillMaxSize()) {
-        NavBar("AI 助手", onBack) {
-            Text("清空", color = TextSub, fontSize = 13.sp, modifier = Modifier.noRippleClick {
+        NavBar(t("ai.title"), onBack) {
+            Text(t("chat.clear"), color = TextSub, fontSize = 13.sp, modifier = Modifier.noRippleClick {
                 scope.launch {
                     runCatching { Api.request("/ai/clear", "POST") }
                     messages = emptyList()
@@ -97,14 +98,14 @@ fun AiChatScreen(myAvatar: String, onBack: () -> Unit) {
 
         Box(Modifier.weight(1f)) {
             if (messages.isEmpty() && !thinking) {
-                EmptyHint("我是 AI 助手，完全免费\n有什么想问的尽管说")
+                EmptyHint(t("ai.empty"))
             } else {
                 LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp, 8.dp)) {
                     itemsIndexed(messages, key = { _, m -> m.id }) { _, m ->
                         AiBubble(m.content, mine = m.role == "user", myAvatar = myAvatar, onOpenHtml = { preview = it })
                     }
                     if (thinking) {
-                        item(key = "thinking") { AiBubble("正在思考…", mine = false, dim = true) }
+                        item(key = "thinking") { AiBubble(t("ai.thinking"), mine = false, dim = true) }
                     }
                 }
             }
@@ -121,7 +122,7 @@ fun AiChatScreen(myAvatar: String, onBack: () -> Unit) {
                 Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).background(Bg3)
                     .padding(14.dp, 10.dp),
             ) {
-                if (input.isEmpty()) Text("随便问点什么…", color = TextDim, fontSize = 14.sp)
+                if (input.isEmpty()) Text(t("ai.inputHint"), color = TextDim, fontSize = 14.sp)
                 BasicTextField(
                     value = input,
                     onValueChange = { input = it },
@@ -137,7 +138,7 @@ fun AiChatScreen(myAvatar: String, onBack: () -> Unit) {
                         .noRippleClick { send() }.padding(horizontal = 16.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text("发送", color = Color.White, fontSize = 14.sp)
+                    Text(t("common.send"), color = Color.White, fontSize = 14.sp)
                 }
             }
         }
@@ -198,8 +199,8 @@ private fun AiBubble(content: String, mine: Boolean, dim: Boolean = false, myAva
                 ) {
                     Text("🌐", fontSize = 22.sp)
                     Column {
-                        Text("网页内容", color = TextMain, fontSize = 14.sp)
-                        Text("点击打开预览 ›", color = Accent, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
+                        Text(t("ai.webContent"), color = TextMain, fontSize = 14.sp)
+                        Text(t("ai.openPreview"), color = Accent, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
                     }
                 }
             }

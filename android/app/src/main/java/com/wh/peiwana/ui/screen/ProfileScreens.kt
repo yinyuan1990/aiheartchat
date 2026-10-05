@@ -197,7 +197,7 @@ fun FollowListScreen(type: String, onBack: () -> Unit, onOpenUser: (String) -> U
                                 Text(u.nickname, color = TextMain, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                                 if (u.isGuide) {
                                     Text(
-                                        "认证", color = Accent, fontSize = 10.sp,
+                                        t("me.verified"), color = Accent, fontSize = 10.sp,
                                         modifier = Modifier.padding(start = 6.dp)
                                             .clip(RoundedCornerShape(3.dp))
                                             .background(Accent.copy(alpha = 0.12f))
@@ -219,11 +219,11 @@ fun FollowListScreen(type: String, onBack: () -> Unit, onOpenUser: (String) -> U
     }
 }
 
-private val txLabels = mapOf(
-    "admin_grant" to "平台发放", "gift_send" to "送出礼物", "gift_recv" to "收到礼物",
-    "task_freeze" to "约单托管", "task_settle" to "约单结算", "task_refund" to "约单退回",
-    "msg_fee" to "发送消息", "msg_income" to "消息收入", "call_fee" to "视频通话", "call_income" to "通话收入",
-    "transfer_out" to "转赠支出", "transfer_in" to "收到转赠", "adjust" to "调整",
+private val txLabels: Map<String, String> get() = mapOf(
+    "admin_grant" to t("wallet.tx.adminGrant"), "gift_send" to t("wallet.tx.giftSend"), "gift_recv" to t("wallet.tx.giftRecv"),
+    "task_freeze" to t("wallet.tx.taskFreeze"), "task_settle" to t("wallet.tx.taskSettle"), "task_refund" to t("wallet.tx.taskRefund"),
+    "msg_fee" to t("wallet.tx.msgFee"), "msg_income" to t("wallet.tx.msgIncome"), "call_fee" to t("wallet.tx.callFee"), "call_income" to t("wallet.tx.callIncome"),
+    "transfer_out" to t("wallet.tx.transferOut"), "transfer_in" to t("wallet.tx.transferIn"), "adjust" to t("wallet.tx.adjust"),
 )
 
 @Composable
@@ -253,17 +253,17 @@ fun WalletScreen(onBack: () -> Unit, onNav: (String) -> Unit) {
         rank = runCatching { Api.getObj<ContribRankResp>("/wallet/contrib-rank") }.getOrNull()
     }
     Column(modifier = Modifier.fillMaxSize()) {
-        NavBar("积分明细", onBack) { Text("转赠", color = Accent, fontSize = 14.sp, modifier = Modifier.clickable { onNav("transfer") }) }
+        NavBar(t("wallet.title"), onBack) { Text(t("wallet.transfer"), color = Accent, fontSize = 14.sp, modifier = Modifier.clickable { onNav("transfer") }) }
         Column(modifier = Modifier.padding(16.dp)) {
             Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Bg2).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("可用积分", color = TextSub, fontSize = 13.sp)
+                Text(t("wallet.available"), color = TextSub, fontSize = 13.sp)
                 Text(fmtPoints(wallet?.balance), color = TextMain, fontSize = 38.sp, fontWeight = FontWeight.Bold)
-                Text("冻结中 ${fmtPoints(wallet?.frozen)}", color = TextDim, fontSize = 12.sp)
+                Text(t("wallet.frozenN", "n" to fmtPoints(wallet?.frozen)), color = TextDim, fontSize = 12.sp)
             }
         }
         // 明细 / 榜单切换
         Row(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            listOf("明细", rank?.title ?: "贡献榜").forEachIndexed { idx, label ->
+            listOf(t("wallet.tabTxs"), rank?.title ?: t("wallet.rankContrib")).forEachIndexed { idx, label ->
                 Text(
                     label,
                     color = if (tab == idx) Color.White else TextSub,
@@ -283,7 +283,7 @@ fun WalletScreen(onBack: () -> Unit, onNav: (String) -> Unit) {
                 if (list.isEmpty()) {
                     item {
                         Box(Modifier.fillMaxWidth().padding(30.dp), contentAlignment = Alignment.Center) {
-                            Text("暂无数据", color = TextDim, fontSize = 13.sp)
+                            Text(t("wallet.noData"), color = TextDim, fontSize = 13.sp)
                         }
                     }
                 }
@@ -301,7 +301,7 @@ fun WalletScreen(onBack: () -> Unit, onNav: (String) -> Unit) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(r.nickname, color = TextMain, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                             Text(
-                                "礼物 ${fmtPoints(r.giftFen)} · 通话 ${fmtPoints(r.callFen)} · 消息 ${fmtPoints(r.msgFen)}",
+                                t("wallet.rankBreakdown", "gift" to fmtPoints(r.giftFen), "call" to fmtPoints(r.callFen), "msg" to fmtPoints(r.msgFen)),
                                 color = TextDim, fontSize = 11.sp,
                             )
                         }
@@ -312,18 +312,18 @@ fun WalletScreen(onBack: () -> Unit, onNav: (String) -> Unit) {
             }
         } else {
         LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp)) {
-            itemsIndexed(txs, key = { _, t -> t.id }) { idx, t ->
+            itemsIndexed(txs, key = { _, tx -> tx.id }) { idx, tx ->
                 // 滚动到最后一条时自动加载下一页
                 if (idx == txs.lastIndex && hasMore) {
-                    LaunchedEffect(t.id) { loadMore() }
+                    LaunchedEffect(tx.id) { loadMore() }
                 }
                 Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(txLabels[t.type] ?: t.type, color = TextMain, fontSize = 14.sp)
-                        Text(t.remark, color = TextDim, fontSize = 11.sp)
+                        Text(txLabels[tx.type] ?: tx.type, color = TextMain, fontSize = 14.sp)
+                        Text(tx.remark, color = TextDim, fontSize = 11.sp)
                     }
-                    val neg = t.amount.startsWith("-")
-                    Text((if (neg) "-" else "+") + fmtPoints(t.amount.removePrefix("-")), color = if (neg) TextMain else Success, fontWeight = FontWeight.SemiBold)
+                    val neg = tx.amount.startsWith("-")
+                    Text((if (neg) "-" else "+") + fmtPoints(tx.amount.removePrefix("-")), color = if (neg) TextMain else Success, fontWeight = FontWeight.SemiBold)
                 }
                 Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Line))
             }
@@ -351,20 +351,20 @@ fun RealnameScreen(onBack: () -> Unit) {
     LaunchedEffect(Unit) { me = runCatching { Api.getObj<UserProfile>("/user/me") }.getOrNull() }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        NavBar("实名认证", onBack)
+        NavBar(t("realname.title"), onBack)
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             if (me?.realname == true) {
                 Column(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Bg2).padding(vertical = 40.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text("已完成实名认证", color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                    Text("认证姓名：${me?.realNameMasked ?: ""}", color = TextSub, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
+                    Text(t("realname.done"), color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text(t("realname.verifiedName", "name" to (me?.realNameMasked ?: "")), color = TextSub, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
                 }
             } else {
                 Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Bg2).padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("真实姓名", color = TextSub, fontSize = 13.sp)
+                        Text(t("realname.name"), color = TextSub, fontSize = 13.sp)
                         androidx.compose.foundation.text.BasicTextField(
                             value = name,
                             onValueChange = { name = it.take(20) },
@@ -373,14 +373,14 @@ fun RealnameScreen(onBack: () -> Unit) {
                             singleLine = true,
                             decorationBox = { inner ->
                                 Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Bg3).padding(12.dp)) {
-                                    if (name.isEmpty()) Text("与身份证一致", color = TextDim, fontSize = 16.sp)
+                                    if (name.isEmpty()) Text(t("realname.namePlaceholder"), color = TextDim, fontSize = 16.sp)
                                     inner()
                                 }
                             },
                         )
                     }
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("身份证号", color = TextSub, fontSize = 13.sp)
+                        Text(t("realname.idCardNo"), color = TextSub, fontSize = 13.sp)
                         androidx.compose.foundation.text.BasicTextField(
                             value = idCard,
                             onValueChange = { v -> idCard = v.uppercase().filter { it.isDigit() || it == 'X' }.take(18) },
@@ -389,15 +389,15 @@ fun RealnameScreen(onBack: () -> Unit) {
                             singleLine = true,
                             decorationBox = { inner ->
                                 Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Bg3).padding(12.dp)) {
-                                    if (idCard.isEmpty()) Text("18 位身份证号码", color = TextDim, fontSize = 16.sp)
+                                    if (idCard.isEmpty()) Text(t("realname.idCardPlaceholder"), color = TextDim, fontSize = 16.sp)
                                     inner()
                                 }
                             },
                         )
                     }
-                    Text("信息仅用于身份核验，平台不对外展示。每个身份证号仅可认证一个账号。", color = TextDim, fontSize = 12.sp)
+                    Text(t("realname.privacy"), color = TextDim, fontSize = 12.sp)
                 }
-                AccentButton(if (busy) "提交中…" else "提交认证", enabled = !busy && name.length >= 2 && idCard.length == 18) {
+                AccentButton(if (busy) t("realname.submitting") else t("realname.submit"), enabled = !busy && name.length >= 2 && idCard.length == 18) {
                     busy = true
                     scope.launch {
                         val body = kotlinx.serialization.json.buildJsonObject {
@@ -406,10 +406,10 @@ fun RealnameScreen(onBack: () -> Unit) {
                         }
                         runCatching { Api.request("/user/realname", "POST", body) }
                             .onSuccess {
-                                toast = "认证成功"
+                                toast = t("realname.success")
                                 me = runCatching { Api.getObj<UserProfile>("/user/me") }.getOrNull() ?: me
                             }
-                            .onFailure { toast = it.message ?: "认证失败" }
+                            .onFailure { toast = it.message ?: t("realname.failed") }
                         busy = false
                     }
                 }
@@ -442,7 +442,7 @@ fun TransferScreen(myShortId: String?, initialSid: String = "", onBack: () -> Un
         com.journeyapps.barcodescanner.ScanContract(),
     ) { result ->
         result.contents?.let { text ->
-            parsePaySid(text)?.let { applySid(it) } ?: run { toast = "无法识别的二维码" }
+            parsePaySid(text)?.let { applySid(it) } ?: run { toast = t("transfer.badQr") }
         }
     }
 
@@ -450,7 +450,7 @@ fun TransferScreen(myShortId: String?, initialSid: String = "", onBack: () -> Un
         scanLauncher.launch(
             com.journeyapps.barcodescanner.ScanOptions()
                 .setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE)
-                .setPrompt("对准对方的收款二维码")
+                .setPrompt(t("transfer.scanHint"))
                 .setBeepEnabled(false)
                 .setOrientationLocked(true)
                 .setCaptureActivity(PortraitCaptureActivity::class.java),
@@ -458,14 +458,14 @@ fun TransferScreen(myShortId: String?, initialSid: String = "", onBack: () -> Un
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        NavBar("积分转赠", onBack)
+        NavBar(t("transfer.title"), onBack)
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             // 收款人卡：大号居中输入 6 位 ID
             Column(
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Bg2).padding(18.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text("对方 ID", color = TextSub, fontSize = 13.sp)
+                Text(t("transfer.targetId"), color = TextSub, fontSize = 13.sp)
                 androidx.compose.foundation.text.BasicTextField(
                     value = sid,
                     onValueChange = {
@@ -483,7 +483,7 @@ fun TransferScreen(myShortId: String?, initialSid: String = "", onBack: () -> Un
                     singleLine = true,
                     decorationBox = { inner ->
                         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
-                            if (sid.isEmpty()) Text("6 位数字", color = TextDim, fontSize = 22.sp)
+                            if (sid.isEmpty()) Text(t("transfer.idPlaceholder"), color = TextDim, fontSize = 22.sp)
                             inner()
                         }
                     },
@@ -495,21 +495,21 @@ fun TransferScreen(myShortId: String?, initialSid: String = "", onBack: () -> Un
                         Avatar(target!!.avatar, 40)
                         Text("  ${target!!.nickname}", color = TextMain, fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                         Box(Modifier.size(6.dp).clip(RoundedCornerShape(3.dp)).background(Success))
-                        Text(" 已确认", color = Success, fontSize = 12.sp)
+                        Text(" " + t("transfer.confirmed"), color = Success, fontSize = 12.sp)
                     }
-                    sid.length == 6 -> Text("正在查找…", color = TextDim, fontSize = 12.sp)
-                    else -> Text("输入对方的 6 位 ID 自动确认收款人", color = TextDim, fontSize = 12.sp)
+                    sid.length == 6 -> Text(t("transfer.lookingUp"), color = TextDim, fontSize = 12.sp)
+                    else -> Text(t("transfer.idHint"), color = TextDim, fontSize = 12.sp)
                 }
                 Spacer(Modifier.height(14.dp))
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "扫一扫", color = Accent, fontSize = 13.sp,
+                        t("me.scan"), color = Accent, fontSize = 13.sp,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         modifier = Modifier.weight(1f).noRippleClick { startScan() },
                     )
                     Box(Modifier.width(1.dp).height(18.dp).background(Line))
                     Text(
-                        "我的收款码", color = Accent, fontSize = 13.sp,
+                        t("transfer.myQr"), color = Accent, fontSize = 13.sp,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         modifier = Modifier.weight(1f).noRippleClick { showMyQr = true },
                     )
@@ -521,7 +521,7 @@ fun TransferScreen(myShortId: String?, initialSid: String = "", onBack: () -> Un
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Bg2).padding(18.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text("转赠积分", color = TextSub, fontSize = 13.sp)
+                Text(t("transfer.amountLabel"), color = TextSub, fontSize = 13.sp)
                 androidx.compose.foundation.text.BasicTextField(
                     value = amount,
                     onValueChange = { amount = it.filter { c -> c.isDigit() || c == '.' } },
@@ -542,12 +542,12 @@ fun TransferScreen(myShortId: String?, initialSid: String = "", onBack: () -> Un
                 Box(Modifier.fillMaxWidth().padding(horizontal = 40.dp).height(1.dp).background(Line))
                 Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("可用余额 ${fmtPoints(balance)}", color = TextSub, fontSize = 12.sp)
-                    Text("  全部", color = Accent, fontSize = 12.sp, modifier = Modifier.noRippleClick { amount = fmtPoints(balance) })
+                    Text(t("transfer.available", "n" to fmtPoints(balance)), color = TextSub, fontSize = 12.sp)
+                    Text("  " + t("transfer.all"), color = Accent, fontSize = 12.sp, modifier = Modifier.noRippleClick { amount = fmtPoints(balance) })
                 }
             }
 
-            AccentButton("确认转赠", enabled = target != null && ((amount.toDoubleOrNull() ?: 0.0) > 0)) {
+            AccentButton(t("transfer.submit"), enabled = target != null && ((amount.toDoubleOrNull() ?: 0.0) > 0)) {
                 scope.launch {
                     val fen = ((amount.toDoubleOrNull() ?: 0.0) * 100).toInt()
                     val body = kotlinx.serialization.json.buildJsonObject {
@@ -555,13 +555,13 @@ fun TransferScreen(myShortId: String?, initialSid: String = "", onBack: () -> Un
                         put("amountFen", kotlinx.serialization.json.JsonPrimitive(fen.toString()))
                     }
                     runCatching { Api.request("/wallet/transfer", "POST", body) }
-                        .onSuccess { toast = "转赠成功"; onBack() }
-                        .onFailure { toast = it.message ?: "失败" }
+                        .onSuccess { toast = t("transfer.success"); onBack() }
+                        .onFailure { toast = it.message ?: t("common.fail") }
                 }
             }
             if (toast.isNotEmpty()) Text(toast, color = Accent, fontSize = 13.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
             if (myShortId != null) {
-                Text("我的 ID：$myShortId（告诉对方即可互转）", color = TextDim, fontSize = 12.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+                Text(t("transfer.myIdHint", "id" to myShortId), color = TextDim, fontSize = 12.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
             }
         }
     }
@@ -572,32 +572,32 @@ fun TransferScreen(myShortId: String?, initialSid: String = "", onBack: () -> Un
                 modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(Bg2).padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text("我的收款码", color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                Text("ID：$myShortId", color = TextSub, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
+                Text(t("transfer.myQr"), color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text(t("me.id", "id" to myShortId), color = TextSub, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
                 Spacer(Modifier.height(16.dp))
                 val qr = remember(myShortId) { makeQrBitmap(payQrContent(myShortId)) }
                 androidx.compose.foundation.Image(
                     bitmap = qr.asImageBitmap(),
-                    contentDescription = "收款二维码",
+                    contentDescription = t("transfer.qrAlt"),
                     modifier = Modifier.size(230.dp).clip(RoundedCornerShape(10.dp)).background(Color.White).padding(10.dp),
                 )
                 Spacer(Modifier.height(14.dp))
-                Text("使用「积分转赠 - 扫一扫」扫码给我转积分", color = TextDim, fontSize = 12.sp)
+                Text(t("transfer.qrHint"), color = TextDim, fontSize = 12.sp)
                 Spacer(Modifier.height(14.dp))
                 val ctx = androidx.compose.ui.platform.LocalContext.current
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        "保存", color = TextMain, fontSize = 14.sp, fontWeight = FontWeight.Medium,
+                        t("common.save"), color = TextMain, fontSize = 14.sp, fontWeight = FontWeight.Medium,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         modifier = Modifier.width(100.dp).clip(RoundedCornerShape(percent = 50)).background(Bg3)
                             .noRippleClick {
                                 val ok = saveQrToGallery(ctx, qr)
-                                android.widget.Toast.makeText(ctx, if (ok) "已保存到相册" else "保存失败", android.widget.Toast.LENGTH_SHORT).show()
+                                android.widget.Toast.makeText(ctx, if (ok) t("wallet.savedToAlbum") else t("common.saveFailed"), android.widget.Toast.LENGTH_SHORT).show()
                             }
                             .padding(vertical = 10.dp),
                     )
                     Text(
-                        "分享", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium,
+                        t("common.share"), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         modifier = Modifier.width(100.dp).clip(RoundedCornerShape(percent = 50)).background(Accent)
                             .noRippleClick { shareQr(ctx, qr) }
@@ -605,7 +605,7 @@ fun TransferScreen(myShortId: String?, initialSid: String = "", onBack: () -> Un
                     )
                 }
                 Spacer(Modifier.height(10.dp))
-                Text("关闭", color = TextSub, fontSize = 14.sp, modifier = Modifier.noRippleClick { showMyQr = false }.padding(6.dp))
+                Text(t("common.close"), color = TextSub, fontSize = 14.sp, modifier = Modifier.noRippleClick { showMyQr = false }.padding(6.dp))
             }
         }
     }

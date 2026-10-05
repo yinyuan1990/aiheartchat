@@ -6,6 +6,7 @@ import { GifPane } from './emoji-panel/GifPane';
 import { StickerPane } from './emoji-panel/StickerPane';
 import { EmojiSearchSheet, GifSearchSheet } from './emoji-panel/SearchSheets';
 import { defaultPanelHeight, useScrollChrome } from './emoji-panel/shared';
+import { t } from '../i18n';
 
 export type PanelMode = 'gif' | 'sticker' | 'emoji';
 const MODE_KEY = 'pw_emoji_panel_mode';
@@ -39,7 +40,7 @@ export function EmojiPanel({ onPick, onEmoji, onDelete, onKeyboard, height }: {
     addRecent(p);
   };
 
-  const modes: [PanelMode, string][] = [['gif', 'GIF'], ['sticker', '贴纸'], ['emoji', '表情']];
+  const modes: [PanelMode, string][] = [['gif', 'GIF'], ['sticker', t('emoji.tabStickers')], ['emoji', t('emoji.tabEmoji')]];
 
   return (
     <div style={{ height: h, position: 'relative', background: 'var(--bg-card)', borderTop: '1px solid var(--line)', overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
@@ -49,7 +50,7 @@ export function EmojiPanel({ onPick, onEmoji, onDelete, onKeyboard, height }: {
 
       {/* 底部悬浮：左 🌐（表情模式）/ 胶囊 / 右 ⌫ 或 ⚙ */}
       {mode === 'emoji' && onKeyboard && (
-        <div className={`ep-chrome ep-side${hidden ? ' hide' : ''}`} style={{ left: 12 }} title="切回键盘" onClick={onKeyboard}>🌐</div>
+        <div className={`ep-chrome ep-side${hidden ? ' hide' : ''}`} style={{ left: 12 }} title={t('emoji.backToKeyboard')} onClick={onKeyboard}>🌐</div>
       )}
       <div className={`ep-chrome${hidden ? ' hide' : ''}`} style={{ left: 0, right: 0, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
         <div className="ep-pill" style={{ pointerEvents: 'auto' }}>
@@ -57,10 +58,10 @@ export function EmojiPanel({ onPick, onEmoji, onDelete, onKeyboard, height }: {
         </div>
       </div>
       {mode === 'emoji' && onDelete && (
-        <div className={`ep-chrome ep-side${hidden ? ' hide' : ''}`} style={{ right: 12 }} title="删除" onClick={onDelete}>⌫</div>
+        <div className={`ep-chrome ep-side${hidden ? ' hide' : ''}`} style={{ right: 12 }} title={t('common.delete')} onClick={onDelete}>⌫</div>
       )}
       {mode === 'sticker' && (
-        <div className={`ep-chrome ep-side${hidden ? ' hide' : ''}`} style={{ right: 12, fontSize: 17 }} title="管理我的贴纸" onClick={() => setSheet({ kind: 'manage' })}>⚙</div>
+        <div className={`ep-chrome ep-side${hidden ? ' hide' : ''}`} style={{ right: 12, fontSize: 17 }} title={t('emoji.manageMine')} onClick={() => setSheet({ kind: 'manage' })}>⚙</div>
       )}
 
       {sheet && (sheet.kind === 'store' || sheet.kind === 'manage') && (

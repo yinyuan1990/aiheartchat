@@ -2,6 +2,7 @@
  * App 原生桥：大厅 H5 运行在原生 WebView（iOS WKWebView / Android WebView）里时，
  * 聊天等界面唤起原生页面；普通浏览器访问时桥不存在，自动回退网页内跳转。
  */
+import { t } from './i18n';
 
 /** 尝试唤起原生聊天页，成功返回 true（调用方不再走网页路由） */
 export function openNativeChat(convId: string, convType: number, targetId: string, title: string): boolean {
@@ -71,7 +72,7 @@ export async function shareText(text: string, url: string, title = text): Promis
     await navigator.clipboard.writeText(url ? `${text} ${url}` : text);
     return 'copied';
   } catch {
-    prompt('复制下面的链接分享给好友', url || text);
+    prompt(t('share.copyPrompt'), url || text);
     return 'fail';
   }
 }

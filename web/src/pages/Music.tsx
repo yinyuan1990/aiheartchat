@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { shareBase, shareText } from '../bridge';
 import { music, useMusic, type MusicTrack } from '../music';
+import { t } from '../i18n';
 
 function fmtDur(s: number): string {
   if (!s || !isFinite(s)) return '0:00';
@@ -20,10 +21,10 @@ function fmtSize(b: number): string {
 function fmtAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const h = Math.floor(diff / 3600000);
-  if (h < 1) return '刚刚';
-  if (h < 24) return `${h} 小时前`;
+  if (h < 1) return t('time.justNow');
+  if (h < 24) return t('time.hoursAgo', { n: h });
   const d = Math.floor(h / 24);
-  return d <= 1 ? '昨天' : `${d} 天前`;
+  return d <= 1 ? t('time.yesterday') : t('time.daysAgo', { n: d });
 }
 
 // ---------- 图标（矢量，不用 emoji） ----------
@@ -108,9 +109,9 @@ export function saveTrack(t: { title: string; url: string }) {
 }
 
 /** 分享：系统分享面板，不支持时复制链接 */
-export async function shareTrack(t: { id: string; title: string; performer: string }, toast: (s: string) => void) {
-  const text = `${t.title}${t.performer ? ` - ${t.performer}` : ''}`;
-  if ((await shareText(text, shareLink(t.id))) === 'copied') toast('链接已复制，去粘贴给好友吧');
+export async function shareTrack(tr: { id: string; title: string; performer: string }, toast: (s: string) => void) {
+  const text = `${tr.title}${tr.performer ? ` - ${tr.performer}` : ''}`;
+  if ((await shareText(text, shareLink(tr.id))) === 'copied') toast(t('share.linkCopied'));
 }
 
 /** 封面：有图用图，没有用渐变 + 音符 */
@@ -133,14 +134,14 @@ function Cover({ track, size, round = true, active }: { track: MusicTrack; size:
 /** 播放中固定在消息页顶部：暂停 / 标题·艺术家 / 倍速 / 关闭；点中间打开播放弹层 */
 export function NowPlayingBar({ onOpen }: { onOpen: () => void }) {
   const s = useMusic();
-  const t = s.current;
-  if (!t) return null;
+  const cur = s.current;
+  if (!cur) return null;
   return (
     <div className="now-playing">
       <span className="np-btn" onClick={() => music.toggle()}><PlayIcon playing={s.playing} size={20} /></span>
       <div className="np-text" onClick={onOpen}>
-        <div className="np-title ellipsis">{t.title}</div>
-        <div className="np-sub ellipsis">{t.performer || s.data?.source?.title || '未知艺术家'}{s.buffering ? ' · 缓冲中…' : ''}</div>
+        <div className="np-title ellipsis">{cur.title}</div>
+        <div className="np-sub ellipsis">{cur.performer || s.data?.source?.title || t('music.unknownArtist')}{s.buffering ? ` · ${t('music.buffering')}` : ''}</div>
       </div>
       <span className="np-rate" onClick={() => music.cycleRate()}>{s.rate === 1 ? '1X' : `${s.rate}X`}</span>
       <span className="np-btn" onClick={() => music.stop()}><CloseIcon /></span>
@@ -180,31 +181,31 @@ export function MusicSheet({ onClose }: { onClose: () => void }) {
           <div className="music-handle" />
           <div className="row" style={{ padding: '4px 16px 10px' }}>
             <div className="grow" style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 16, fontWeight: 600 }} className="ellipsis">{s.data?.source?.title || '音乐'}</div>
-              <div className="small" style={{ marginTop: 2 }}>最多保留 100 首{list.length ? ` · 共 ${list.length} 首` : ''}</div>
+              <div style={{ fontSize: 16, fontWeight: 600 }} className="ellipsis">{s.data?.source?.title || t('music.title')}</div>
+              <div className="small" style={{ marginTop: 2 }}>{t('music.keepMax')}{list.length ? ` · ${t('music.totalN', { n: list.length })}` : ''}</div>
             </div>
             <span className="np-btn" onClick={onClose}><CloseIcon /></span>
           </div>
         </div>
 
         <div className="music-list no-scrollbar">
-          {!loaded && <div className="empty">加载中…</div>}
-          {loaded && list.length === 0 && <div className="empty">还没有歌曲<br />稍后再来看看</div>}
-          {list.map((t) => {
-            const active = t.id === track?.id;
+          {!loaded && <div className="empty">{t('common.loading')}</div>}
+          {loaded && list.length === 0 && <div className="empty">{t('music.empty')}<br />{t('common.checkBackLater')}</div>}
+          {list.map((it) => {
+            const active = it.id === track?.id;
             return (
-              <div key={t.id} className="row music-row" onClick={() => music.play(t)}>
-                <Cover track={t} size={48} active={active && s.playing} />
+              <div key={it.id} className="row music-row" onClick={() => music.play(it)}>
+                <Cover track={it} size={48} active={active && s.playing} />
                 <div className="grow">
                   <div className="row" style={{ gap: 6 }}>
-                    <span className="grow ellipsis" style={{ fontSize: 15, color: active ? 'var(--accent)' : 'var(--text)', fontWeight: active ? 600 : 400 }}>{t.title}</span>
+                    <span className="grow ellipsis" style={{ fontSize: 15, color: active ? 'var(--accent)' : 'var(--text)', fontWeight: active ? 600 : 400 }}>{it.title}</span>
                     {active && s.playing && <Bars />}
                   </div>
                   <div className="small" style={{ marginTop: 4, display: 'flex', gap: 8 }}>
-                    <span>{fmtDur(t.duration)}</span>
-                    {t.performer && <span className="ellipsis" style={{ maxWidth: 120 }}>· {t.performer}</span>}
-                    <span>· {fmtSize(t.size)}</span>
-                    <span>· {fmtAgo(t.postedAt)}</span>
+                    <span>{fmtDur(it.duration)}</span>
+                    {it.performer && <span className="ellipsis" style={{ maxWidth: 120 }}>· {it.performer}</span>}
+                    <span>· {fmtSize(it.size)}</span>
+                    <span>· {fmtAgo(it.postedAt)}</span>
                   </div>
                 </div>
                 <span style={{ color: active ? 'var(--accent)' : 'var(--text-3)', display: 'flex' }}>
@@ -223,11 +224,11 @@ export function MusicSheet({ onClose }: { onClose: () => void }) {
                 <Cover track={track} size={52} round={false} />
                 <div className="grow" style={{ minWidth: 0 }}>
                   <div className="ellipsis" style={{ fontSize: 16, fontWeight: 600 }}>{track.title}</div>
-                  <div className="muted ellipsis" style={{ marginTop: 3 }}>{track.performer || '未知艺术家'}</div>
+                  <div className="muted ellipsis" style={{ marginTop: 3 }}>{track.performer || t('music.unknownArtist')}</div>
                 </div>
                 {/* 保存到手机 / 分享 */}
-                <span className="np-btn" title="保存到手机" onClick={() => { saveTrack(track); showToast('开始下载'); }}><DownloadIcon /></span>
-                <span className="np-btn" title="分享" onClick={() => shareTrack(track, showToast)}><ShareIcon /></span>
+                <span className="np-btn" title={t('music.saveToPhone')} onClick={() => { saveTrack(track); showToast(t('music.downloadStarted')); }}><DownloadIcon /></span>
+                <span className="np-btn" title={t('common.share')} onClick={() => shareTrack(track, showToast)}><ShareIcon /></span>
               </div>
               <div className="music-progress big" onClick={seek}>
                 <div className="music-progress-fill" style={{ width: `${pct}%` }} />
@@ -242,7 +243,7 @@ export function MusicSheet({ onClose }: { onClose: () => void }) {
               </div>
             </>
           ) : (
-            <div className="muted" style={{ textAlign: 'center', padding: '6px 0 2px' }}>点上面的歌开始播放</div>
+            <div className="muted" style={{ textAlign: 'center', padding: '6px 0 2px' }}>{t('music.tapToPlay')}</div>
           )}
           <div className="music-controls">
             <span className={`music-ctl${s.shuffle ? ' on' : ''}`} onClick={() => music.toggleShuffle()}><ShuffleIcon /></span>
@@ -269,7 +270,7 @@ interface SharedTrack extends MusicTrack {
 /** /music/share/:id：好友点开链接直接听 + 保存 + 下载 App */
 export function MusicSharePage() {
   const { id } = useParams<{ id: string }>();
-  const [t, setT] = useState<SharedTrack | null>(null);
+  const [track, setTrack] = useState<SharedTrack | null>(null);
   const [err, setErr] = useState('');
   const [dl, setDl] = useState<{ android?: string; ios?: string } | null>(null);
   const [toast, setToast] = useState('');
@@ -277,7 +278,7 @@ export function MusicSharePage() {
 
   useEffect(() => {
     if (!id) return;
-    api<SharedTrack>(`/app/music/${id}`).then(setT).catch((e) => setErr(e.message || '这首歌已下架'));
+    api<SharedTrack>(`/app/music/${id}`).then(setTrack).catch((e) => setErr(e.message || t('music.removed')));
     api<any>('/app/download').then((d) => setDl({ android: d?.android?.url, ios: d?.ios?.url })).catch(() => {});
   }, [id]);
 
@@ -290,29 +291,29 @@ export function MusicSharePage() {
   return (
     <div className="app music-share">
       {err && <div className="empty">{err}</div>}
-      {!t && !err && <div className="empty">加载中…</div>}
-      {t && (
+      {!track && !err && <div className="empty">{t('common.loading')}</div>}
+      {track && (
         <>
           <div className="music-share-head">
             <div className="music-cover square" style={{ width: 160, height: 160, margin: '0 auto' }}>
               {/* 封面加载失败就去掉图，露出渐变 + 音符，不留裂图 */}
-              {t.fullCover ? <img src={t.fullCover} alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} /> : (
+              {track.fullCover ? <img src={track.fullCover} alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} /> : (
                 <svg width={74} height={74} viewBox="0 0 24 24" fill="#fff" opacity={0.9}><path d="M9 3v10.55A4 4 0 1 0 11 17V7h5a3 3 0 0 0 3-3V3H9z" /></svg>
               )}
             </div>
-            <div style={{ fontSize: 20, fontWeight: 700, marginTop: 18, textAlign: 'center' }}>{t.title}</div>
+            <div style={{ fontSize: 20, fontWeight: 700, marginTop: 18, textAlign: 'center' }}>{track.title}</div>
             <div className="muted" style={{ marginTop: 6, textAlign: 'center' }}>
-              {t.performer || '未知艺术家'} · {fmtDur(t.duration)} · {fmtSize(t.size)}
+              {track.performer || t('music.unknownArtist')} · {fmtDur(track.duration)} · {fmtSize(track.size)}
             </div>
-            {t.source?.title && <div className="small" style={{ marginTop: 6, textAlign: 'center' }}>来自 {t.source.title}</div>}
+            {track.source?.title && <div className="small" style={{ marginTop: 6, textAlign: 'center' }}>{t('music.from', { name: track.source.title })}</div>}
           </div>
           {/* 同源 /res 路径：<a download> 跨域会失效，且同源可复用 nginx 的 /res 反代 */}
-          <audio src={t.url} controls preload="metadata" style={{ width: '100%', marginTop: 22 }} />
+          <audio src={track.url} controls preload="metadata" style={{ width: '100%', marginTop: 22 }} />
           <div className="row" style={{ gap: 12, marginTop: 22 }}>
-            <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => { saveTrack({ title: t.title, url: t.url }); showToast('开始下载'); }}>保存到手机</button>
-            <button className="btn" style={{ flex: 1 }} onClick={openApp}>打开心之音 App</button>
+            <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => { saveTrack({ title: track.title, url: track.url }); showToast(t('music.downloadStarted')); }}>{t('music.saveToPhone')}</button>
+            <button className="btn" style={{ flex: 1 }} onClick={openApp}>{t('music.openApp', { app: t('app.name') })}</button>
           </div>
-          <div className="hint">心之音 App 里每天都有新歌，边聊边听</div>
+          <div className="hint">{t('music.shareHint', { app: t('app.name') })}</div>
         </>
       )}
       {toast && <div className="music-toast">{toast}</div>}

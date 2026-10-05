@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.*
 import com.wh.peiwana.ui.*
 import com.wh.peiwana.ui.theme.*
@@ -60,29 +61,29 @@ fun CreateGroupScreen(onBack: () -> Unit, onCreated: (convId: String, groupId: S
     }
 
     Column(Modifier.fillMaxSize()) {
-        NavBar("创建群聊", onBack)
+        NavBar(t("group.create"), onBack)
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 // 群头像（可选，不设置默认用群主头像）
                 Box(Modifier.size(56.dp).clip(CircleShape).background(Bg3).noRippleClick { pickAvatar.launch("image/*") }, contentAlignment = Alignment.Center) {
                     if (avatar.isNotEmpty()) Avatar(avatar, 56)
-                    else Text(if (uploading) "…" else "头像", color = TextDim, fontSize = 11.sp)
+                    else Text(if (uploading) "…" else t("group.avatar"), color = TextDim, fontSize = 11.sp)
                 }
-                OutlinedTextField(name, { name = it }, placeholder = { Text("群名称") }, singleLine = true, modifier = Modifier.weight(1f))
+                OutlinedTextField(name, { name = it }, placeholder = { Text(t("group.namePlaceholder")) }, singleLine = true, modifier = Modifier.weight(1f))
             }
-            Text("群头像可选，不设置默认显示群主头像 · 邀请成员（可选）", color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp))
+            Text(t("group.createHint"), color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp))
         }
         LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 16.dp)) {
             items(people, key = { it.id }) { p ->
                 Row(modifier = Modifier.fillMaxWidth().clickable { selected = if (selected.contains(p.id)) selected - p.id else selected + p.id }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Avatar(p.avatar, 36)
                     Text("  ${p.nickname}", color = TextMain, modifier = Modifier.weight(1f))
-                    Text(if (selected.contains(p.id)) "已选" else "选择", color = if (selected.contains(p.id)) Accent else TextDim, fontSize = 13.sp)
+                    Text(if (selected.contains(p.id)) t("group.selected") else t("msg.select"), color = if (selected.contains(p.id)) Accent else TextDim, fontSize = 13.sp)
                 }
             }
         }
         Box(Modifier.padding(16.dp)) {
-            AccentButton("创建（${selected.size} 人）") {
+            AccentButton(t("group.createWithN", "n" to selected.size)) {
                 if (name.isBlank()) return@AccentButton
                 scope.launch {
                     runCatching {
@@ -129,7 +130,7 @@ fun GroupInfoScreen(groupId: String, myUserId: String, onBack: () -> Unit, onExi
                 val url = Api.upload("image", b, "g.jpg", "image/jpeg")
                 Api.request("/im/group/$groupId", "PUT", buildJsonObject { put("avatar", JsonPrimitive(url)) })
                 load()
-            }.onFailure { android.widget.Toast.makeText(ctx, it.message ?: "修改失败", android.widget.Toast.LENGTH_SHORT).show() }
+            }.onFailure { android.widget.Toast.makeText(ctx, it.message ?: t("group.updateFailed"), android.widget.Toast.LENGTH_SHORT).show() }
         }
     }
 
@@ -144,29 +145,29 @@ fun GroupInfoScreen(groupId: String, myUserId: String, onBack: () -> Unit, onExi
 
     Column(Modifier.fillMaxSize()) {
         NavBar(g.name, onBack, action = {
-            Text("分享", color = Accent, fontSize = 14.sp, modifier = Modifier.clickable { showShare = true })
+            Text(t("common.share"), color = Accent, fontSize = 14.sp, modifier = Modifier.clickable { showShare = true })
         })
         // 群头像 + 人数
         Row(Modifier.fillMaxWidth().padding(16.dp, 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(Modifier.noRippleClick { if (canEdit) pickAvatar.launch("image/*") }) { Avatar(g.avatar, 56) }
             Column {
-                Text("共 ${g.members.size} 人", color = TextSub, fontSize = 13.sp)
-                if (canEdit) Text("点头像可修改", color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp))
+                Text(t("group.memberCount", "n" to g.members.size), color = TextSub, fontSize = 13.sp)
+                if (canEdit) Text(t("group.tapAvatarToEdit"), color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp))
             }
             Spacer(Modifier.weight(1f))
-            if (canEdit) Text("机器人", color = BotBlue, fontSize = 13.sp, modifier = Modifier.clip(RoundedCornerShape(14.dp)).background(Bg3).clickable { showBots = true }.padding(horizontal = 12.dp, vertical = 6.dp))
+            if (canEdit) Text(t("bot.label"), color = BotBlue, fontSize = 13.sp, modifier = Modifier.clip(RoundedCornerShape(14.dp)).background(Bg3).clickable { showBots = true }.padding(horizontal = 12.dp, vertical = 6.dp))
         }
         LazyVerticalGrid(columns = GridCells.Fixed(5), contentPadding = PaddingValues(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.weight(1f)) {
             items(g.members, key = { it.id }) { m ->
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Avatar(m.avatar, 48)
-                    Text(m.nickname + (if (m.role == "owner") " 主" else ""), color = if (m.isBot) BotBlue else TextSub, fontSize = 11.sp, maxLines = 1)
-                    if (m.isBot) Text("机器人", color = BotBlue, fontSize = 9.sp)
+                    Text(m.nickname + (if (m.role == "owner") " " + t("group.ownerBadge") else ""), color = if (m.isBot) BotBlue else TextSub, fontSize = 11.sp, maxLines = 1)
+                    if (m.isBot) Text(t("bot.label"), color = BotBlue, fontSize = 9.sp)
                 }
             }
         }
         Box(Modifier.padding(16.dp)) {
-            AccentButton(if (myRole == "owner") "解散群聊" else "退出群聊") {
+            AccentButton(if (myRole == "owner") t("group.dissolve") else t("group.leave")) {
                 scope.launch { runCatching { Api.request("/im/group/$groupId/${if (myRole == "owner") "dissolve" else "leave"}", "POST") }.onSuccess { onExit() } }
             }
         }
@@ -197,14 +198,14 @@ internal fun GroupShareDialog(groupId: String, onClose: () -> Unit, channel: Boo
         ) {
             val s = share
             if (s == null) {
-                Text("加载中…", color = TextSub, fontSize = 13.sp, modifier = Modifier.padding(30.dp))
+                Text(t("common.loading"), color = TextSub, fontSize = 13.sp, modifier = Modifier.padding(30.dp))
             } else {
-                Text(if (channel) "分享频道" else "群邀请", color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text(if (channel) t("group.shareChannel") else t("group.invite"), color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 Text(
                     when {
-                        channel -> "扫码或输入邀请码即可打开频道订阅"
-                        s.hasPassword -> "扫码或输码后需输入密码才能加入"
-                        else -> "扫码或输入邀请码即可加入"
+                        channel -> t("group.shareChannelHint")
+                        s.hasPassword -> t("group.invitePwdHint")
+                        else -> t("group.inviteHint")
                     },
                     color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp),
                 )
@@ -219,13 +220,13 @@ internal fun GroupShareDialog(groupId: String, onClose: () -> Unit, channel: Boo
                     Modifier.padding(top = 12.dp).clip(RoundedCornerShape(8.dp)).background(Bg3)
                         .clickable {
                             clipboard.setText(androidx.compose.ui.text.AnnotatedString(s.code))
-                            android.widget.Toast.makeText(ctx, "邀请码已复制", android.widget.Toast.LENGTH_SHORT).show()
+                            android.widget.Toast.makeText(ctx, t("group.codeCopied"), android.widget.Toast.LENGTH_SHORT).show()
                         }
                         .padding(horizontal = 14.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(s.code, color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold, letterSpacing = androidx.compose.ui.unit.TextUnit(3f, androidx.compose.ui.unit.TextUnitType.Sp))
-                    Text("  复制", color = Accent, fontSize = 12.sp)
+                    Text("  " + t("common.copy"), color = Accent, fontSize = 12.sp)
                 }
 
                 // 密码设置（仅群主/管理员）：模式切换 + 行内小保存按钮，不再用整行大按钮
@@ -233,7 +234,7 @@ internal fun GroupShareDialog(groupId: String, onClose: () -> Unit, channel: Boo
                     fun save() {
                         if (saving) return
                         if (mode == "pwd" && pwd.isBlank()) {
-                            android.widget.Toast.makeText(ctx, "请输入密码", android.widget.Toast.LENGTH_SHORT).show()
+                            android.widget.Toast.makeText(ctx, t("group.enterPassword"), android.widget.Toast.LENGTH_SHORT).show()
                             return
                         }
                         saving = true
@@ -243,9 +244,9 @@ internal fun GroupShareDialog(groupId: String, onClose: () -> Unit, channel: Boo
                                     put("password", JsonPrimitive(if (mode == "pwd") pwd.trim() else ""))
                                 })!!
                                 share = Api.json.decodeFromJsonElement(GroupShareInfo.serializer(), data)
-                                android.widget.Toast.makeText(ctx, "已保存", android.widget.Toast.LENGTH_SHORT).show()
+                                android.widget.Toast.makeText(ctx, t("common.saved"), android.widget.Toast.LENGTH_SHORT).show()
                             }.onFailure {
-                                android.widget.Toast.makeText(ctx, it.message ?: "保存失败", android.widget.Toast.LENGTH_SHORT).show()
+                                android.widget.Toast.makeText(ctx, it.message ?: t("msg.saveFailed"), android.widget.Toast.LENGTH_SHORT).show()
                             }
                             saving = false
                         }
@@ -255,7 +256,7 @@ internal fun GroupShareDialog(groupId: String, onClose: () -> Unit, channel: Boo
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        listOf("none" to "无密码", "pwd" to "有密码").forEach { (k, label) ->
+                        listOf("none" to t("group.noPassword"), "pwd" to t("group.withPassword")).forEach { (k, label) ->
                             Text(
                                 label,
                                 color = if (mode == k) Color.White else TextSub, fontSize = 12.sp,
@@ -267,7 +268,7 @@ internal fun GroupShareDialog(groupId: String, onClose: () -> Unit, channel: Boo
                         }
                         Spacer(Modifier.weight(1f))
                         Text(
-                            if (saving) "保存中…" else "保存",
+                            if (saving) t("group.saving") else t("common.save"),
                             color = Color.White, fontSize = 12.sp,
                             modifier = Modifier.clip(RoundedCornerShape(13.dp)).background(Accent)
                                 .noRippleClick { save() }
@@ -286,7 +287,7 @@ internal fun GroupShareDialog(groupId: String, onClose: () -> Unit, channel: Boo
                                 .padding(horizontal = 12.dp, vertical = 10.dp),
                             decorationBox = { inner ->
                                 Box {
-                                    if (pwd.isEmpty()) Text("设置入群密码", color = TextDim, fontSize = 14.sp)
+                                    if (pwd.isEmpty()) Text(t("group.setPassword"), color = TextDim, fontSize = 14.sp)
                                     inner()
                                 }
                             },
@@ -297,12 +298,12 @@ internal fun GroupShareDialog(groupId: String, onClose: () -> Unit, channel: Boo
                 androidx.compose.material3.HorizontalDivider(Modifier.padding(top = 16.dp), color = Bg3)
                 // 保存相册 / 系统分享 / 关闭
                 Row(Modifier.padding(top = 12.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    Text("保存相册", color = TextSub, fontSize = 13.sp, modifier = Modifier.noRippleClick {
+                    Text(t("group.saveToGallery"), color = TextSub, fontSize = 13.sp, modifier = Modifier.noRippleClick {
                         val ok = saveQrToGallery(ctx, qr)
-                        android.widget.Toast.makeText(ctx, if (ok) "已保存到相册" else "保存失败", android.widget.Toast.LENGTH_SHORT).show()
+                        android.widget.Toast.makeText(ctx, if (ok) t("msg.savedToGallery") else t("msg.saveFailed"), android.widget.Toast.LENGTH_SHORT).show()
                     })
-                    Text("分享图片", color = Accent, fontSize = 13.sp, modifier = Modifier.noRippleClick { shareQr(ctx, qr) })
-                    Text("关闭", color = TextDim, fontSize = 13.sp, modifier = Modifier.noRippleClick(onClose))
+                    Text(t("group.shareImage"), color = Accent, fontSize = 13.sp, modifier = Modifier.noRippleClick { shareQr(ctx, qr) })
+                    Text(t("common.close"), color = TextDim, fontSize = 13.sp, modifier = Modifier.noRippleClick(onClose))
                 }
             }
         }
@@ -353,7 +354,7 @@ fun JoinGroupScreen(onBack: () -> Unit, onJoined: (convId: String, groupId: Stri
         scope.launch {
             runCatching { Api.getObj<GroupCodeInfo>("/im/group/code/$c") }
                 .onSuccess { if (it.kind == 2) onOpenChannel(it.groupId) else { info = it; pwd = "" } }
-                .onFailure { toast(it.message ?: "邀请码无效") }
+                .onFailure { toast(it.message ?: t("group.invalidCode")) }
             busy = false
         }
     }
@@ -370,7 +371,7 @@ fun JoinGroupScreen(onBack: () -> Unit, onJoined: (convId: String, groupId: Stri
                 val obj = data.jsonObject
                 val convId = obj["conversationId"]?.jsonPrimitive?.content ?: ""
                 onJoined(convId, g.id, obj["name"]?.jsonPrimitive?.content ?: g.name)
-            }.onFailure { toast(it.message ?: "加入失败") }
+            }.onFailure { toast(it.message ?: t("group.joinFailed")) }
             busy = false
         }
     }
@@ -388,19 +389,19 @@ fun JoinGroupScreen(onBack: () -> Unit, onJoined: (convId: String, groupId: Stri
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(g.name, color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                Text("该群需要密码", color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                Text(t("group.needsPassword"), color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                 OutlinedTextField(
                     pwdInput, { if (it.length <= 20) pwdInput = it },
-                    placeholder = { Text("输入入群密码", fontSize = 13.sp) },
+                    placeholder = { Text(t("group.passwordPlaceholder"), fontSize = 13.sp) },
                     singleLine = true,
                     modifier = Modifier.padding(top = 12.dp).fillMaxWidth(),
                 )
                 Row(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                    Text("取消", color = TextDim, fontSize = 14.sp, modifier = Modifier.noRippleClick { pwdTarget = null })
-                    Text("加入", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.noRippleClick {
-                        if (pwdInput.isBlank()) { toast("请输入密码"); return@noRippleClick }
-                        val t = g; pwdTarget = null
-                        joinById(t, pwdInput)
+                    Text(t("common.cancel"), color = TextDim, fontSize = 14.sp, modifier = Modifier.noRippleClick { pwdTarget = null })
+                    Text(t("group.join"), color = Accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.noRippleClick {
+                        if (pwdInput.isBlank()) { toast(t("group.enterPassword")); return@noRippleClick }
+                        val target = g; pwdTarget = null
+                        joinById(target, pwdInput)
                     })
                 }
             }
@@ -411,16 +412,16 @@ fun JoinGroupScreen(onBack: () -> Unit, onJoined: (convId: String, groupId: Stri
         com.journeyapps.barcodescanner.ScanContract(),
     ) { result ->
         result.contents?.let { text ->
-            parseGroupCode(text)?.let { code = it; check(it) } ?: toast("无法识别的群二维码")
+            parseGroupCode(text)?.let { code = it; check(it) } ?: toast(t("group.badQr"))
         }
     }
 
     Column(Modifier.fillMaxSize()) {
-        NavBar("加入群聊", onBack)
+        NavBar(t("group.joinGroup"), onBack)
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             OutlinedTextField(
                 code, { code = it.uppercase().take(12); info = null },
-                placeholder = { Text("输入群邀请码", fontSize = 14.sp) },
+                placeholder = { Text(t("group.codePlaceholder"), fontSize = 14.sp) },
                 singleLine = true,
                 trailingIcon = {
                     // 扫码：扫群邀请二维码
@@ -429,7 +430,7 @@ fun JoinGroupScreen(onBack: () -> Unit, onJoined: (convId: String, groupId: Stri
                             scanLauncher.launch(
                                 com.journeyapps.barcodescanner.ScanOptions()
                                     .setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE)
-                                    .setPrompt("对准群邀请二维码")
+                                    .setPrompt(t("group.scanPrompt"))
                                     .setBeepEnabled(false)
                                     .setOrientationLocked(true)
                                     .setCaptureActivity(PortraitCaptureActivity::class.java),
@@ -443,8 +444,8 @@ fun JoinGroupScreen(onBack: () -> Unit, onJoined: (convId: String, groupId: Stri
             val g = info
             if (g == null) {
                 if (code.isNotBlank()) {
-                    AccentButton(if (busy) "查询中…" else "查找群聊") {
-                        if (code.length < 6) { toast("请输入完整邀请码"); return@AccentButton }
+                    AccentButton(if (busy) t("group.searching") else t("group.find")) {
+                        if (code.length < 6) { toast(t("group.codeIncomplete")); return@AccentButton }
                         check(code)
                     }
                 }
@@ -454,13 +455,13 @@ fun JoinGroupScreen(onBack: () -> Unit, onJoined: (convId: String, groupId: Stri
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(g.name, color = TextMain, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                    Text("共 ${g.memberCount} 人${if (g.hasPassword) " · 需要密码" else ""}", color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                    Text(t("group.memberCount", "n" to g.memberCount) + if (g.hasPassword) " · " + t("group.passwordRequired") else "", color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                     if (g.isMember) {
-                        Text("你已在群里", color = Success, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+                        Text(t("group.alreadyMember"), color = Success, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
                     } else if (g.hasPassword) {
                         OutlinedTextField(
                             pwd, { if (it.length <= 20) pwd = it },
-                            placeholder = { Text("输入入群密码", fontSize = 13.sp) },
+                            placeholder = { Text(t("group.passwordPlaceholder"), fontSize = 13.sp) },
                             singleLine = true,
                             modifier = Modifier.padding(top = 10.dp).fillMaxWidth(),
                         )
@@ -468,9 +469,9 @@ fun JoinGroupScreen(onBack: () -> Unit, onJoined: (convId: String, groupId: Stri
                 }
                 AccentButton(
                     when {
-                        g.isMember -> "进入群聊"
-                        busy -> "加入中…"
-                        else -> "加入群聊"
+                        g.isMember -> t("group.enter")
+                        busy -> t("group.joining")
+                        else -> t("group.joinGroup")
                     },
                 ) {
                     if (busy) return@AccentButton
@@ -478,7 +479,7 @@ fun JoinGroupScreen(onBack: () -> Unit, onJoined: (convId: String, groupId: Stri
                         onJoined(g.conversationId, g.groupId, g.name)
                         return@AccentButton
                     }
-                    if (g.hasPassword && pwd.isBlank()) { toast("请输入入群密码"); return@AccentButton }
+                    if (g.hasPassword && pwd.isBlank()) { toast(t("group.enterGroupPassword")); return@AccentButton }
                     busy = true
                     scope.launch {
                         runCatching {
@@ -491,7 +492,7 @@ fun JoinGroupScreen(onBack: () -> Unit, onJoined: (convId: String, groupId: Stri
                             val gid = obj["id"]?.jsonPrimitive?.content ?: g.groupId
                             val name = obj["name"]?.jsonPrimitive?.content ?: g.name
                             onJoined(convId, gid, name)
-                        }.onFailure { toast(it.message ?: "加入失败") }
+                        }.onFailure { toast(it.message ?: t("group.joinFailed")) }
                         busy = false
                     }
                 }
@@ -499,9 +500,9 @@ fun JoinGroupScreen(onBack: () -> Unit, onJoined: (convId: String, groupId: Stri
         }
 
         // 群列表：直接浏览加入
-        Text("群列表", color = TextSub, fontSize = 13.sp, modifier = Modifier.padding(16.dp, 4.dp))
+        Text(t("group.list"), color = TextSub, fontSize = 13.sp, modifier = Modifier.padding(16.dp, 4.dp))
         if (groups.isEmpty()) {
-            Text("暂无群聊", color = TextDim, fontSize = 13.sp, modifier = Modifier.padding(16.dp, 12.dp))
+            Text(t("group.empty"), color = TextDim, fontSize = 13.sp, modifier = Modifier.padding(16.dp, 12.dp))
         }
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 16.dp)) {
             items(groups, key = { it.id }) { g ->
@@ -514,12 +515,12 @@ fun JoinGroupScreen(onBack: () -> Unit, onJoined: (convId: String, groupId: Stri
                     Column(Modifier.weight(1f)) {
                         Text(g.name, color = TextMain, fontSize = 15.sp, maxLines = 1)
                         Text(
-                            "共 ${g.memberCount} 人${if (g.hasPassword) " · 需要密码" else ""}",
+                            t("group.memberCount", "n" to g.memberCount) + if (g.hasPassword) " · " + t("group.passwordRequired") else "",
                             color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp),
                         )
                     }
                     Text(
-                        if (g.isMember) "进入" else "加入",
+                        if (g.isMember) t("group.open") else t("group.join"),
                         color = if (g.isMember) TextSub else Color.White, fontSize = 12.sp,
                         modifier = Modifier.clip(RoundedCornerShape(14.dp))
                             .background(if (g.isMember) Bg3 else Accent)

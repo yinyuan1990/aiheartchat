@@ -14,6 +14,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import com.wh.peiwana.BuildConfig
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.Api
 import com.wh.peiwana.net.Session
 import kotlinx.coroutines.launch
@@ -61,7 +62,7 @@ fun rememberScanHandler(onNav: (String) -> Unit): (String) -> Unit {
     val vroomMicPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
         pendingVroomGid?.let { gid ->
             if (ok) com.wh.peiwana.rtc.VoiceRoomManager.join(gid)
-            else toast("需要麦克风权限才能加入语音房")
+            else toast(t("voiceRoom.needMic"))
         }
         pendingVroomGid = null
     }
@@ -69,16 +70,16 @@ fun rememberScanHandler(onNav: (String) -> Unit): (String) -> Unit {
     fun joinVroomByQr(groupId: String, token: String) = scope.launch {
         runCatching { com.wh.peiwana.rtc.VoiceRoomManager.scanJoin(groupId, token) }
             .onSuccess { r ->
-                if (r.conversationId.isEmpty()) { toast("群会话不存在"); return@onSuccess }
+                if (r.conversationId.isEmpty()) { toast(t("qr.groupNotFound")); return@onSuccess }
                 if (r.roomActive) {
                     pendingVroomGid = r.groupId
                     vroomMicPerm.launch(android.Manifest.permission.RECORD_AUDIO)
                 } else {
-                    toast("已入群，语音房当前未开启")
+                    toast(t("qr.joinedRoomClosed"))
                 }
-                onNav("chatroom/${r.conversationId}?convType=2&targetId=${r.groupId}&title=${Uri.encode("${r.groupName}（群）")}")
+                onNav("chatroom/${r.conversationId}?convType=2&targetId=${r.groupId}&title=${Uri.encode(t("chat.groupTitle", "name" to r.groupName))}")
             }
-            .onFailure { toast(it.message ?: "扫码失败") }
+            .onFailure { toast(it.message ?: t("qr.scanFailed")) }
     }
 
     fun openByInvite(code: String) = scope.launch {
@@ -90,7 +91,7 @@ fun rememberScanHandler(onNav: (String) -> Unit): (String) -> Unit {
             val peerId = peer?.get("id")?.jsonPrimitive?.content ?: ""
             val nickname = peer?.get("nickname")?.jsonPrimitive?.content ?: ""
             onNav("chatroom/$convId?convType=1&targetId=$peerId&title=${Uri.encode(nickname)}")
-        }.onFailure { toast(it.message ?: "打开聊天失败") }
+        }.onFailure { toast(it.message ?: t("qr.openChatFailed")) }
     }
 
     return remember(onNav) {
@@ -102,12 +103,12 @@ fun rememberScanHandler(onNav: (String) -> Unit): (String) -> Unit {
             when {
                 invite != null -> openByInvite(invite)
                 vroom != null -> joinVroomByQr(vroom.first, vroom.second)
-                text.contains("pay?sid=") -> parsePaySid(text)?.let { onNav("transfer?sid=$it") } ?: toast("收款码不完整")
+                text.contains("pay?sid=") -> parsePaySid(text)?.let { onNav("transfer?sid=$it") } ?: toast(t("qr.payCodeIncomplete"))
                 !wallet && parseGroupCode(text) != null -> onNav("join-group?code=${parseGroupCode(text)}")
                 wallet ->
                     if (BuildConfig.WALLET_ALLOWED && (Session.walletFeature || ChainWalletVault.exists(ctx))) onNav(chainWalletRoute("/wallet/send?scan=" + Uri.encode(text)))
-                    else toast("这是链上钱包地址，当前版本不能在 App 里转账")
-                else -> toast("无法识别的二维码")
+                    else toast(t("qr.walletUnsupported"))
+                else -> toast(t("qr.unrecognized"))
             }
         }
     }
@@ -124,7 +125,7 @@ fun rememberQrScan(onNav: (String) -> Unit): () -> Unit {
         launcher.launch(
             ScanOptions()
                 .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                .setPrompt("扫名片、群码、收款码或钱包地址")
+                .setPrompt(t("qr.scanPrompt"))
                 .setBeepEnabled(false)
                 .setOrientationLocked(true)
                 .setCaptureActivity(PortraitCaptureActivity::class.java),

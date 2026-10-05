@@ -7,6 +7,7 @@ import { StickerPayload } from '../stickers';
 import { dropLastGrapheme } from '../emojis';
 import { EmojiPanel } from '../components/EmojiPanel';
 import { StickerView } from '../components/StickerView';
+import { lang, t } from '../i18n';
 
 /** 私密树洞帖子（匿名，无作者信息） */
 export interface TreeholePost {
@@ -33,11 +34,12 @@ interface TreeholeComment {
   createdAt: string;
 }
 
-const CHANNEL_NAME = '私密树洞';
+const CHANNEL_NAME = t('treehole.channel');
 const NAME_COLORS = ['#e57373', '#64b5f6', '#81c784', '#ffb74d', '#ba68c8', '#4dd0e1', '#f06292', '#aed581'];
 
 /** 阅读数：1234 → 1.2K，12345 → 1.2万 */
 export function fmtCount(n: number): string {
+  if (n >= 10000 && lang() !== 'zh') return n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${(n / 1000).toFixed(0)}K`;
   if (n >= 10000) return `${(n / 10000).toFixed(n >= 100000 ? 0 : 1)}万`;
   if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
   return String(n);
@@ -49,7 +51,7 @@ export function fmtTime(iso: string): string {
   const now = new Date();
   const hm = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
   if (d.toDateString() === now.toDateString()) return hm;
-  if (d.getFullYear() === now.getFullYear()) return `${d.getMonth() + 1}月${d.getDate()}日 ${hm}`;
+  if (d.getFullYear() === now.getFullYear()) return t('treehole.monthDay', { m: d.getMonth() + 1, d: d.getDate(), time: hm });
   return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${hm}`;
 }
 
@@ -99,10 +101,10 @@ function shareLink(id: string): string {
 
 /** 分享：文案前 60 字（没文案就「N 张图片」），App 内走原生分享面板。纯文字帖不单独传 url（分享面板不去抓链接预览图），链接拼进文字 */
 export async function shareTreehole(post: TreeholePost, toast: (s: string) => void) {
-  const text = post.content?.trim() ? post.content.trim().replace(/\s+/g, ' ').slice(0, 60) : `${CHANNEL_NAME} · ${post.images.length} 张图片`;
+  const text = post.content?.trim() ? post.content.trim().replace(/\s+/g, ' ').slice(0, 60) : `${CHANNEL_NAME} · ${t('treehole.imageCount', { n: post.images.length })}`;
   const link = shareLink(post.id);
   const r = post.images.length ? await shareText(text, link, CHANNEL_NAME) : await shareText(`${text}\n${link}`, '', CHANNEL_NAME);
-  if (r === 'copied') toast('链接已复制，去粘贴给好友吧');
+  if (r === 'copied') toast(t('treehole.linkCopied'));
 }
 
 function ShareIcon({ size = 15 }: { size?: number }) {
@@ -128,7 +130,7 @@ function TreeholeCard({ post, clamp, onOpen, onShare }: { post: TreeholePost; cl
       <div className="th-meta" style={{ alignItems: 'center' }}>
         {onShare && (
           <span onClick={(e) => { e.stopPropagation(); onShare(); }} style={{ marginRight: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px 4px 0', cursor: 'pointer', color: 'var(--text-2)', fontSize: 12 }}>
-            <ShareIcon /> 分享
+            <ShareIcon /> {t('common.share')}
           </span>
         )}
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
@@ -147,7 +149,7 @@ function TreeholeCard({ post, clamp, onOpen, onShare }: { post: TreeholePost; cl
             </div>
           )}
           <span className="th-label" style={post.commenters.length ? { marginLeft: 8 } : undefined}>
-            {post.commentCount > 0 ? `${post.commentCount} 条评论` : '发表评论'}
+            {post.commentCount > 0 ? t('treehole.commentCount', { n: post.commentCount }) : t('treehole.addComment')}
           </span>
           <span className="th-chevron">›</span>
         </div>
@@ -205,7 +207,7 @@ export function TreeholeFeed() {
       <div ref={anchorRef} />
       {hasMore && (
         <div className="hint" style={{ cursor: 'pointer', padding: '10px 0 14px' }} onClick={() => { setLoadingMore(true); load(true); }}>
-          {loadingMore ? '加载中…' : '查看更早的树洞'}
+          {loadingMore ? t('common.loading') : t('treehole.loadEarlier')}
         </div>
       )}
       {toast && <div className="music-toast">{toast}</div>}
@@ -213,7 +215,7 @@ export function TreeholeFeed() {
         <TreeholeCard key={p.id} post={p} clamp onOpen={() => nav(`/treehole/${p.id}`)} onShare={() => shareTreehole(p, showToast)} />
       ))}
       {loaded && posts.length === 0 && (
-        <div className="empty">树洞还是空的<br />说点只想让陌生人听见的话吧<br /><span className="small">下拉可刷新</span></div>
+        <div className="empty">{t('treehole.emptyTitle')}<br />{t('treehole.emptySub')}<br /><span className="small">{t('treehole.pullToRefresh')}</span></div>
       )}
       <div style={{ height: 72 }} />
       <button
@@ -221,7 +223,7 @@ export function TreeholeFeed() {
         style={{ bottom: isEmbedded() ? 'calc(20px + env(safe-area-inset-bottom))' : 'calc(74px + env(safe-area-inset-bottom))' }}
         onClick={() => nav('/treehole/publish')}
       >
-        ✎ 写树洞
+        ✎ {t('treehole.write')}
       </button>
     </PullToRefresh>
   );
@@ -242,8 +244,8 @@ export function TreeholeDetailPage() {
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const showToast = (t: string) => {
-    setToast(t);
+  const showToast = (msg: string) => {
+    setToast(msg);
     setTimeout(() => setToast(''), 1600);
   };
 
@@ -281,7 +283,7 @@ export function TreeholeDetailPage() {
   };
 
   const remove = async () => {
-    if (!confirm('删除这条树洞？评论也会一起消失')) return;
+    if (!confirm(t('treehole.deleteConfirm'))) return;
     try {
       await api(`/treehole/${id}`, { method: 'DELETE' });
       nav(-1);
@@ -295,14 +297,14 @@ export function TreeholeDetailPage() {
     inputRef.current?.focus();
   };
 
-  if (!post) return <div className="app"><div className="empty">加载中…</div></div>;
+  if (!post) return <div className="app"><div className="empty">{t('common.loading')}</div></div>;
 
   return (
     <div className="app">
       <div className="navbar" style={{ borderBottom: 'none' }}>
-        <span className="back" onClick={() => nav(-1)}>‹ 返回</span>
-        <span className="title">{post.commentCount > 0 ? `${post.commentCount} 条评论` : CHANNEL_NAME}</span>
-        {post.mine ? <span className="action" style={{ color: 'var(--text-2)' }} onClick={remove}>删除</span> : <span style={{ width: 40 }} />}
+        <span className="back" onClick={() => nav(-1)}>‹ {t('common.back')}</span>
+        <span className="title">{post.commentCount > 0 ? t('treehole.commentCount', { n: post.commentCount }) : CHANNEL_NAME}</span>
+        {post.mine ? <span className="action" style={{ color: 'var(--text-2)' }} onClick={remove}>{t('common.delete')}</span> : <span style={{ width: 40 }} />}
       </div>
 
       <div ref={listRef} className="page no-scrollbar" style={{ padding: '0 14px' }}>
@@ -310,7 +312,7 @@ export function TreeholeDetailPage() {
 
         {/* 评论区：和动态详情一致的平铺列表（头像 | 昵称 · 时间 …… 回复 / 正文 / 贴纸 / 细线），不再用聊天气泡 */}
         <div className={comments.length ? 'th-comments-title' : 'th-comments-title empty'}>
-          {comments.length > 0 ? `全部评论（${comments.length}）` : '还没有人评论，来说第一句'}
+          {comments.length > 0 ? t('treehole.allComments', { n: comments.length }) : t('treehole.noComments')}
         </div>
 
         {comments.map((c) => (
@@ -320,7 +322,7 @@ export function TreeholeDetailPage() {
               <div className="head">
                 <span className="name" style={{ color: nameColor(c.user.id) }}>{c.user.nickname}</span>
                 <span className="time">{fmtTime(c.createdAt)}</span>
-                <span className="reply" onClick={() => startReply(c)}>回复</span>
+                <span className="reply" onClick={() => startReply(c)}>{t('treehole.reply')}</span>
               </div>
               {(c.content || c.replyToNickname) && (
                 <div className="text">
@@ -343,8 +345,8 @@ export function TreeholeDetailPage() {
               <span onClick={() => setSticker(null)} style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: 9, background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>×</span>
             </span>
           )}
-          {replyTo ? <span className="small grow">回复 <span className="accent">@{replyTo.nickname}</span></span> : <span className="grow" />}
-          {replyTo && <span className="small" style={{ cursor: 'pointer' }} onClick={() => setReplyTo(null)}>取消</span>}
+          {replyTo ? <span className="small grow">{t('treehole.reply')} <span className="accent">@{replyTo.nickname}</span></span> : <span className="grow" />}
+          {replyTo && <span className="small" style={{ cursor: 'pointer' }} onClick={() => setReplyTo(null)}>{t('common.cancel')}</span>}
         </div>
       )}
 
@@ -356,12 +358,12 @@ export function TreeholeDetailPage() {
           style={{ marginBottom: 0, padding: '10px 14px' }}
           value={input}
           maxLength={500}
-          placeholder={replyTo ? `回复 @${replyTo.nickname}` : '说点什么…'}
+          placeholder={replyTo ? t('treehole.replyTo', { name: replyTo.nickname }) : t('treehole.inputPlaceholder')}
           onChange={(e) => setInput(e.target.value)}
           onFocus={() => setShowEmoji(false)}
           onKeyDown={(e) => e.key === 'Enter' && send()}
         />
-        <button className="btn-sm" disabled={busy || (!input.trim() && !sticker)} onClick={send}>发送</button>
+        <button className="btn-sm" disabled={busy || (!input.trim() && !sticker)} onClick={send}>{t('common.send')}</button>
       </div>
       {showEmoji && <EmojiPanel onPick={(p) => setSticker(p)} onEmoji={(e) => setInput((v) => v + e)} onDelete={() => setInput((v) => dropLastGrapheme(v))} onKeyboard={() => { setShowEmoji(false); inputRef.current?.focus(); }} />}
 
@@ -391,7 +393,7 @@ export function TreeholeSharePage() {
 
   useEffect(() => {
     if (!id) return;
-    api<SharedTreehole>(`/app/treehole/${id}`).then(setP).catch((e) => setErr(e.message || '这条内容已删除'));
+    api<SharedTreehole>(`/app/treehole/${id}`).then(setP).catch((e) => setErr(e.message || t('treehole.deleted')));
     api<any>('/app/download').then((d) => setDl({ android: d?.android?.url, ios: d?.ios?.url })).catch(() => {});
   }, [id]);
 
@@ -404,13 +406,13 @@ export function TreeholeSharePage() {
   return (
     <div className="app music-share" style={{ padding: '20px 12px 32px' }}>
       {err && <div className="empty">{err}</div>}
-      {!p && !err && <div className="empty">加载中…</div>}
+      {!p && !err && <div className="empty">{t('common.loading')}</div>}
       {p && (
         <>
           <TreeholeCard post={p} clamp={false} onShare={() => shareTreehole(p, showToast)} />
           {p.comments.length > 0 && (
             <>
-              <div className="th-comments-title">{p.commentCount > p.comments.length ? `最近评论（共 ${p.commentCount} 条）` : `全部评论（${p.commentCount}）`}</div>
+              <div className="th-comments-title">{p.commentCount > p.comments.length ? t('treehole.recentComments', { n: p.commentCount }) : t('treehole.allComments', { n: p.commentCount })}</div>
               {p.comments.map((c) => (
                 <div key={c.id} className="th-comment">
                   <div className="avatar">{c.user.avatar && <img src={c.user.avatar} alt="" />}</div>
@@ -432,9 +434,9 @@ export function TreeholeSharePage() {
             </>
           )}
           <div className="row" style={{ gap: 12, marginTop: 18 }}>
-            <button className="btn" style={{ flex: 1 }} onClick={openApp}>打开心之音 App 参与讨论</button>
+            <button className="btn" style={{ flex: 1 }} onClick={openApp}>{t('treehole.openApp', { app: t('app.name') })}</button>
           </div>
-          <div className="hint">私密树洞 · 匿名说心事，评论只显示昵称</div>
+          <div className="hint">{t('treehole.shareFooter')}</div>
         </>
       )}
       {toast && <div className="music-toast">{toast}</div>}
@@ -462,7 +464,7 @@ export function TreeholePublishPage() {
         setImages((prev) => [...prev, url]);
       }
     } catch (e: any) {
-      setToast(e.message || '上传失败');
+      setToast(e.message || t('treehole.uploadFailed'));
       setTimeout(() => setToast(''), 1600);
     } finally {
       setUploading(false);
@@ -472,7 +474,7 @@ export function TreeholePublishPage() {
   const submit = async () => {
     const text = content.trim();
     if (text.length < 5 && images.length === 0) {
-      setToast('至少写 5 个字，或配一张图');
+      setToast(t('treehole.tooShort'));
       setTimeout(() => setToast(''), 1600);
       return;
     }
@@ -491,9 +493,9 @@ export function TreeholePublishPage() {
   return (
     <div className="app">
       <div className="navbar" style={{ borderBottom: 'none' }}>
-        <span className="back" onClick={() => nav(-1)}>‹ 取消</span>
-        <span className="title">写树洞</span>
-        <span className="action" style={!canSubmit ? { opacity: 0.4 } : undefined} onClick={() => canSubmit && submit()}>发布</span>
+        <span className="back" onClick={() => nav(-1)}>‹ {t('common.cancel')}</span>
+        <span className="title">{t('treehole.write')}</span>
+        <span className="action" style={!canSubmit ? { opacity: 0.4 } : undefined} onClick={() => canSubmit && submit()}>{t('treehole.publish')}</span>
       </div>
       <div className="page no-scrollbar" style={{ padding: '4px 16px' }}>
         <textarea
@@ -502,7 +504,7 @@ export function TreeholePublishPage() {
           value={content}
           maxLength={MAX}
           onChange={(e) => setContent(e.target.value)}
-          placeholder="把想说却无处说的话放进树洞…"
+          placeholder={t('treehole.publishPlaceholder')}
           style={{ minHeight: 200, lineHeight: 1.7, fontSize: 15 }}
         />
         <div className="th-pick">
@@ -512,7 +514,7 @@ export function TreeholePublishPage() {
           )}
         </div>
         <div className="row">
-          <span className="small grow">匿名发布：其他人只能看到内容，不会显示你的昵称和头像</span>
+          <span className="small grow">{t('treehole.anonHint')}</span>
           <span className="small">{content.length} / {MAX}</span>
         </div>
       </div>

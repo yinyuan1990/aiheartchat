@@ -40,6 +40,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.Api
 import com.wh.peiwana.net.EnterResp
 import com.wh.peiwana.net.UserProfile
@@ -73,7 +74,7 @@ fun RegisterScreen(onDone: (UserProfile) -> Unit) {
         verticalArrangement = Arrangement.Center,
     ) {
         Text(
-            text = "心之音",
+            text = t("app.name"),
             style = MaterialTheme.typography.headlineLarge,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.align(Alignment.CenterHorizontally),
@@ -92,13 +93,13 @@ fun RegisterScreen(onDone: (UserProfile) -> Unit) {
             if (avatarUri != null) {
                 AsyncImage(
                     model = avatarUri,
-                    contentDescription = "头像",
+                    contentDescription = t("register.avatar"),
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                 )
             } else {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("选择头像", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(t("register.chooseAvatar"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -107,7 +108,7 @@ fun RegisterScreen(onDone: (UserProfile) -> Unit) {
         OutlinedTextField(
             value = nickname,
             onValueChange = { if (it.length <= 30) nickname = it },
-            label = { Text("昵称") },
+            label = { Text(t("register.nickname")) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -122,7 +123,7 @@ fun RegisterScreen(onDone: (UserProfile) -> Unit) {
             contentAlignment = Alignment.CenterStart,
         ) {
             Text(
-                if (age > 0) "$age 岁" else "年纪（点击选择）",
+                if (age > 0) t("register.ageN", "n" to age) else t("register.agePick"),
                 color = if (age > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyLarge,
             )
@@ -130,10 +131,10 @@ fun RegisterScreen(onDone: (UserProfile) -> Unit) {
         }
         Spacer(Modifier.height(16.dp))
 
-        Text("性别（注册后不可修改）", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(t("register.genderHint"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            listOf(1 to "男", 2 to "女").forEach { (value, label) ->
+            listOf(1 to t("me.male"), 2 to t("me.female")).forEach { (value, label) ->
                 OutlinedButton(
                     onClick = { gender = value },
                     modifier = Modifier.weight(1f),
@@ -156,11 +157,11 @@ fun RegisterScreen(onDone: (UserProfile) -> Unit) {
         Button(
             onClick = {
                 if (avatarUri == null) {
-                    error = "请选择头像"
+                    error = t("register.needAvatar")
                     return@Button
                 }
                 if (nickname.isBlank() || age == 0 || gender == 0) {
-                    error = "请填写昵称、选择年纪和性别"
+                    error = t("register.errFields")
                     return@Button
                 }
                 loading = true
@@ -185,7 +186,7 @@ fun RegisterScreen(onDone: (UserProfile) -> Unit) {
                         // 通过 TA 的专属邀请页装的：进主页后直接打开 TA 的个人主页（MainActivity 监听 openUserHome）
                         resp.inviter?.let { com.wh.peiwana.rtc.CallManager.openUserHome.value = it.id }
                     } catch (e: Exception) {
-                        error = e.message ?: "注册失败"
+                        error = e.message ?: t("register.failed")
                     } finally {
                         loading = false
                     }
@@ -194,12 +195,12 @@ fun RegisterScreen(onDone: (UserProfile) -> Unit) {
             enabled = !loading,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(if (loading) "创建中…" else "进入")
+            Text(if (loading) t("register.creating") else t("register.enter"))
         }
 
         Spacer(Modifier.height(16.dp))
         Text(
-            "无需密码，账号与本机自动绑定，卸载重装后自动恢复",
+            t("register.noPassword"),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.align(Alignment.CenterHorizontally),
@@ -207,22 +208,22 @@ fun RegisterScreen(onDone: (UserProfile) -> Unit) {
 
         Spacer(Modifier.height(8.dp))
         Text(
-            "本平台仅限年满 18 周岁用户使用",
+            t("register.adultsOnly"),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.align(Alignment.CenterHorizontally),
         )
         Row(modifier = Modifier.align(Alignment.CenterHorizontally)) {
-            Text("注册即代表已满 18 周岁并同意", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(t("register.agreePrefix"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
-                "《用户协议》",
+                t("register.userAgreement"),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.noRippleClick { agreementIsPrivacy = false; showAgreement = true },
             )
-            Text("与", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(t("register.and"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
-                "《隐私政策》",
+                t("register.privacyPolicy"),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.noRippleClick { agreementIsPrivacy = true; showAgreement = true },

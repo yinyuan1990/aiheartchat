@@ -2,6 +2,7 @@ import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
 import { ScanIcon } from './QrScanner';
 import { chainCardPreview } from './ChainCards';
+import { t } from '../i18n';
 
 export interface SearchConv {
   id: string;
@@ -77,17 +78,17 @@ function previewOf(msg?: SearchConv['lastMsg']) {
   if (!msg) return '';
   switch (msg.type) {
     case 'text': return msg.content.slice(0, 40);
-    case 'image': return '[图片]';
-    case 'video': return '[视频]';
-    case 'sticker': return msg.content.includes('"mp4"') ? '[GIF]' : '[表情]';
-    case 'gift': return '[礼物]';
-    case 'audio': return '[语音]';
-    case 'location': return '[位置]';
+    case 'image': return t('msg.preview.image');
+    case 'video': return t('msg.preview.video');
+    case 'sticker': return msg.content.includes('"mp4"') ? '[GIF]' : t('msg.preview.sticker');
+    case 'gift': return t('msg.preview.gift');
+    case 'audio': return t('msg.preview.voice');
+    case 'location': return t('msg.preview.location');
     case 'transfer':
     case 'callout':
     case 'perp':
     case 'payreq': return chainCardPreview(msg.type, msg.content) ?? '';
-    default: return msg.type.startsWith('call') ? '[通话]' : '';
+    default: return msg.type.startsWith('call') ? t('msg.preview.call') : '';
   }
 }
 
@@ -155,13 +156,13 @@ export function ChatSearch({
     if (!keyword) { setResult(null); setLoading(false); return; }
     setLoading(true);
     let alive = true;
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       api<{ messages: MessageHit[]; users: UserHit[] }>(`/im/search?q=${encodeURIComponent(keyword)}`)
         .then((r) => { if (alive) setResult({ q: keyword, ...r }); })
         .catch(() => { if (alive) setResult({ q: keyword, messages: [], users: [] }); })
         .finally(() => { if (alive) setLoading(false); });
     }, 300);
-    return () => { alive = false; clearTimeout(t); };
+    return () => { alive = false; clearTimeout(timer); };
   }, [keyword]);
 
   const remember = (item: Recent) => {
@@ -204,7 +205,7 @@ export function ChatSearch({
     <div key={`c${c.id}`} className="cs-row" onClick={() => openConv(c)}>
       <div className="avatar" style={{ width: 44, height: 44 }}>{convAvatar(c) && <img src={convAvatar(c)} alt="" />}</div>
       <div className="cs-row-main">
-        <div className="cs-row-title ellipsis"><Highlight text={convTitle(c)} q={keyword} />{c.type === 2 && <span className="cs-tag">群</span>}{c.peer?.isBot && <span className="bot-tag">机器人</span>}</div>
+        <div className="cs-row-title ellipsis"><Highlight text={convTitle(c)} q={keyword} />{c.type === 2 && <span className="cs-tag">{t('chat.tagGroup')}</span>}{c.peer?.isBot && <span className="bot-tag">{t('chat.bot')}</span>}</div>
         <div className="cs-row-sub ellipsis">{sub ?? previewOf(c.lastMsg)}</div>
       </div>
       <Badge n={c.unread} />
@@ -226,13 +227,13 @@ export function ChatSearch({
     <div key={`u${u.id}`} className="cs-row" onClick={() => openUser(u)}>
       <div className="avatar" style={{ width: 44, height: 44 }}>{u.avatar && <img src={u.avatar} alt="" />}</div>
       <div className="cs-row-main">
-        <div className="cs-row-title ellipsis"><Highlight text={u.title} q={keyword} />{u.isBot && <span className="bot-tag">机器人</span>}</div>
+        <div className="cs-row-title ellipsis"><Highlight text={u.title} q={keyword} />{u.isBot && <span className="bot-tag">{t('chat.bot')}</span>}</div>
         <div className="cs-row-sub ellipsis">{u.subtitle}</div>
       </div>
     </div>
   );
 
-  const userSub = (u: UserHit) => (u.isBot ? `@${u.username}` : [u.age ? `${u.age} 岁` : '', u.cityName ?? ''].filter(Boolean).join(' · ') || '用户');
+  const userSub = (u: UserHit) => (u.isBot ? `@${u.username}` : [u.age ? t('chatSearch.age', { n: u.age }) : '', u.cityName ?? ''].filter(Boolean).join(' · ') || t('chatSearch.user'));
 
   const top = convs.slice(0, 12);
   const recentRows = recent
@@ -249,10 +250,10 @@ export function ChatSearch({
         <div className="cs-head">
           <div className="cs-input">
             <svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-            <input ref={inputRef} value={q} placeholder="搜索" onChange={(e) => setQ(e.target.value)} enterKeyHint="search" />
+            <input ref={inputRef} value={q} placeholder={t('common.search')} onChange={(e) => setQ(e.target.value)} enterKeyHint="search" />
             {q
               ? <span className="cs-clear" onClick={() => { setQ(''); inputRef.current?.focus(); }}>×</span>
-              : <span className="cs-scan" title="扫一扫" onClick={onScan}><ScanIcon size={19} color="currentColor" /></span>}
+              : <span className="cs-scan" title={t('me.scan')} onClick={onScan}><ScanIcon size={19} color="currentColor" /></span>}
           </div>
           <span className="cs-close" onClick={onClose}>
             <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
@@ -261,8 +262,8 @@ export function ChatSearch({
 
         {keyword && (
           <div className="cs-tabs">
-            <span className={tab === 'chats' ? 'on' : ''} onClick={() => setTab('chats')}>聊天</span>
-            <span className={tab === 'messages' ? 'on' : ''} onClick={() => setTab('messages')}>消息{msgHits.length > 0 ? ` ${msgHits.length}` : ''}</span>
+            <span className={tab === 'chats' ? 'on' : ''} onClick={() => setTab('chats')}>{t('chatSearch.tabChats')}</span>
+            <span className={tab === 'messages' ? 'on' : ''} onClick={() => setTab('messages')}>{t('chatSearch.tabMessages')}{msgHits.length > 0 ? ` ${msgHits.length}` : ''}</span>
           </div>
         )}
 
@@ -285,13 +286,13 @@ export function ChatSearch({
               {recentRows.length > 0 ? (
                 <>
                   <div className="cs-section">
-                    <span>最近</span>
-                    <span className="cs-section-action" onClick={() => { setRecent([]); saveRecent([]); }}>清空</span>
+                    <span>{t('chatSearch.recent')}</span>
+                    <span className="cs-section-action" onClick={() => { setRecent([]); saveRecent([]); }}>{t('chat.clear')}</span>
                   </div>
                   {recentRows}
                 </>
               ) : (
-                <div className="cs-hint">搜索聊天、消息内容和用户</div>
+                <div className="cs-hint">{t('chatSearch.hint')}</div>
               )}
             </>
           )}
@@ -302,12 +303,12 @@ export function ChatSearch({
               {chatHits.map((c) => convRow(c))}
               {userHits.length > 0 && (
                 <>
-                  <div className="cs-section"><span>全局搜索</span></div>
+                  <div className="cs-section"><span>{t('chatSearch.global')}</span></div>
                   {userHits.map((u) => userRow({ id: u.id, title: u.nickname, avatar: u.avatar, subtitle: userSub(u), isBot: u.isBot }))}
                 </>
               )}
               {chatHits.length + extraHits.length + userHits.length === 0 && (
-                <div className="cs-hint">{loading ? '搜索中…' : '没有找到相关聊天'}</div>
+                <div className="cs-hint">{loading ? t('chatSearch.searching') : t('chatSearch.noChats')}</div>
               )}
             </>
           )}
@@ -327,17 +328,17 @@ export function ChatSearch({
                   <div className="avatar" style={{ width: 44, height: 44 }}>{m.avatar && <img src={m.avatar} alt="" />}</div>
                   <div className="cs-row-main">
                     <div className="row" style={{ gap: 8 }}>
-                      <span className="cs-row-title grow ellipsis">{m.title}{m.convType === 2 && <span className="cs-tag">群</span>}</span>
+                      <span className="cs-row-title grow ellipsis">{m.title}{m.convType === 2 && <span className="cs-tag">{t('chat.tagGroup')}</span>}</span>
                       <span className="small">{dateText(m.createdAt)}</span>
                     </div>
                     <div className="cs-row-sub cs-row-sub2">
-                      {m.convType === 2 || m.senderNickname === '我' ? <span className="cs-sender">{m.senderNickname}：</span> : null}
+                      {m.convType === 2 || m.senderNickname === '我' ? <span className="cs-sender">{t('chatSearch.senderPrefix', { name: m.senderNickname })}</span> : null}
                       <Highlight text={m.content} q={keyword} />
                     </div>
                   </div>
                 </div>
               ))}
-              {msgHits.length === 0 && <div className="cs-hint">{loading ? '搜索中…' : '没有找到相关消息'}</div>}
+              {msgHits.length === 0 && <div className="cs-hint">{loading ? t('chatSearch.searching') : t('chatSearch.noMessages')}</div>}
             </>
           )}
         </div>

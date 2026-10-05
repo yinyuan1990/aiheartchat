@@ -42,3 +42,7 @@ demo-video/build/
 demo-video/*.mp4
 demo-video/endcard.png
 demo-video/youtube-banner-*.jpg
+
+# i18n merge scratch (see i18n/merge-parts.mjs)
+i18n/_parts/
+i18n/_left.txt

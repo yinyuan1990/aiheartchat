@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.Api
 import com.wh.peiwana.net.MeetUser
 import com.wh.peiwana.net.Session
@@ -78,7 +79,7 @@ fun MeetSection(
             modifier = Modifier.fillMaxWidth().padding(16.dp, 2.dp, 16.dp, 10.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            listOf("all" to "所有", "new" to "新人", "city" to "同城", "intimacy" to "亲密度").forEach { (k, label) ->
+            listOf("all" to t("meet.tabAll"), "new" to t("meet.tabNew"), "city" to t("meet.tabCity"), "intimacy" to t("meet.tabIntimacy")).forEach { (k, label) ->
                 val sel = tab == k
                 Text(
                     label,
@@ -98,10 +99,10 @@ fun MeetSection(
             Box(Modifier.fillMaxSize()) {
                 EmptyHint(
                     when {
-                        loading -> "加载中…"
-                        tab == "intimacy" -> "还没有亲密的人\n聊天、视频、点赞评论都会累计亲密度"
-                        tab == "city" -> "「${city.ifEmpty { "同城" }}」还没有人\n切到所有看看"
-                        else -> "暂时没有人"
+                        loading -> t("common.loading")
+                        tab == "intimacy" -> t("meet.emptyIntimacy")
+                        tab == "city" -> t("meet.emptyCity", "city" to city.ifEmpty { t("meet.tabCity") })
+                        else -> t("meet.empty")
                     },
                 )
             }
@@ -147,12 +148,12 @@ private fun MeetCard(
         Row(Modifier.align(Alignment.TopStart).padding(8.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
             if (u.isGuide || u.realnameVerified) {
                 Text(
-                    "已认证", color = Color.White, fontSize = 10.sp,
+                    t("meet.verified"), color = Color.White, fontSize = 10.sp,
                     modifier = Modifier.clip(RoundedCornerShape(9.dp)).background(Accent).padding(horizontal = 7.dp, vertical = 2.dp),
                 )
             } else if (u.isNew) {
                 Text(
-                    "新人", color = Color.White, fontSize = 10.sp,
+                    t("meet.tabNew"), color = Color.White, fontSize = 10.sp,
                     modifier = Modifier.clip(RoundedCornerShape(9.dp)).background(Color(0xFF6C5CE7)).padding(horizontal = 7.dp, vertical = 2.dp),
                 )
             }
@@ -174,7 +175,7 @@ private fun MeetCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // 评分五星换算（0-100 → 5.0）
                 Text(
-                    "★ ${if (u.ratingCount > 0) "%.1f".format(u.ratingAvg / 20.0) else "新"}",
+                    "★ ${if (u.ratingCount > 0) "%.1f".format(u.ratingAvg / 20.0) else t("meet.ratingNew")}",
                     color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold,
                     modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(Warn.copy(alpha = 0.85f)).padding(horizontal = 6.dp, vertical = 1.dp),
                 )
@@ -194,17 +195,17 @@ private fun MeetCard(
                     val busyColor = Color(0xFFFFAA3C)
                     Text(
                         when {
-                            u.busy -> "通话中"
-                            u.videoPriceFen > 0 -> "视频 ${fmtPoints(u.videoPriceFen.toString())}/分"
-                            else -> "视频"
+                            u.busy -> t("meet.busy")
+                            u.videoPriceFen > 0 -> t("meet.videoPrice", "n" to fmtPoints(u.videoPriceFen.toString()))
+                            else -> t("common.video")
                         },
                         color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold,
                         modifier = Modifier.clip(RoundedCornerShape(10.dp))
                             .background(if (u.busy) busyColor.copy(alpha = 0.9f) else if (u.online) Accent else TextDim.copy(alpha = 0.8f))
                             .noRippleClick {
                                 when {
-                                    u.busy -> android.widget.Toast.makeText(ctx, "对方正在通话中，请稍后再试", android.widget.Toast.LENGTH_SHORT).show()
-                                    !u.online -> android.widget.Toast.makeText(ctx, "对方不在线", android.widget.Toast.LENGTH_SHORT).show()
+                                    u.busy -> android.widget.Toast.makeText(ctx, t("meet.peerBusy"), android.widget.Toast.LENGTH_SHORT).show()
+                                    !u.online -> android.widget.Toast.makeText(ctx, t("meet.peerOffline"), android.widget.Toast.LENGTH_SHORT).show()
                                     else -> startCall(u.id, u.nickname, u.avatar, 2)
                                 }
                             }

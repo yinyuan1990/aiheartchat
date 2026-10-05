@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.Api
 import com.wh.peiwana.net.UserProfile
 import com.wh.peiwana.ui.*
@@ -49,12 +50,12 @@ fun InviteCardScreen(me: UserProfile?, onBack: () -> Unit) {
     LaunchedEffect(Unit) {
         runCatching { Api.getObj<InviteMine>("/app/invite/mine") }
             .onSuccess { info = it }
-            .onFailure { error = it.message ?: "加载失败" }
+            .onFailure { error = it.message ?: t("common.loadFailed") }
     }
 
     val isFemale = me?.gender == 2
-    val shareText = if (isFemale) "我在心之音等你，来和我聊聊："
-    else "我在心之音，想请你来聊聊，你的时间在这里每一分钟都算钱："
+    val shareText = if (isFemale) t("invite.shareTextFemale", "app" to t("app.name"))
+    else t("invite.shareTextMale", "app" to t("app.name"))
 
     fun toast(s: String) = android.widget.Toast.makeText(ctx, s, android.widget.Toast.LENGTH_SHORT).show()
     fun shareLink(link: String) {
@@ -63,16 +64,16 @@ fun InviteCardScreen(me: UserProfile?, onBack: () -> Unit) {
                 type = "text/plain"
                 putExtra(android.content.Intent.EXTRA_TEXT, "$shareText$link")
             }
-            ctx.startActivity(android.content.Intent.createChooser(intent, "分享我的邀请名片"))
+            ctx.startActivity(android.content.Intent.createChooser(intent, t("invite.shareChooser")))
         }
     }
 
     Column(Modifier.fillMaxSize()) {
-        NavBar("我的邀请名片", onBack)
+        NavBar(t("me.inviteCard"), onBack)
         val i = info
         when {
             i == null && error.isNotEmpty() -> EmptyHint(error)
-            i == null -> EmptyHint("加载中…")
+            i == null -> EmptyHint(t("common.loading"))
             else -> Column(
                 Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -87,14 +88,14 @@ fun InviteCardScreen(me: UserProfile?, onBack: () -> Unit) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Avatar(me?.avatar, 52)
                         Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                            Text("心之音 · 专属名片", color = TextSub, fontSize = 11.sp)
+                            Text(t("invite.cardLabel", "app" to t("app.name")), color = TextSub, fontSize = 11.sp)
                             Text(me?.nickname ?: "", color = TextMain, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                            Text("邀请码 ${i.code}", color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
+                            Text(t("invite.code", "code" to i.code), color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
                         }
                     }
                     Text(
-                        if (isFemale) "发给男生：他打开网页能看到你的照片、价格和评分，下载后自动打开你的主页，第一条消息就是你的收入。"
-                        else "发给女生：她打开网页能看到你的名片和在这里的收入方式，下载后自动和你成为好友。",
+                        if (isFemale) t("invite.descFemale")
+                        else t("invite.descMale"),
                         color = TextSub, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 14.dp),
                     )
                     // 二维码
@@ -110,24 +111,24 @@ fun InviteCardScreen(me: UserProfile?, onBack: () -> Unit) {
                         Modifier.padding(top = 14.dp).fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Bg3)
                             .noRippleClick {
                                 clipboard.setText(androidx.compose.ui.text.AnnotatedString(i.link))
-                                toast("链接已复制")
+                                toast(t("invite.linkCopied"))
                             }
                             .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(i.link.removePrefix("https://"), color = TextMain, fontSize = 13.sp, modifier = Modifier.weight(1f), maxLines = 1)
-                        Text("复制", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text(t("common.copy"), color = Accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     }
                     Row(Modifier.padding(top = 12.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(
-                            "保存二维码", color = TextMain, fontSize = 14.sp,
+                            t("qr.save"), color = TextMain, fontSize = 14.sp,
                             modifier = Modifier.weight(1f).clip(RoundedCornerShape(22.dp)).background(Bg3)
-                                .noRippleClick { toast(if (saveQrToGallery(ctx, qr, "邀请名片")) "已保存到相册" else "保存失败") }
+                                .noRippleClick { toast(if (saveQrToGallery(ctx, qr, "邀请名片")) t("qr.savedToGallery") else t("qr.saveFailed")) }
                                 .padding(vertical = 12.dp),
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         )
                         Text(
-                            "分享链接", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                            t("invite.shareLink"), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.weight(1f).clip(RoundedCornerShape(22.dp)).background(AccentBrush)
                                 .noRippleClick { shareLink(i.link) }
                                 .padding(vertical = 12.dp),
@@ -138,7 +139,7 @@ fun InviteCardScreen(me: UserProfile?, onBack: () -> Unit) {
 
                 // 统计
                 Row(Modifier.padding(top = 14.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    listOf("${i.clicks30d}" to "30 天内被打开", "${i.invited}" to "成功邀请").forEach { (n, label) ->
+                    listOf("${i.clicks30d}" to t("invite.opened30d"), "${i.invited}" to t("invite.invited")).forEach { (n, label) ->
                         Column(
                             Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(Bg2).padding(vertical = 14.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -150,7 +151,7 @@ fun InviteCardScreen(me: UserProfile?, onBack: () -> Unit) {
                 }
 
                 if (i.recent.isNotEmpty()) {
-                    Text("通过我加入的人", color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp).align(Alignment.Start))
+                    Text(t("invite.joinedViaMe"), color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp).align(Alignment.Start))
                     i.recent.forEach { u ->
                         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Avatar(u.avatar, 38)

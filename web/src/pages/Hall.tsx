@@ -6,6 +6,7 @@ import { GuideProjectBody } from './GuideProject';
 import { TreeholeFeed } from './Treehole';
 import { GalleryFeed } from './Gallery';
 import { PullToRefresh } from '../components/PullToRefresh';
+import { t } from '../i18n';
 
 interface ProjectItem {
   id: number;
@@ -25,11 +26,11 @@ const HALL_VERSION = '2026-09-15-hall-tabs-v4';
 
 type HallTab = 'guide' | 'games' | 'gallery' | 'treehole';
 const ALL_TABS: { key: HallTab; label: string }[] = [
-  { key: 'guide', label: '同城搭子' },
-  { key: 'games', label: '休闲游戏' },
+  { key: 'guide', label: t('guide.localBuddy') },
+  { key: 'games', label: t('hall.tabGames') },
   // 「养眼图片」名称后台可改（GET /gallery/settings），按性别分流内容
-  { key: 'gallery', label: '养眼图片' },
-  { key: 'treehole', label: '私密树洞' },
+  { key: 'gallery', label: t('gallery.defaultTitle') },
+  { key: 'treehole', label: t('plaza.tab.treehole') },
 ];
 const TAB_KEY = 'hall_tab';
 const GALLERY_TITLE_KEY = 'hall_gallery_title';
@@ -118,7 +119,7 @@ export function HallPage() {
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [loaded, setLoaded] = useState(false);
   // 养眼图片 tab 名称（后台可改）：先用上次缓存的，再拉最新
-  const [galleryTitle, setGalleryTitle] = useState(() => sessionStorage.getItem(GALLERY_TITLE_KEY) || '养眼图片');
+  const [galleryTitle, setGalleryTitle] = useState(() => sessionStorage.getItem(GALLERY_TITLE_KEY) || t('gallery.defaultTitle'));
   useEffect(() => {
     api<{ title: string }>('/gallery/settings').then((s) => {
       if (s?.title) { setGalleryTitle(s.title); sessionStorage.setItem(GALLERY_TITLE_KEY, s.title); }
@@ -202,7 +203,7 @@ export function HallPage() {
                   padding: '7px 20px', borderRadius: 16, fontSize: 13, fontWeight: 600,
                   background: 'rgba(255,255,255,0.92)', color: '#111',
                 }}>
-                  进入
+                  {t('hall.enter')}
                 </span>
               </div>
             ))}
@@ -222,7 +223,7 @@ export function HallPage() {
                 ))}
               </div>
             )}
-            {loaded && games.length === 0 && <div className="empty">游戏正在筹备中<br />敬请期待<br /><span className="small">下拉可刷新</span></div>}
+            {loaded && games.length === 0 && <div className="empty">{t('hall.gamesComing')}<br />{t('hall.stayTuned')}<br /><span className="small">{t('treehole.pullToRefresh')}</span></div>}
           </PullToRefresh>
         )}
 

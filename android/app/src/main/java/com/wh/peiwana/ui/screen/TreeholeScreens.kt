@@ -28,6 +28,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.wh.peiwana.i18n.I18n
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.Api
 import com.wh.peiwana.net.MomentUser
 import com.wh.peiwana.ui.*
@@ -117,10 +119,15 @@ private val NameColors = listOf(
     Color(0xFFE57373), Color(0xFF64B5F6), Color(0xFF81C784), Color(0xFFFFB74D),
     Color(0xFFBA68C8), Color(0xFF4DD0E1), Color(0xFFF06292), Color(0xFFAED581),
 )
-private const val CHANNEL_NAME = "私密树洞"
+private val CHANNEL_NAME: String get() = t("treehole.channel")
 
 /** 阅读数：1234 → 1.2K，12345 → 1.2万 */
 fun fmtCount(n: Int): String = when {
+    I18n.lang != "zh" -> when {
+        n >= 1_000_000 -> String.format("%.1fM", n / 1_000_000.0)
+        n >= 1_000 -> String.format("%.1fK", n / 1_000.0)
+        else -> n.toString()
+    }
     n >= 100_000 -> "${n / 10_000}万"
     n >= 10_000 -> String.format("%.1f万", n / 10_000.0)
     n >= 1_000 -> String.format("%.1fK", n / 1_000.0)
@@ -136,7 +143,7 @@ fun fmtTreeholeTime(iso: String): String {
         val hm = zdt.format(DateTimeFormatter.ofPattern("HH:mm"))
         when {
             zdt.toLocalDate() == today -> hm
-            zdt.year == today.year -> "${zdt.monthValue}月${zdt.dayOfMonth}日 $hm"
+            zdt.year == today.year -> t("treehole.monthDay", "m" to zdt.monthValue, "d" to zdt.dayOfMonth, "time" to hm)
             else -> "${zdt.year}/${zdt.monthValue}/${zdt.dayOfMonth} $hm"
         }
     } catch (_: Exception) { "" }
@@ -193,7 +200,7 @@ fun TreeholeSection(onOpen: (String) -> Unit, onPublish: () -> Unit) {
                 LazyColumn(Modifier.fillMaxSize()) {
                     item {
                         Box(Modifier.fillParentMaxSize()) {
-                            EmptyHint(if (TreeholeCache.loaded) "树洞还是空的\n说点只想让陌生人听见的话吧" else "加载中…")
+                            EmptyHint(if (TreeholeCache.loaded) t("treehole.emptyTitle") + "\n" + t("treehole.emptySub") else t("common.loading"))
                         }
                     }
                 }
@@ -210,7 +217,7 @@ fun TreeholeSection(onOpen: (String) -> Unit, onPublish: () -> Unit) {
                         TreeholeCard(p, clamp = true, onOpen = { onOpen(p.id) })
                     }
                     if (loadingMore) {
-                        item { Text("加载中…", color = TextDim, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(8.dp)) }
+                        item { Text(t("common.loading"), color = TextDim, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(8.dp)) }
                     }
                 }
             }
@@ -221,7 +228,7 @@ fun TreeholeSection(onOpen: (String) -> Unit, onPublish: () -> Unit) {
                 .clip(RoundedCornerShape(22.dp)).background(AccentBrush).noRippleClick(onPublish)
                 .padding(horizontal = 18.dp, vertical = 12.dp),
         ) {
-            Text("✎ 写树洞", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text("✎ " + t("treehole.write"), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -231,13 +238,13 @@ fun treeholeShareLink(id: String) = "https://app.yyheart.com/s/treehole/$id"
 
 /** 分享一条树洞：文案前 60 字（没文案就「N 张图片」）+ 短链，系统分享面板 */
 fun shareTreehole(ctx: android.content.Context, post: TreeholePost) {
-    val text = post.content.trim().replace(Regex("\\s+"), " ").take(60).ifEmpty { "$CHANNEL_NAME · ${post.images.size} 张图片" }
+    val text = post.content.trim().replace(Regex("\\s+"), " ").take(60).ifEmpty { "$CHANNEL_NAME · " + t("treehole.imageCount", "n" to post.images.size) }
     val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
         type = "text/plain"
         putExtra(android.content.Intent.EXTRA_SUBJECT, CHANNEL_NAME)
         putExtra(android.content.Intent.EXTRA_TEXT, "$text\n${treeholeShareLink(post.id)}")
     }
-    runCatching { ctx.startActivity(android.content.Intent.createChooser(intent, "分享").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    runCatching { ctx.startActivity(android.content.Intent.createChooser(intent, t("common.share")).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
 }
 
 /** 分享图标：向上箭头 + 托盘（和音乐页一致） */
@@ -313,7 +320,7 @@ fun TreeholeCard(post: TreeholePost, clamp: Boolean, onOpen: (() -> Unit)? = nul
             ) {
                 ShareArrowIcon(TextSub, 14.dp)
                 Spacer(Modifier.width(4.dp))
-                Text("分享", color = TextSub, fontSize = 12.sp)
+                Text(t("common.share"), color = TextSub, fontSize = 12.sp)
             }
             Spacer(Modifier.weight(1f))
             EyeIcon(TextDim, 13.dp)
@@ -336,7 +343,7 @@ fun TreeholeCard(post: TreeholePost, clamp: Boolean, onOpen: (() -> Unit)? = nul
                     Spacer(Modifier.width(10.dp))
                 }
                 Text(
-                    if (post.commentCount > 0) "${post.commentCount} 条评论" else "发表评论",
+                    if (post.commentCount > 0) t("treehole.commentCount", "n" to post.commentCount) else t("treehole.addComment"),
                     color = LinkBlue, fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f),
                 )
                 Text("›", color = LinkBlue, fontSize = 20.sp)
@@ -389,14 +396,14 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
     val p = post
     Column(Modifier.fillMaxSize()) {
         NavBar(
-            title = if (p != null && p.commentCount > 0) "${p.commentCount} 条评论" else CHANNEL_NAME,
+            title = if (p != null && p.commentCount > 0) t("treehole.commentCount", "n" to p.commentCount) else CHANNEL_NAME,
             onBack = onBack,
             action = if (p?.mine == true) {
-                { Text("删除", color = TextSub, fontSize = 14.sp, modifier = Modifier.noRippleClick { confirmDelete = true }) }
+                { Text(t("common.delete"), color = TextSub, fontSize = 14.sp, modifier = Modifier.noRippleClick { confirmDelete = true }) }
             } else null,
         )
         if (p == null) {
-            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Text("加载中…", color = TextSub, fontSize = 13.sp) }
+            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Text(t("common.loading"), color = TextSub, fontSize = 13.sp) }
             return@Column
         }
         LazyColumn(state = listState, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 14.dp)) {
@@ -404,7 +411,7 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
                 TreeholeCard(p, clamp = false)
                 // 评论区标题（和动态详情一致的平铺列表，不再用聊天气泡）
                 Text(
-                    if (comments.isEmpty()) "还没有人评论，来说第一句" else "全部评论（${comments.size}）",
+                    if (comments.isEmpty()) t("treehole.noComments") else t("treehole.allComments", "n" to comments.size),
                     color = if (comments.isEmpty()) TextSub else TextMain, fontSize = if (comments.isEmpty()) 13.sp else 15.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(top = 18.dp, bottom = 6.dp, start = 2.dp),
                 )
@@ -428,8 +435,8 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
                     Spacer(Modifier.width(10.dp))
                 }
                 replyTo?.let { r ->
-                    Text("回复 @${r.user?.nickname ?: ""}", color = Accent, fontSize = 12.sp, modifier = Modifier.weight(1f))
-                    Text("取消", color = TextSub, fontSize = 12.sp, modifier = Modifier.noRippleClick { replyTo = null })
+                    Text(t("treehole.replyTo", "name" to (r.user?.nickname ?: "")), color = Accent, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                    Text(t("common.cancel"), color = TextSub, fontSize = 12.sp, modifier = Modifier.noRippleClick { replyTo = null })
                 } ?: Spacer(Modifier.weight(1f))
             }
         }
@@ -448,7 +455,7 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
             Box(Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).background(Bg3).padding(horizontal = 14.dp, vertical = 9.dp), contentAlignment = Alignment.CenterStart) {
                 if (input.isEmpty()) {
                     Text(
-                        if (replyTo != null) "回复 @${replyTo?.user?.nickname ?: ""}" else "说点什么…",
+                        if (replyTo != null) t("treehole.replyTo", "name" to (replyTo?.user?.nickname ?: "")) else t("treehole.inputPlaceholder"),
                         color = TextSub, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 }
@@ -484,12 +491,12 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
                                 TreeholeCache.bumpComment(id)
                                 // 滚到底部看到自己的评论
                                 if (comments.isNotEmpty()) listState.animateScrollToItem(comments.size)
-                            }.onFailure { toast = it.message ?: "发送失败" }
+                            }.onFailure { toast = it.message ?: t("treehole.sendFailed") }
                             sending = false
                         }
                     }
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-            ) { Text("发送", color = Color.White, fontSize = 13.sp) }
+            ) { Text(t("common.send"), color = Color.White, fontSize = 13.sp) }
         }
         if (showSticker) EmojiPanel(onPick = { sticker = it }, onEmoji = { input += it }, onDelete = { input = dropLastGrapheme(input) }, onKeyboard = { showSticker = false; inputFocus.requestFocus(); keyboard?.show() })
         } // 底部区域 Column
@@ -504,19 +511,19 @@ fun TreeholeDetailScreen(id: String, onBack: () -> Unit) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { confirmDelete = false },
             containerColor = Bg2,
-            title = { Text("删除这条树洞？", color = TextMain) },
-            text = { Text("评论也会一起消失", color = TextSub) },
+            title = { Text(t("treehole.deleteTitle"), color = TextMain) },
+            text = { Text(t("treehole.deleteBody"), color = TextSub) },
             confirmButton = {
-                Text("删除", color = Danger, modifier = Modifier.noRippleClick {
+                Text(t("common.delete"), color = Danger, modifier = Modifier.noRippleClick {
                     confirmDelete = false
                     scope.launch {
                         runCatching { Api.request("/treehole/$id", "DELETE") }
                             .onSuccess { TreeholeCache.remove(id); onBack() }
-                            .onFailure { toast = it.message ?: "删除失败" }
+                            .onFailure { toast = it.message ?: t("treehole.deleteFailed") }
                     }
                 }.padding(8.dp))
             },
-            dismissButton = { Text("取消", color = TextSub, modifier = Modifier.noRippleClick { confirmDelete = false }.padding(8.dp)) },
+            dismissButton = { Text(t("common.cancel"), color = TextSub, modifier = Modifier.noRippleClick { confirmDelete = false }.padding(8.dp)) },
         )
     }
 }
@@ -534,11 +541,11 @@ private fun TreeholeCommentRow(c: TreeholeComment, onReply: () -> Unit) {
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(c.user?.nickname ?: "用户", color = nameColor(c.user?.id ?: c.id), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                Text(c.user?.nickname ?: t("treehole.user"), color = nameColor(c.user?.id ?: c.id), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 Spacer(Modifier.width(8.dp))
                 Text(fmtTreeholeTime(c.createdAt), color = TextDim, fontSize = 11.sp)
                 Spacer(Modifier.weight(1f))
-                Text("回复", color = TextSub, fontSize = 12.sp, modifier = Modifier.noRippleClick(onReply).padding(start = 12.dp, top = 2.dp, bottom = 2.dp))
+                Text(t("treehole.reply"), color = TextSub, fontSize = 12.sp, modifier = Modifier.noRippleClick(onReply).padding(start = 12.dp, top = 2.dp, bottom = 2.dp))
             }
             if (c.content.isNotEmpty() || c.replyToNickname.isNotEmpty()) {
                 Text(
@@ -582,7 +589,7 @@ fun TreeholePublishScreen(onBack: () -> Unit, onDone: () -> Unit) {
                 runCatching {
                     val bytes = ctx.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
                     images = images + Api.upload("image", bytes, "img.jpg", "image/jpeg")
-                }.onFailure { toast = it.message ?: "上传失败" }
+                }.onFailure { toast = it.message ?: t("treehole.uploadFailed") }
             }
             uploading = false
         }
@@ -593,12 +600,12 @@ fun TreeholePublishScreen(onBack: () -> Unit, onDone: () -> Unit) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        NavBar("写树洞", onBack) {
+        NavBar(t("treehole.write"), onBack) {
             Text(
-                if (busy) "发布中" else "发布", color = if (canSubmit) Accent else Accent.copy(alpha = 0.4f), fontSize = 14.sp,
+                if (busy) t("treehole.publishing") else t("treehole.publish"), color = if (canSubmit) Accent else Accent.copy(alpha = 0.4f), fontSize = 14.sp,
                 modifier = Modifier.noRippleClick {
                     if (!canSubmit) {
-                        if (content.trim().length < 5 && images.isEmpty()) toast = "至少写 5 个字，或配一张图"
+                        if (content.trim().length < 5 && images.isEmpty()) toast = t("treehole.tooShort")
                         return@noRippleClick
                     }
                     busy = true
@@ -612,7 +619,7 @@ fun TreeholePublishScreen(onBack: () -> Unit, onDone: () -> Unit) {
                             TreeholeCache.refresh()
                             onDone()
                         }.onFailure {
-                            toast = it.message ?: "发布失败"
+                            toast = it.message ?: t("treehole.publishFailed")
                             busy = false
                         }
                     }
@@ -623,7 +630,7 @@ fun TreeholePublishScreen(onBack: () -> Unit, onDone: () -> Unit) {
             Box(
                 Modifier.fillMaxWidth().heightIn(min = 200.dp).clip(RoundedCornerShape(12.dp)).background(Bg3).padding(14.dp),
             ) {
-                if (content.isEmpty()) Text("把想说却无处说的话放进树洞…", color = TextSub, fontSize = 15.sp)
+                if (content.isEmpty()) Text(t("treehole.publishPlaceholder"), color = TextSub, fontSize = 15.sp)
                 BasicTextField(
                     value = content, onValueChange = { if (it.length <= max) content = it },
                     textStyle = TextStyle(color = TextMain, fontSize = 15.sp, lineHeight = 26.sp),
@@ -657,7 +664,7 @@ fun TreeholePublishScreen(onBack: () -> Unit, onDone: () -> Unit) {
             }
             Spacer(Modifier.height(10.dp))
             Row(Modifier.fillMaxWidth()) {
-                Text("匿名发布：其他人只能看到内容，不会显示你的昵称和头像", color = TextDim, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                Text(t("treehole.anonHint"), color = TextDim, fontSize = 11.sp, modifier = Modifier.weight(1f))
                 Text("${content.length} / $max", color = TextDim, fontSize = 11.sp)
             }
         }

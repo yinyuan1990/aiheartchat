@@ -14,6 +14,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.Api
 import com.wh.peiwana.net.WsClient
 import org.webrtc.AudioTrack
@@ -243,7 +244,7 @@ object CallManager {
                     val peer = Api.request("/user/$calleeId") as? kotlinx.serialization.json.JsonObject
                     val priceFen = peer?.get("videoPriceActualFen")?.jsonPrimitive?.contentOrNull?.toLongOrNull()
                     if (balance != null && priceFen != null && priceFen > 0 && balance < priceFen) {
-                        "视频通话需 ${"%.2f".format(priceFen / 100.0).trimEnd('0').trimEnd('.')} 积分/分钟\n当前积分不足，无法发起"
+                        t("call.insufficientPoints", "n" to "%.2f".format(priceFen / 100.0).trimEnd('0').trimEnd('.'))
                     } else {
                         null
                     }
@@ -254,9 +255,9 @@ object CallManager {
                         // 独立提示弹框（不用 toast）；context 异常时降级 Toast 兜底
                         runCatching {
                             android.app.AlertDialog.Builder(context)
-                                .setTitle("提示")
+                                .setTitle(t("common.tip"))
                                 .setMessage(insufficientMsg)
-                                .setPositiveButton("知道了", null)
+                                .setPositiveButton(t("common.gotIt"), null)
                                 .show()
                         }.onFailure {
                             android.widget.Toast.makeText(context, insufficientMsg, android.widget.Toast.LENGTH_LONG).show()
@@ -280,7 +281,7 @@ object CallManager {
                 clog("invite sent type=$type callId=$callId")
                 _state.value = CallState.Outgoing(callId, calleeId, type, config)
             } catch (e: Exception) {
-                android.widget.Toast.makeText(context, e.message ?: "呼叫失败", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(context, e.message ?: t("call.callFailed"), android.widget.Toast.LENGTH_SHORT).show()
                 teardown()
             }
         }
@@ -298,7 +299,7 @@ object CallManager {
                 startTimer()
                 startMedia(cur.callId, cur.caller.id, cur.type, cur.config)
             } catch (e: Exception) {
-                android.widget.Toast.makeText(context, e.message ?: "接听失败", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(context, e.message ?: t("call.acceptFailed"), android.widget.Toast.LENGTH_SHORT).show()
                 teardown()
             }
         }
@@ -578,7 +579,7 @@ object CallManager {
         runCatching {
             val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                val channel = android.app.NotificationChannel("peiwan_call", "来电提醒", android.app.NotificationManager.IMPORTANCE_HIGH).apply {
+                val channel = android.app.NotificationChannel("peiwan_call", t("notify.callChannel"), android.app.NotificationManager.IMPORTANCE_HIGH).apply {
                     setSound(
                         android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE),
                         android.media.AudioAttributes.Builder()
@@ -598,8 +599,8 @@ object CallManager {
             )
             val notification = androidx.core.app.NotificationCompat.Builder(ctx, "peiwan_call")
                 .setSmallIcon(com.wh.peiwana.R.mipmap.ic_launcher)
-                .setContentTitle(callerName.ifEmpty { "来电" })
-                .setContentText(if (type == 2) "邀请你进行视频通话" else "邀请你进行语音通话")
+                .setContentTitle(callerName.ifEmpty { t("call.incoming") })
+                .setContentText(if (type == 2) t("call.inviteVideo") else t("call.inviteVoice"))
                 .setPriority(androidx.core.app.NotificationCompat.PRIORITY_MAX)
                 .setCategory(androidx.core.app.NotificationCompat.CATEGORY_CALL)
                 .setContentIntent(pending)

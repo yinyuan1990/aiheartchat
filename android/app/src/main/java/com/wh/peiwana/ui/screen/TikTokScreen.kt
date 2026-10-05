@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.Api
 import com.wh.peiwana.net.Moment
 import com.wh.peiwana.ui.Avatar
@@ -37,7 +38,7 @@ fun TikTokScreen(onExit: () -> Unit) {
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         if (items.isEmpty()) {
-            Text("暂无视频动态", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp, modifier = Modifier.align(Alignment.Center))
+            Text(t("tiktok.empty"), color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp, modifier = Modifier.align(Alignment.Center))
         } else {
             val startPage = items.indexOfFirst { it.id == PlazaCache.tiktokStartId }.let { if (it >= 0) it else 0 }
             val pagerState = rememberPagerState(initialPage = startPage, pageCount = { items.size })
@@ -131,10 +132,10 @@ private fun TikTokPage(m: Moment, playing: Boolean, onVideoCall: (Moment) -> Uni
                             .background(if (peerOnline) Accent.copy(alpha = 0.85f) else Color.White.copy(alpha = 0.15f))
                             .noRippleClick {
                                 if (peerOnline) onVideoCall(m)
-                                else android.widget.Toast.makeText(ctx, "对方不在线", android.widget.Toast.LENGTH_SHORT).show()
+                                else android.widget.Toast.makeText(ctx, t("meet.peerOffline"), android.widget.Toast.LENGTH_SHORT).show()
                             }
                             .padding(horizontal = 10.dp, vertical = 6.dp),
-                    ) { Text(if (peerOnline) "视频通话" else "对方离线", color = Color.White.copy(alpha = if (peerOnline) 1f else 0.5f), fontSize = 12.sp) }
+                    ) { Text(if (peerOnline) t("tiktok.videoCall") else t("tiktok.peerOffline"), color = Color.White.copy(alpha = if (peerOnline) 1f else 0.5f), fontSize = 12.sp) }
                 }
             }
         }

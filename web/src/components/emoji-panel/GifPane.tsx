@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { searchGifs, StickerPayload, useStickers } from '../../stickers';
 import { Collapsible, SearchRow, SectionTitle } from './shared';
+import { t } from '../../i18n';
 
 const SEARCH_H = 44;
 
@@ -27,7 +28,7 @@ export function GifPane({ hidden, onScroll, onPick, onSearch }: { hidden: boolea
         if (id !== seq.current) return;
         setItems(r.items); setNext(r.next);
       } catch (e: any) {
-        if (id === seq.current) setError(e.message || '加载失败');
+        if (id === seq.current) setError(e.message || t('common.loadFailed'));
       } finally {
         if (id === seq.current) setLoading(false);
       }
@@ -65,19 +66,19 @@ export function GifPane({ hidden, onScroll, onPick, onSearch }: { hidden: boolea
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Collapsible hidden={hidden} height={SEARCH_H}>
-        <SearchRow value="" onChange={() => {}} chip="" onChip={(e) => onSearch(e)} placeholder="搜索 GIF" onTap={() => onSearch('')} />
+        <SearchRow value="" onChange={() => {}} chip="" onChip={(e) => onSearch(e)} placeholder={t('emoji.searchGif')} onTap={() => onSearch('')} />
       </Collapsible>
       <div ref={scroller} className="no-scrollbar" onScroll={handleScroll} style={{ flex: 1, overflowY: 'auto', paddingBottom: 64 }}>
         {recentGifs.length > 0 && (
           <>
-            <SectionTitle>最近使用</SectionTitle>
+            <SectionTitle>{t('emoji.recent')}</SectionTitle>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>{recentGifs.map(tile)}</div>
           </>
         )}
-        <SectionTitle>热门</SectionTitle>
+        <SectionTitle>{t('emoji.trending')}</SectionTitle>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>{items.map(tile)}</div>
-        {loading && <div className="empty" style={{ padding: 16, fontSize: 12 }}>{items.length ? '加载更多…' : '正在拉取 GIF，第一次会慢几秒…'}</div>}
-        {!loading && !items.length && !error && <div className="empty" style={{ padding: 30, fontSize: 13 }}>暂无 GIF</div>}
+        {loading && <div className="empty" style={{ padding: 16, fontSize: 12 }}>{items.length ? t('emoji.loadingMore') : t('emoji.gifFirstLoad')}</div>}
+        {!loading && !items.length && !error && <div className="empty" style={{ padding: 30, fontSize: 13 }}>{t('emoji.noGif')}</div>}
         {error && <div className="empty" style={{ padding: 30, fontSize: 13 }}>{error}</div>}
       </div>
     </div>

@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.Api
 import com.wh.peiwana.net.Moment
 import com.wh.peiwana.net.fmtPoints
@@ -160,7 +161,7 @@ fun PlazaScreen(
                 Modifier.weight(1f).horizontalScroll(rememberScrollState()),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                listOf("feed" to "动态", "meet" to "遇见", "quotes" to "励志行", "treehole" to "私密树洞").forEach { (k, label) ->
+                listOf("feed" to t("plaza.tab.feed"), "meet" to t("plaza.tab.meet"), "quotes" to t("plaza.tab.quotes"), "treehole" to t("plaza.tab.treehole")).forEach { (k, label) ->
                     Text(
                         label,
                         color = if (tab == k) TextMain else TextSub,
@@ -172,7 +173,7 @@ fun PlazaScreen(
                 }
             }
             Text(
-                if (locating) "定位中…" else (if (city.isEmpty()) "定位" else "$city ▾"),
+                if (locating) t("plaza.locating") else (if (city.isEmpty()) t("plaza.locate") else "$city ▾"),
                 color = TextSub, fontSize = 13.sp, maxLines = 1, softWrap = false,
                 modifier = Modifier.noRippleClick {
                     locPerm.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
@@ -212,7 +213,7 @@ fun PlazaScreen(
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     item {
                         Box(Modifier.fillParentMaxSize()) {
-                            EmptyHint("暂无动态\n自己发布的仅异性可见")
+                            EmptyHint(t("plaza.emptyFeed"))
                         }
                     }
                 }
@@ -245,9 +246,9 @@ fun FollowMomentsScreen(onBack: () -> Unit, onOpenDetail: (String) -> Unit, onOp
         loaded = true
     }
     Column(modifier = Modifier.fillMaxSize()) {
-        NavBar("关注动态", onBack)
+        NavBar(t("me.followMoments"), onBack)
         if (loaded && items.isEmpty()) {
-            EmptyHint("关注的人还没有动态\n去遇见里关注一些人吧")
+            EmptyHint(t("plaza.emptyFollow"))
         } else {
             LazyColumn {
                 items(items, key = { it.id }) { m ->
@@ -289,7 +290,7 @@ fun MomentCard(
                     Text(m.user?.nickname ?: "", color = TextMain, fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
                     if (m.user?.isGuide == true) {
                         Spacer(Modifier.width(5.dp))
-                        Text("认证", color = Accent, fontSize = 10.sp, modifier = Modifier.clip(RoundedCornerShape(3.dp)).background(Accent.copy(alpha = 0.12f)).padding(horizontal = 5.dp, vertical = 1.dp))
+                        Text(t("me.verified"), color = Accent, fontSize = 10.sp, modifier = Modifier.clip(RoundedCornerShape(3.dp)).background(Accent.copy(alpha = 0.12f)).padding(horizontal = 5.dp, vertical = 1.dp))
                     }
                     // 位置紧跟昵称（迷你淡色标签）
                     if (m.cityName.isNotEmpty()) {
@@ -318,7 +319,7 @@ fun MomentCard(
                                 }
                             }
                         }.padding(horizontal = 11.dp, vertical = 4.dp),
-                ) { Text(if (following) "已关注" else "关注", color = if (following) TextSub else androidx.compose.ui.graphics.Color.White, fontSize = 12.sp) }
+                ) { Text(if (following) t("plaza.followed") else t("me.following"), color = if (following) TextSub else androidx.compose.ui.graphics.Color.White, fontSize = 12.sp) }
                 // 视频通话仅男方可发起（女方只能接听）；三态：通话中（占线）/ 离线置灰 / 可打（显示价格）
                 if (com.wh.peiwana.net.Session.gender == 1) {
                     val peerOnline = m.user?.online == true
@@ -335,8 +336,8 @@ fun MomentCard(
                             )
                             .noRippleClick {
                                 when {
-                                    peerBusy -> android.widget.Toast.makeText(headerCtx, "对方正在通话中，请稍后再试", android.widget.Toast.LENGTH_SHORT).show()
-                                    !peerOnline -> android.widget.Toast.makeText(headerCtx, "对方不在线", android.widget.Toast.LENGTH_SHORT).show()
+                                    peerBusy -> android.widget.Toast.makeText(headerCtx, t("plaza.peerBusy"), android.widget.Toast.LENGTH_SHORT).show()
+                                    !peerOnline -> android.widget.Toast.makeText(headerCtx, t("plaza.peerOffline"), android.widget.Toast.LENGTH_SHORT).show()
                                     else -> onVideoCall()
                                 }
                             }
@@ -345,9 +346,9 @@ fun MomentCard(
                         // 叠加显示女方视频价格（积分/分钟）
                         val priceFen = m.user?.videoPriceFen ?: 0
                         val label = when {
-                            peerBusy -> "通话中"
-                            priceFen > 0 -> "视频通话 ${fmtPoints(priceFen.toString())}/分"
-                            else -> "视频通话"
+                            peerBusy -> t("plaza.inCall")
+                            priceFen > 0 -> t("plaza.videoCallPrice", "n" to fmtPoints(priceFen.toString()))
+                            else -> t("attach.videoCall")
                         }
                         Text(label, color = if (peerBusy) busyColor else if (peerOnline) Accent else TextDim, fontSize = 12.sp)
                     }
@@ -404,7 +405,7 @@ fun MomentCard(
             val online = m.user?.online == true
             Box(Modifier.size(6.dp).clip(RoundedCornerShape(3.dp)).background(if (online) Success else TextDim))
             Spacer(Modifier.width(4.dp))
-            Text(if (online) "在线" else "离线", color = if (online) Success else TextDim, fontSize = 12.sp)
+            Text(if (online) t("plaza.online") else t("plaza.offline"), color = if (online) Success else TextDim, fontSize = 12.sp)
             distanceText(m)?.let { d ->
                 Spacer(Modifier.width(12.dp))
                 Text("· $d", color = TextSub, fontSize = 12.sp)
@@ -412,7 +413,7 @@ fun MomentCard(
             Spacer(Modifier.weight(1f))
             Text(
                 // 图标统一用实心，颜色区分状态，避免 ♥/♡ 字形不一致
-                "♥ 点赞${if (likeCount > 0) " $likeCount" else ""}",
+                "♥ " + t("plaza.like") + (if (likeCount > 0) " $likeCount" else ""),
                 color = if (liked) Accent else TextSub, fontSize = 13.sp,
                 modifier = Modifier.noRippleClick {
                     scope.launch {
@@ -424,7 +425,7 @@ fun MomentCard(
                     }
                 }.padding(end = 18.dp),
             )
-            Text("评论${if (m.commentCount > 0) " ${m.commentCount}" else ""}", color = TextSub, fontSize = 13.sp, modifier = Modifier.noRippleClick(onOpenDetail))
+            Text(t("plaza.comment") + (if (m.commentCount > 0) " ${m.commentCount}" else ""), color = TextSub, fontSize = 13.sp, modifier = Modifier.noRippleClick(onOpenDetail))
         }
     }
     Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Line))

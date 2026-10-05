@@ -4,6 +4,7 @@ import { api } from '../api';
 import { shareBase, shareText, viewNativeMedia, type NativeMediaItem } from '../bridge';
 import { PullToRefresh } from '../components/PullToRefresh';
 import { fmtCount, fmtTime } from './Treehole';
+import { t } from '../i18n';
 
 export interface GalleryMedia {
   type: 'image' | 'video';
@@ -45,7 +46,7 @@ function Cell({ m, onOpen, style }: { m: GalleryMedia; onOpen: () => void; style
       {src ? <img src={src} alt="" loading="lazy" decoding="async" /> : <div className="gl-cell-blank" />}
       {m.type === 'video' && (
         <>
-          <span className="gl-dur">{fmtDur(m.duration) || '视频'}</span>
+          <span className="gl-dur">{fmtDur(m.duration) || t('gallery.video')}</span>
           <span className="gl-play">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10-6.5a1 1 0 0 0 0-1.72l-10-6.5A1 1 0 0 0 8 5.5z" /></svg>
           </span>
@@ -146,7 +147,7 @@ function MediaLightbox({ groups, group, index, onClose }: { groups: GalleryMedia
       ))}
       <span onClick={onClose} className="gl-lb-close">×</span>
       <span className="gl-lb-counter">
-        {groups.length > 1 && <>{pos.g + 1} / {groups.length} 条</>}
+        {groups.length > 1 && <>{t('gallery.postIndex', { i: pos.g + 1, n: groups.length })}</>}
         {cur.length > 1 && <>{groups.length > 1 ? ' · ' : ''}{pos.i + 1} / {cur.length}</>}
       </span>
     </div>
@@ -166,11 +167,11 @@ function shareCaption(post: GalleryPost, title: string): string {
   if (post.text) return post.text.slice(0, 60);
   const imgs = post.media.filter((m) => m.type === 'image').length;
   const vids = post.media.length - imgs;
-  return [title, imgs ? `${imgs} 张图片` : '', vids ? `${vids} 个视频` : ''].filter(Boolean).join(' · ');
+  return [title, imgs ? t('gallery.nImages', { n: imgs }) : '', vids ? t('gallery.nVideos', { n: vids }) : ''].filter(Boolean).join(' · ');
 }
 
 async function sharePost(post: GalleryPost, title: string, toast: (s: string) => void) {
-  if ((await shareText(shareCaption(post, title), shareLink(post.id), title)) === 'copied') toast('链接已复制，去粘贴给好友吧');
+  if ((await shareText(shareCaption(post, title), shareLink(post.id), title)) === 'copied') toast(t('share.linkCopied'));
 }
 
 function ShareIcon({ size = 15 }: { size?: number }) {
@@ -192,7 +193,7 @@ function GalleryCard({ post, channel, onOpen, onShare }: { post: GalleryPost; ch
         {/* 分享靠左（点击区域放大一点），浏览量 / 时间靠右 */}
         {onShare && (
           <span onClick={(e) => { e.stopPropagation(); onShare(); }} style={{ marginRight: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px 4px 0', cursor: 'pointer', color: 'var(--text-2)', fontSize: 12 }}>
-            <ShareIcon /> 分享
+            <ShareIcon /> {t('common.share')}
           </span>
         )}
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
@@ -228,7 +229,7 @@ export function GalleryFeed() {
     const d = await api<GalleryList>('/gallery').catch(() => null);
     scrollToBottom.current = true;
     if (d) { setData(d); setHasMore(d.list.length >= 20); }
-    else setData({ title: '养眼图片', days: 3, source: null, list: [] });
+    else setData({ title: t('gallery.defaultTitle'), days: 3, source: null, list: [] });
   };
   const loadOlder = async () => {
     if (loadingMore || !hasMore || !data?.list.length) return;
@@ -291,15 +292,15 @@ export function GalleryFeed() {
       {view && <MediaLightbox groups={ordered.map((p) => p.media)} group={view.g} index={view.i} onClose={() => setView(null)} />}
       {toast && <div className="music-toast">{toast}</div>}
       <div ref={rootRef}>
-        {!data && <div className="empty">加载中…</div>}
-        {data && data.list.length === 0 && <div className="empty">最近 {data.days} 天还没有内容<br />稍后再来看看</div>}
+        {!data && <div className="empty">{t('common.loading')}</div>}
+        {data && data.list.length === 0 && <div className="empty">{t('gallery.emptyDays', { n: data.days })}<br />{t('common.checkBackLater')}</div>}
         <div ref={topSentinel} style={{ height: 1 }} />
-        {loadingMore && <div className="small" style={{ textAlign: 'center', padding: 12 }}>加载更早的…</div>}
+        {loadingMore && <div className="small" style={{ textAlign: 'center', padding: 12 }}>{t('gallery.loadingOlder')}</div>}
         {data && data.list.length > 0 && !hasMore && (
-          <div className="small" style={{ textAlign: 'center', padding: '6px 0 8px' }}>只保留最近 {data.days} 天 · 已经是最早的了</div>
+          <div className="small" style={{ textAlign: 'center', padding: '6px 0 8px' }}>{t('gallery.endOfList', { n: data.days })}</div>
         )}
         {/* 卡片不显示频道名（频道名多带引流字样），与 Telegram 帖子样式一致 */}
-        {ordered.map((p, g) => <GalleryCard key={p.id} post={p} channel="" onOpen={(i) => openAt(g, i)} onShare={() => sharePost(p, data?.title || '养眼图片', showToast)} />)}
+        {ordered.map((p, g) => <GalleryCard key={p.id} post={p} channel="" onOpen={(i) => openAt(g, i)} onShare={() => sharePost(p, data?.title || t('gallery.defaultTitle'), showToast)} />)}
       </div>
     </PullToRefresh>
   );
@@ -321,7 +322,7 @@ export function GallerySharePage() {
 
   useEffect(() => {
     if (!id) return;
-    api<SharedPost>(`/app/gallery/${id}`).then(setP).catch((e) => setErr(e.message || '这条内容已过期'));
+    api<SharedPost>(`/app/gallery/${id}`).then(setP).catch((e) => setErr(e.message || t('gallery.expired')));
     api<any>('/app/download').then((d) => setDl({ android: d?.android?.url, ios: d?.ios?.url })).catch(() => {});
   }, [id]);
 
@@ -334,16 +335,16 @@ export function GallerySharePage() {
   return (
     <div className="app music-share" style={{ padding: '20px 12px 32px' }}>
       {err && <div className="empty">{err}</div>}
-      {!p && !err && <div className="empty">加载中…</div>}
+      {!p && !err && <div className="empty">{t('common.loading')}</div>}
       {p && (
         <>
           {view !== null && <MediaLightbox groups={[p.media]} group={0} index={view} onClose={() => setView(null)} />}
-          <div style={{ fontSize: 17, fontWeight: 700, textAlign: 'center', marginBottom: 12 }}>{p.title || '养眼图片'}</div>
+          <div style={{ fontSize: 17, fontWeight: 700, textAlign: 'center', marginBottom: 12 }}>{p.title || t('gallery.defaultTitle')}</div>
           <GalleryCard post={p} channel="" onOpen={(i) => setView(i)} />
           <div className="row" style={{ gap: 12, marginTop: 18 }}>
-            <button className="btn" style={{ flex: 1 }} onClick={openApp}>打开心之音 App 看更多</button>
+            <button className="btn" style={{ flex: 1 }} onClick={openApp}>{t('gallery.openAppMore', { app: t('app.name') })}</button>
           </div>
-          <div className="hint">心之音 App 里每天都有新图，边聊边看</div>
+          <div className="hint">{t('gallery.shareHint', { app: t('app.name') })}</div>
         </>
       )}
     </div>

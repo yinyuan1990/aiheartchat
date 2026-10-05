@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { CITY_LETTERS, locateCity } from '../cities';
+import { t } from '../i18n';
 
 const HOT_CITIES = ['北京', '上海', '广州', '深圳', '成都', '杭州', '重庆', '武汉', '西安', '南京', '长沙', '三亚'];
 
@@ -7,7 +8,7 @@ const HOT_CITIES = ['北京', '上海', '广州', '深圳', '成都', '杭州', 
  * 城市选择组件：定位 + 热门 + 字母分组列表 + 右侧 A-Z 索引导航（无滚动条）。
  * 用法：<CityField value={city} onChange={setCity} />
  */
-export function CityField({ value, onChange, placeholder = '选择城市' }: {
+export function CityField({ value, onChange, placeholder = t('city.choose') }: {
   value: string;
   onChange: (city: string) => void;
   placeholder?: string;
@@ -73,14 +74,14 @@ export function CityPickerSheet({ current, onClose, onSelect }: {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="row" style={{ padding: '16px 16px 10px' }}>
-          <span className="grow" style={{ fontSize: 17, fontWeight: 700 }}>选择城市</span>
-          <span className="muted" style={{ cursor: 'pointer', fontSize: 14 }} onClick={onClose}>关闭</span>
+          <span className="grow" style={{ fontSize: 17, fontWeight: 700 }}>{t('city.choose')}</span>
+          <span className="muted" style={{ cursor: 'pointer', fontSize: 14 }} onClick={onClose}>{t('common.close')}</span>
         </div>
 
         {/* 内容区（无滚动条） */}
         <div ref={scrollRef} className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '0 40px 24px 16px' }}>
           {/* 定位 + 热门 */}
-          <div className="muted" style={{ margin: '4px 0 8px', fontSize: 12 }}>定位 / 热门</div>
+          <div className="muted" style={{ margin: '4px 0 8px', fontSize: 12 }}>{t('city.locateHot')}</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
             <div
               onClick={() => located && onSelect(located)}
@@ -89,7 +90,7 @@ export function CityPickerSheet({ current, onClose, onSelect }: {
                 background: 'rgba(254,44,85,0.12)', color: 'var(--accent)',
               }}
             >
-              {locating ? '定位中…' : located ?? '定位不可用'}
+              {locating ? t('city.locating') : located ?? t('city.locateUnavailable')}
             </div>
             {HOT_CITIES.map((c) => (
               <div

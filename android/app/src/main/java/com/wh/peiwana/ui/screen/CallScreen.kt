@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.rtc.CallManager
 import com.wh.peiwana.rtc.CallState
 import kotlinx.coroutines.launch
@@ -73,19 +74,19 @@ fun CallOverlay() {
         when (val s = state) {
             is CallState.Outgoing -> Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
                 Spacer(Modifier.height(110.dp))
-                PeerHeader(peerName, peerAvatar, if (s.type == 2) "正在等待对方接受视频通话邀请…" else "正在等待对方接受语音通话邀请…")
+                PeerHeader(peerName, peerAvatar, if (s.type == 2) t("call.waitingVideo") else t("call.waitingVoice"))
                 Spacer(Modifier.weight(1f))
                 Row(Modifier.fillMaxWidth().padding(bottom = 70.dp), horizontalArrangement = Arrangement.Center) {
-                    CircleAction("取消", HangupRed, "✕") { CallManager.hangup() }
+                    CircleAction(t("common.cancel"), HangupRed, "✕") { CallManager.hangup() }
                 }
             }
             is CallState.Incoming -> Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
                 Spacer(Modifier.height(110.dp))
-                PeerHeader(peerName, peerAvatar, if (s.type == 2) "邀请你进行视频通话" else "邀请你进行语音通话")
+                PeerHeader(peerName, peerAvatar, if (s.type == 2) t("call.invitedVideo") else t("call.invitedVoice"))
                 Spacer(Modifier.weight(1f))
                 Row(Modifier.fillMaxWidth().padding(bottom = 70.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    CircleAction("拒绝", HangupRed, "✕") { CallManager.reject() }
-                    CircleAction("接听", AnswerGreen, "✓") {
+                    CircleAction(t("call.decline"), HangupRed, "✕") { CallManager.reject() }
+                    CircleAction(t("call.answer"), AnswerGreen, "✓") {
                         CallManager.attachContext(context)
                         CallManager.accept(context)
                     }
@@ -102,7 +103,7 @@ fun CallOverlay() {
 private fun RateOverlay(pending: CallManager.PendingRate) {
     val context = LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
-    val dims = listOf("真实度", "配合度", "腿型", "曲线", "肤质")
+    val dims = listOf(t("call.rate.real"), t("call.rate.coop"), t("call.rate.legs"), t("call.rate.curves"), t("call.rate.skin"))
     val scores = remember { List(5) { androidx.compose.runtime.mutableFloatStateOf(80f) } }
     var busy by remember { androidx.compose.runtime.mutableStateOf(false) }
 
@@ -114,9 +115,9 @@ private fun RateOverlay(pending: CallManager.PendingRate) {
             Spacer(Modifier.height(70.dp))
             Avatar(pending.peerAvatar, 72)
             Spacer(Modifier.height(10.dp))
-            Text(pending.peerName.ifEmpty { "对方" }, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            Text(pending.peerName.ifEmpty { t("call.peer") }, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(4.dp))
-            Text("本次视频通话体验如何？", color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
+            Text(t("call.rate.title"), color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
             Spacer(Modifier.height(26.dp))
 
             dims.forEachIndexed { i, label ->
@@ -162,7 +163,7 @@ private fun RateOverlay(pending: CallManager.PendingRate) {
                                     },
                                 )
                             }.onFailure {
-                                android.widget.Toast.makeText(context, it.message ?: "评分失败", android.widget.Toast.LENGTH_SHORT).show()
+                                android.widget.Toast.makeText(context, it.message ?: t("call.rate.failed"), android.widget.Toast.LENGTH_SHORT).show()
                             }
                             CallManager.pendingRate.value = null
                             // 评分完成后留在女方个人主页
@@ -171,10 +172,10 @@ private fun RateOverlay(pending: CallManager.PendingRate) {
                     }
                     .padding(vertical = 13.dp),
                 contentAlignment = Alignment.Center,
-            ) { Text(if (busy) "提交中…" else "提交评分", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
+            ) { Text(if (busy) t("call.rate.submitting") else t("call.rate.submit"), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
             Spacer(Modifier.height(12.dp))
             Text(
-                "跳过",
+                t("call.rate.skip"),
                 color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp,
                 modifier = Modifier.noRippleClick {
                     CallManager.pendingRate.value = null
@@ -192,7 +193,7 @@ private fun PeerHeader(name: String, avatar: String, status: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Avatar(avatar, 96)
         Spacer(Modifier.height(14.dp))
-        Text(if (name.isEmpty()) "对方" else name, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+        Text(if (name.isEmpty()) t("call.peer") else name, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(10.dp))
         Text(status, color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp)
     }
@@ -300,7 +301,7 @@ private fun ActiveCall(state: CallState.Active, peerName: String, peerAvatar: St
                             contentAlignment = Alignment.Center,
                         ) { Box(Modifier.width(10.dp).height(2.dp).background(Color.White)) }
                         Text(
-                            "双击切换", color = Color.White.copy(alpha = 0.7f), fontSize = 9.sp,
+                            t("call.doubleTapSwap"), color = Color.White.copy(alpha = 0.7f), fontSize = 9.sp,
                             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 5.dp)
                                 .clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.35f)).padding(horizontal = 5.dp, vertical = 1.dp),
                         )
@@ -319,7 +320,7 @@ private fun ActiveCall(state: CallState.Active, peerName: String, peerAvatar: St
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
             CircleAction(
-                "静音",
+                t("call.mute"),
                 if (muted) Color.White else Color.White.copy(alpha = 0.22f),
                 fg = if (muted) Color.Black else Color.White,
                 icon = { c -> com.wh.peiwana.ui.MicIcon(c, 26.dp) },
@@ -327,20 +328,20 @@ private fun ActiveCall(state: CallState.Active, peerName: String, peerAvatar: St
 
             if (state.type == 2) {
                 CircleAction(
-                    "摄像头",
+                    t("call.camera"),
                     if (cameraOff) Color.White else Color.White.copy(alpha = 0.22f),
                     fg = if (cameraOff) Color.Black else Color.White,
                     icon = { c -> com.wh.peiwana.ui.VideoIcon(c, 26.dp) },
                 ) { CallManager.toggleCameraOff() }
             }
 
-            CircleAction("挂断", HangupRed, "✕") { CallManager.hangup() }
+            CircleAction(t("call.hangUp"), HangupRed, "✕") { CallManager.hangup() }
 
             if (state.type == 2) {
-                CircleAction("翻转", Color.White.copy(alpha = 0.22f), "⟳") { CallManager.switchCamera() }
+                CircleAction(t("call.flip"), Color.White.copy(alpha = 0.22f), "⟳") { CallManager.switchCamera() }
             } else {
                 CircleAction(
-                    "免提",
+                    t("call.speaker"),
                     if (speakerOn) Color.White else Color.White.copy(alpha = 0.22f),
                     fg = if (speakerOn) Color.Black else Color.White,
                     icon = { c -> com.wh.peiwana.ui.VoiceIcon(c, 26.dp) },
@@ -402,7 +403,7 @@ fun rememberStartCallAny(): (calleeId: String, name: String, avatar: String, typ
                 CallManager.startCall(context, id, pendingType.intValue, name, avatar)
             }
         } else {
-            android.widget.Toast.makeText(context, "需要麦克风/摄像头权限才能通话", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(context, t("call.needPermission"), android.widget.Toast.LENGTH_SHORT).show()
         }
     }
     return { id, name, avatar, type ->
@@ -427,7 +428,7 @@ fun rememberStartCall(calleeId: String, calleeName: String = "", calleeAvatar: S
             CallManager.attachContext(context)
             CallManager.startCall(context, calleeId, pendingType.intValue, calleeName, calleeAvatar)
         } else {
-            android.widget.Toast.makeText(context, "需要麦克风/摄像头权限才能通话", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(context, t("call.needPermission"), android.widget.Toast.LENGTH_SHORT).show()
         }
     }
     return { type ->

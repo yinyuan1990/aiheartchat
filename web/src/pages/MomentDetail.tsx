@@ -8,6 +8,7 @@ import { StickerPayload } from '../stickers';
 import { dropLastGrapheme } from '../emojis';
 import { EmojiPanel } from '../components/EmojiPanel';
 import { StickerView } from '../components/StickerView';
+import { t } from '../i18n';
 
 /** 动态详情页：正文 + 全部评论 + 底部固定输入栏 */
 export function MomentDetailPage() {
@@ -76,7 +77,7 @@ export function MomentDetailPage() {
       setSticker(null);
       setReplyTo(null);
       setShowEmoji(false);
-      showToast('评论成功');
+      showToast(t('moments.commentSent'));
       loadComments();
     } catch (e: any) {
       showToast(e.message);
@@ -98,7 +99,7 @@ export function MomentDetailPage() {
     }
   };
 
-  if (!moment) return <div className="app"><div className="empty">加载中…</div></div>;
+  if (!moment) return <div className="app"><div className="empty">{t('common.loading')}</div></div>;
 
   return (
     <div className="app">
@@ -111,7 +112,7 @@ export function MomentDetailPage() {
         <span className="grow" style={{ fontSize: 15 }}>{moment.user?.nickname}</span>
         {/* 自己的动态不显示私聊按钮 */}
         {me?.id !== moment.user?.id && (
-          <button className="btn-sm ghost" onClick={greet}>私聊</button>
+          <button className="btn-sm ghost" onClick={greet}>{t('moments.chat')}</button>
         )}
       </div>
 
@@ -142,8 +143,8 @@ export function MomentDetailPage() {
 
         {/* 全部评论 */}
         <div style={{ borderTop: '1px solid var(--line)', marginTop: 14, paddingTop: 14 }}>
-          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 14 }}>全部评论（{comments.length}）</div>
-          {comments.length === 0 && <div className="empty" style={{ padding: 24 }}>暂无评论，抢首评</div>}
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 14 }}>{t('moments.allComments', { n: comments.length })}</div>
+          {comments.length === 0 && <div className="empty" style={{ padding: 24 }}>{t('moments.noComments')}</div>}
           {comments.map((c) => (
             <div key={c.id} className="row" style={{ marginBottom: 16, alignItems: 'flex-start' }}>
               <div className="avatar" style={{ width: 34, height: 34 }}>
@@ -152,14 +153,14 @@ export function MomentDetailPage() {
               <div className="grow">
                 <div className="small">
                   {c.user?.nickname}
-                  {c.replyToNickname && <span> 回复 <span className="accent">@{c.replyToNickname}</span></span>}
+                  {c.replyToNickname && <span> {t('moments.repliedToWeb')} <span className="accent">@{c.replyToNickname}</span></span>}
                 </div>
                 {c.content && <div style={{ fontSize: 14, marginTop: 3, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{c.content}</div>}
                 {c.imageUrl && <img src={c.imageUrl} style={{ maxWidth: 140, borderRadius: 8, marginTop: 4, display: 'block' }} alt="" />}
                 {c.sticker && <StickerView p={c.sticker} size={96} style={{ marginTop: 4 }} />}
                 <div className="small" style={{ marginTop: 4 }}>
                   {new Date(c.createdAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                  <span className="accent" style={{ marginLeft: 12, cursor: 'pointer' }} onClick={() => setReplyTo({ id: c.id, nickname: c.user?.nickname ?? '' })}>回复</span>
+                  <span className="accent" style={{ marginLeft: 12, cursor: 'pointer' }} onClick={() => setReplyTo({ id: c.id, nickname: c.user?.nickname ?? '' })}>{t('moments.reply')}</span>
                 </div>
               </div>
             </div>
@@ -177,9 +178,9 @@ export function MomentDetailPage() {
               <span onClick={() => setSticker(null)} style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: 9, background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>×</span>
             </span>
           )}
-          {replyTo && <span className="small grow">回复 <span className="accent">@{replyTo.nickname}</span></span>}
+          {replyTo && <span className="small grow">{t('moments.replyingTo')} <span className="accent">@{replyTo.nickname}</span></span>}
           {!replyTo && <span className="grow" />}
-          {replyTo && <span className="small" style={{ cursor: 'pointer' }} onClick={() => setReplyTo(null)}>取消</span>}
+          {replyTo && <span className="small" style={{ cursor: 'pointer' }} onClick={() => setReplyTo(null)}>{t('common.cancel')}</span>}
         </div>
       )}
 
@@ -195,15 +196,15 @@ export function MomentDetailPage() {
           className="input grow"
           style={{ marginBottom: 0, padding: '10px 14px' }}
           value={input}
-          placeholder={replyTo ? `回复 @${replyTo.nickname}` : '说点什么…'}
+          placeholder={replyTo ? t('moments.replyToName', { name: replyTo.nickname }) : t('moments.saySomething')}
           onChange={(e) => setInput(e.target.value)}
           onFocus={() => setShowEmoji(false)}
           onKeyDown={(e) => e.key === 'Enter' && send()}
         />
         <span className={liked ? 'accent' : 'muted'} style={{ cursor: 'pointer', fontSize: 13, flexShrink: 0 }} onClick={toggleLike}>
-          点赞 {likeCount > 0 ? likeCount : ''}
+          {t('moments.like')} {likeCount > 0 ? likeCount : ''}
         </span>
-        <button className="btn-sm" disabled={busy || (!input.trim() && !sticker)} onClick={() => send()}>发送</button>
+        <button className="btn-sm" disabled={busy || (!input.trim() && !sticker)} onClick={() => send()}>{t('common.send')}</button>
       </div>
 
       {/* 表情面板：emoji 插入文字，贴纸挂到待发评论 */}

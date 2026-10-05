@@ -1,6 +1,7 @@
 package com.wh.peiwana.rtc
 
 import android.content.Context
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.Api
 import com.wh.peiwana.net.WsClient
 import kotlinx.coroutines.CoroutineScope
@@ -134,7 +135,7 @@ object VoiceRoomManager {
         return VroomScanResult(
             conversationId = d["conversationId"]?.jsonPrimitive?.contentOrNull ?: "",
             groupId = d["groupId"]?.jsonPrimitive?.contentOrNull ?: groupId,
-            groupName = d["groupName"]?.jsonPrimitive?.contentOrNull ?: "群聊",
+            groupName = d["groupName"]?.jsonPrimitive?.contentOrNull ?: t("chat.groupChat"),
             roomActive = d["roomActive"]?.jsonPrimitive?.contentOrNull?.toBoolean() ?: false,
         )
     }
@@ -152,7 +153,7 @@ object VoiceRoomManager {
         // 服务端已把我剔除（心跳超时等）→ 本地同步退房
         if (myUserId !in new) {
             vlog("kicked by server (not in member list)")
-            teardown("语音房连接超时，已退出")
+            teardown(t("voiceRoom.timeoutLeft"))
             return
         }
         (new - old).filter { it != myUserId }.forEach { subscribe(it) }
@@ -164,7 +165,7 @@ object VoiceRoomManager {
     fun join(groupId: String) {
         val cur = joinedGroupId.value
         if (cur != null) {
-            if (cur != groupId) toastMsg.value = "请先退出当前语音房"
+            if (cur != groupId) toastMsg.value = t("voiceRoom.leaveCurrentFirst")
             return
         }
         if (joining.value) return
@@ -190,7 +191,7 @@ object VoiceRoomManager {
                 startSpeakingMonitor()
             } catch (e: Exception) {
                 vlog("join FAIL: ${e.message}")
-                toastMsg.value = e.message ?: "加入失败"
+                toastMsg.value = e.message ?: t("voiceRoom.joinFailed")
                 teardown(null)
             }
             joining.value = false
@@ -276,7 +277,7 @@ object VoiceRoomManager {
             override fun onIceConnectionChange(state: PeerConnection.IceConnectionState?) {
                 vlog("push ICE state=$state")
             }
-        }) ?: throw IllegalStateException("创建推流连接失败")
+        }) ?: throw IllegalStateException(t("voiceRoom.createPcFailed"))
         localAudioTrack = f.createAudioTrack("audio0", f.createAudioSource(MediaConstraints()))
         localAudioTrack?.setEnabled(!muted.value)
         push.addTransceiver(localAudioTrack, RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_ONLY))
@@ -295,7 +296,7 @@ object VoiceRoomManager {
             vlog("push whip FAIL attempt=$attempt: ${result.exceptionOrNull()?.message}")
             if (attempt < 2) delay(1000)
         }
-        val answerSdp = answer ?: throw IllegalStateException("语音推流失败")
+        val answerSdp = answer ?: throw IllegalStateException(t("voiceRoom.publishFailed"))
         push.awaitSetRemoteDescription(SessionDescription(SessionDescription.Type.ANSWER, answerSdp))
         vlog("push ready stream=$stream")
     }
@@ -370,7 +371,7 @@ object VoiceRoomManager {
                 }.getOrNull()
                 if (inRoom == false) {
                     vlog("heartbeat: server says not in room, teardown")
-                    teardown("语音房连接超时，已退出")
+                    teardown(t("voiceRoom.timeoutLeft"))
                     return@launch
                 }
             }

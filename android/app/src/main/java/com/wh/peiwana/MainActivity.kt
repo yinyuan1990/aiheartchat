@@ -31,6 +31,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.Api
 import com.wh.peiwana.net.UserProfile
 import com.wh.peiwana.net.WsClient
@@ -138,7 +139,7 @@ fun AppRoot() {
             // 来电悬浮窗权限（显示在其他应用上层）
             runCatching {
                 if (!android.provider.Settings.canDrawOverlays(context)) {
-                    android.widget.Toast.makeText(context, "请允许「显示在其他应用上层」以接收来电弹窗", android.widget.Toast.LENGTH_LONG).show()
+                    android.widget.Toast.makeText(context, t("call.overlayPermission"), android.widget.Toast.LENGTH_LONG).show()
                     val intent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
                         data = android.net.Uri.parse("package:${context.packageName}")
                         addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -277,7 +278,7 @@ fun AppRoot() {
             page("create-group") {
                 CreateGroupScreen(onBack = { nav.popBackStack() }, onCreated = { convId, groupId, name ->
                     nav.popBackStack()
-                    nav.navigate("chatroom/$convId?convType=2&targetId=$groupId&title=${Uri.encode("$name（群）")}")
+                    nav.navigate("chatroom/$convId?convType=2&targetId=$groupId&title=${Uri.encode(t("chat.groupTitle", "name" to name))}")
                 })
             }
             page("join-group?code={code}", listOf(navArgument("code") { type = NavType.StringType; defaultValue = "" })) { entry ->
@@ -285,7 +286,7 @@ fun AppRoot() {
                     onBack = { nav.popBackStack() },
                     onJoined = { convId, groupId, name ->
                         nav.popBackStack()
-                        nav.navigate("chatroom/$convId?convType=2&targetId=$groupId&title=${Uri.encode("$name（群）")}")
+                        nav.navigate("chatroom/$convId?convType=2&targetId=$groupId&title=${Uri.encode(t("chat.groupTitle", "name" to name))}")
                     },
                     initialCode = entry.arguments?.getString("code")?.takeIf { it.isNotBlank() },
                     onOpenChannel = { nav.popBackStack(); nav.navigate("channel/$it") },

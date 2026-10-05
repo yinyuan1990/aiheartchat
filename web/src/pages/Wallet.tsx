@@ -2,21 +2,22 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, fmtPoints } from '../api';
 import { useApp } from '../store';
+import { t } from '../i18n';
 
 const typeText: Record<string, string> = {
-  admin_grant: '平台发放',
-  gift_send: '送出礼物',
-  gift_recv: '收到礼物',
-  task_freeze: '约单托管',
-  task_settle: '约单结算',
-  task_refund: '约单退回',
-  msg_fee: '发送消息',
-  msg_income: '消息收入',
-  call_fee: '视频通话',
-  call_income: '通话收入',
-  transfer_out: '转赠支出',
-  transfer_in: '收到转赠',
-  adjust: '调整',
+  admin_grant: t('wallet.tx.adminGrant'),
+  gift_send: t('wallet.tx.giftSend'),
+  gift_recv: t('wallet.tx.giftRecv'),
+  task_freeze: t('wallet.tx.taskFreeze'),
+  task_settle: t('wallet.tx.taskSettle'),
+  task_refund: t('wallet.tx.taskRefund'),
+  msg_fee: t('wallet.tx.msgFee'),
+  msg_income: t('wallet.tx.msgIncome'),
+  call_fee: t('wallet.tx.callFee'),
+  call_income: t('wallet.tx.callIncome'),
+  transfer_out: t('wallet.tx.transferOut'),
+  transfer_in: t('wallet.tx.transferIn'),
+  adjust: t('wallet.tx.adjust'),
 };
 
 const PAGE_SIZE = 30;
@@ -30,7 +31,7 @@ export function WalletPage() {
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<'txs' | 'rank'>('txs');
   const [rank, setRank] = useState<any[]>([]);
-  const rankTitle = user?.gender === 2 ? '贡献榜' : '送花榜';
+  const rankTitle = user?.gender === 2 ? t('wallet.rankContrib') : t('wallet.rankGifting');
 
   useEffect(() => {
     if (tab === 'rank' && rank.length === 0) {
@@ -60,23 +61,23 @@ export function WalletPage() {
   return (
     <div className="app">
       <div className="navbar">
-        <span className="back" onClick={() => nav(-1)}>‹ 返回</span>
-        <span className="title">积分明细</span>
-        <span className="action" onClick={() => nav('/transfer')}>转赠</span>
+        <span className="back" onClick={() => nav(-1)}>‹ {t('common.back')}</span>
+        <span className="title">{t('wallet.title')}</span>
+        <span className="action" onClick={() => nav('/transfer')}>{t('wallet.transfer')}</span>
       </div>
       {/* 积分卡固定在顶部，不随流水滚动 */}
       <div style={{ padding: '16px 16px 0' }}>
         <div className="card" style={{ textAlign: 'center', padding: 24 }}>
-          <div className="muted">可用积分</div>
+          <div className="muted">{t('wallet.available')}</div>
           <div style={{ fontSize: 38, fontWeight: 700, margin: '8px 0' }}>{wallet ? fmtPoints(wallet.balance) : '…'}</div>
-          <div className="small">冻结中 {fmtPoints(wallet?.frozen)}</div>
-          <button className="btn-sm" style={{ marginTop: 14 }} onClick={() => nav('/transfer')}>转赠积分</button>
+          <div className="small">{t('wallet.frozenN', { n: fmtPoints(wallet?.frozen) })}</div>
+          <button className="btn-sm" style={{ marginTop: 14 }} onClick={() => nav('/transfer')}>{t('wallet.transferPoints')}</button>
         </div>
       </div>
 
       {/* 明细 / 榜单切换 */}
       <div className="row" style={{ padding: '14px 16px 0', gap: 10 }}>
-        {([['txs', '明细'], ['rank', rankTitle]] as const).map(([key, label]) => (
+        {([['txs', t('wallet.tabTxs')], ['rank', rankTitle]] as const).map(([key, label]) => (
           <span
             key={key}
             onClick={() => setTab(key)}
@@ -95,22 +96,22 @@ export function WalletPage() {
       <div className="page" style={{ padding: '0 16px 16px' }}>
         {tab === 'txs' && (
           <>
-            {txs.length === 0 && !loading && <div className="empty" style={{ padding: 30 }}>暂无流水</div>}
-            {txs.map((t) => (
-              <div key={t.id} className="row" style={{ padding: '12px 0', borderBottom: '1px solid var(--line)' }}>
+            {txs.length === 0 && !loading && <div className="empty" style={{ padding: 30 }}>{t('wallet.noTxs')}</div>}
+            {txs.map((tx) => (
+              <div key={tx.id} className="row" style={{ padding: '12px 0', borderBottom: '1px solid var(--line)' }}>
                 <div className="grow">
-                  <div style={{ fontSize: 14 }}>{typeText[t.type] ?? t.type}</div>
-                  <div className="small">{t.remark} · {new Date(t.createdAt).toLocaleString('zh-CN')}</div>
+                  <div style={{ fontSize: 14 }}>{typeText[tx.type] ?? tx.type}</div>
+                  <div className="small">{tx.remark} · {new Date(tx.createdAt).toLocaleString('zh-CN')}</div>
                 </div>
-                <div style={{ fontWeight: 600, color: BigInt(t.amount) >= 0n ? 'var(--success)' : 'var(--text)' }}>
-                  {BigInt(t.amount) >= 0n ? '+' : '-'}{fmtPoints(BigInt(t.amount) < 0n ? -BigInt(t.amount) : t.amount)}
+                <div style={{ fontWeight: 600, color: BigInt(tx.amount) >= 0n ? 'var(--success)' : 'var(--text)' }}>
+                  {BigInt(tx.amount) >= 0n ? '+' : '-'}{fmtPoints(BigInt(tx.amount) < 0n ? -BigInt(tx.amount) : tx.amount)}
                 </div>
               </div>
             ))}
             {hasMore && (
               <div style={{ textAlign: 'center', padding: 14 }}>
                 <button className="btn-sm" disabled={loading} onClick={() => loadMore()}>
-                  {loading ? '加载中…' : '加载更多'}
+                  {loading ? t('common.loading') : t('wallet.loadMore')}
                 </button>
               </div>
             )}
@@ -118,7 +119,7 @@ export function WalletPage() {
         )}
         {tab === 'rank' && (
           <>
-            {rank.length === 0 && <div className="empty" style={{ padding: 30 }}>暂无数据</div>}
+            {rank.length === 0 && <div className="empty" style={{ padding: 30 }}>{t('wallet.noData')}</div>}
             {rank.map((r, i) => (
               <div key={r.userId} className="row" style={{ padding: '12px 0', borderBottom: '1px solid var(--line)', gap: 12 }}>
                 <span style={{
@@ -133,7 +134,7 @@ export function WalletPage() {
                 <div className="grow">
                   <div style={{ fontSize: 14, fontWeight: 500 }}>{r.nickname}</div>
                   <div className="small">
-                    礼物 {fmtPoints(r.giftFen)} · 通话 {fmtPoints(r.callFen)} · 消息 {fmtPoints(r.msgFen)}
+                    {t('wallet.rankBreakdown', { gift: fmtPoints(r.giftFen), call: fmtPoints(r.callFen), msg: fmtPoints(r.msgFen) })}
                   </div>
                 </div>
                 <div style={{ fontWeight: 700, color: 'var(--accent)' }}>{fmtPoints(r.totalFen)}</div>

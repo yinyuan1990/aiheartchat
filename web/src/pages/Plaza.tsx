@@ -5,6 +5,7 @@ import { api, fmtPoints } from '../api';
 import { CityPickerSheet } from '../components/CityPicker';
 import { locateCity } from '../cities';
 import { useApp } from '../store';
+import { t } from '../i18n';
 
 export interface MomentItem {
   id: string;
@@ -62,7 +63,7 @@ export function MomentCard({ m, onOpenDetail, onGreet, onOpenVideo }: { m: Momen
         <div className="grow">
           <div style={{ fontSize: 15, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
             <span>{m.user?.nickname}</span>
-            {m.user?.isGuide && <span className="tag tag-accent" style={{ fontSize: 10, padding: '1px 6px' }}>认证</span>}
+            {m.user?.isGuide && <span className="tag tag-accent" style={{ fontSize: 10, padding: '1px 6px' }}>{t('me.verified')}</span>}
             {m.cityName && (
               <span style={{ fontSize: 10, color: 'var(--text-3)', background: 'rgba(0,0,0,0.05)', padding: '1px 6px', borderRadius: 3 }}>{m.cityName}</span>
             )}
@@ -81,14 +82,14 @@ export function MomentCard({ m, onOpenDetail, onGreet, onOpenVideo }: { m: Momen
                 color: following ? 'var(--text-2)' : '#fff',
               }}
             >
-              {following ? '已关注' : '关注'}
+              {following ? t('common.followed') : t('common.follow')}
             </button>
             {/* 视频按钮三态：通话中（占线）/ 离线置灰 / 可打（显示价格） */}
             <button
               onClick={() => {
-                if (m.user?.busy) return window.alert('对方正在通话中，请稍后再试');
-                if (!m.user?.online) return window.alert('对方不在线');
-                window.alert('视频通话请在 App 中使用，请下载 App');
+                if (m.user?.busy) return window.alert(t('common.peerBusy'));
+                if (!m.user?.online) return window.alert(t('common.peerOffline'));
+                window.alert(t('common.videoInApp'));
               }}
               style={{
                 height: 26, padding: '0 12px', borderRadius: 13, fontSize: 12, cursor: 'pointer', marginLeft: 8,
@@ -98,8 +99,8 @@ export function MomentCard({ m, onOpenDetail, onGreet, onOpenVideo }: { m: Momen
               }}
             >
               {m.user?.busy
-                ? '通话中'
-                : (m.user?.videoPriceFen ?? 0) > 0 ? `视频通话 ${fmtPoints(String(m.user.videoPriceFen))}/分` : '视频通话'}
+                ? t('common.inCall')
+                : (m.user?.videoPriceFen ?? 0) > 0 ? t('plaza.videoCallPriceWeb', { price: fmtPoints(String(m.user.videoPriceFen)) }) : t('plaza.videoCall')}
             </button>
           </>
         )}
@@ -159,7 +160,7 @@ export function MomentCard({ m, onOpenDetail, onGreet, onOpenVideo }: { m: Momen
       <div style={{ display: 'flex', alignItems: 'center', marginTop: 12, gap: 18 }}>
         <span style={{ fontSize: 12, color: m.user?.online ? '#0bd07d' : 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 4 }}>
           <span style={{ width: 6, height: 6, borderRadius: 3, background: m.user?.online ? '#0bd07d' : 'var(--text-3)', display: 'inline-block' }} />
-          {m.user?.online ? '在线' : '离线'}
+          {m.user?.online ? t('common.online') : t('common.offline')}
         </span>
         <span style={{ flex: 1 }} />
         <span
@@ -167,10 +168,10 @@ export function MomentCard({ m, onOpenDetail, onGreet, onOpenVideo }: { m: Momen
           style={{ cursor: 'pointer', fontSize: 13, color: liked ? 'var(--accent)' : undefined }}
           onClick={toggleLike}
         >
-          {liked ? '♥' : '♡'} 点赞{likeCount > 0 ? ` ${likeCount}` : ''}
+          {liked ? '♥' : '♡'} {t('plaza.like')}{likeCount > 0 ? ` ${likeCount}` : ''}
         </span>
         <span className="muted" style={{ cursor: 'pointer', fontSize: 13 }} onClick={onOpenDetail}>
-          评论{m.commentCount > 0 ? ` ${m.commentCount}` : ''}
+          {t('plaza.comment')}{m.commentCount > 0 ? ` ${m.commentCount}` : ''}
         </span>
       </div>
     </div>
@@ -180,12 +181,12 @@ export function MomentCard({ m, onOpenDetail, onGreet, onOpenVideo }: { m: Momen
 function formatAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const min = Math.floor(diff / 60000);
-  if (min < 1) return '刚刚';
-  if (min < 60) return `${min} 分钟前`;
+  if (min < 1) return t('time.justNow');
+  if (min < 60) return t('time.minutesAgo', { n: min });
   const hours = Math.floor(min / 60);
-  if (hours < 24) return `${hours} 小时前`;
+  if (hours < 24) return t('time.hoursAgo', { n: hours });
   const days = Math.floor(hours / 24);
-  if (days < 30) return `${days} 天前`;
+  if (days < 30) return t('time.daysAgo', { n: days });
   return new Date(iso).toLocaleDateString('zh-CN');
 }
 
@@ -230,7 +231,7 @@ function QuoteSection() {
     if (hasMore && i >= list.length - 3) void loadMore();
   };
 
-  if (loaded && list.length === 0) return <div className="empty">今天的励志话正在路上…</div>;
+  if (loaded && list.length === 0) return <div className="empty">{t('plaza.quotesEmpty')}</div>;
 
   const today = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10);
   return (
@@ -269,7 +270,7 @@ function QuoteSection() {
             <div className="quote-mark quote-mark-close">」</div>
             <div className="quote-meta">
               <span>{artDate(q.day)}</span>
-              {q.day === today && <span className="quote-today">今日</span>}
+              {q.day === today && <span className="quote-today">{t('plaza.today')}</span>}
             </div>
             <div className="quote-index">{i + 1} / {list.length}{hasMore ? '+' : ''}</div>
           </div>
@@ -320,7 +321,7 @@ function TikTokMode({ onExit, onGreet, startId }: { onExit: () => void; onGreet:
   if (!m) {
     return (
       <div className="tiktok" onClick={onExit}>
-        <div className="empty" style={{ paddingTop: 200 }}>{loaded ? '暂无视频动态' : '加载中…'}<br />点击返回</div>
+        <div className="empty" style={{ paddingTop: 200 }}>{loaded ? t('plaza.noVideos') : t('common.loading')}<br />{t('plaza.tapToGoBack')}</div>
       </div>
     );
   }
@@ -340,7 +341,7 @@ function TikTokMode({ onExit, onGreet, startId }: { onExit: () => void; onGreet:
       }}
     >
       <video key={m.id} src={m.videoUrl} poster={m.coverUrl || undefined} autoPlay loop playsInline controls={false} />
-      <div style={{ position: 'absolute', top: 14, left: 16, color: '#fff', cursor: 'pointer' }} onClick={onExit}>‹ 返回</div>
+      <div style={{ position: 'absolute', top: 14, left: 16, color: '#fff', cursor: 'pointer' }} onClick={onExit}>‹ {t('common.back')}</div>
       <div className="side">
         <div className="avatar" style={{ width: 44, height: 44, border: '1px solid #fff' }}>
           {m.user?.avatar && <img src={m.user.avatar} alt="" />}
@@ -351,7 +352,7 @@ function TikTokMode({ onExit, onGreet, startId }: { onExit: () => void; onGreet:
           <div style={{ fontSize: 22 }}>♥</div>
           {m.likeCount}
         </div>
-        <div style={{ cursor: 'pointer' }} onClick={() => onGreet(m)}>私信</div>
+        <div style={{ cursor: 'pointer' }} onClick={() => onGreet(m)}>{t('plaza.message')}</div>
       </div>
       <div className="info">
         <div className="name">@{m.user?.nickname}</div>
@@ -383,10 +384,10 @@ interface MeetUser {
 }
 
 const MEET_TABS = [
-  ['all', '所有'],
-  ['new', '新人'],
-  ['city', '同城'],
-  ['intimacy', '亲密度'],
+  ['all', t('plaza.meetAll')],
+  ['new', t('plaza.meetNew')],
+  ['city', t('plaza.meetCity')],
+  ['intimacy', t('plaza.meetIntimacy')],
 ] as const;
 
 /** 遇见：异性卡片流（所有/新人/同城/亲密度），亲密度按互动记分倒序 */
@@ -428,10 +429,10 @@ function MeetSection({ city }: { city: string }) {
       {!loading && items.length === 0 && (
         <div className="empty">
           {tab === 'intimacy'
-            ? '还没有亲密的人'
-            : tab === 'city' ? `「${city || '同城'}」还没有人` : '暂时没有人'}
+            ? t('plaza.noIntimate')
+            : tab === 'city' ? t('plaza.nobodyInCity', { city: city || t('plaza.meetCity') }) : t('plaza.nobody')}
           <br />
-          {tab === 'intimacy' && <span className="small">聊天、视频、点赞评论都会累计亲密度</span>}
+          {tab === 'intimacy' && <span className="small">{t('plaza.intimacyTip')}</span>}
         </div>
       )}
       {/* 两列大图卡片 */}
@@ -446,9 +447,9 @@ function MeetSection({ city }: { city: string }) {
             {/* 顶部徽章 + 在线点 */}
             <div style={{ position: 'absolute', top: 8, left: 8, display: 'flex', gap: 5 }}>
               {(u.isGuide || u.realnameVerified) ? (
-                <span style={{ fontSize: 10, color: '#fff', background: 'var(--accent)', padding: '2px 7px', borderRadius: 9 }}>已认证</span>
+                <span style={{ fontSize: 10, color: '#fff', background: 'var(--accent)', padding: '2px 7px', borderRadius: 9 }}>{t('plaza.verifiedBadge')}</span>
               ) : u.isNew ? (
-                <span style={{ fontSize: 10, color: '#fff', background: '#6c5ce7', padding: '2px 7px', borderRadius: 9 }}>新人</span>
+                <span style={{ fontSize: 10, color: '#fff', background: '#6c5ce7', padding: '2px 7px', borderRadius: 9 }}>{t('plaza.newBadge')}</span>
               ) : null}
             </div>
             <span style={{ position: 'absolute', top: 10, right: 10, width: 8, height: 8, borderRadius: 4, background: u.online ? '#0bd07d' : 'var(--text-3)' }} />
@@ -458,7 +459,7 @@ function MeetSection({ city }: { city: string }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5 }}>
                 {/* 评分五星换算（0-100 → 5.0） */}
                 <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: 'rgba(255,184,0,0.85)', padding: '1px 6px', borderRadius: 8 }}>
-                  ★ {u.ratingCount > 0 ? (u.ratingAvg / 20).toFixed(1) : '新'}
+                  ★ {u.ratingCount > 0 ? (u.ratingAvg / 20).toFixed(1) : t('plaza.newRating')}
                 </span>
                 {u.cityName && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.cityName}</span>}
                 <span style={{ flex: 1 }} />
@@ -470,16 +471,16 @@ function MeetSection({ city }: { city: string }) {
                   <span
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (u.busy) return window.alert('对方正在通话中，请稍后再试');
-                      if (!u.online) return window.alert('对方不在线');
-                      window.alert('视频通话请在 App 中使用，请下载 App');
+                      if (u.busy) return window.alert(t('common.peerBusy'));
+                      if (!u.online) return window.alert(t('common.peerOffline'));
+                      window.alert(t('common.videoInApp'));
                     }}
                     style={{
                       fontSize: 11, fontWeight: 700, color: '#fff', padding: '3px 8px', borderRadius: 10,
                       background: u.busy ? 'rgba(255,170,60,0.9)' : u.online ? 'var(--accent)' : 'rgba(74,74,82,0.8)',
                     }}
                   >
-                    {u.busy ? '通话中' : u.videoPriceFen > 0 ? `视频 ${fmtPoints(String(u.videoPriceFen))}/分` : '视频'}
+                    {u.busy ? t('common.inCall') : u.videoPriceFen > 0 ? t('plaza.videoPrice', { price: fmtPoints(String(u.videoPriceFen)) }) : t('plaza.video')}
                   </span>
                 ) : null}
               </div>
@@ -542,20 +543,20 @@ export function PlazaPage() {
   return (
     <>
       <div className="top-tabs">
-        <span className={`top-tab${tab === 'feed' ? ' active' : ''}`} onClick={() => setTab('feed')}>动态</span>
-        <span className={`top-tab${tab === 'meet' ? ' active' : ''}`} onClick={() => setTab('meet')}>遇见</span>
-        <span className={`top-tab${tab === 'quotes' ? ' active' : ''}`} onClick={() => setTab('quotes')}>励志行</span>
-        <span className="top-right" onClick={() => setShowCity(true)}>{city || '定位中'} ▾</span>
+        <span className={`top-tab${tab === 'feed' ? ' active' : ''}`} onClick={() => setTab('feed')}>{t('plaza.tabFeed')}</span>
+        <span className={`top-tab${tab === 'meet' ? ' active' : ''}`} onClick={() => setTab('meet')}>{t('plaza.tabMeet')}</span>
+        <span className={`top-tab${tab === 'quotes' ? ' active' : ''}`} onClick={() => setTab('quotes')}>{t('plaza.tabQuotes')}</span>
+        <span className="top-right" onClick={() => setShowCity(true)}>{city || t('plaza.locatingWeb')} ▾</span>
       </div>
       {tab === 'meet' && <MeetSection city={city} />}
       {tab === 'quotes' && <QuoteSection />}
       {tab === 'feed' && !loading && items.length === 0 && (
         <div className="empty">
-          还没有动态
+          {t('plaza.feedEmpty')}
           <br />
-          点击底部 + 发布第一条
+          {t('plaza.feedEmptyHint')}
           <br />
-          <span className="small">提示：自己发布的动态仅异性可见，可在「我的-我的动态」查看</span>
+          <span className="small">{t('plaza.feedEmptyTip')}</span>
         </div>
       )}
       {tab === 'feed' && items.map((m) => (

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { openNativeChat } from '../bridge';
 import { api, fmtPoints } from '../api';
 import { useApp } from '../store';
+import { t } from '../i18n';
 
 interface HomeProfile {
   id: string;
@@ -33,7 +34,7 @@ function CertLine({ label, verified }: { label: string; verified: boolean }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
       <span style={{ fontSize: 13, fontWeight: 700, color: verified ? 'var(--accent)' : 'var(--text-3)' }}>✓</span>
-      <span style={{ fontSize: 13, color: verified ? 'var(--text)' : 'var(--text-3)' }}>{verified ? label : `${label}（未认证）`}</span>
+      <span style={{ fontSize: 13, color: verified ? 'var(--text)' : 'var(--text-3)' }}>{verified ? label : t('userHome.unverified', { label })}</span>
     </span>
   );
 }
@@ -50,7 +51,7 @@ interface MomentItem {
   createdAt: string;
 }
 
-const fmtDate = (s: string) => (s && s.length >= 10 ? `${s.slice(5, 7)}月${s.slice(8, 10)}日` : '');
+const fmtDate = (s: string) => (s && s.length >= 10 ? t('userHome.monthDay', { m: s.slice(5, 7), d: s.slice(8, 10) }) : '');
 
 /** 他人主页：顶部大图 hero + 圆角资料卡（关于我/我的动态 tab）+ 底部操作栏 */
 export function UserHomePage() {
@@ -80,16 +81,16 @@ export function UserHomePage() {
     if (!p) return;
     const n = new Set([p.avatar, ...(p.albums ?? []).filter((a) => a.type === 1).map((a) => a.url)].filter(Boolean)).size;
     if (n <= 1) return;
-    const t = setInterval(() => {
+    const timer = setInterval(() => {
       const el = heroRef.current;
       if (!el) return;
       const next = (Math.round(el.scrollLeft / el.clientWidth) + 1) % n;
       el.scrollTo({ left: next * el.clientWidth, behavior: 'smooth' });
     }, 3500);
-    return () => clearInterval(t);
+    return () => clearInterval(timer);
   }, [p]);
 
-  const showToast = (t: string) => { setToast(t); setTimeout(() => setToast(''), 2000); };
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 2000); };
 
   const toggleFollow = async () => {
     try {
@@ -112,14 +113,14 @@ export function UserHomePage() {
   };
 
   const sendGift = async () => {
-    if (selGift == null) return showToast('请选择礼物');
+    if (selGift == null) return showToast(t('userHome.pickGift'));
     try {
       await api('/gifts/send', { method: 'POST', body: { toUserId: id, giftId: selGift } });
-      showToast('已送出');
+      showToast(t('userHome.giftSent'));
     } catch (e: any) { showToast(e.message); }
   };
 
-  if (!p) return <div className="app"><div className="empty">加载中…</div></div>;
+  if (!p) return <div className="app"><div className="empty">{t('common.loading')}</div></div>;
   const isFemale = p.gender === 2;
   const canVideo = me?.gender === 1 && isFemale;
   // hero 轮播图：头像 + 照片墙（去重去空）
@@ -128,9 +129,9 @@ export function UserHomePage() {
   const videoSub = p.busy
     ? ''
     : !p.online
-      ? '对方离线'
+      ? t('userHome.peerOffline')
       : (p.videoPriceActualFen ?? 0) > 0
-        ? `${fmtPoints(String(p.videoPriceActualFen))}积分/分钟`
+        ? t('userHome.pricePerMin', { price: fmtPoints(String(p.videoPriceActualFen)) })
         : '';
 
   return (
@@ -192,13 +193,13 @@ export function UserHomePage() {
             {isFemale && p.answerRate != null && p.answerRate >= 0 && (
               <div style={{ display: 'flex', alignItems: 'baseline' }}>
                 <b style={{ fontSize: 26, color: '#fff' }}>{p.answerRate}</b>
-                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)' }}>&nbsp;% 接通率</span>
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)' }}>&nbsp;{t('userHome.answerRate')}</span>
               </div>
             )}
             {isFemale && (p.videoPriceActualFen ?? 0) > 0 && (
               <div style={{ display: 'flex', alignItems: 'baseline' }}>
                 <b style={{ fontSize: 26, color: '#fff' }}>{fmtPoints(String(p.videoPriceActualFen))}</b>
-                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)' }}>&nbsp;积分/分钟</span>
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)' }}>&nbsp;{t('userHome.pointsPerMin')}</span>
               </div>
             )}
           </div>
@@ -208,12 +209,12 @@ export function UserHomePage() {
         <div style={{ marginTop: -20, borderRadius: '20px 20px 0 0', background: 'var(--bg)', position: 'relative' }}>
           {/* tab 行 + 关注按钮 */}
           <div className="row" style={{ padding: '18px 16px', gap: 24, alignItems: 'center' }}>
-            {(['关于我', '我的动态'] as const).map((t, i) => (
-              <div key={t} onClick={() => setTab(i)} style={{ cursor: 'pointer', textAlign: 'center' }}>
+            {[t('userHome.aboutMe'), t('userHome.posts')].map((label, i) => (
+              <div key={label} onClick={() => setTab(i)} style={{ cursor: 'pointer', textAlign: 'center' }}>
                 <div style={{
                   fontSize: tab === i ? 16 : 15, fontWeight: tab === i ? 700 : 400,
                   color: tab === i ? 'var(--text)' : 'var(--text-2)',
-                }}>{t}</div>
+                }}>{label}</div>
                 <div style={{
                   width: 20, height: 3, borderRadius: 2, margin: '5px auto 0',
                   background: tab === i ? 'var(--accent)' : 'transparent',
@@ -229,7 +230,7 @@ export function UserHomePage() {
                 color: following ? 'var(--text-2)' : '#fff',
               }}
             >
-              {following ? '已关注' : '＋ 关注'}
+              {following ? t('common.followed') : t('userHome.followPlus')}
             </button>
           </div>
 
@@ -239,19 +240,19 @@ export function UserHomePage() {
               <div style={{ fontSize: 20, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
                 {p.nickname}
                 <span style={{ fontSize: 11, fontWeight: 400, color: p.busy ? '#ffaa3c' : p.online ? 'var(--success)' : 'var(--text-3)' }}>
-                  ● {p.busy ? '通话中' : p.online ? '在线' : '离线'}
+                  ● {p.busy ? t('common.inCall') : p.online ? t('common.online') : t('common.offline')}
                 </span>
               </div>
               <div className="row" style={{ gap: 6, marginTop: 8 }}>
                 <span className="tag" style={{ fontSize: 11, color: p.gender === 1 ? '#6db3ff' : '#ff7a95' }}>
-                  {p.gender === 1 ? '男' : '女'} {p.age}
+                  {p.gender === 1 ? t('me.male') : t('me.female')} {p.age}
                 </span>
                 {p.cityName && <span className="tag" style={{ fontSize: 11 }}>{p.cityName}</span>}
               </div>
               {p.signature && <div className="muted" style={{ marginTop: 12, fontSize: 13, lineHeight: 1.6 }}>{p.signature}</div>}
               <div className="row" style={{ gap: 24, marginTop: 16 }}>
-                <span style={{ fontSize: 13 }}><b style={{ fontSize: 16 }}>{p.following}</b> <span className="muted">关注</span></span>
-                <span style={{ fontSize: 13 }}><b style={{ fontSize: 16 }}>{p.fans}</b> <span className="muted">粉丝</span></span>
+                <span style={{ fontSize: 13 }}><b style={{ fontSize: 16 }}>{p.following}</b> <span className="muted">{t('me.following')}</span></span>
+                <span style={{ fontSize: 13 }}><b style={{ fontSize: 16 }}>{p.fans}</b> <span className="muted">{t('me.fans')}</span></span>
               </div>
               {/* ===== 评分：星级总分 + 五维度方格，最高维度渐变高亮 ===== */}
               {isFemale && p.rating && p.rating.count > 0 && (() => {
@@ -259,19 +260,19 @@ export function UserHomePage() {
                 const filled = Math.min(Math.max(Math.round(star), 0), 5);
                 // 按分从高到低排成 3+2 方格，第一格（她最突出的）用渐变填充
                 const dims = ([
-                  ['真实度', p.rating.photo ?? 0],
-                  ['配合度', p.rating.obedience ?? 0],
-                  ['腿型', p.rating.legs ?? 0],
-                  ['曲线', p.rating.chest ?? 0],
-                  ['肤质', p.rating.skin ?? 0],
+                  [t('userHome.ratingPhoto'), p.rating.photo ?? 0],
+                  [t('userHome.ratingObedience'), p.rating.obedience ?? 0],
+                  [t('userHome.ratingLegs'), p.rating.legs ?? 0],
+                  [t('userHome.ratingChest'), p.rating.chest ?? 0],
+                  [t('userHome.ratingSkin'), p.rating.skin ?? 0],
                 ] as [string, number][]).sort((a, b) => b[1] - a[1]);
                 return (
                   <div style={{ marginTop: 18 }}>
                     <div className="row" style={{ gap: 6, alignItems: 'center' }}>
-                      <span style={{ fontSize: 14, fontWeight: 600 }}>评分</span>
+                      <span style={{ fontSize: 14, fontWeight: 600 }}>{t('userHome.rating')}</span>
                       <span style={{ fontSize: 13, color: 'var(--accent)' }}>{'★'.repeat(filled)}{'☆'.repeat(5 - filled)}</span>
                       <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--accent)' }}>{star.toFixed(1)}</span>
-                      <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{p.rating.count}次评价</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{t('userHome.ratingCount', { n: p.rating.count })}</span>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 8 }}>
                       {dims.map(([label, score], i) => {
@@ -293,7 +294,7 @@ export function UserHomePage() {
               {/* 照片墙（最多 8 张） */}
               {(p.albums ?? []).filter((a) => a.type === 1).length > 0 && (
                 <div style={{ marginTop: 18 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600 }}>照片墙</div>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>{t('userHome.photoWall')}</div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 8 }}>
                     {(p.albums ?? []).filter((a) => a.type === 1).map((a) => (
                       <div
@@ -309,17 +310,17 @@ export function UserHomePage() {
               )}
               {/* 认证信息：简约行，无背景卡 */}
               <div style={{ marginTop: 18 }}>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>认证信息</div>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>{t('userHome.certs')}</div>
                 <div className="row" style={{ gap: 18, marginTop: 10 }}>
-                  <CertLine label="平台认证" verified={p.isGuide} />
-                  {isFemale && <CertLine label="实名认证" verified={!!p.realnameVerified} />}
+                  <CertLine label={t('userHome.platformCert')} verified={p.isGuide} />
+                  {isFemale && <CertLine label={t('userHome.realnameCert')} verified={!!p.realnameVerified} />}
                 </div>
               </div>
             </div>
           ) : (
             /* ===== 我的动态：列表式 ===== */
             <div>
-              {moments.length === 0 && <div className="empty" style={{ padding: 40 }}>暂无动态</div>}
+              {moments.length === 0 && <div className="empty" style={{ padding: 40 }}>{t('userHome.noPosts')}</div>}
               {moments.map((m) => {
                 const thumbs = m.type === 2 ? [m.coverUrl].filter(Boolean) : m.images.slice(0, 3);
                 return (
@@ -362,7 +363,7 @@ export function UserHomePage() {
                     )}
                     <div className="row" style={{ gap: 18, marginTop: 10 }}>
                       <span style={{ fontSize: 13, color: 'var(--text-2)' }}>♡ {m.likeCount}</span>
-                      <span style={{ fontSize: 13, color: 'var(--text-2)' }}>评论 {m.commentCount}</span>
+                      <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{t('userHome.comments')} {m.commentCount}</span>
                     </div>
                   </div>
                 );
@@ -385,20 +386,20 @@ export function UserHomePage() {
             width: 48, height: 48, borderRadius: '50%', background: 'var(--bg-card)', flexShrink: 0,
             display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, cursor: 'pointer',
           }}
-        >聊天</div>
+        >{t('userHome.chat')}</div>
         <div
           onClick={openGifts}
           style={{
             width: 48, height: 48, borderRadius: '50%', background: 'var(--bg-card)', flexShrink: 0,
             display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#ff6b81', cursor: 'pointer',
           }}
-        >礼物</div>
+        >{t('userHome.gift')}</div>
         {canVideo ? (
           <button
             onClick={() => {
-              if (p.busy) return showToast('对方正在通话中，请稍后再试');
-              if (!p.online) return showToast('对方不在线');
-              window.alert('视频通话请在 App 中使用，请下载 App');
+              if (p.busy) return showToast(t('common.peerBusy'));
+              if (!p.online) return showToast(t('common.peerOffline'));
+              window.alert(t('common.videoInApp'));
             }}
             style={{
               flex: 1, height: 48, border: 'none', borderRadius: 999, fontSize: 15, fontWeight: 600, cursor: 'pointer',
@@ -407,7 +408,7 @@ export function UserHomePage() {
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1,
             }}
           >
-            <span style={{ lineHeight: 1.2 }}>{p.busy ? '通话中' : '视频聊天'}</span>
+            <span style={{ lineHeight: 1.2 }}>{p.busy ? t('common.inCall') : t('userHome.videoChat')}</span>
             {videoSub && (
               <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.85, lineHeight: 1.2 }}>{videoSub}</span>
             )}
@@ -420,7 +421,7 @@ export function UserHomePage() {
               background: 'linear-gradient(90deg, var(--accent), #ff6b81)', color: '#fff',
             }}
           >
-            发消息
+            {t('userHome.message')}
           </button>
         )}
       </div>
@@ -448,7 +449,7 @@ export function UserHomePage() {
             style={{ width: '100%', background: 'var(--bg-card)', borderRadius: '16px 16px 0 0', padding: 16, maxHeight: '60vh', overflowY: 'auto' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>送礼物给 {p.nickname}</div>
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>{t('userHome.giftTo', { name: p.nickname })}</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
               {gifts.map((g) => (
                 <div
@@ -466,7 +467,7 @@ export function UserHomePage() {
                 </div>
               ))}
             </div>
-            <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={sendGift}>赠送</button>
+            <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={sendGift}>{t('userHome.giftSend')}</button>
           </div>
         </div>
       )}

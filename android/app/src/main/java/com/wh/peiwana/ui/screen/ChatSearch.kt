@@ -39,6 +39,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.WindowCompat
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.Api
 import com.wh.peiwana.ui.Avatar
 import com.wh.peiwana.ui.RoundBadge
@@ -179,7 +180,7 @@ fun ChatSearchDialog(
     fun openConv(c: ConversationItem) {
         addRecent(SearchRecent("conv", c.id))
         keyboard?.hide()
-        val title = if (c.type == 2) "${convTitle(c)}（群）" else convTitle(c)
+        val title = if (c.type == 2) t("chat.groupTitle", "name" to convTitle(c)) else convTitle(c)
         onOpenChat(c.id, c.type, convTarget(c), title)
     }
     fun openExtra(e: SearchExtra) {
@@ -233,7 +234,7 @@ fun ChatSearchDialog(
                     SearchIcon(TextSub, 17.dp)
                     Spacer(Modifier.width(8.dp))
                     Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                        if (q.isEmpty()) Text("搜索", color = TextDim, fontSize = 17.sp)
+                        if (q.isEmpty()) Text(t("common.search"), color = TextDim, fontSize = 17.sp)
                         BasicTextField(
                             value = q,
                             onValueChange = { q = it },
@@ -263,7 +264,7 @@ fun ChatSearchDialog(
 
             if (keyword.isNotEmpty()) {
                 Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("聊天", if (msgHits.isNotEmpty()) "消息 ${msgHits.size}" else "消息").forEachIndexed { i, label ->
+                    listOf(t("chatSearch.tabChats"), if (msgHits.isNotEmpty()) t("chatSearch.tabMessagesN", "n" to msgHits.size) else t("chatSearch.tabMessages")).forEachIndexed { i, label ->
                         Text(
                             label,
                             color = if (tab == i) TextMain else TextSub,
@@ -304,10 +305,10 @@ fun ChatSearchDialog(
                         }
                     }
                     if (rows.isEmpty()) {
-                        item("hint") { SearchHint("搜索聊天、消息内容和用户") }
+                        item("hint") { SearchHint(t("chatSearch.hint")) }
                     } else {
                         item("recent-head") {
-                            SectionHead("最近", "清空") { recent = emptyList(); saveRecent(ctx, emptyList()) }
+                            SectionHead(t("chatSearch.recent"), t("chat.clear")) { recent = emptyList(); saveRecent(ctx, emptyList()) }
                         }
                         items(rows, key = { "${it.first.kind}-${it.first.id}" }) { (r, v) ->
                             when (v) {
@@ -322,15 +323,15 @@ fun ChatSearchDialog(
                     items(chatHits, key = { "c-${it.id}" }) { ConvResultRow(it, keyword, ::openConv) }
                     items(knownHits, key = { "k-${it.id}" }) { ConvResultRow(it, keyword, ::openConv) }
                     if (userHits.isNotEmpty()) {
-                        item("global-head") { SectionHead("全局搜索") }
+                        item("global-head") { SectionHead(t("chatSearch.global")) }
                         items(userHits, key = { "u-${it.id}" }) { u ->
-                            val sub = if (u.isBot) "@${u.username.orEmpty()} · 机器人"
-                            else listOfNotNull(u.age?.takeIf { it > 0 }?.let { "$it 岁" }, u.cityName?.takeIf { it.isNotEmpty() }).joinToString(" · ").ifEmpty { "用户" }
+                            val sub = if (u.isBot) t("chatSearch.botSub", "username" to u.username.orEmpty())
+                            else listOfNotNull(u.age?.takeIf { it > 0 }?.let { t("chatSearch.age", "n" to it) }, u.cityName?.takeIf { it.isNotEmpty() }).joinToString(" · ").ifEmpty { t("chatSearch.user") }
                             UserResultRow(u.nickname, u.avatar, sub, keyword) { openUser(SearchRecent("user", u.id, u.nickname, u.avatar, sub)) }
                         }
                     }
                     if (extraHits.isEmpty() && chatHits.isEmpty() && knownHits.isEmpty() && userHits.isEmpty()) {
-                        item("none") { SearchHint(if (loading) "搜索中…" else "没有找到相关聊天") }
+                        item("none") { SearchHint(if (loading) t("chatSearch.searching") else t("chatSearch.noChats")) }
                     }
                 } else {
                     items(msgHits, key = { "m-${it.id}" }) { m ->
@@ -340,10 +341,10 @@ fun ChatSearchDialog(
                             keyboard?.hide()
                             val title = if (c != null) convTitle(c) else m.title
                             val target = if (c != null) convTarget(c) else m.targetId
-                            onOpenMessage(m.conversationId, m.convType, target, if (m.convType == 2) "$title（群）" else title, m.id)
+                            onOpenMessage(m.conversationId, m.convType, target, if (m.convType == 2) t("chat.groupTitle", "name" to title) else title, m.id)
                         }
                     }
-                    if (msgHits.isEmpty()) item("none") { SearchHint(if (loading) "搜索中…" else "没有找到相关消息") }
+                    if (msgHits.isEmpty()) item("none") { SearchHint(if (loading) t("chatSearch.searching") else t("chatSearch.noMessages")) }
                 }
             }
         }
@@ -377,7 +378,7 @@ private fun ResultRow(onClick: () -> Unit, leading: @Composable () -> Unit, cont
 @Composable
 private fun GroupTag() {
     Text(
-        "群", color = TextSub, fontSize = 10.sp,
+        t("chat.groupTag"), color = TextSub, fontSize = 10.sp,
         modifier = Modifier.padding(start = 6.dp).clip(RoundedCornerShape(4.dp)).background(Bg3).padding(horizontal = 4.dp),
     )
 }

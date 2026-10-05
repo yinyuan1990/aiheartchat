@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import QRCode from 'qrcode';
 import { api } from '../api';
 import { useApp } from '../store';
+import { t } from '../i18n';
 
 interface InviteMine {
   code: string;
@@ -28,56 +29,56 @@ export function InviteCardPage() {
     api<InviteMine>('/app/invite/mine').then(async (r) => {
       setInfo(r);
       setQr(await QRCode.toDataURL(r.link, { width: 480, margin: 1 }));
-    }).catch((e) => setErr(e.message || '加载失败'));
+    }).catch((e) => setErr(e.message || t('common.loadFailed')));
   }, []);
 
   const flash = (s: string) => { setToast(s); setTimeout(() => setToast(''), 1500); };
   const copy = async () => {
     if (!info) return;
-    try { await navigator.clipboard.writeText(info.link); flash('链接已复制'); } catch { flash('复制失败，请长按链接复制'); }
+    try { await navigator.clipboard.writeText(info.link); flash(t('invite.linkCopied')); } catch { flash(t('invite.copyFailed')); }
   };
   const share = async () => {
     if (!info) return;
-    const text = (isFemale ? '我在心之音等你，来和我聊聊：' : '我在心之音，想请你来聊聊，你的时间在这里每一分钟都算钱：') + info.link;
+    const text = (isFemale ? t('invite.shareTextFemale', { app: t('app.name') }) : t('invite.shareTextMale', { app: t('app.name') })) + info.link;
     if (navigator.share) { try { await navigator.share({ text }); } catch { /* 用户取消 */ } } else copy();
   };
 
   return (
     <div className="app">
       <div className="navbar">
-        <span className="back" onClick={() => nav(-1)}>‹ 返回</span>
-        <span className="title">我的邀请名片</span>
+        <span className="back" onClick={() => nav(-1)}>‹ {t('common.back')}</span>
+        <span className="title">{t('me.inviteCard')}</span>
         <span className="action" />
       </div>
       <div className="page no-scrollbar" style={{ padding: 16 }}>
-        {!info ? <div className="empty">{err || '加载中…'}</div> : (
+        {!info ? <div className="empty">{err || t('common.loading')}</div> : (
           <>
             <div className="card" style={{ padding: 18, border: '1px solid rgba(254,44,85,0.45)' }}>
               <div className="row">
                 <div className="avatar" style={{ width: 52, height: 52 }}>{user?.avatar && <img src={full(user.avatar)} alt="" />}</div>
                 <div className="grow">
-                  <div style={{ fontSize: 11, color: 'var(--text-2)' }}>心之音 · 专属名片</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-2)' }}>{t('invite.cardLabel', { app: t('app.name') })}</div>
                   <div style={{ fontSize: 17, fontWeight: 700 }}>{user?.nickname}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-3)' }}>邀请码 {info.code}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{t('invite.code', { code: info.code })}</div>
                 </div>
               </div>
               <p style={{ marginTop: 14, fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
                 {isFemale
-                  ? '发给男生：他打开网页能看到你的照片、价格和评分，下载后自动打开你的主页，第一条消息就是你的收入。'
-                  : '发给女生：她打开网页能看到你的名片和在这里的收入方式，下载后自动和你成为好友。'}
+                  ? t('invite.descFemale')
+                  : t('invite.descMale')}
               </p>
               {qr && <div style={{ textAlign: 'center', marginTop: 16 }}><img src={qr} alt="" style={{ width: 190, height: 190, borderRadius: 12, background: '#fff', padding: 6 }} /></div>}
               <div onClick={copy} style={{ marginTop: 14, display: 'flex', gap: 10, alignItems: 'center', padding: '10px 12px', borderRadius: 10, background: 'var(--bg-input)', fontSize: 13 }}>
                 <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{info.link.replace('https://', '')}</span>
-                <span style={{ color: 'var(--accent)', fontWeight: 600, fontSize: 12 }}>复制</span>
+                <span style={{ color: 'var(--accent)', fontWeight: 600, fontSize: 12 }}>{t('common.copy')}</span>
               </div>
               <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
-                <button className="btn btn-ghost" style={{ flex: 1 }} onClick={copy}>复制链接</button>
-                <button className="btn" style={{ flex: 1 }} onClick={share}>分享链接</button>
+                <button className="btn btn-ghost" style={{ flex: 1 }} onClick={copy}>{t('invite.copyLink')}</button>
+                <button className="btn" style={{ flex: 1 }} onClick={share}>{t('invite.shareLink')}</button>
               </div>
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
-              {[[info.clicks30d, '30 天内被打开'], [info.invited, '成功邀请']].map(([n, l]) => (
+              {[[info.clicks30d, t('invite.opened30d')], [info.invited, t('invite.invitedCount')]].map(([n, l]) => (
                 <div key={String(l)} className="card" style={{ flex: 1, textAlign: 'center', padding: '14px 0' }}>
                   <div style={{ fontSize: 20, fontWeight: 700 }}>{n}</div>
                   <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 2 }}>{l}</div>
@@ -86,7 +87,7 @@ export function InviteCardPage() {
             </div>
             {info.recent.length > 0 && (
               <div style={{ marginTop: 10 }}>
-                <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 6 }}>通过我加入的人</div>
+                <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 6 }}>{t('invite.joinedViaMe')}</div>
                 {info.recent.map((u) => (
                   <div key={u.id} className="row" style={{ padding: '8px 0' }}>
                     <div className="avatar" style={{ width: 38, height: 38 }}>{u.avatar && <img src={full(u.avatar)} alt="" />}</div>

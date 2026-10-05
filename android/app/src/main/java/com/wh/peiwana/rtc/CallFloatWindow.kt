@@ -20,6 +20,7 @@ import android.widget.TextView
 import coil.imageLoader
 import coil.request.ImageRequest
 import coil.transform.CircleCropTransformation
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.Api
 
 /**
@@ -82,14 +83,14 @@ object CallFloatWindow {
                     }
                 }
                 textCol.addView(TextView(ctx).apply {
-                    text = name.ifEmpty { "来电" }
+                    text = name.ifEmpty { t("call.incoming") }
                     setTextColor(Color.WHITE)
                     textSize = 16f
                     typeface = Typeface.DEFAULT_BOLD
                     maxLines = 1
                 })
                 textCol.addView(TextView(ctx).apply {
-                    text = if (type == 2) "邀请你进行视频通话" else "邀请你进行语音通话"
+                    text = if (type == 2) t("call.inviteVideo") else t("call.inviteVoice")
                     setTextColor(0xFF8A8A93.toInt())
                     textSize = 13f
                     maxLines = 1

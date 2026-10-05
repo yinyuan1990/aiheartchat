@@ -13,6 +13,7 @@ import { LinkText } from '../components/LinkText';
 import { dust, dustThen, undust } from '../dust';
 import { AudioBubble, GroupShareView } from './ChatRoom';
 import { AddBotSheet, InlineKeyboard, InlineMarkup } from './Bots';
+import { lang, t } from '../i18n';
 
 /** 频道（kind=2 的群）：频道主发帖，订阅者看帖 + 表情回应 + 评论。帖子就是这个群会话里的消息。 */
 
@@ -61,7 +62,7 @@ interface Post {
 
 const postEl = (id: string) => document.querySelector(`[data-mid="${CSS.escape(id)}"]`);
 
-const fmtCount = (n: number) => (n >= 10000 ? `${(n / 10000).toFixed(1)}万` : String(n));
+const fmtCount = (n: number) => (n >= 10000 ? (lang() === 'zh' ? `${(n / 10000).toFixed(1)}万` : `${(n / 1000).toFixed(1)}k`) : String(n));
 
 function postTime(iso: string) {
   const d = new Date(iso);
@@ -78,7 +79,7 @@ function PostBody({ p, onImage }: { p: Post; onImage: (url: string) => void }) {
       return <video src={p.content} controls playsInline className="ch-media" style={{ background: '#000' }} />;
     case 'sticker': {
       const s = parseSticker(p.content);
-      return s ? <div style={{ padding: '10px 12px 0' }}><StickerView p={s} size={s.format === 'mp4' ? 220 : 140} /></div> : <div className="ch-text">[表情]</div>;
+      return s ? <div style={{ padding: '10px 12px 0' }}><StickerView p={s} size={s.format === 'mp4' ? 220 : 140} /></div> : <div className="ch-text">{t('channel.stickerPlaceholder')}</div>;
     }
     case 'audio': {
       let a: any = {};
@@ -90,7 +91,7 @@ function PostBody({ p, onImage }: { p: Post; onImage: (url: string) => void }) {
       try { loc = JSON.parse(p.content); } catch { /* ignore */ }
       return (
         <div className="ch-text" style={{ cursor: 'pointer' }} onClick={() => loc.lat && window.open(`https://uri.amap.com/marker?position=${loc.lng},${loc.lat}`, '_blank')}>
-          ◎ {loc.name || loc.address || '位置'}
+          ◎ {loc.name || loc.address || t('channel.location')}
         </div>
       );
     }
@@ -118,7 +119,7 @@ function PostCard({ ch, p, onReact, onComments, onImage, onDelete }: {
         <div className="avatar" style={{ width: 28, height: 28 }}>{headAvatar && <img src={headAvatar} alt="" />}</div>
         <span className="ellipsis" style={{ fontWeight: 600, fontSize: 14 }}>{byAuthor ? p.senderNickname : ch.name}</span>
         <span className="grow" />
-        {onDelete && !p.pending && <span className="small" style={{ cursor: 'pointer' }} onClick={onDelete}>删除</span>}
+        {onDelete && !p.pending && <span className="small" style={{ cursor: 'pointer' }} onClick={onDelete}>{t('common.delete')}</span>}
       </div>
       <PostBody p={p} onImage={onImage} />
       {p.markup && <InlineKeyboard markup={p.markup} messageId={p.id} />}
@@ -132,7 +133,7 @@ function PostCard({ ch, p, onReact, onComments, onImage, onDelete }: {
           {!p.pending && <span className="ch-react add" onClick={() => setPicker((v) => !v)}>☺+</span>}
         </div>
         <span className="small" style={{ whiteSpace: 'nowrap' }}>
-          {p.pending ? '发送中…' : <>👁 {fmtCount(p.views)} · {postTime(p.createdAt)}</>}
+          {p.pending ? t('channel.sending') : <>👁 {fmtCount(p.views)} · {postTime(p.createdAt)}</>}
         </span>
       </div>
       {picker && (
@@ -144,7 +145,7 @@ function PostCard({ ch, p, onReact, onComments, onImage, onDelete }: {
       )}
       {!p.pending && (
         <div className="ch-comment-bar" onClick={onComments}>
-          <span>💬 {p.commentCount > 0 ? `${p.commentCount} 条评论` : '评论'}</span>
+          <span>💬 {p.commentCount > 0 ? t('channel.commentsN', { n: p.commentCount }) : t('channel.comments')}</span>
           <span>›</span>
         </div>
       )}
@@ -157,7 +158,7 @@ function MemberBubble({ p, mine, onImage, onDelete }: { p: Post; mine: boolean; 
   const timer = useRef<number>();
   const media = p.type === 'image' || p.type === 'video';
   const askDelete = () => {
-    if (onDelete && !p.pending && confirm('删除这条消息？')) onDelete();
+    if (onDelete && !p.pending && confirm(t('channel.deleteMessageConfirm'))) onDelete();
   };
   return (
     <div className={`ch-msg${mine ? ' mine' : ''}`} style={{ opacity: p.pending ? 0.6 : 1 }} data-testid="member-msg" data-mid={p.id}>
@@ -171,7 +172,7 @@ function MemberBubble({ p, mine, onImage, onDelete }: { p: Post; mine: boolean; 
       >
         {!mine && <div className="ch-msg-name">{p.senderNickname}</div>}
         <PostBody p={p} onImage={onImage} />
-        <div className="ch-msg-time">{p.pending ? '发送中…' : postTime(p.createdAt)}</div>
+        <div className="ch-msg-time">{p.pending ? t('channel.sending') : postTime(p.createdAt)}</div>
       </div>
     </div>
   );
@@ -199,7 +200,7 @@ function ChannelInfoSheet({ ch, onClose, onChanged, onExit }: { ch: ChannelInfo;
     try {
       await save({ avatar: await uploadFile('image', file) });
     } catch (e: any) {
-      alert(e.message || '上传失败');
+      alert(e.message || t('common.uploadFailed'));
     }
   };
   const toggleMute = async () => {
@@ -211,10 +212,10 @@ function ChannelInfoSheet({ ch, onClose, onChanged, onExit }: { ch: ChannelInfo;
     }
   };
   const clearAll = async () => {
-    if (!confirm('清空频道里的所有消息？评论、表情回应和图片 / 视频 / 语音文件会一起永久删除，无法恢复。')) return;
+    if (!confirm(t('channel.clearAllConfirm'))) return;
     try {
       const r = await api<{ deleted: number }>(`/im/channel/${ch.id}/clear`, { method: 'POST' });
-      alert(r.deleted ? `已清空 ${r.deleted} 条消息` : '频道里没有消息');
+      alert(r.deleted ? t('channel.clearedN', { n: r.deleted }) : t('channel.noMessages'));
       onClose();
     } catch (e: any) {
       alert(e.message);
@@ -222,7 +223,7 @@ function ChannelInfoSheet({ ch, onClose, onChanged, onExit }: { ch: ChannelInfo;
   };
   const leave = async () => {
     const owner = ch.role === 'owner';
-    if (!confirm(owner ? '删除频道后所有订阅者都看不到它，确定删除？' : '确定退订这个频道？')) return;
+    if (!confirm(owner ? t('channel.deleteConfirm') : t('channel.unsubscribeConfirm'))) return;
     try {
       await api(`/im/channel/${ch.id}/${owner ? 'delete' : 'unsubscribe'}`, { method: 'POST' });
       onExit();
@@ -245,37 +246,37 @@ function ChannelInfoSheet({ ch, onClose, onChanged, onExit }: { ch: ChannelInfo;
               <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => changeAvatar(e.target.files?.[0])} />
               {editing ? (
                 <>
-                  <input className="input" style={{ marginTop: 12 }} value={name} maxLength={50} placeholder="频道名称" onChange={(e) => setName(e.target.value)} />
-                  <textarea className="input" style={{ height: 90, resize: 'none' }} value={desc} maxLength={500} placeholder="频道简介" onChange={(e) => setDesc(e.target.value)} />
+                  <input className="input" style={{ marginTop: 12 }} value={name} maxLength={50} placeholder={t('channel.namePlaceholder')} onChange={(e) => setName(e.target.value)} />
+                  <textarea className="input" style={{ height: 90, resize: 'none' }} value={desc} maxLength={500} placeholder={t('channel.descPlaceholder')} onChange={(e) => setDesc(e.target.value)} />
                   <div className="row">
-                    <button className="btn-sm ghost" onClick={() => setEditing(false)}>取消</button>
+                    <button className="btn-sm ghost" onClick={() => setEditing(false)}>{t('common.cancel')}</button>
                     <span className="grow" />
-                    <button className="btn-sm" onClick={() => save({ name, description: desc })}>保存</button>
+                    <button className="btn-sm" onClick={() => save({ name, description: desc })}>{t('common.save')}</button>
                   </div>
                 </>
               ) : (
                 <>
                   <div style={{ fontSize: 18, fontWeight: 700, marginTop: 10 }}>{ch.name}</div>
-                  <div className="small" style={{ marginTop: 4 }}>{fmtCount(ch.subscribers)} 位订阅者 · 频道主 {ch.owner?.nickname}</div>
+                  <div className="small" style={{ marginTop: 4 }}>{t('channel.subscribers', { n: fmtCount(ch.subscribers) })} · {t('channel.ownedBy', { name: ch.owner?.nickname ?? '' })}</div>
                   {ch.description && <div style={{ fontSize: 14, marginTop: 12, whiteSpace: 'pre-wrap', textAlign: 'left', lineHeight: 1.6 }}>{ch.description}</div>}
-                  {!!ch.retentionDays && <div className="small" style={{ marginTop: 10 }} data-testid="retention-tip">消息保留 {ch.retentionDays} 天，超过自动删除</div>}
+                  {!!ch.retentionDays && <div className="small" style={{ marginTop: 10 }} data-testid="retention-tip">{t('channel.retentionTip', { n: ch.retentionDays })}</div>}
                 </>
               )}
             </div>
             {!editing && (
               <div style={{ marginTop: 16, borderTop: '1px solid var(--line)' }}>
-                {ch.canPost && <div className="ch-menu" onClick={() => setEditing(true)}>编辑频道资料</div>}
+                {ch.canPost && <div className="ch-menu" onClick={() => setEditing(true)}>{t('channel.editInfo')}</div>}
                 {ch.canPost && (
                   <div className="ch-menu row" onClick={() => save({ memberPost: !ch.memberPost })}>
-                    <span className="grow">订阅者可发消息</span>
+                    <span className="grow">{t('channel.memberPost')}</span>
                     <span className={`switch${ch.memberPost ? ' on' : ''}`} data-testid="member-post-switch" />
                   </div>
                 )}
-                {ch.isMember && <div className="ch-menu" onClick={() => setShare(true)}>分享频道（二维码 / 邀请码）</div>}
-                {ch.role === 'owner' && <div className="ch-menu" onClick={() => setBots(true)}>机器人（自动发帖）</div>}
-                {ch.isMember && ch.role !== 'owner' && <div className="ch-menu" onClick={toggleMute}>{ch.muted ? '取消静音' : '静音'}</div>}
-                {ch.role === 'owner' && <div className="ch-menu" style={{ color: 'var(--danger)' }} onClick={clearAll} data-testid="clear-all">清空所有消息</div>}
-                {ch.isMember && <div className="ch-menu" style={{ color: 'var(--danger)' }} onClick={leave}>{ch.role === 'owner' ? '删除频道' : '退订'}</div>}
+                {ch.isMember && <div className="ch-menu" onClick={() => setShare(true)}>{t('channel.shareMenu')}</div>}
+                {ch.role === 'owner' && <div className="ch-menu" onClick={() => setBots(true)}>{t('channel.botsMenu')}</div>}
+                {ch.isMember && ch.role !== 'owner' && <div className="ch-menu" onClick={toggleMute}>{ch.muted ? t('channel.unmute') : t('channel.mute')}</div>}
+                {ch.role === 'owner' && <div className="ch-menu" style={{ color: 'var(--danger)' }} onClick={clearAll} data-testid="clear-all">{t('channel.clearAll')}</div>}
+                {ch.isMember && <div className="ch-menu" style={{ color: 'var(--danger)' }} onClick={leave}>{ch.role === 'owner' ? t('channel.delete') : t('channel.unsubscribe')}</div>}
               </div>
             )}
           </>
@@ -320,7 +321,7 @@ export function ChannelPage() {
           if (c.isMember && last && c.conversationId) wsManager.markRead(c.conversationId, last.id);
         });
       })
-      .catch((e: any) => alive && setError(e.message || '频道不存在'));
+      .catch((e: any) => alive && setError(e.message || t('channel.notFound')));
 
     wsManager.connect();
     const off = wsManager.on((frame) => {
@@ -336,7 +337,7 @@ export function ChannelPage() {
         setPosts((prev) => prev.map((p) => (p.tempId === frame.tempId ? { ...p, id: frame.msgId, createdAt: frame.createdAt, pending: false } : p)));
       } else if (frame.op === 'error') {
         setPosts((prev) => prev.filter((p) => !(p.pending && p.tempId === frame.tempId)));
-        alert(frame.msg ?? '发送失败');
+        alert(frame.msg ?? t('channel.sendFailed'));
       } else if (frame.op === 'channel_stats' && frame.data?.conversationId === conv) {
         const d = frame.data;
         setPosts((prev) => prev.map((p) => (p.id === d.msgId ? { ...p, reactions: d.reactions, commentCount: d.commentCount } : p)));
@@ -402,7 +403,7 @@ export function ChannelPage() {
   };
 
   const deletePost = async (p: Post) => {
-    if (!confirm('删除这条帖子？评论和表情回应会一起删除')) return;
+    if (!confirm(t('channel.deletePostConfirm'))) return;
     // 确认后立刻开始化成灰（和接口并行），失败再放回来
     const el = postEl(p.id);
     const anim = dust(el);
@@ -423,9 +424,9 @@ export function ChannelPage() {
     setPosts((prev) => [...prev, { id: tempId, tempId, senderId: me.id, senderNickname: me.nickname, senderAvatar: me.avatar, type, content, createdAt: new Date().toISOString(), views: 1, reactions: [], myReaction: null, commentCount: 0, pending: true, memberMsg: !ch.canPost }]);
   };
   const send = () => {
-    const t = input.trim();
-    if (!t) return;
-    sendRaw('text', t);
+    const text = input.trim();
+    if (!text) return;
+    sendRaw('text', text);
     setInput('');
   };
   const sendMedia = async (files: File[], caption: string) => {
@@ -439,26 +440,26 @@ export function ChannelPage() {
       }
     }
     if (caption.trim()) sendRaw('text', caption.trim());
-    if (failed) alert(`${failed} 个文件发送失败`);
+    if (failed) alert(t('channel.filesFailed', { n: failed }));
   };
   const handleAttach = (a: AttachAction) => {
     if (a !== 'location') return;
-    if (!navigator.geolocation) return alert('当前环境不支持定位');
+    if (!navigator.geolocation) return alert(t('channel.geoUnsupported'));
     navigator.geolocation.getCurrentPosition(
       (pos) => sendRaw('location', JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude, name: nearestCity(pos.coords.latitude, pos.coords.longitude) })),
-      () => alert('定位失败，请允许定位权限'),
+      () => alert(t('channel.geoFailed')),
     );
   };
 
   if (error) {
     return (
       <div className="app">
-        <div className="navbar"><span className="back" onClick={() => nav(-1)}>‹</span><span className="title">频道</span><span style={{ width: 40 }} /></div>
+        <div className="navbar"><span className="back" onClick={() => nav(-1)}>‹</span><span className="title">{t('channel.title')}</span><span style={{ width: 40 }} /></div>
         <div className="empty">{error}</div>
       </div>
     );
   }
-  if (!ch) return <div className="app"><div className="empty">加载中…</div></div>;
+  if (!ch) return <div className="app"><div className="empty">{t('common.loading')}</div></div>;
   const canSend = ch.canSend ?? ch.canPost;
 
   return (
@@ -469,16 +470,16 @@ export function ChannelPage() {
           <div className="avatar" style={{ width: 36, height: 36, flexShrink: 0 }}>{ch.avatar && <img src={ch.avatar} alt="" />}</div>
           <div style={{ minWidth: 0 }}>
             <div className="ellipsis" style={{ fontWeight: 600, fontSize: 15 }}>{ch.name}</div>
-            <div className="small">{fmtCount(ch.subscribers)} 位订阅者</div>
+            <div className="small">{t('channel.subscribers', { n: fmtCount(ch.subscribers) })}</div>
           </div>
         </div>
         <span className="action" onClick={() => setShowInfo(true)}>···</span>
       </div>
 
       <div className="page ch-page no-scrollbar" onClick={() => setShowSticker(false)}>
-        {hasMore && posts.length > 0 && <div className="small" style={{ textAlign: 'center', padding: 10, cursor: 'pointer' }} onClick={loadMore}>查看更早的帖子</div>}
+        {hasMore && posts.length > 0 && <div className="small" style={{ textAlign: 'center', padding: 10, cursor: 'pointer' }} onClick={loadMore}>{t('channel.loadEarlier')}</div>}
         {posts.length === 0 && (
-          <div className="empty">{canSend ? '发第一条帖子吧，订阅者都会收到' : '频道还没有发帖'}</div>
+          <div className="empty">{canSend ? t('channel.emptyCanPost') : t('channel.emptyNoPosts')}</div>
         )}
         {posts.map((p) => p.memberMsg ? (
           <MemberBubble
@@ -510,14 +511,14 @@ export function ChannelPage() {
               className="input grow"
               style={{ marginBottom: 0, borderRadius: 20, height: 40 }}
               value={input}
-              placeholder={ch.canPost ? '发帖…' : '发消息…'}
+              placeholder={ch.canPost ? t('channel.postPlaceholder') : t('channel.messagePlaceholder')}
               onChange={(e) => setInput(e.target.value)}
               onFocus={() => setShowSticker(false)}
               onKeyDown={(e) => e.key === 'Enter' && send()}
             />
             <span className="ch-round" style={showSticker ? { background: '#ffe1e7', color: 'var(--accent)' } : undefined} onClick={() => setShowSticker((v) => !v)}>☺</span>
             <span className="ch-round" onClick={() => { setShowAttach(true); setShowSticker(false); }}>+</span>
-            {input.trim() && <button className="btn-sm" style={{ height: 40, borderRadius: 20 }} onClick={send}>发送</button>}
+            {input.trim() && <button className="btn-sm" style={{ height: 40, borderRadius: 20 }} onClick={send}>{t('common.send')}</button>}
           </div>
           {showSticker && (
             <EmojiPanel
@@ -531,9 +532,9 @@ export function ChannelPage() {
       ) : (
         <div className="ch-bottom">
           {ch.isMember ? (
-            <span onClick={toggleMute}>{ch.muted ? '取消静音' : '静音'}</span>
+            <span onClick={toggleMute}>{ch.muted ? t('channel.unmute') : t('channel.mute')}</span>
           ) : (
-            <span className="accent" style={{ fontWeight: 600 }} onClick={subscribe}>订阅</span>
+            <span className="accent" style={{ fontWeight: 600 }} onClick={subscribe}>{t('channel.subscribe')}</span>
           )}
         </div>
       )}
@@ -604,7 +605,7 @@ export function ChannelCommentsPage() {
   };
 
   const remove = async (c: Comment) => {
-    if (!confirm('删除这条评论？')) return;
+    if (!confirm(t('channel.deleteCommentConfirm'))) return;
     try {
       await api(`/im/channel/comments/${c.id}/delete`, { method: 'POST' });
       setList((prev) => (prev ?? []).filter((x) => x.id !== c.id));
@@ -617,13 +618,13 @@ export function ChannelCommentsPage() {
     <div className="app">
       <div className="navbar">
         <span className="back" onClick={() => nav(-1)}>‹</span>
-        <span className="title">{list ? `${list.length} 条评论` : '评论'}</span>
+        <span className="title">{list ? t('channel.commentsN', { n: list.length }) : t('channel.comments')}</span>
         <span style={{ width: 40 }} />
       </div>
       <div className="page no-scrollbar" style={{ padding: '0 16px' }} onClick={() => setShowEmoji(false)}>
-        {state.channelName && <div className="small" style={{ padding: '10px 0' }}>{state.channelName} 的帖子</div>}
-        {list === null && <div className="empty">加载中…</div>}
-        {list?.length === 0 && <div className="empty" style={{ padding: 30 }}>还没有评论，来抢沙发</div>}
+        {state.channelName && <div className="small" style={{ padding: '10px 0' }}>{t('channel.postOf', { name: state.channelName })}</div>}
+        {list === null && <div className="empty">{t('common.loading')}</div>}
+        {list?.length === 0 && <div className="empty" style={{ padding: 30 }}>{t('channel.noComments')}</div>}
         {(list ?? []).map((c) => (
           <div key={c.id} className="row" style={{ padding: '10px 0', alignItems: 'flex-start', borderBottom: '1px solid var(--line)' }}>
             <div className="avatar" style={{ width: 34, height: 34, cursor: 'pointer' }} onClick={() => c.user && nav(`/u/${c.user.id}`)}>
@@ -634,8 +635,8 @@ export function ChannelCommentsPage() {
                 <span className="small" style={{ fontWeight: 600, color: 'var(--text)' }}>{c.user?.nickname}</span>
                 <span className="small">{postTime(c.createdAt)}</span>
                 <span className="grow" />
-                <span className="small accent" style={{ cursor: 'pointer' }} onClick={() => { setReplyTo({ id: c.id, nickname: c.user?.nickname ?? '' }); inputRef.current?.focus(); }}>回复</span>
-                {(c.user?.id === me?.id || state.canAdmin) && <span className="small" style={{ cursor: 'pointer' }} onClick={() => remove(c)}>删除</span>}
+                <span className="small accent" style={{ cursor: 'pointer' }} onClick={() => { setReplyTo({ id: c.id, nickname: c.user?.nickname ?? '' }); inputRef.current?.focus(); }}>{t('channel.reply')}</span>
+                {(c.user?.id === me?.id || state.canAdmin) && <span className="small" style={{ cursor: 'pointer' }} onClick={() => remove(c)}>{t('common.delete')}</span>}
               </div>
               {(c.content || c.replyToNickname) && (
                 <div style={{ fontSize: 14, marginTop: 3, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
@@ -658,8 +659,8 @@ export function ChannelCommentsPage() {
               <span onClick={() => setSticker(null)} style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: 9, background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>×</span>
             </span>
           )}
-          <span className="small grow">{replyTo && <>回复 <span className="accent">@{replyTo.nickname}</span></>}</span>
-          {replyTo && <span className="small" style={{ cursor: 'pointer' }} onClick={() => setReplyTo(null)}>取消</span>}
+          <span className="small grow">{replyTo && <>{t('channel.replyingTo')} <span className="accent">@{replyTo.nickname}</span></>}</span>
+          {replyTo && <span className="small" style={{ cursor: 'pointer' }} onClick={() => setReplyTo(null)}>{t('common.cancel')}</span>}
         </div>
       )}
       <div className="row" style={{ padding: '10px 16px calc(10px + env(safe-area-inset-bottom))', borderTop: '1px solid var(--line)', gap: 8 }}>
@@ -670,12 +671,12 @@ export function ChannelCommentsPage() {
           style={{ marginBottom: 0, padding: '10px 14px' }}
           value={input}
           maxLength={500}
-          placeholder={replyTo ? `回复 @${replyTo.nickname}` : '说点什么…'}
+          placeholder={replyTo ? t('channel.replyPlaceholder', { name: replyTo.nickname }) : t('channel.commentPlaceholder')}
           onChange={(e) => setInput(e.target.value)}
           onFocus={() => setShowEmoji(false)}
           onKeyDown={(e) => e.key === 'Enter' && send()}
         />
-        <button className="btn-sm" disabled={busy || (!input.trim() && !sticker)} onClick={send}>发送</button>
+        <button className="btn-sm" disabled={busy || (!input.trim() && !sticker)} onClick={send}>{t('common.send')}</button>
       </div>
       {showEmoji && (
         <EmojiPanel onPick={setSticker} onEmoji={(e) => setInput((v) => v + e)} onDelete={() => setInput((v) => dropLastGrapheme(v))} onKeyboard={() => { setShowEmoji(false); inputRef.current?.focus(); }} />
@@ -724,12 +725,12 @@ export function CreateChannelSheet({ onClose, onCreated }: { onClose: () => void
     try {
       setAvatar(await uploadFile('image', f));
     } catch (e: any) {
-      alert(e.message || '上传失败');
+      alert(e.message || t('common.uploadFailed'));
     }
     setBusy(false);
   };
   const create = async () => {
-    if (!name.trim()) return alert('请填写频道名称');
+    if (!name.trim()) return alert(t('channel.nameRequired'));
     setBusy(true);
     try {
       onCreated(await api<ChannelInfo>('/im/channel', { method: 'POST', body: { name: name.trim(), description: desc.trim(), avatar, memberPost } }));
@@ -744,53 +745,50 @@ export function CreateChannelSheet({ onClose, onCreated }: { onClose: () => void
       <div className="sheet sheet-up cc-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="cc-grab" />
         <div className="cc-top">
-          <span className="cc-cancel" onClick={onClose}>取消</span>
-          <span className="cc-title">新建频道</span>
-          <span className="cc-cancel" style={{ visibility: 'hidden' }}>取消</span>
+          <span className="cc-cancel" onClick={onClose}>{t('common.cancel')}</span>
+          <span className="cc-title">{t('channel.newTitle')}</span>
+          <span className="cc-cancel" style={{ visibility: 'hidden' }}>{t('common.cancel')}</span>
         </div>
 
         <div className="cc-avatar-wrap">
           <div className="cc-avatar" onClick={() => !busy && fileRef.current?.click()}>
             {avatar ? <img src={avatar} alt="" /> : name.trim() ? <span>{Array.from(name.trim())[0]}</span> : <CameraIcon size={30} />}
-            {busy && <div className="cc-avatar-busy">上传中…</div>}
+            {busy && <div className="cc-avatar-busy">{t('channel.uploading')}</div>}
             <div className="cc-avatar-badge"><CameraIcon size={14} /></div>
           </div>
-          <span className="cc-avatar-tip" onClick={() => !busy && fileRef.current?.click()}>{avatar ? '更换头像' : '设置频道头像'}</span>
+          <span className="cc-avatar-tip" onClick={() => !busy && fileRef.current?.click()}>{avatar ? t('channel.changeAvatar') : t('channel.setAvatar')}</span>
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => pick(e.target.files?.[0])} />
         </div>
 
         <div className="cc-group">
           <div className="cc-field">
-            <input placeholder="频道名称" value={name} maxLength={50} autoFocus onChange={(e) => setName(e.target.value)} />
+            <input placeholder={t('channel.namePlaceholder')} value={name} maxLength={50} autoFocus onChange={(e) => setName(e.target.value)} />
             {name && <span className="cc-count">{Array.from(name).length}/50</span>}
           </div>
           <div className="cc-field">
-            <textarea placeholder="简介（可选）" rows={3} value={desc} maxLength={500} onChange={(e) => setDesc(e.target.value)} />
+            <textarea placeholder={t('channel.descOptional')} rows={3} value={desc} maxLength={500} onChange={(e) => setDesc(e.target.value)} />
             {desc && <span className="cc-count">{desc.length}/500</span>}
           </div>
         </div>
-        <div className="cc-caption">简介会显示在频道资料页，告诉别人这个频道发什么。</div>
+        <div className="cc-caption">{t('channel.descCaption')}</div>
 
         <div className="cc-group">
           <div className="cc-row" onClick={() => setMemberPost((v) => !v)}>
             <span className="cc-row-icon">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1.1-4.6A8 8 0 1 1 21 12z" /></svg>
             </span>
-            <span className="grow">订阅者可发消息</span>
+            <span className="grow">{t('channel.memberPost')}</span>
             <span className={`switch${memberPost ? ' on' : ''}`} data-testid="create-member-post" />
           </div>
         </div>
         <div className="cc-caption">
-          {memberPost
-            ? '所有订阅者都能在频道里发帖，你可以删除任何人的帖子。'
-            : '只有你能发帖，订阅者可以看、点表情、评论。'}
-          创建后也能在频道资料里修改。
+          {memberPost ? t('channel.memberPostOnTip') : t('channel.memberPostOffTip')}
         </div>
 
-        <button className="btn cc-submit" disabled={busy || !name.trim() || left === 0} onClick={create}>创建频道</button>
+        <button className="btn cc-submit" disabled={busy || !name.trim() || left === 0} onClick={create}>{t('channel.createSubmit')}</button>
         {quota && (
           <div className="cc-quota" data-testid="channel-quota">
-            {left === 0 ? `已达到创建上限（最多 ${quota.limit} 个频道）` : `还能创建 ${left} 个频道（共 ${quota.limit} 个）`}
+            {left === 0 ? t('channel.quotaFull', { n: quota.limit }) : t('channel.quotaLeft', { left: left ?? 0, n: quota.limit })}
           </div>
         )}
       </div>
@@ -806,10 +804,10 @@ export function ChannelsPage() {
   const [showCreate, setShowCreate] = useState(false);
 
   useEffect(() => {
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       api<ChannelListItem[]>(`/im/channel/list${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''}`).then(setList).catch(() => setList([]));
     }, q ? 300 : 0);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [q]);
 
   const subscribe = async (c: ChannelListItem) => {
@@ -825,29 +823,29 @@ export function ChannelsPage() {
     <div className="app">
       <div className="navbar">
         <span className="back" onClick={() => nav(-1)}>‹</span>
-        <span className="title">发现频道</span>
-        <span className="action" onClick={() => setShowCreate(true)}>创建</span>
+        <span className="title">{t('channel.discover')}</span>
+        <span className="action" onClick={() => setShowCreate(true)}>{t('common.create')}</span>
       </div>
       <div className="page no-scrollbar">
         <div style={{ padding: '8px 16px' }}>
-          <input className="input" style={{ marginBottom: 0, borderRadius: 18 }} placeholder="搜索频道" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input className="input" style={{ marginBottom: 0, borderRadius: 18 }} placeholder={t('channel.searchPlaceholder')} value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
-        {list === null && <div className="empty">加载中…</div>}
-        {list?.length === 0 && <div className="empty">{q ? '没有找到相关频道' : '还没有频道，创建第一个吧'}</div>}
+        {list === null && <div className="empty">{t('common.loading')}</div>}
+        {list?.length === 0 && <div className="empty">{q ? t('channel.noResults') : t('channel.emptyList')}</div>}
         {(list ?? []).map((c) => (
           <div key={c.id} className="cl-row" onClick={() => nav(`/channel/${c.id}`)}>
             <div className="avatar" style={{ width: 54, height: 54 }}>{c.avatar && <img src={c.avatar} alt="" />}</div>
             <div className="cl-row-main">
               <div className="cl-row-top">
                 <span className="cl-row-title ellipsis">{c.name}</span>
-                <span className="small" style={{ flexShrink: 0 }}>{fmtCount(c.subscribers)} 订阅</span>
+                <span className="small" style={{ flexShrink: 0 }}>{t('channel.subscribersShort', { n: fmtCount(c.subscribers) })}</span>
               </div>
               <div className="cl-row-sub">
-                <span className="ellipsis">{c.description || `频道主 ${c.ownerNickname}`}</span>
+                <span className="ellipsis">{c.description || t('channel.ownedBy', { name: c.ownerNickname })}</span>
                 <span
                   className={`ch-sub-btn${c.isMember ? ' on' : ''}`}
                   onClick={(e) => { e.stopPropagation(); if (!c.isMember) subscribe(c); else nav(`/channel/${c.id}`); }}
-                >{c.isMember ? '已订阅' : '订阅'}</span>
+                >{c.isMember ? t('channel.subscribed') : t('channel.subscribe')}</span>
               </div>
             </div>
           </div>

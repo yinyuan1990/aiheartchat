@@ -65,6 +65,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.rtc.CallManager
 import com.wh.peiwana.rtc.CallState
 import com.wh.peiwana.ui.*
@@ -82,6 +83,9 @@ private const val MAX_PICK = 9
 
 private data class MediaImage(val id: Long, val uri: Uri, val bucketId: String, val bucketName: String)
 private data class MediaAlbum(val id: String?, val name: String)
+
+/** id 为空的是「最近项目」（全部照片），名字跟随界面语言 */
+private fun MediaAlbum.label() = if (id == null) t("attach.recents") else name
 
 private enum class MediaAccess { Full, Partial, Denied }
 
@@ -111,7 +115,7 @@ private suspend fun queryImages(ctx: Context): List<MediaImage> = withContext(Di
             val iName = c.getColumnIndexOrThrow(MediaStore.Images.Media.BUCKET_DISPLAY_NAME)
             while (c.moveToNext()) {
                 val id = c.getLong(iId)
-                out += MediaImage(id, ContentUris.withAppendedId(base, id), c.getString(iBucket) ?: "", c.getString(iName) ?: "其他")
+                out += MediaImage(id, ContentUris.withAppendedId(base, id), c.getString(iBucket) ?: "", c.getString(iName) ?: t("attach.otherAlbum"))
             }
         }
     }
@@ -139,7 +143,7 @@ fun AttachSheet(
 
     var access by remember { mutableStateOf(mediaAccess(ctx)) }
     var images by remember { mutableStateOf<List<MediaImage>>(emptyList()) }
-    var album by remember { mutableStateOf(MediaAlbum(null, "最近项目")) }
+    var album by remember { mutableStateOf(MediaAlbum(null, "")) }
     var selection by remember { mutableStateOf(listOf<Uri>()) }
     var caption by remember { mutableStateOf("") }
     var askedMedia by remember { mutableStateOf(false) }
@@ -255,12 +259,12 @@ fun AttachSheet(
                 capturing = true
                 runCatching { takePicture.launch(uri) }.onFailure {
                     capturing = false
-                    Toast.makeText(ctx, "无法打开相机", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(ctx, t("attach.cameraFailed"), Toast.LENGTH_SHORT).show()
                 }
             }
             val camPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
                 camGranted = ok
-                if (ok) launchCamera() else Toast.makeText(ctx, "请在系统设置中允许使用相机", Toast.LENGTH_SHORT).show()
+                if (ok) launchCamera() else Toast.makeText(ctx, t("attach.cameraDenied"), Toast.LENGTH_SHORT).show()
             }
             val pickSystem = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
                 if (uris.isNotEmpty()) {
@@ -310,19 +314,19 @@ fun AttachSheet(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.noRippleClick { if (access != MediaAccess.Denied) menu = true },
                             ) {
-                                Text(album.name, color = TextMain, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                                Text(album.label(), color = TextMain, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                                 Spacer(Modifier.width(4.dp))
                                 ChevronDownIcon(TextSub, 12.dp)
                             }
                             val albums = remember(images) {
-                                listOf(MediaAlbum(null, "最近项目")) + images.groupBy { it.bucketId }
+                                listOf(MediaAlbum(null, "")) + images.groupBy { it.bucketId }
                                     .map { (id, list) -> MediaAlbum(id, list.first().bucketName) to list.size }
                                     .sortedByDescending { it.second }.map { it.first }
                             }
                             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                                 albums.forEach { a ->
                                     DropdownMenuItem(
-                                        text = { Text(a.name, fontSize = 14.sp, color = if (a.id == album.id) Accent else TextMain) },
+                                        text = { Text(a.label(), fontSize = 14.sp, color = if (a.id == album.id) Accent else TextMain) },
                                         onClick = { menu = false; album = a },
                                     )
                                 }
@@ -331,7 +335,7 @@ fun AttachSheet(
 
                         if (access == MediaAccess.Partial) {
                             Text(
-                                "管理", color = Accent, fontSize = 15.sp,
+                                t("attach.manage"), color = Accent, fontSize = 15.sp,
                                 modifier = Modifier.align(Alignment.CenterEnd).noRippleClick { mediaPerm.launch(mediaPermissions()) },
                             )
                         }
@@ -350,7 +354,7 @@ fun AttachSheet(
                     item(key = "camera") {
                         CameraCell(live = camGranted && !capturing && !inCall) {
                             when {
-                                inCall -> Toast.makeText(ctx, "通话中无法拍照", Toast.LENGTH_SHORT).show()
+                                inCall -> Toast.makeText(ctx, t("attach.inCallNoCamera"), Toast.LENGTH_SHORT).show()
                                 camGranted -> launchCamera()
                                 else -> camPerm.launch(Manifest.permission.CAMERA)
                             }
@@ -376,7 +380,7 @@ fun AttachSheet(
                             selection = when {
                                 idx >= 0 -> selection - m.uri
                                 selection.size >= MAX_PICK -> {
-                                    Toast.makeText(ctx, "最多选择 $MAX_PICK 张", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(ctx, t("attach.maxPick", "n" to MAX_PICK), Toast.LENGTH_SHORT).show()
                                     selection
                                 }
                                 else -> selection + m.uri
@@ -477,14 +481,14 @@ private fun PhotoCell(uri: Uri, order: Int?, onTap: () -> Unit) {
 private fun DeniedTip(onGrant: () -> Unit, onSystemPicker: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         ImageIcon(TextDim, 40.dp)
-        Text("允许访问相册后，可以在这里直接选图发送", color = TextSub, fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
+        Text(t("attach.deniedTip"), color = TextSub, fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
         Row(Modifier.padding(top = 14.dp)) {
             Box(Modifier.height(36.dp).clip(CircleShape).background(Accent).noRippleClick(onGrant).padding(horizontal = 18.dp), contentAlignment = Alignment.Center) {
-                Text("去授权", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(t("attach.grant"), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             }
             Spacer(Modifier.width(12.dp))
             Box(Modifier.height(36.dp).clip(CircleShape).background(Bg3).noRippleClick(onSystemPicker).padding(horizontal = 18.dp), contentAlignment = Alignment.Center) {
-                Text("从系统相册选择", color = TextMain, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(t("attach.systemPicker"), color = TextMain, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             }
         }
     }
@@ -495,13 +499,13 @@ private data class AttachTab(val label: String, val action: AttachAction?, val i
 @Composable
 private fun AttachTabBar(isSingle: Boolean, canVideoCall: Boolean, canTransfer: Boolean, onAction: (AttachAction) -> Unit) {
     val tabs = buildList {
-        add(AttachTab("相册", null) { ImageIcon(it, 24.dp) })
-        if (isSingle) add(AttachTab("礼物", AttachAction.Gift) { GiftIcon(it, 24.dp) })
-        if (canTransfer) add(AttachTab("转账", AttachAction.Transfer) { TransferIcon(it, 24.dp) })
-        add(AttachTab("位置", AttachAction.Location) { LocationArrowIcon(it, 22.dp) })
+        add(AttachTab(t("attach.album"), null) { ImageIcon(it, 24.dp) })
+        if (isSingle) add(AttachTab(t("attach.gift"), AttachAction.Gift) { GiftIcon(it, 24.dp) })
+        if (canTransfer) add(AttachTab(t("attach.transfer"), AttachAction.Transfer) { TransferIcon(it, 24.dp) })
+        add(AttachTab(t("attach.location"), AttachAction.Location) { LocationArrowIcon(it, 22.dp) })
         if (isSingle) {
-            add(AttachTab("语音通话", AttachAction.VoiceCall) { PhoneIcon(it, 22.dp) })
-            if (canVideoCall) add(AttachTab("视频通话", AttachAction.VideoCall) { VideoIcon(it, 24.dp) })
+            add(AttachTab(t("attach.voiceCall"), AttachAction.VoiceCall) { PhoneIcon(it, 22.dp) })
+            if (canVideoCall) add(AttachTab(t("attach.videoCall"), AttachAction.VideoCall) { VideoIcon(it, 24.dp) })
         }
     }
     Row(
@@ -511,18 +515,18 @@ private fun AttachTabBar(isSingle: Boolean, canVideoCall: Boolean, canTransfer: 
             .background(Color.White.copy(alpha = 0.97f))
             .padding(5.dp),
     ) {
-        tabs.forEach { t ->
-            val on = t.action == null
+        tabs.forEach { tb ->
+            val on = tb.action == null
             val tint = if (on) Accent else TextMain
             Column(
                 Modifier.width(64.dp).height(50.dp).clip(CircleShape)
                     .background(if (on) BubbleMine else Color.Transparent)
-                    .noRippleClick { t.action?.let(onAction) },
+                    .noRippleClick { tb.action?.let(onAction) },
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                t.icon(tint)
-                Text(t.label, color = tint, fontSize = 10.5.sp, fontWeight = FontWeight.Medium, maxLines = 1, modifier = Modifier.padding(top = 1.dp))
+                tb.icon(tint)
+                Text(tb.label, color = tint, fontSize = 10.5.sp, fontWeight = FontWeight.Medium, maxLines = 1, modifier = Modifier.padding(top = 1.dp))
             }
         }
     }
@@ -535,7 +539,7 @@ private fun CaptionBar(caption: String, onCaption: (String) -> Unit, count: Int,
             Modifier.weight(1f).height(44.dp).shadow(8.dp, CircleShape).clip(CircleShape).background(Color.White).padding(horizontal = 16.dp),
             contentAlignment = Alignment.CenterStart,
         ) {
-            if (caption.isEmpty()) Text("添加说明…", color = TextDim, fontSize = 15.sp)
+            if (caption.isEmpty()) Text(t("attach.captionHint"), color = TextDim, fontSize = 15.sp)
             BasicTextField(
                 value = caption, onValueChange = onCaption, singleLine = true,
                 textStyle = TextStyle(color = TextMain, fontSize = 15.sp),

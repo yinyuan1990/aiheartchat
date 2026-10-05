@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.ui.BackIcon
 import com.wh.peiwana.ui.noRippleClick
 import com.wh.peiwana.ui.theme.*
@@ -129,7 +130,7 @@ fun GameWebScreen(url: String, title: String, landscape: Boolean = false, onBack
                         modifier = Modifier.weight(1f),
                     )
                     Box(modifier = Modifier.size(56.dp, 40.dp).noRippleClick(onBack), contentAlignment = Alignment.Center) {
-                        Text(if (canGoBack) "关闭" else "", color = TextSub, fontSize = 14.sp)
+                        Text(if (canGoBack) t("common.close") else "", color = TextSub, fontSize = 14.sp)
                     }
                 }
             }

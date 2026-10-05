@@ -8,6 +8,7 @@ import { MusicSheet, NowPlayingBar } from './Music';
 import { ChatSearch, SearchExtra } from '../components/ChatSearch';
 import { looksLikeWalletPayment, parseGroupCode, parseInviteCode, QrScanner, ScanIcon } from '../components/QrScanner';
 import { CreateChannelSheet } from './Channel';
+import { t } from '../i18n';
 
 interface ConversationItem {
   id: string;
@@ -40,12 +41,12 @@ interface NoticeSummary {
 
 const NOTICE_META: Record<NoticeKind, { title: string; grad: string; icon: ReactNode }> = {
   comment: {
-    title: '评论通知',
+    title: t('chat.notice.comment'),
     grad: 'linear-gradient(135deg, #ff9a3c, #fe2c55)',
     icon: <svg width={26} height={26} viewBox="0 0 24 24" fill="#fff"><path d="M12 3C6.5 3 2 6.6 2 11c0 2.4 1.3 4.6 3.4 6.1L4.6 21l4.3-2.3c1 .2 2 .3 3.1.3 5.5 0 10-3.6 10-8s-4.5-8-10-8z" /></svg>,
   },
   task: {
-    title: '接单通知',
+    title: t('chat.notice.task'),
     grad: 'linear-gradient(135deg, #2fb5ff, #4c6fff)',
     icon: <svg width={24} height={24} viewBox="0 0 24 24" fill="#fff"><path d="M9 3h6a2 2 0 0 1 2 2v1h3a2 2 0 0 1 2 2v4H2V8a2 2 0 0 1 2-2h3V5a2 2 0 0 1 2-2zm0 3h6V5H9v1zM2 14h8v1a2 2 0 0 0 4 0v-1h8v5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-5z" /></svg>,
   },
@@ -62,17 +63,17 @@ function previewText(msg?: ConversationItem['lastMsg']): string {
   if (!msg) return '';
   switch (msg.type) {
     case 'text': return msg.content.slice(0, 30);
-    case 'image': return '[图片]';
-    case 'video': return '[视频]';
-    case 'sticker': return msg.content.includes('"mp4"') ? '[GIF]' : '[表情]';
-    case 'gift': return '[礼物]';
-    case 'audio': return '[语音]';
-    case 'location': return '[位置]';
+    case 'image': return t('msg.preview.image');
+    case 'video': return t('msg.preview.video');
+    case 'sticker': return msg.content.includes('"mp4"') ? '[GIF]' : t('msg.preview.sticker');
+    case 'gift': return t('msg.preview.gift');
+    case 'audio': return t('msg.preview.voice');
+    case 'location': return t('msg.preview.location');
     case 'transfer':
     case 'callout':
     case 'perp':
     case 'payreq': return chainCardPreview(msg.type, msg.content) ?? '';
-    default: return msg.type.startsWith('call') ? '[通话]' : '';
+    default: return msg.type.startsWith('call') ? t('msg.preview.call') : '';
   }
 }
 
@@ -103,14 +104,14 @@ function CreateGroupSheet({ onClose, onCreated }: { onClose: () => void; onCreat
     try {
       setAvatar(await uploadFile('image', file));
     } catch (e: any) {
-      alert(e.message || '上传失败');
+      alert(e.message || t('common.uploadFailed'));
     }
     setUploading(false);
   };
 
   const create = async () => {
     if (!name.trim()) {
-      alert('请填写群名');
+      alert(t('group.create.nameRequired'));
       return;
     }
     try {
@@ -124,7 +125,7 @@ function CreateGroupSheet({ onClose, onCreated }: { onClose: () => void; onCreat
   return (
     <div className="mask bottom" onClick={onClose}>
       <div className="sheet no-scrollbar" onClick={(e) => e.stopPropagation()}>
-        <div style={{ textAlign: 'center', marginBottom: 12, fontWeight: 600 }}>创建群聊</div>
+        <div style={{ textAlign: 'center', marginBottom: 12, fontWeight: 600 }}>{t('group.create.title')}</div>
         <div className="row" style={{ gap: 12 }}>
           {/* 群头像（可选，不设置默认用群主头像） */}
           <div
@@ -132,12 +133,12 @@ function CreateGroupSheet({ onClose, onCreated }: { onClose: () => void; onCreat
             onClick={() => fileRef.current?.click()}
             style={{ width: 56, height: 56, flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-input)', fontSize: 11, color: 'var(--text-3)' }}
           >
-            {avatar ? <img src={avatar} alt="" /> : uploading ? '…' : '头像'}
+            {avatar ? <img src={avatar} alt="" /> : uploading ? '…' : t('group.create.avatar')}
           </div>
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => pickAvatar(e.target.files?.[0])} />
-          <input className="input grow" style={{ marginBottom: 0 }} placeholder="群名称" value={name} maxLength={50} onChange={(e) => setName(e.target.value)} />
+          <input className="input grow" style={{ marginBottom: 0 }} placeholder={t('group.create.namePlaceholder')} value={name} maxLength={50} onChange={(e) => setName(e.target.value)} />
         </div>
-        <div className="muted" style={{ margin: '8px 0 10px' }}>群头像可选，不设置默认显示群主头像 · 邀请成员（可选）</div>
+        <div className="muted" style={{ margin: '8px 0 10px' }}>{t('group.create.hint')}</div>
         {people.map((p) => (
           <div key={p.id} className="row" style={{ padding: '8px 0', cursor: 'pointer' }} onClick={() => {
             const next = new Set(selected);
@@ -149,11 +150,11 @@ function CreateGroupSheet({ onClose, onCreated }: { onClose: () => void; onCreat
             </div>
             <div className="grow">{p.nickname}</div>
             <span style={{ color: selected.has(p.id) ? 'var(--accent)' : 'var(--text-3)' }}>
-              {selected.has(p.id) ? '已选' : '选择'}
+              {selected.has(p.id) ? t('common.selected') : t('common.select')}
             </span>
           </div>
         ))}
-        <button className="btn mt12" onClick={create}>创建（{selected.size} 人）</button>
+        <button className="btn mt12" onClick={create}>{t('group.create.submit', { n: selected.size })}</button>
       </div>
     </div>
   );
@@ -182,7 +183,7 @@ export function JoinGroupSheet({ onClose, onJoined, initialCode }: { onClose: ()
     }
     let password = '';
     if (g.hasPassword) {
-      const input = prompt(`「${g.name}」需要密码才能加入`);
+      const input = prompt(t('group.join.pwdPrompt', { name: g.name }));
       if (input == null) return;
       password = input.trim();
     }
@@ -191,14 +192,14 @@ export function JoinGroupSheet({ onClose, onJoined, initialCode }: { onClose: ()
       const r = await api<any>(`/im/group/${g.id}/join`, { method: 'POST', body: { password } });
       onJoined(r.conversationId, r.name, r.id);
     } catch (e: any) {
-      alert(e.message || '加入失败');
+      alert(e.message || t('group.join.failed'));
     }
     setBusy(false);
   };
 
   const check = async (raw?: string) => {
     const c = (raw ?? code).trim().toUpperCase();
-    if (c.length < 6) { alert('请输入完整邀请码'); return; }
+    if (c.length < 6) { alert(t('group.join.codeIncomplete')); return; }
     setBusy(true);
     try {
       const g = await api<any>(`/im/group/code/${c}`);
@@ -210,7 +211,7 @@ export function JoinGroupSheet({ onClose, onJoined, initialCode }: { onClose: ()
       setInfo(g);
       setPwd('');
     } catch (e: any) {
-      alert(e.message || '邀请码无效');
+      alert(e.message || t('group.join.codeInvalid'));
     }
     setBusy(false);
   };
@@ -220,13 +221,13 @@ export function JoinGroupSheet({ onClose, onJoined, initialCode }: { onClose: ()
       onJoined(info.conversationId, info.name, info.groupId);
       return;
     }
-    if (info.hasPassword && !pwd.trim()) { alert('请输入入群密码'); return; }
+    if (info.hasPassword && !pwd.trim()) { alert(t('group.join.pwdRequired')); return; }
     setBusy(true);
     try {
       const g = await api<any>('/im/group/join-by-code', { method: 'POST', body: { code: code.trim().toUpperCase(), password: pwd.trim() } });
       onJoined(g.conversationId, g.name, g.id);
     } catch (e: any) {
-      alert(e.message || '加入失败');
+      alert(e.message || t('group.join.failed'));
     }
     setBusy(false);
   };
@@ -234,36 +235,36 @@ export function JoinGroupSheet({ onClose, onJoined, initialCode }: { onClose: ()
   return (
     <div className="mask bottom" onClick={onClose}>
       <div className="sheet no-scrollbar" onClick={(e) => e.stopPropagation()}>
-        <div style={{ textAlign: 'center', marginBottom: 12, fontWeight: 600 }}>加入群聊</div>
+        <div style={{ textAlign: 'center', marginBottom: 12, fontWeight: 600 }}>{t('group.join.title')}</div>
         <input
           className="input"
-          placeholder="输入群邀请码"
+          placeholder={t('group.join.codePlaceholder')}
           value={code}
           maxLength={12}
           style={{ textTransform: 'uppercase', letterSpacing: 2 }}
           onChange={(e) => { setCode(e.target.value.toUpperCase()); setInfo(null); }}
         />
         {!info ? (
-          code.trim() && <button className="btn mt12" disabled={busy} onClick={() => check()}>{busy ? '查询中…' : '查找群聊'}</button>
+          code.trim() && <button className="btn mt12" disabled={busy} onClick={() => check()}>{busy ? t('group.join.searching') : t('group.join.find')}</button>
         ) : (
           <>
             <div className="card" style={{ marginTop: 12, textAlign: 'center' }}>
               <div style={{ fontSize: 16, fontWeight: 600 }}>{info.name}</div>
-              <div className="small" style={{ marginTop: 4 }}>共 {info.memberCount} 人{info.hasPassword ? ' · 需要密码' : ''}</div>
-              {info.isMember && <div className="small" style={{ color: 'var(--success, #0bd07d)', marginTop: 6 }}>你已在群里</div>}
+              <div className="small" style={{ marginTop: 4 }}>{t('group.memberCount', { n: info.memberCount })}{info.hasPassword ? ` · ${t('group.needPwd')}` : ''}</div>
+              {info.isMember && <div className="small" style={{ color: 'var(--success, #0bd07d)', marginTop: 6 }}>{t('group.join.alreadyIn')}</div>}
               {!info.isMember && info.hasPassword && (
-                <input className="input" type="password" placeholder="输入入群密码" value={pwd} maxLength={20} style={{ marginTop: 10 }} onChange={(e) => setPwd(e.target.value)} />
+                <input className="input" type="password" placeholder={t('group.join.pwdPlaceholder')} value={pwd} maxLength={20} style={{ marginTop: 10 }} onChange={(e) => setPwd(e.target.value)} />
               )}
             </div>
             <button className="btn mt12" disabled={busy} onClick={join}>
-              {info.isMember ? '进入群聊' : busy ? '加入中…' : '加入群聊'}
+              {info.isMember ? t('group.join.enter') : busy ? t('group.join.joining') : t('group.join.title')}
             </button>
           </>
         )}
 
         {/* 群列表：直接浏览加入 */}
-        <div className="small" style={{ margin: '14px 0 4px' }}>群列表</div>
-        {groups.length === 0 && <div className="empty" style={{ padding: 16 }}>暂无群聊</div>}
+        <div className="small" style={{ margin: '14px 0 4px' }}>{t('group.join.list')}</div>
+        {groups.length === 0 && <div className="empty" style={{ padding: 16 }}>{t('group.join.empty')}</div>}
         {groups.map((g) => (
           <div key={g.id} className="row" style={{ padding: '9px 0', borderBottom: '1px solid var(--line)' }}>
             <div className="avatar" style={{ width: 44, height: 44 }}>
@@ -271,7 +272,7 @@ export function JoinGroupSheet({ onClose, onJoined, initialCode }: { onClose: ()
             </div>
             <div className="grow" style={{ minWidth: 0 }}>
               <div className="ellipsis" style={{ fontSize: 15 }}>{g.name}</div>
-              <div className="small" style={{ marginTop: 2 }}>共 {g.memberCount} 人{g.hasPassword ? ' · 需要密码' : ''}</div>
+              <div className="small" style={{ marginTop: 2 }}>{t('group.memberCount', { n: g.memberCount })}{g.hasPassword ? ` · ${t('group.needPwd')}` : ''}</div>
             </div>
             <span
               onClick={() => !busy && joinById(g)}
@@ -280,7 +281,7 @@ export function JoinGroupSheet({ onClose, onJoined, initialCode }: { onClose: ()
                 background: g.isMember ? 'var(--bg-input)' : 'var(--accent-grad)',
                 color: g.isMember ? 'var(--text-2)' : '#fff',
               }}
-            >{g.isMember ? '进入' : '加入'}</span>
+            >{g.isMember ? t('group.join.open') : t('group.join.join')}</span>
           </div>
         ))}
       </div>
@@ -335,22 +336,22 @@ export function ScanFlow({ onClose, text: given }: { onClose: () => void; text?:
     if (g) return setJoinCode(g);
     if (wallet) {
       await navigator.clipboard?.writeText(text).catch(() => {});
-      alert(`这是链上钱包地址（已复制）：\n${text}\n\n网页版没有钱包，请在心之音 App 的钱包里转账。`);
-    } else alert('无法识别的二维码');
+      alert(t('scan.walletAddress', { text, app: t('app.name') }));
+    } else alert(t('scan.unknownQr'));
     onClose();
   };
 
   return (
     <>
-      {scanning && <QrScanner hint="对准邀请名片或群二维码" onResult={handle} onClose={onClose} />}
+      {scanning && <QrScanner hint={t('scan.hintInviteOrGroup')} onResult={handle} onClose={onClose} />}
       {joinCode && (
         <JoinGroupSheet
           initialCode={joinCode}
           onClose={onClose}
           onJoined={(convId, name, groupId) => {
             onClose();
-            if (openNativeChat(convId, 2, groupId, `${name}（群）`)) return;
-            nav(`/chatroom/${convId}`, { state: { title: `${name}（群）`, convType: 2, targetId: groupId } });
+            if (openNativeChat(convId, 2, groupId, t('chat.groupTitle', { name }))) return;
+            nav(`/chatroom/${convId}`, { state: { title: t('chat.groupTitle', { name }), convType: 2, targetId: groupId } });
           }}
         />
       )}
@@ -389,7 +390,7 @@ export function ChatListPage() {
       nav(`/channel/${c.targetId}`);
       return;
     }
-    const title = c.type === 2 ? `${c.title}（群）` : c.title;
+    const title = c.type === 2 ? t('chat.groupTitle', { name: c.title }) : c.title;
     if (openNativeChat(c.id, c.type, c.targetId, title)) return;
     const isBot = c.isBot ?? !!conv?.peer?.isBot;
     nav(`/chatroom/${c.id}`, { state: { title, convType: c.type, targetId: c.targetId, focusMsgId: c.focusMsgId, isBot } });
@@ -405,8 +406,8 @@ export function ChatListPage() {
   ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 
   const searchExtras: SearchExtra[] = [
-    { key: 'ai', title: 'AI 助手', subtitle: '有问必答，随便问', icon: AI_ICON, onOpen: () => nav('/ai-chat') },
-    { key: 'music', title: '音乐', subtitle: 'DJ 热曲 · 情感音乐，边聊边听', icon: MUSIC_ICON, onOpen: () => { setShowSearch(false); setShowMusic(true); } },
+    { key: 'ai', title: t('ai.title'), subtitle: t('ai.subtitle'), icon: AI_ICON, onOpen: () => nav('/ai-chat') },
+    { key: 'music', title: t('music.title'), subtitle: t('chat.music.subtitle'), icon: MUSIC_ICON, onOpen: () => { setShowSearch(false); setShowMusic(true); } },
     ...(['comment', 'task'] as NoticeKind[]).filter((k) => summary?.[k]?.last).map((k) => ({
       key: k,
       title: NOTICE_META[k].title,
@@ -445,9 +446,9 @@ export function ChatListPage() {
       <NowPlayingBar onOpen={() => setShowMusic(true)} />
       {/* 头部：标题 + 建群按钮 */}
       <div className="cl-head">
-        <span className="cl-title">消息</span>
+        <span className="cl-title">{t('tab.messages')}</span>
         <span style={{ position: 'relative', flexShrink: 0 }}>
-          <span className="cl-plus" onClick={() => setShowPlusMenu((v) => !v)} title="群聊">+</span>
+          <span className="cl-plus" onClick={() => setShowPlusMenu((v) => !v)} title={t('chat.groupChat')}>+</span>
           {showPlusMenu && (
             <>
               <div style={{ position: 'fixed', inset: 0, zIndex: 30 }} onClick={() => setShowPlusMenu(false)} />
@@ -456,11 +457,11 @@ export function ChatListPage() {
                 background: 'var(--bg-card)', border: '1px solid var(--line)', borderRadius: 10,
                 boxShadow: '0 8px 24px rgba(0,0,0,0.4)', overflow: 'hidden', width: 120,
               }}>
-                <div style={{ padding: '11px 16px', fontSize: 14, cursor: 'pointer' }} onClick={() => { setShowPlusMenu(false); setShowCreate(true); }}>创建群聊</div>
-                <div style={{ padding: '11px 16px', fontSize: 14, cursor: 'pointer', borderTop: '1px solid var(--line)' }} onClick={() => { setShowPlusMenu(false); setShowJoin(true); }}>加入群聊</div>
-                <div style={{ padding: '11px 16px', fontSize: 14, cursor: 'pointer', borderTop: '1px solid var(--line)' }} onClick={() => { setShowPlusMenu(false); setShowCreateChannel(true); }}>创建频道</div>
-                <div style={{ padding: '11px 16px', fontSize: 14, cursor: 'pointer', borderTop: '1px solid var(--line)' }} onClick={() => { setShowPlusMenu(false); nav('/channels'); }}>发现频道</div>
-                <div style={{ padding: '11px 16px', fontSize: 14, cursor: 'pointer', borderTop: '1px solid var(--line)' }} onClick={() => { setShowPlusMenu(false); nav('/bots'); }}>我的机器人</div>
+                <div style={{ padding: '11px 16px', fontSize: 14, cursor: 'pointer' }} onClick={() => { setShowPlusMenu(false); setShowCreate(true); }}>{t('group.create.title')}</div>
+                <div style={{ padding: '11px 16px', fontSize: 14, cursor: 'pointer', borderTop: '1px solid var(--line)' }} onClick={() => { setShowPlusMenu(false); setShowJoin(true); }}>{t('group.join.title')}</div>
+                <div style={{ padding: '11px 16px', fontSize: 14, cursor: 'pointer', borderTop: '1px solid var(--line)' }} onClick={() => { setShowPlusMenu(false); setShowCreateChannel(true); }}>{t('chat.plus.createChannel')}</div>
+                <div style={{ padding: '11px 16px', fontSize: 14, cursor: 'pointer', borderTop: '1px solid var(--line)' }} onClick={() => { setShowPlusMenu(false); nav('/channels'); }}>{t('chat.plus.discoverChannels')}</div>
+                <div style={{ padding: '11px 16px', fontSize: 14, cursor: 'pointer', borderTop: '1px solid var(--line)' }} onClick={() => { setShowPlusMenu(false); nav('/bots'); }}>{t('me.bots')}</div>
               </div>
             </>
           )}
@@ -470,15 +471,15 @@ export function ChatListPage() {
       {/* 搜索：点了弹全屏搜索框 */}
       <div className="cl-search" onClick={() => setShowSearch(true)}>
         <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-        搜索
-        <span className="cl-scan" title="扫一扫" onClick={(e) => { e.stopPropagation(); setShowScan(true); }}>
+        {t('common.search')}
+        <span className="cl-scan" title={t('me.scan')} onClick={(e) => { e.stopPropagation(); setShowScan(true); }}>
           <ScanIcon size={17} color="currentColor" />
         </span>
       </div>
 
       {/* AI 助手 / 音乐固定置顶，其余按最新消息时间排 */}
-      {fixedRow(AI_ICON, 'AI 助手', '有问必答，随便问', '免费', () => nav('/ai-chat'))}
-      {fixedRow(MUSIC_ICON, '音乐', 'DJ 热曲 · 情感音乐，边聊边听', '每日上新', () => setShowMusic(true))}
+      {fixedRow(AI_ICON, t('ai.title'), t('ai.subtitle'), t('ai.free'), () => nav('/ai-chat'))}
+      {fixedRow(MUSIC_ICON, t('music.title'), t('chat.music.subtitle'), t('chat.music.tag'), () => setShowMusic(true))}
 
       {entries.map((e) => {
         if (e.kind === 'notice') {
@@ -512,8 +513,8 @@ export function ChatListPage() {
               <div className="cl-row-top">
                 <span className="cl-row-title ellipsis">
                   {title}
-                  {c.type === 2 && <span className="cs-tag">{c.group?.kind === 2 ? '频道' : '群'}</span>}
-                  {c.peer?.isBot && <span className="bot-tag">机器人</span>}
+                  {c.type === 2 && <span className="cs-tag">{c.group?.kind === 2 ? t('chat.tagChannel') : t('chat.tagGroup')}</span>}
+                  {c.peer?.isBot && <span className="bot-tag">{t('chat.bot')}</span>}
                 </span>
                 <span className="small">{timeText(c.lastMsgAt)}</span>
               </div>
@@ -525,7 +526,7 @@ export function ChatListPage() {
           </div>
         );
       })}
-      {entries.length === 0 && <div className="empty">暂无消息{'\n'}去广场或大厅找人打招呼吧</div>}
+      {entries.length === 0 && <div className="empty">{t('chat.emptyWeb')}</div>}
 
       {showSearch && (
         <ChatSearch
@@ -552,8 +553,8 @@ export function ChatListPage() {
           onClose={() => setShowCreate(false)}
           onCreated={(convId, name, groupId) => {
             setShowCreate(false);
-            if (openNativeChat(convId, 2, groupId, `${name}（群）`)) return;
-            nav(`/chatroom/${convId}`, { state: { title: `${name}（群）`, convType: 2, targetId: groupId } });
+            if (openNativeChat(convId, 2, groupId, t('chat.groupTitle', { name }))) return;
+            nav(`/chatroom/${convId}`, { state: { title: t('chat.groupTitle', { name }), convType: 2, targetId: groupId } });
           }}
         />
       )}
@@ -572,8 +573,8 @@ export function ChatListPage() {
           onClose={() => setShowJoin(false)}
           onJoined={(convId, name, groupId) => {
             setShowJoin(false);
-            if (openNativeChat(convId, 2, groupId, `${name}（群）`)) return;
-            nav(`/chatroom/${convId}`, { state: { title: `${name}（群）`, convType: 2, targetId: groupId } });
+            if (openNativeChat(convId, 2, groupId, t('chat.groupTitle', { name }))) return;
+            nav(`/chatroom/${convId}`, { state: { title: t('chat.groupTitle', { name }), convType: 2, targetId: groupId } });
           }}
         />
       )}
@@ -594,13 +595,13 @@ export function NoticesPage() {
   return (
     <div className="app">
       <div className="navbar">
-        <span className="back" onClick={() => nav(-1)}>‹ 返回</span>
+        <span className="back" onClick={() => nav(-1)}>‹ {t('common.back')}</span>
         <span className="title">{NOTICE_META[kind].title}</span>
         <span style={{ width: 40 }} />
       </div>
       <div className="page no-scrollbar">
-        {list === null && <div className="empty">加载中…</div>}
-        {list?.length === 0 && <div className="empty">{kind === 'comment' ? '暂无评论消息' : '暂无接单消息'}</div>}
+        {list === null && <div className="empty">{t('common.loading')}</div>}
+        {list?.length === 0 && <div className="empty">{kind === 'comment' ? t('chat.notice.commentEmpty') : t('chat.notice.taskEmpty')}</div>}
         {(list ?? []).map((n) => (
           <div
             key={n.id}

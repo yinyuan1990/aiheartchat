@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.Api
 import com.wh.peiwana.net.HomeProfile
 import com.wh.peiwana.net.Moment
@@ -62,7 +63,7 @@ import kotlinx.coroutines.launch
 private val BusyOrange = Color(0xFFFFAA3C)
 
 private fun fmtDate(s: String): String =
-    if (s.length >= 10) "${s.substring(5, 7)}月${s.substring(8, 10)}日" else ""
+    if (s.length >= 10) t("userHome.monthDay", "m" to s.substring(5, 7), "d" to s.substring(8, 10)) else ""
 
 /** 他人主页：顶部大图 hero + 圆角资料卡（关于我/我的动态 tab）+ 底部操作栏 */
 @Composable
@@ -90,7 +91,7 @@ fun UserHomeScreen(
     val profile = p
     if (profile == null) {
         Box(Modifier.fillMaxSize().background(Bg), contentAlignment = Alignment.Center) {
-            Text("加载中…", color = TextDim, fontSize = 13.sp)
+            Text(t("common.loading"), color = TextDim, fontSize = 13.sp)
         }
         return
     }
@@ -162,13 +163,13 @@ fun UserHomeScreen(
                         if (isFemale && profile.answerRate != null && profile.answerRate >= 0) {
                             Row(verticalAlignment = Alignment.Bottom) {
                                 Text("${profile.answerRate}", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                                Text(" % 接通率", color = Color.White.copy(alpha = 0.75f), fontSize = 12.sp, modifier = Modifier.padding(bottom = 4.dp))
+                                Text(" " + t("userHome.answerRate"), color = Color.White.copy(alpha = 0.75f), fontSize = 12.sp, modifier = Modifier.padding(bottom = 4.dp))
                             }
                         }
                         if (isFemale && profile.videoPriceActualFen > 0) {
                             Row(verticalAlignment = Alignment.Bottom) {
                                 Text(fmtPoints(profile.videoPriceActualFen.toString()), color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                                Text(" 积分/分钟", color = Color.White.copy(alpha = 0.75f), fontSize = 12.sp, modifier = Modifier.padding(bottom = 4.dp))
+                                Text(" " + t("userHome.pointsPerMin"), color = Color.White.copy(alpha = 0.75f), fontSize = 12.sp, modifier = Modifier.padding(bottom = 4.dp))
                             }
                         }
                     }
@@ -187,9 +188,9 @@ fun UserHomeScreen(
                         Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        TabLabel("关于我", tab == 0) { tab = 0 }
+                        TabLabel(t("userHome.aboutMe"), tab == 0) { tab = 0 }
                         Spacer(Modifier.width(24.dp))
-                        TabLabel("我的动态", tab == 1) { tab = 1 }
+                        TabLabel(t("userHome.posts"), tab == 1) { tab = 1 }
                         Spacer(Modifier.weight(1f))
                         // 关注胶囊
                         Box(
@@ -210,7 +211,7 @@ fun UserHomeScreen(
                                 .padding(horizontal = 18.dp, vertical = 8.dp),
                         ) {
                             Text(
-                                if (following) "已关注" else "＋ 关注",
+                                if (following) t("common.followed") else t("userHome.followPlus"),
                                 color = if (following) TextSub else Color.White,
                                 fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
                             )
@@ -228,15 +229,15 @@ fun UserHomeScreen(
                             Text(profile.nickname, color = TextMain, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.width(8.dp))
                             val (stColor, stText) = when {
-                                profile.busy -> BusyOrange to "通话中"
-                                profile.online -> Success to "在线"
-                                else -> TextDim to "离线"
+                                profile.busy -> BusyOrange to t("common.inCall")
+                                profile.online -> Success to t("common.online")
+                                else -> TextDim to t("common.offline")
                             }
                             Text("● $stText", color = stColor, fontSize = 11.sp)
                         }
                         Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(
-                                "${if (profile.gender == 1) "男" else "女"} ${profile.age}",
+                                "${if (profile.gender == 1) t("me.male") else t("me.female")} ${profile.age}",
                                 color = if (profile.gender == 1) Color(0xFF6DB3FF) else Color(0xFFFF7A95), fontSize = 11.sp,
                                 modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Color.White.copy(alpha = 0.07f)).padding(horizontal = 6.dp, vertical = 2.dp),
                             )
@@ -252,8 +253,8 @@ fun UserHomeScreen(
                         }
                         // 数据行：关注 / 粉丝（评分独立展示在下方）
                         Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                            StatCell("${profile.following}", "关注", TextMain)
-                            StatCell("${profile.fans}", "粉丝", TextMain)
+                            StatCell("${profile.following}", t("me.following"), TextMain)
+                            StatCell("${profile.fans}", t("me.fans"), TextMain)
                         }
                         // ===== 评分：星级总分 + 五维度方格，最高维度渐变高亮 =====
                         val r = profile.rating
@@ -261,18 +262,18 @@ fun UserHomeScreen(
                             val star = r.avg / 20.0
                             val filled = Math.round(star).toInt().coerceIn(0, 5)
                             Row(Modifier.padding(top = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text("评分", color = TextMain, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                                Text(t("userHome.rating"), color = TextMain, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                                 Spacer(Modifier.width(8.dp))
                                 Text("★".repeat(filled) + "☆".repeat(5 - filled), color = Accent, fontSize = 13.sp)
                                 Spacer(Modifier.width(6.dp))
                                 Text("%.1f".format(star), color = Accent, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                                 Spacer(Modifier.width(6.dp))
-                                Text("${r.count}次评价", color = TextDim, fontSize = 11.sp)
+                                Text(t("userHome.ratingCount", "n" to r.count), color = TextDim, fontSize = 11.sp)
                             }
                             // 按分从高到低排成 3+2 方格，第一格（她最突出的）用渐变填充
                             val dims = listOf(
-                                "真实度" to r.photo, "配合度" to r.obedience,
-                                "腿型" to r.legs, "曲线" to r.chest, "肤质" to r.skin,
+                                t("userHome.ratingPhoto") to r.photo, t("userHome.ratingObedience") to r.obedience,
+                                t("userHome.ratingLegs") to r.legs, t("userHome.ratingChest") to r.chest, t("userHome.ratingSkin") to r.skin,
                             ).sortedByDescending { it.second }
                             dims.chunked(3).forEachIndexed { rowI, rowItems ->
                                 Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -306,7 +307,7 @@ fun UserHomeScreen(
                         // 照片墙（最多 8 张）
                         val wall = profile.albums.filter { it.type == 1 }
                         if (wall.isNotEmpty()) {
-                            Text("照片墙", color = TextMain, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 18.dp))
+                            Text(t("userHome.photoWall"), color = TextMain, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 18.dp))
                             wall.chunked(4).forEach { rowItems ->
                                 Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     rowItems.forEach { a ->
@@ -323,10 +324,10 @@ fun UserHomeScreen(
                             }
                         }
                         // 认证信息：简约行，无背景卡
-                        Text("认证信息", color = TextMain, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 18.dp))
+                        Text(t("userHome.certs"), color = TextMain, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 18.dp))
                         Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                            CertLine("平台认证", profile.isGuide)
-                            if (isFemale) CertLine("实名认证", profile.realnameVerified)
+                            CertLine(t("userHome.platformCert"), profile.isGuide)
+                            if (isFemale) CertLine(t("userHome.realnameCert"), profile.realnameVerified)
                         }
                         Spacer(Modifier.height(120.dp))
                     }
@@ -336,7 +337,7 @@ fun UserHomeScreen(
                 if (moments.isEmpty()) {
                     item {
                         Box(Modifier.fillMaxWidth().offset(y = (-20).dp).background(Bg).padding(40.dp), contentAlignment = Alignment.Center) {
-                            Text("暂无动态", color = TextDim, fontSize = 13.sp)
+                            Text(t("userHome.noPosts"), color = TextDim, fontSize = 13.sp)
                         }
                     }
                 }
@@ -396,7 +397,7 @@ fun UserHomeScreen(
                         Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text("♡ ${m.likeCount}", color = TextSub, fontSize = 13.sp)
                             Spacer(Modifier.width(18.dp))
-                            Text("评论 ${m.commentCount}", color = TextSub, fontSize = 13.sp)
+                            Text(t("userHome.comments") + " ${m.commentCount}", color = TextSub, fontSize = 13.sp)
                         }
                         Spacer(Modifier.height(14.dp))
                         Box(Modifier.fillMaxWidth().height(0.5.dp).background(Line))
@@ -419,12 +420,12 @@ fun UserHomeScreen(
                 Modifier.size(48.dp).clip(CircleShape).background(Bg2)
                     .noRippleClick { onOpenChat(profile.id, profile.nickname) },
                 contentAlignment = Alignment.Center,
-            ) { Text("聊天", color = TextMain, fontSize = 12.sp) }
+            ) { Text(t("userHome.chat"), color = TextMain, fontSize = 12.sp) }
             Box(
                 Modifier.size(48.dp).clip(CircleShape).background(Bg2)
                     .noRippleClick { showGift = true },
                 contentAlignment = Alignment.Center,
-            ) { Text("礼物", color = Accent2, fontSize = 12.sp) }
+            ) { Text(t("userHome.gift"), color = Accent2, fontSize = 12.sp) }
             if (canVideo) {
                 val busy = profile.busy
                 val online = profile.online
@@ -439,8 +440,8 @@ fun UserHomeScreen(
                         )
                         .noRippleClick {
                             when {
-                                busy -> android.widget.Toast.makeText(context, "对方正在通话中，请稍后再试", android.widget.Toast.LENGTH_SHORT).show()
-                                !online -> android.widget.Toast.makeText(context, "对方不在线", android.widget.Toast.LENGTH_SHORT).show()
+                                busy -> android.widget.Toast.makeText(context, t("common.peerBusy"), android.widget.Toast.LENGTH_SHORT).show()
+                                !online -> android.widget.Toast.makeText(context, t("common.peerOffline"), android.widget.Toast.LENGTH_SHORT).show()
                                 else -> {
                                     CallManager.attachContext(context)
                                     CallManager.startCall(context, profile.id, 2, profile.nickname, profile.avatar)
@@ -456,14 +457,14 @@ fun UserHomeScreen(
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            if (busy) "通话中" else "视频聊天",
+                            if (busy) t("common.inCall") else t("userHome.videoChat"),
                             color = mainColor, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                         )
                         if (!busy) {
                             when {
-                                !online -> Text("对方离线", color = TextDim, fontSize = 10.sp)
+                                !online -> Text(t("userHome.peerOffline"), color = TextDim, fontSize = 10.sp)
                                 profile.videoPriceActualFen > 0 -> Text(
-                                    "${fmtPoints(profile.videoPriceActualFen.toString())}积分/分钟",
+                                    t("userHome.pricePerMin", "price" to fmtPoints(profile.videoPriceActualFen.toString())),
                                     color = Color.White.copy(alpha = 0.85f), fontSize = 10.sp,
                                 )
                             }
@@ -476,7 +477,7 @@ fun UserHomeScreen(
                         .background(Brush.horizontalGradient(listOf(Accent, Accent2)))
                         .noRippleClick { onOpenChat(profile.id, profile.nickname) },
                     contentAlignment = Alignment.Center,
-                ) { Text("发消息", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
+                ) { Text(t("userHome.message"), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
             }
         }
     }
@@ -504,7 +505,7 @@ private fun CertLine(label: String, verified: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text("✓", color = if (verified) Accent else TextDim, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.width(5.dp))
-        Text(if (verified) label else "$label（未认证）", color = if (verified) TextMain else TextDim, fontSize = 13.sp)
+        Text(if (verified) label else t("userHome.unverified", "label" to label), color = if (verified) TextMain else TextDim, fontSize = 13.sp)
     }
 }
 

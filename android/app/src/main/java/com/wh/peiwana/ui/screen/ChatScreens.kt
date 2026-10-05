@@ -60,6 +60,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.*
 import com.wh.peiwana.ui.*
 import com.wh.peiwana.ui.theme.*
@@ -146,14 +147,14 @@ fun shouldShowTime(messages: List<MsgItem>, idx: Int): Boolean {
 internal fun preview(msg: LastMsg?): String = when {
     msg == null -> ""
     msg.type == "text" -> msg.content.take(30)
-    msg.type == "image" -> "[图片]"
-    msg.type == "video" -> "[视频]"
-    msg.type == "sticker" -> if (msg.content.contains("\"mp4\"")) "[GIF]" else "[表情]"
-    msg.type == "audio" -> "[语音]"
-    msg.type == "location" -> "[位置]"
-    msg.type == "gift" -> "[礼物]"
+    msg.type == "image" -> t("chat.preview.image")
+    msg.type == "video" -> t("chat.preview.video")
+    msg.type == "sticker" -> if (msg.content.contains("\"mp4\"")) "[GIF]" else t("chat.preview.sticker")
+    msg.type == "audio" -> t("chat.preview.voice")
+    msg.type == "location" -> t("chat.preview.location")
+    msg.type == "gift" -> t("chat.preview.gift")
     msg.type == "transfer" || msg.type == "callout" || msg.type == "payreq" || msg.type == "perp" -> chainCardPreview(msg.type, msg.content).orEmpty()
-    msg.type.startsWith("call") -> "[通话]"
+    msg.type.startsWith("call") -> t("chat.preview.call")
     else -> ""
 }
 
@@ -172,7 +173,7 @@ private data class NoticeEntry(val kind: String, val s: NoticeSummary) : MsgEntr
     override val key get() = "n-$kind"
 }
 
-private fun noticeTitle(kind: String) = if (kind == "task") "接单通知" else "评论通知"
+private fun noticeTitle(kind: String) = if (kind == "task") t("chat.notice.task") else t("chat.notice.comment")
 
 /** 评论 / 接单系统会话的圆形图标 */
 @Composable
@@ -313,8 +314,8 @@ fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, c
 
     if (showSearch) {
         val extras = buildList {
-            add(SearchExtra("ai", "AI 助手", "有问必答，随便问", icon = { AiIcon(it) }, onOpen = { showSearch = false; onOpenAi() }))
-            add(SearchExtra("music", "音乐", "DJ 热曲 · 情感音乐，边聊边听", icon = { MusicEntryIcon(it) }, onOpen = { showSearch = false; showMusic = true }))
+            add(SearchExtra("ai", t("ai.title"), t("ai.subtitle"), icon = { AiIcon(it) }, onOpen = { showSearch = false; onOpenAi() }))
+            add(SearchExtra("music", t("music.title"), t("music.subtitle"), icon = { MusicEntryIcon(it) }, onOpen = { showSearch = false; showMusic = true }))
             listOf("comment" to summary.comment, "task" to summary.task).filter { it.second.last != null }.forEach { (k, s) ->
                 add(SearchExtra(k, noticeTitle(k), s.last?.title ?: "", s.unread, icon = { NoticeIcon(k, it) }, onOpen = { showSearch = false; onOpenNotices(k) }))
             }
@@ -338,7 +339,7 @@ fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, c
         // 播放中：固定在消息页最上面
         NowPlayingBar(onOpen = { showMusic = true })
         Row(modifier = Modifier.fillMaxWidth().padding(16.dp, 12.dp, 16.dp, 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("消息", color = TextMain, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(t("tab.messages"), color = TextMain, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Box {
                 var showPlusMenu by remember { mutableStateOf(false) }
                 Box(modifier = Modifier.size(34.dp).clip(CircleShape).background(Bg3).clickable { showPlusMenu = true }, contentAlignment = Alignment.Center) { PlusIcon(TextMain, 18.dp) }
@@ -346,12 +347,12 @@ fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, c
                     expanded = showPlusMenu,
                     onDismiss = { showPlusMenu = false },
                     items = listOf(
-                        PlusMenuItem("创建群聊", { PersonPlusIcon(it, 19.dp) }, onCreateGroup),
-                        PlusMenuItem("加入群聊", { PeopleIcon(it, 19.dp) }, onJoinGroup),
-                        PlusMenuItem("创建频道", { BroadcastIcon(it, 19.dp) }, onCreateChannel),
-                        PlusMenuItem("发现频道", { com.wh.peiwana.ui.sticker.SearchIcon(it, 18.dp) }, onOpenChannels),
-                        PlusMenuItem("我的机器人", { Text("Bot", color = it, fontSize = 11.sp, fontWeight = FontWeight.Bold) }, onOpenBots),
-                        PlusMenuItem("扫一扫", { ScanIcon(it, 18.dp) }, onScan),
+                        PlusMenuItem(t("chat.createGroup"), { PersonPlusIcon(it, 19.dp) }, onCreateGroup),
+                        PlusMenuItem(t("chat.joinGroup"), { PeopleIcon(it, 19.dp) }, onJoinGroup),
+                        PlusMenuItem(t("channel.create"), { BroadcastIcon(it, 19.dp) }, onCreateChannel),
+                        PlusMenuItem(t("channel.discover"), { com.wh.peiwana.ui.sticker.SearchIcon(it, 18.dp) }, onOpenChannels),
+                        PlusMenuItem(t("me.bots"), { Text("Bot", color = it, fontSize = 11.sp, fontWeight = FontWeight.Bold) }, onOpenBots),
+                        PlusMenuItem(t("me.scan"), { ScanIcon(it, 18.dp) }, onScan),
                     ),
                 )
             }
@@ -364,7 +365,7 @@ fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, c
         ) {
             Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically) {
                 com.wh.peiwana.ui.sticker.SearchIcon(TextSub, 16.dp)
-                Text("搜索", color = TextSub, fontSize = 15.sp, modifier = Modifier.padding(start = 6.dp))
+                Text(t("common.search"), color = TextSub, fontSize = 15.sp, modifier = Modifier.padding(start = 6.dp))
             }
             Box(
                 Modifier.align(Alignment.CenterEnd).padding(end = 4.dp).size(28.dp).clip(androidx.compose.foundation.shape.CircleShape).clickable(onClick = onScan),
@@ -385,15 +386,15 @@ fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, c
             item("ai") {
                 MsgListRow(
                     onClick = onOpenAi, leading = { AiIcon(54) },
-                    title = { Text("AI 助手", color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.Medium); tag("免费") },
-                    end = "", sub = "有问必答，随便问", badge = {},
+                    title = { Text(t("ai.title"), color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.Medium); tag(t("ai.free")) },
+                    end = "", sub = t("ai.subtitle"), badge = {},
                 )
             }
             item("music") {
                 MsgListRow(
                     onClick = { showMusic = true }, leading = { MusicEntryIcon(54) },
-                    title = { Text("音乐", color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.Medium); tag("每日上新") },
-                    end = "", sub = "DJ 热曲 · 情感音乐，边聊边听", badge = {},
+                    title = { Text(t("music.title"), color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.Medium); tag(t("music.dailyNew")) },
+                    end = "", sub = t("music.subtitle"), badge = {},
                 )
             }
             items(entries, key = { it.key }) { e ->
@@ -407,7 +408,7 @@ fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, c
                     is ConvEntry -> {
                         val c = e.c
                         val name = if (c.type == 1) c.peer?.nickname ?: "" else c.group?.name ?: ""
-                        val title = if (c.type == 1) name else "$name（群）"
+                        val title = if (c.type == 1) name else t("chat.groupTitle", "name" to name)
                         val avatar = if (c.type == 1) c.peer?.avatar else c.group?.avatar
                         val target = if (c.type == 1) c.peer?.id else c.group?.id
                         MsgListRow(
@@ -415,7 +416,7 @@ fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, c
                             title = {
                                 Text(name, color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                                 if (c.type == 2) Text(
-                                    if (c.group?.kind == 2) "频道" else "群", color = TextSub, fontSize = 10.sp,
+                                    if (c.group?.kind == 2) t("channel.title") else t("chat.groupTag"), color = TextSub, fontSize = 10.sp,
                                     modifier = Modifier.padding(start = 6.dp).clip(RoundedCornerShape(4.dp)).background(Bg3).padding(horizontal = 4.dp),
                                 )
                                 if (c.peer?.isBot == true) BotTag()
@@ -428,7 +429,7 @@ fun MessagesScreen(modifier: Modifier = Modifier, onOpenChat: (convId: String, c
             }
             if (entries.isEmpty()) item("empty") {
                 Box(Modifier.fillMaxWidth().padding(vertical = 70.dp), contentAlignment = Alignment.Center) {
-                    Text("暂无消息\n去广场或大厅找人打招呼", color = TextSub, fontSize = 14.sp, lineHeight = 26.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    Text(t("chat.empty"), color = TextSub, fontSize = 14.sp, lineHeight = 26.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 }
             }
         }
@@ -447,8 +448,8 @@ fun NoticesScreen(kind: String, onBack: () -> Unit, onOpenMoment: (String) -> Un
         NavBar(noticeTitle(kind), onBack)
         val items = list
         when {
-            items == null -> Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { Text("加载中…", color = TextDim, fontSize = 13.sp) }
-            items.isEmpty() -> EmptyHint(if (kind == "task") "暂无接单消息" else "暂无评论消息")
+            items == null -> Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { Text(t("common.loading"), color = TextDim, fontSize = 13.sp) }
+            items.isEmpty() -> EmptyHint(if (kind == "task") t("chat.notice.taskEmpty") else t("chat.notice.commentEmpty"))
             else -> LazyColumn {
                 items(items, key = { it.id }) { n ->
                     Column(modifier = Modifier.fillMaxWidth().clickable { if (kind == "task") onOpenTask(n.refId) else onOpenMoment(n.refId) }.padding(16.dp, 12.dp)) {
@@ -538,10 +539,10 @@ fun ChatRoomScreen(
     fun startTransfer() {
         val open = onOpenWallet ?: return
         scope.launch {
-            val a = runCatching { Api.getObj<ChainAddr>("/user/$targetId/chain-address") }.getOrElse { toast(it.message ?: "没取到对方的收款地址"); return@launch }
+            val a = runCatching { Api.getObj<ChainAddr>("/user/$targetId/chain-address") }.getOrElse { toast(it.message ?: t("chat.transfer.noAddr")); return@launch }
             val opts = a.options()
             when (opts.size) {
-                0 -> toast("对方还没在钱包里打开「允许好友给我转账」")
+                0 -> toast(t("chat.transfer.disabled"))
                 1 -> open(transferPath(opts[0].second, opts[0].first, title))
                 else -> transferAddr = a
             }
@@ -550,11 +551,11 @@ fun ChatRoomScreen(
     LaunchedEffect(walletResult) {
         val r = walletResult ?: return@LaunchedEffect
         onWalletResultUsed()
-        toast("转账成功，正在核对链上交易…")
+        toast(t("chat.transfer.verifying"))
         // 付收款消息（带 req）由服务端决定卡片发到哪：群里回到群，频道里私聊发给收款人
         runCatching { postTransferCard(if (convType == 1) targetId else "", r) }
             .onSuccess { m -> if (m != null && m.conversationId == convId && messages.none { it.id == m.id }) messages = messages + m }
-            .onFailure { toast("转账卡片没发出去：${it.message ?: "请稍后再试"}（钱已经转了，可以在钱包里查）") }
+            .onFailure { toast(t("chat.transfer.cardFailed", "msg" to (it.message ?: t("chat.tryLater")))) }
     }
 
     /** 发消息并乐观显示；正在回复的话只挂在这一条上 */
@@ -659,7 +660,7 @@ fun ChatRoomScreen(
                 }
                 "error" -> {
                     // 发送被后端拒绝（如积分不足）：提示并撤回乐观显示的消息
-                    val msg = frame["msg"]?.jsonPrimitive?.content ?: "发送失败"
+                    val msg = frame["msg"]?.jsonPrimitive?.content ?: t("chat.sendFailed")
                     android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_SHORT).show()
                     val tid = frame["tempId"]?.jsonPrimitive?.content
                     (if (tid != null) messages.firstOrNull { it.id == tid } else messages.lastOrNull { it.pending })?.let { last -> messages = messages - last }
@@ -709,7 +710,7 @@ fun ChatRoomScreen(
             return@launch
         }
         val list = runCatching { Api.getList<MsgItem>("/im/messages?conversationId=$convId&aroundId=$id") }.getOrDefault(emptyList())
-        if (list.none { it.id == id }) { toast("原消息已不存在"); return@launch }
+        if (list.none { it.id == id }) { toast(t("chat.originalGone")); return@launch }
         // 交给 LaunchedEffect(messages.size) 定位（列表条数没变时它不会触发，就地滚）
         focusTarget = id
         val sameSize = list.size == messages.size
@@ -727,13 +728,13 @@ fun ChatRoomScreen(
             val r = Api.request("/im/messages/$id/react", "POST", buildJsonObject { put("emoji", JsonPrimitive(emoji)) })
             val rs = WsClient.json.decodeFromJsonElement(ListSerializer(MsgReaction.serializer()), r!!.jsonObject["reactions"]!!)
             messages = messages.map { if (it.id == id) it.copy(reactions = rs) else it }
-        }.onFailure { toast(it.message ?: "操作失败") }
+        }.onFailure { toast(it.message ?: t("common.failed")) }
     }
 
     fun togglePin(id: String, pin: Boolean) = scope.launch {
         runCatching { Api.request("/im/messages/$id/pin", "POST", buildJsonObject { put("pin", JsonPrimitive(pin)) }) }
-            .onSuccess { loadPins(); toast(if (pin) "已置顶" else "已取消置顶") }
-            .onFailure { toast(it.message ?: "操作失败") }
+            .onSuccess { loadPins(); toast(if (pin) t("chat.pinned") else t("chat.unpinned")) }
+            .onFailure { toast(it.message ?: t("common.failed")) }
     }
 
     fun doDelete(ids: List<String>, forAll: Boolean) = scope.launch {
@@ -742,7 +743,7 @@ fun ChatRoomScreen(
                 put("conversationId", JsonPrimitive(convId)); put("ids", jsonIds(ids)); put("forAll", JsonPrimitive(forAll))
             })
         }.onSuccess { selecting = null; removeMsgs(ids) }
-            .onFailure { toast(it.message ?: "删除失败") }
+            .onFailure { toast(it.message ?: t("chat.deleteFailed")) }
     }
 
     /** 能否「为双方删除」：自己的或群管理员，礼物不行 */
@@ -778,7 +779,7 @@ fun ChatRoomScreen(
         }
         val text = caption.trim()
         if (text.isNotEmpty()) sendMsg("text", text)
-        if (failed > 0) android.widget.Toast.makeText(ctx, "$failed 张图片发送失败", android.widget.Toast.LENGTH_SHORT).show()
+        if (failed > 0) android.widget.Toast.makeText(ctx, t("chat.imagesFailed", "n" to failed), android.widget.Toast.LENGTH_SHORT).show()
     }
 
     fun startRec() {
@@ -863,15 +864,15 @@ fun ChatRoomScreen(
             androidx.compose.material3.AlertDialog(
                 onDismissRequest = { showClearConfirm = false },
                 containerColor = Bg2,
-                title = { Text("清空聊天记录", color = TextMain) },
+                title = { Text(t("chat.menu.clear"), color = TextMain) },
                 text = {
                     Text(
-                        if (convType == 1) "清空后双方的聊天记录都将删除，不可恢复" else "将删除我在本群发送的全部消息，所有成员都将不再看到",
+                        if (convType == 1) t("chat.clearSingleConfirm") else t("chat.clearGroupConfirm"),
                         color = TextSub,
                     )
                 },
                 confirmButton = {
-                    Text("清空", color = Danger, modifier = Modifier.noRippleClick {
+                    Text(t("chat.clear"), color = Danger, modifier = Modifier.noRippleClick {
                         showClearConfirm = false
                         scope.launch {
                             runCatching { Api.request("/im/conversations/$convId/clear", "POST") }
@@ -879,7 +880,7 @@ fun ChatRoomScreen(
                         }
                     }.padding(8.dp))
                 },
-                dismissButton = { Text("取消", color = TextSub, modifier = Modifier.noRippleClick { showClearConfirm = false }.padding(8.dp)) },
+                dismissButton = { Text(t("common.cancel"), color = TextSub, modifier = Modifier.noRippleClick { showClearConfirm = false }.padding(8.dp)) },
             )
         }
         val botFresh = bot != null && loaded && messages.isEmpty()
@@ -949,22 +950,22 @@ fun ChatRoomScreen(
         if (sel != null) {
             val chosen = messages.filter { it.id in sel }
             Row(Modifier.fillMaxWidth().background(Bg2).navigationBarsPadding().padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("取消", color = TextMain, fontSize = 15.sp, modifier = Modifier.noRippleClick { selecting = null })
-                Text("已选 ${sel.size} 条", color = TextSub, fontSize = 13.sp, modifier = Modifier.weight(1f).padding(start = 14.dp))
+                Text(t("common.cancel"), color = TextMain, fontSize = 15.sp, modifier = Modifier.noRippleClick { selecting = null })
+                Text(t("chat.selectedN", "n" to sel.size), color = TextSub, fontSize = 13.sp, modifier = Modifier.weight(1f).padding(start = 14.dp))
                 val on = chosen.isNotEmpty()
-                Text("拷贝", color = if (on) TextMain else TextDim, fontSize = 15.sp, modifier = Modifier.noRippleClick {
+                Text(t("chat.copySelected"), color = if (on) TextMain else TextDim, fontSize = 15.sp, modifier = Modifier.noRippleClick {
                     val texts = chosen.filter { it.type == "text" }
-                    if (texts.isEmpty()) toast("选中的消息里没有文字")
+                    if (texts.isEmpty()) toast(t("chat.noTextSelected"))
                     else { copyToClipboard(ctx, texts.joinToString("\n") { if (convType == 2) "${it.senderNickname}：${it.content}" else it.content }); selecting = null }
                 })
                 Spacer(Modifier.width(18.dp))
-                Text("转发", color = if (on) TextMain else TextDim, fontSize = 15.sp, modifier = Modifier.noRippleClick {
+                Text(t("chat.forward"), color = if (on) TextMain else TextDim, fontSize = 15.sp, modifier = Modifier.noRippleClick {
                     val ok = chosen.filter { it.type in FORWARDABLE }.map { it.id }
-                    if (ok.isEmpty()) toast("礼物、通话记录不能转发")
-                    else { if (ok.size < chosen.size) toast("礼物、通话记录不会被转发"); forwardIds = ok }
+                    if (ok.isEmpty()) toast(t("chat.cantForward"))
+                    else { if (ok.size < chosen.size) toast(t("chat.partForward")); forwardIds = ok }
                 })
                 Spacer(Modifier.width(18.dp))
-                Text("删除", color = if (on) Danger else TextDim, fontSize = 15.sp, modifier = Modifier.noRippleClick { if (on) deleteIds = chosen.map { it.id } })
+                Text(t("common.delete"), color = if (on) Danger else TextDim, fontSize = 15.sp, modifier = Modifier.noRippleClick { if (on) deleteIds = chosen.map { it.id } })
             }
         } else
         // 和机器人的空会话：底部是「开始」按钮（发 /start），同 Telegram
@@ -974,7 +975,7 @@ fun ChatRoomScreen(
                     sendMsg("text", "/start")
                 }.padding(vertical = 16.dp),
                 contentAlignment = Alignment.Center,
-            ) { Text("开始", color = Accent, fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
+            ) { Text(t("chat.botStart"), color = Accent, fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
         } else
         // 微信式底部区（随键盘上移）：左语音切换 / 输入框 / +面板 / 发送
         Column(modifier = Modifier.background(Bg2).imePadding().navigationBarsPadding()) {
@@ -1027,16 +1028,16 @@ fun ChatRoomScreen(
                             val trans = rememberInfiniteTransition(label = "rec")
                             val a by trans.animateFloat(0.35f, 1f, infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "a")
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                WaveformIcon(Color.White.copy(alpha = a), 16.dp); Spacer(Modifier.width(8.dp)); Text("松开发送", color = Color.White, fontSize = 14.sp)
+                                WaveformIcon(Color.White.copy(alpha = a), 16.dp); Spacer(Modifier.width(8.dp)); Text(t("chat.releaseToSend"), color = Color.White, fontSize = 14.sp)
                             }
-                        } else Text("按住 说话", color = TextMain, fontSize = 14.sp)
+                        } else Text(t("chat.holdToTalk"), color = TextMain, fontSize = 14.sp)
                     }
                 } else {
                     Box(
                         modifier = Modifier.weight(1f).heightIn(min = 40.dp).clip(RoundedCornerShape(20.dp)).background(Bg3).padding(horizontal = 14.dp, vertical = 9.dp),
                         contentAlignment = Alignment.CenterStart,
                     ) {
-                        if (input.isEmpty()) Text("发消息", color = TextDim, fontSize = 15.sp)
+                        if (input.isEmpty()) Text(t("chat.inputHint"), color = TextDim, fontSize = 15.sp)
                         androidx.compose.foundation.text.BasicTextField(
                             value = input, onValueChange = { input = it },
                             textStyle = androidx.compose.ui.text.TextStyle(color = TextMain, fontSize = 15.sp),
@@ -1058,7 +1059,7 @@ fun ChatRoomScreen(
                     Spacer(Modifier.width(8.dp))
                     Box(modifier = Modifier.height(40.dp).clip(RoundedCornerShape(20.dp)).background(Accent).noRippleClick {
                         sendMsg("text", input.trim()); input = ""
-                    }.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) { Text("发送", color = Color.White, fontSize = 14.sp) }
+                    }.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) { Text(t("common.send"), color = Color.White, fontSize = 14.sp) }
                 }
             }
 
@@ -1158,7 +1159,7 @@ private fun Bubble(
                 Text(m.senderNickname, color = TextSub, fontSize = 11.sp)
                 if (m.senderIsBot && convType == 2) BotTag()
             }
-            if (m.fwdFrom != null) Text("转发自 ${m.fwdFrom}", color = BotBlue, fontSize = 11.sp, modifier = Modifier.padding(bottom = 2.dp, start = 4.dp, end = 4.dp))
+            if (m.fwdFrom != null) Text(t("chat.forwardedFrom", "name" to m.fwdFrom), color = BotBlue, fontSize = 11.sp, modifier = Modifier.padding(bottom = 2.dp, start = 4.dp, end = 4.dp))
             m.replyTo?.let { r -> ReplyQuote(r) { onJump(r.id) } }
             when (m.type) {
                 "image" -> AsyncImage(
@@ -1171,7 +1172,7 @@ private fun Bubble(
                     val p = remember(m.content) { StickerStore.parse(m.content) }
                     // GIF 比贴纸大一号、带圆角
                     if (p != null) StickerImage(p, if (p.isGif) 220.dp else 140.dp)
-                    else Box(modifier = Modifier.clip(bubbleShape).background(bg).padding(horizontal = 14.dp, vertical = 10.dp)) { Text("[表情]", color = fg, fontSize = 15.sp) }
+                    else Box(modifier = Modifier.clip(bubbleShape).background(bg).padding(horizontal = 14.dp, vertical = 10.dp)) { Text(t("chat.preview.sticker"), color = fg, fontSize = 15.sp) }
                 }
                 "audio" -> {
                     val obj = runCatching { WsClient.json.parseToJsonElement(m.content).jsonObject }.getOrNull()
@@ -1197,14 +1198,14 @@ private fun Bubble(
                     }
                 }
                 "location" -> {
-                    val name = runCatching { WsClient.json.parseToJsonElement(m.content).jsonObject["name"]?.jsonPrimitive?.content }.getOrNull() ?: "位置"
+                    val name = runCatching { WsClient.json.parseToJsonElement(m.content).jsonObject["name"]?.jsonPrimitive?.content }.getOrNull() ?: t("chat.location")
                     Row(modifier = Modifier.clip(bubbleShape).background(bg).padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                         PinIcon(fg, 16.dp); Spacer(Modifier.width(8.dp)); Text(name, color = fg, fontSize = 14.sp)
                     }
                 }
                 "gift" -> {
                     val obj = runCatching { WsClient.json.parseToJsonElement(m.content).jsonObject }.getOrNull()
-                    val giftName = obj?.get("name")?.jsonPrimitive?.content ?: "礼物"
+                    val giftName = obj?.get("name")?.jsonPrimitive?.content ?: t("chat.giftDefault")
                     val giftIcon = obj?.get("icon")?.jsonPrimitive?.content ?: ""
                     val giftPrice = obj?.get("price")?.jsonPrimitive?.content ?: "0"
                     Row(
@@ -1218,9 +1219,9 @@ private fun Bubble(
                         )
                         Spacer(Modifier.width(10.dp))
                         Column {
-                            Text("${if (mine) "送出" else "收到"}「$giftName」", color = fg, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                            Text(if (mine) t("chat.gift.sent", "name" to giftName) else t("chat.gift.received", "name" to giftName), color = fg, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                             Spacer(Modifier.height(3.dp))
-                            Text("${fmtPoints(giftPrice)} 积分", color = Warn, fontSize = 12.sp)
+                            Text(t("chat.gift.points", "n" to fmtPoints(giftPrice)), color = Warn, fontSize = 12.sp)
                         }
                     }
                 }
@@ -1233,11 +1234,11 @@ private fun Bubble(
                     val callType = obj?.get("callType")?.jsonPrimitive?.content?.toIntOrNull() ?: 1
                     val result = obj?.get("result")?.jsonPrimitive?.content ?: "end"
                     val dur = obj?.get("duration")?.jsonPrimitive?.content?.toIntOrNull() ?: 0
-                    val label = if (callType == 2) "视频通话" else "语音通话"
+                    val label = if (callType == 2) t("chat.call.video") else t("chat.call.voice")
                     val text = when (result) {
                         "end" -> "$label %02d:%02d".format(dur / 60, dur % 60)
-                        "reject" -> "$label 已拒绝"
-                        else -> "$label 已取消"
+                        "reject" -> t("chat.call.rejected", "label" to label)
+                        else -> t("chat.call.canceled", "label" to label)
                     }
                     Row(modifier = Modifier.clip(bubbleShape).background(bg).padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (callType == 2) VideoIcon(fg, 16.dp) else MicIcon(fg, 16.dp)
@@ -1271,7 +1272,7 @@ fun GiftSheet(toUserId: String, onClose: () -> Unit) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Spacer(Modifier.size(28.dp))
-                Text("送礼物", color = TextMain, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.weight(1f))
+                Text(t("chat.gift.title"), color = TextMain, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.weight(1f))
                 Box(modifier = Modifier.size(28.dp).clip(RoundedCornerShape(14.dp)).background(Bg3).noRippleClick(onClose), contentAlignment = Alignment.Center) { Text("×", color = TextSub, fontSize = 18.sp) }
             }
             LazyVerticalGrid(columns = GridCells.Fixed(4), modifier = Modifier.height(220.dp).padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1285,21 +1286,21 @@ fun GiftSheet(toUserId: String, onClose: () -> Unit) {
             }
             if (toast.isNotEmpty()) Text(toast, color = if (toastOk) Warn else Danger, fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("余额 ${fmtPoints(balance)} 积分", color = TextSub, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                Text(t("chat.gift.balance", "n" to fmtPoints(balance)), color = TextSub, fontSize = 13.sp, modifier = Modifier.weight(1f))
                 Box(modifier = Modifier.clip(RoundedCornerShape(15.dp)).background(Accent).clickable {
-                    val gid = selected ?: run { toastOk = false; toast = "请先选择礼物"; return@clickable }
+                    val gid = selected ?: run { toastOk = false; toast = t("chat.gift.pick"); return@clickable }
                     scope.launch {
                         runCatching { Api.request("/gifts/send", "POST", buildJsonObject { put("toUserId", JsonPrimitive(toUserId)); put("giftId", JsonPrimitive(gid)) }) }
                             .onSuccess {
                                 // 送出后不关面板，刷新余额，可连续赠送
-                                toastOk = true; toast = "已送出"
+                                toastOk = true; toast = t("chat.gift.sentOk")
                                 balance = runCatching { Api.getObj<WalletData>("/wallet").balance }.getOrDefault(balance)
                                 kotlinx.coroutines.delay(1500)
                                 if (toastOk) toast = ""
                             }
-                            .onFailure { toastOk = false; toast = it.message ?: "赠送失败" }
+                            .onFailure { toastOk = false; toast = it.message ?: t("chat.gift.failed") }
                     }
-                }.padding(horizontal = 16.dp, vertical = 8.dp)) { Text("赠送", color = Color.White, fontSize = 13.sp) }
+                }.padding(horizontal = 16.dp, vertical = 8.dp)) { Text(t("chat.gift.send"), color = Color.White, fontSize = 13.sp) }
             }
             Spacer(Modifier.height(20.dp))
         }

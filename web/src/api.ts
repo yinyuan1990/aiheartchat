@@ -1,4 +1,4 @@
-import { lang } from './i18n';
+import { lang, localizeServer, t } from './i18n';
 
 // http 环境（非安全上下文）没有 crypto.randomUUID，做降级
 function randomId(): string {
@@ -48,9 +48,9 @@ export async function api<T = any>(path: string, options: { method?: string; bod
       setToken(null);
       location.hash = '#/enter';
     }
-    throw new Error(json.msg || '请求失败');
+    throw new Error(json.msg || t('common.requestFailed'));
   }
-  return json.data as T;
+  return localizeServer(json.data as T);
 }
 
 /** 分 → 积分 显示（100 分 = 1 积分），去掉多余的 0 */
@@ -74,7 +74,7 @@ export async function uploadFile(kind: 'image' | 'video', file: File): Promise<s
     body: form,
   });
   const json = await res.json();
-  if (json.code !== 0) throw new Error(json.msg || '上传失败');
+  if (json.code !== 0) throw new Error(json.msg || t('common.uploadFailed'));
   return json.data.url as string;
 }
 

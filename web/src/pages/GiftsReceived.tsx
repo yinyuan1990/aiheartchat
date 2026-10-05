@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, fmtPoints } from '../api';
+import { t } from '../i18n';
 
 interface GiftWallItem {
   id: number;
@@ -24,12 +25,12 @@ export function GiftsReceivedPage() {
   return (
     <div className="app">
       <div className="navbar">
-        <span className="back" onClick={() => nav(-1)}>‹ 返回</span>
-        <span className="title">礼物墙</span>
+        <span className="back" onClick={() => nav(-1)}>‹ {t('common.back')}</span>
+        <span className="title">{t('gifts.title')}</span>
         <span style={{ width: 40 }} />
       </div>
       <div className="page no-scrollbar page-pad">
-        <div className="muted" style={{ marginBottom: 14 }}>共收到 {total} 个礼物</div>
+        <div className="muted" style={{ marginBottom: 14 }}>{t('gifts.totalReceived', { n: total })}</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
           {items.map((g) => (
             <div
@@ -41,7 +42,7 @@ export function GiftsReceivedPage() {
             >
               <img src={g.icon} style={{ width: 52, height: 52, objectFit: 'contain' }} alt="" />
               <div style={{ fontSize: 13, marginTop: 6 }}>{g.name}</div>
-              <div className="small" style={{ marginTop: 2 }}>{fmtPoints(g.price)} 积分</div>
+              <div className="small" style={{ marginTop: 2 }}>{t('gifts.pricePoints', { n: fmtPoints(g.price) })}</div>
               <div style={{ marginTop: 6, fontSize: 13, fontWeight: 600, color: g.count > 0 ? 'var(--accent)' : 'var(--text-3)' }}>
                 × {g.count}
               </div>

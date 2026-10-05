@@ -1,4 +1,5 @@
 import { ReactNode, useEffect, useRef } from 'react';
+import { t } from '../i18n';
 
 const THRESHOLD = 56;
 const MAX_PULL = 110;
@@ -50,7 +51,7 @@ export function PullToRefresh({ onRefresh, children }: { onRefresh: () => Promis
       // 阻止 WebView 自己的回弹/过度滚动效果
       if (e.cancelable) e.preventDefault();
       dist = Math.min(MAX_PULL, dy * 0.55);
-      setBar(dist, dist >= THRESHOLD ? '松开刷新' : '下拉刷新', false);
+      setBar(dist, dist >= THRESHOLD ? t('ptr.release') : t('ptr.pull'), false);
     };
     const onEnd = async () => {
       if (!pulling) return;
@@ -60,7 +61,7 @@ export function PullToRefresh({ onRefresh, children }: { onRefresh: () => Promis
         return;
       }
       refreshing = true;
-      setBar(THRESHOLD, '刷新中…', true);
+      setBar(THRESHOLD, t('ptr.refreshing'), true);
       try {
         await refreshFn.current();
       } finally {

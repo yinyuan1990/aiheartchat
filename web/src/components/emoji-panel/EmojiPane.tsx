@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { addRecentEmoji, useEmojis } from '../../emojis';
 import { BarCell, Collapsible, SearchRow, SectionTitle, useBarExpand } from './shared';
+import { t } from '../../i18n';
 
 const BAR_H = 52;
 const SEARCH_H = 44;
@@ -63,7 +64,7 @@ export function EmojiPane({ hidden, onScroll, onEmoji, onSearch }: { hidden: boo
           onScroll={touch}
           style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '6px 6px 0', overflowX: 'auto', height: expanded ? BAR_H + 24 : BAR_H, boxSizing: 'border-box', transition: 'height .15s', position: 'relative', zIndex: 2, background: 'var(--bg-card)' }}
         >
-          <BarCell dataKey="recent" active={active === 'recent'} onClick={() => jump('recent')} title="最近使用" expanded={expanded}>
+          <BarCell dataKey="recent" active={active === 'recent'} onClick={() => jump('recent')} title={t('emoji.recent')} expanded={expanded}>
             <span style={{ fontSize: 18, color: 'var(--text-2)' }}>🕒</span>
           </BarCell>
           {groups.map((g) => (
@@ -72,12 +73,12 @@ export function EmojiPane({ hidden, onScroll, onEmoji, onSearch }: { hidden: boo
             </BarCell>
           ))}
         </div>
-        <SearchRow value="" onChange={() => {}} chip="" onChip={(e) => onSearch(e)} placeholder="搜索表情" onTap={() => onSearch('')} />
+        <SearchRow value="" onChange={() => {}} chip="" onChip={(e) => onSearch(e)} placeholder={t('emoji.searchEmoji')} onTap={() => onSearch('')} />
       </Collapsible>
 
       <div ref={scroller} className="no-scrollbar" onScroll={handleScroll} style={{ flex: 1, overflowY: 'auto', position: 'relative', paddingBottom: 64 }}>
         <div ref={(n) => { if (n) sections.current.set('recent', n); }}>
-          {recent.length > 0 && <><SectionTitle>最近使用</SectionTitle>{grid(recent)}</>}
+          {recent.length > 0 && <><SectionTitle>{t('emoji.recent')}</SectionTitle>{grid(recent)}</>}
         </div>
         {groups.map((g) => (
           <div key={g.key} ref={(n) => { if (n) sections.current.set(g.key, n); else sections.current.delete(g.key); }}>
@@ -85,7 +86,7 @@ export function EmojiPane({ hidden, onScroll, onEmoji, onSearch }: { hidden: boo
             {grid(g.items.map((it) => it[0]))}
           </div>
         ))}
-        {!groups.length && <div className="empty" style={{ padding: 30, fontSize: 13 }}>加载中…</div>}
+        {!groups.length && <div className="empty" style={{ padding: 30, fontSize: 13 }}>{t('common.loading')}</div>}
       </div>
     </div>
   );

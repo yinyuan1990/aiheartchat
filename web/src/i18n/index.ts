@@ -37,6 +37,37 @@ export function setLang(code: string) {
   location.reload();
 }
 
+/** 服务端生成、全群共用的中文（币群名 / 群公告 / 系统昵称）：按 zh.json 里的模板匹配，换成当前语言 */
+const SERVER_KEYS = ['coinGroup.name', 'coinGroup.perpName', 'coinGroup.perpNotice', 'coinGroup.notice', 'coinGroup.bot'];
+const serverPatterns = SERVER_KEYS.flatMap((k) => {
+  const zh = tables.zh?.[k];
+  if (!zh) return [];
+  const names = [...zh.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
+  const re = new RegExp(`^${zh.split(/\{\w+\}/).map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('(.+?)')}$`);
+  return [{ k, re, names }];
+});
+
+export function serverText(s: string): string {
+  if (current === 'zh' || !s.includes('群')) return s;
+  for (const p of serverPatterns) {
+    const m = p.re.exec(s);
+    if (m) return t(p.k, Object.fromEntries(p.names.map((n, i) => [n, m[i + 1]])));
+  }
+  return s;
+}
+
+/** 接口返回的数据里，把上面这些服务端文字换成当前语言（中文直接原样返回） */
+export function localizeServer<T>(v: T): T {
+  if (current === 'zh') return v;
+  const walk = (x: unknown): unknown => {
+    if (typeof x === 'string') return x.length >= 3 && x.length <= 400 ? serverText(x) : x;
+    if (Array.isArray(x)) return x.map(walk);
+    if (x && typeof x === 'object') return Object.fromEntries(Object.entries(x).map(([k, y]) => [k, walk(y)]));
+    return x;
+  };
+  return walk(v) as T;
+}
+
 /** t('me.frozen', { n: 12 }) */
 export function t(key: string, args?: Record<string, string | number>): string {
   let s = tables[current]?.[key] ?? tables.zh?.[key] ?? key;

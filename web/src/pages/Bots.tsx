@@ -4,6 +4,7 @@ import { api, uploadFile } from '../api';
 import { openNativeChat } from '../bridge';
 import { wsManager } from '../ws';
 import { openLink } from '../components/LinkText';
+import { t } from '../i18n';
 
 /** 机器人（Telegram 式）：用户创建，第三方程序用兼容 Telegram 的 Bot API 收发消息 */
 
@@ -96,7 +97,7 @@ export function InlineKeyboard({ markup, messageId }: { markup?: InlineMarkup | 
       // 机器人没回应也别一直转圈（Telegram 也是超时后自动停）
       waitRef.current = { queryId, timer: setTimeout(done, 10_000) };
     } catch (e: any) {
-      flashToast(e.message || '机器人没有响应');
+      flashToast(e.message || t('bot.noResponse'));
       setBusy(null);
     }
   };
@@ -143,7 +144,7 @@ export function AddBotSheet({ groupId, channel, onClose, onChanged }: { groupId:
     try {
       await api(`/im/group/${groupId}/bot`, { method: 'POST', body: { username: u } });
       setUsername('');
-      flashToast('已添加');
+      flashToast(t('bot.added'));
       load();
       onChanged?.();
     } catch (e: any) {
@@ -152,7 +153,7 @@ export function AddBotSheet({ groupId, channel, onClose, onChanged }: { groupId:
     setSaving(false);
   };
   const remove = async (b: { id: string; nickname: string }) => {
-    if (!confirm(`把机器人「${b.nickname}」移出${channel ? '频道' : '群'}？`)) return;
+    if (!confirm(t(channel ? 'bot.removeFromChannelConfirm' : 'bot.removeFromGroupConfirm', { name: b.nickname }))) return;
     try {
       await api(`/im/group/${groupId}/kick/${b.id}`, { method: 'POST' });
       load();
@@ -166,33 +167,33 @@ export function AddBotSheet({ groupId, channel, onClose, onChanged }: { groupId:
   return (
     <div className="mask bottom" style={{ zIndex: 150 }} onClick={(e) => { e.stopPropagation(); onClose(); }}>
       <div className="sheet no-scrollbar" style={{ maxHeight: '80vh' }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ textAlign: 'center', fontWeight: 600, marginBottom: 6 }}>{channel ? '频道机器人' : '群机器人'}</div>
+        <div style={{ textAlign: 'center', fontWeight: 600, marginBottom: 6 }}>{channel ? t('bot.channelBots') : t('bot.groupBots')}</div>
         <div className="small" style={{ textAlign: 'center', marginBottom: 14 }}>
-          {channel ? '机器人在频道里是管理员，可以发帖，能收到所有帖子' : '机器人默认只收到 /命令 和 @它 的消息（创建者可关闭隐私模式）'}
+          {channel ? t('bot.channelBotsTip') : t('bot.groupBotsTip')}
         </div>
         <div className="row" style={{ gap: 8 }}>
-          <input className="input grow" style={{ marginBottom: 0 }} placeholder="机器人用户名，如 @weather_bot" value={username} onChange={(e) => setUsername(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add(username)} />
-          <button className="btn-sm" disabled={saving} onClick={() => add(username)}>添加</button>
+          <input className="input grow" style={{ marginBottom: 0 }} placeholder={t('bot.addUsernamePlaceholder')} value={username} onChange={(e) => setUsername(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add(username)} />
+          <button className="btn-sm" disabled={saving} onClick={() => add(username)}>{t('bot.add')}</button>
         </div>
 
-        {inChat.length > 0 && <div className="small" style={{ margin: '16px 0 6px' }}>已加入</div>}
+        {inChat.length > 0 && <div className="small" style={{ margin: '16px 0 6px' }}>{t('bot.joined')}</div>}
         {inChat.map((b) => (
           <div key={b.id} className="row" style={{ padding: '8px 0', gap: 10 }}>
             <div className="avatar" style={{ width: 36, height: 36 }}>{b.avatar && <img src={b.avatar} alt="" />}</div>
-            <span className="grow ellipsis">{b.nickname}<span className="bot-tag">机器人</span></span>
-            <span className="small" style={{ cursor: 'pointer', color: 'var(--danger)' }} onClick={() => remove(b)}>移出</span>
+            <span className="grow ellipsis">{b.nickname}<span className="bot-tag">{t('bot.tag')}</span></span>
+            <span className="small" style={{ cursor: 'pointer', color: 'var(--danger)' }} onClick={() => remove(b)}>{t('bot.remove')}</span>
           </div>
         ))}
 
-        {mine.filter((b) => !inIds.has(b.id)).length > 0 && <div className="small" style={{ margin: '16px 0 6px' }}>我的机器人</div>}
+        {mine.filter((b) => !inIds.has(b.id)).length > 0 && <div className="small" style={{ margin: '16px 0 6px' }}>{t('me.bots')}</div>}
         {mine.filter((b) => !inIds.has(b.id)).map((b) => (
           <div key={b.id} className="row" style={{ padding: '8px 0', gap: 10 }}>
             <div className="avatar" style={{ width: 36, height: 36 }}>{b.avatar && <img src={b.avatar} alt="" />}</div>
             <span className="grow ellipsis">{b.name} <span className="small">@{b.username}</span></span>
-            <span className="accent" style={{ cursor: 'pointer', fontSize: 13 }} onClick={() => add(b.username)}>添加</span>
+            <span className="accent" style={{ cursor: 'pointer', fontSize: 13 }} onClick={() => add(b.username)}>{t('bot.add')}</span>
           </div>
         ))}
-        <div className="small" style={{ marginTop: 16, textAlign: 'center', cursor: 'pointer' }} onClick={() => nav('/bots')}>创建自己的机器人 ›</div>
+        <div className="small" style={{ marginTop: 16, textAlign: 'center', cursor: 'pointer' }} onClick={() => nav('/bots')}>{t('bot.createOwn')}</div>
       </div>
     </div>
   );
@@ -203,11 +204,11 @@ function TokenDialog({ token, onClose }: { token: string; onClose: () => void })
   return (
     <div className="mask" onClick={onClose}>
       <div className="dialog" onClick={(e) => e.stopPropagation()} style={{ textAlign: 'left' }}>
-        <h3 style={{ textAlign: 'center' }}>机器人 Token</h3>
-        <p className="small" style={{ marginBottom: 8 }}>只显示这一次，请马上保存。拿到 token 就能控制这个机器人，不要泄露；泄露了就去重置。</p>
+        <h3 style={{ textAlign: 'center' }}>{t('bot.tokenTitle')}</h3>
+        <p className="small" style={{ marginBottom: 8 }}>{t('bot.tokenTip')}</p>
         <div className="bot-code" style={{ userSelect: 'all' }}>{token}</div>
-        <button className="btn" onClick={() => { navigator.clipboard?.writeText(token); flashToast('已复制'); }}>复制 Token</button>
-        <button className="btn btn-ghost" style={{ marginTop: 10 }} onClick={onClose}>我已保存</button>
+        <button className="btn" onClick={() => { navigator.clipboard?.writeText(token); flashToast(t('common.copied')); }}>{t('bot.copyToken')}</button>
+        <button className="btn btn-ghost" style={{ marginTop: 10 }} onClick={onClose}>{t('bot.tokenSaved')}</button>
       </div>
     </div>
   );
@@ -230,11 +231,11 @@ function CreateBotSheet({ onClose, onCreated }: { onClose: () => void; onCreated
   return (
     <div className="mask bottom" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
-        <div style={{ textAlign: 'center', fontWeight: 600, marginBottom: 14 }}>创建机器人</div>
-        <input className="input" placeholder="名称（聊天里显示的名字）" maxLength={30} value={name} onChange={(e) => setName(e.target.value)} />
-        <input className="input" placeholder="用户名，必须以 bot 结尾，如 weather_bot" maxLength={32} value={username} onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))} />
-        <textarea className="input" style={{ height: 80, resize: 'none' }} placeholder="简介（用户第一次打开聊天时看到）" maxLength={500} value={desc} onChange={(e) => setDesc(e.target.value)} />
-        <button className="btn" disabled={saving || !name.trim() || !username.trim()} onClick={submit}>{saving ? '创建中…' : '创建'}</button>
+        <div style={{ textAlign: 'center', fontWeight: 600, marginBottom: 14 }}>{t('bot.createTitle')}</div>
+        <input className="input" placeholder={t('bot.namePlaceholder')} maxLength={30} value={name} onChange={(e) => setName(e.target.value)} />
+        <input className="input" placeholder={t('bot.usernamePlaceholderWeb')} maxLength={32} value={username} onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))} />
+        <textarea className="input" style={{ height: 80, resize: 'none' }} placeholder={t('bot.descPlaceholder')} maxLength={500} value={desc} onChange={(e) => setDesc(e.target.value)} />
+        <button className="btn" disabled={saving || !name.trim() || !username.trim()} onClick={submit}>{saving ? t('bot.creating') : t('common.create')}</button>
       </div>
     </div>
   );
@@ -254,19 +255,18 @@ export function BotsPage() {
     <div className="app">
       <div className="navbar">
         <span className="back" onClick={() => nav(-1)}>‹</span>
-        <span className="title">我的机器人</span>
-        <span className="action" onClick={() => setCreating(true)}>创建</span>
+        <span className="title">{t('me.bots')}</span>
+        <span className="action" onClick={() => setCreating(true)}>{t('common.create')}</span>
       </div>
       <div className="page no-scrollbar">
         <div className="small" style={{ padding: '12px 16px', lineHeight: 1.6 }}>
-          机器人可以接入你自己的程序：用 Telegram 兼容的 Bot API 收发消息、发图片、带按钮，能私聊、进群、在频道发帖。
-          现有的 Telegram 机器人代码改一下接口地址就能直接用。
+          {t('bot.introWeb')}
         </div>
-        {list === null && <div className="empty">加载中…</div>}
+        {list === null && <div className="empty">{t('common.loading')}</div>}
         {list?.length === 0 && (
           <div className="empty" style={{ paddingTop: 40 }}>
-            还没有机器人
-            <div><button className="btn-sm" style={{ marginTop: 16 }} onClick={() => setCreating(true)}>创建第一个机器人</button></div>
+            {t('bot.empty')}
+            <div><button className="btn-sm" style={{ marginTop: 16 }} onClick={() => setCreating(true)}>{t('bot.createFirst')}</button></div>
           </div>
         )}
         {(list ?? []).map((b) => (
@@ -274,8 +274,8 @@ export function BotsPage() {
             <div className="avatar" style={{ width: 48, height: 48 }}>{b.avatar && <img src={b.avatar} alt="" />}</div>
             <div className="cl-row-main">
               <div className="cl-row-top">
-                <span className="cl-row-title ellipsis">{b.name}<span className="bot-tag">机器人</span></span>
-                {b.status !== 0 && <span className="tag tag-warn">已封禁</span>}
+                <span className="cl-row-title ellipsis">{b.name}<span className="bot-tag">{t('bot.tag')}</span></span>
+                {b.status !== 0 && <span className="tag tag-warn">{t('bot.banned')}</span>}
               </div>
               <div className="cl-row-sub"><span className="ellipsis">@{b.username} · {b.webhookUrl ? 'Webhook' : 'getUpdates'}</span></div>
             </div>
@@ -318,11 +318,11 @@ export function BotDetailPage() {
     try {
       await save({ avatar: await uploadFile('image', file) });
     } catch (e: any) {
-      alert(e.message || '上传失败');
+      alert(e.message || t('common.uploadFailed'));
     }
   };
   const reset = async () => {
-    if (!confirm('重置后旧 token 立即失效，正在运行的程序要换成新 token。确定重置？')) return;
+    if (!confirm(t('bot.resetTokenConfirm'))) return;
     try {
       setToken((await api<{ token: string }>(`/im/bots/${id}/token`, { method: 'POST' })).token);
     } catch (e: any) {
@@ -330,7 +330,7 @@ export function BotDetailPage() {
     }
   };
   const remove = async () => {
-    if (!confirm(`删除机器人 @${bot?.username}？会退出所有群和频道，不能恢复`)) return;
+    if (!confirm(t('bot.deleteConfirmWeb', { name: bot?.username ?? '' }))) return;
     try {
       await api(`/im/bots/${id}/delete`, { method: 'POST' });
       nav('/bots', { replace: true });
@@ -339,8 +339,8 @@ export function BotDetailPage() {
     }
   };
 
-  if (error) return <div className="app"><div className="navbar"><span className="back" onClick={() => nav(-1)}>‹</span><span className="title">机器人</span></div><div className="empty">{error}</div></div>;
-  if (!bot) return <div className="empty">加载中…</div>;
+  if (error) return <div className="app"><div className="navbar"><span className="back" onClick={() => nav(-1)}>‹</span><span className="title">{t('bot.title')}</span></div><div className="empty">{error}</div></div>;
+  if (!bot) return <div className="empty">{t('common.loading')}</div>;
 
   const apiBase = `${location.origin}/api`;
   return (
@@ -348,31 +348,31 @@ export function BotDetailPage() {
       <div className="navbar">
         <span className="back" onClick={() => nav(-1)}>‹</span>
         <span className="title">{bot.name}</span>
-        <span className="action" onClick={() => openBotChat(nav, bot.id, bot.name).catch((e) => alert(e.message))}>聊天</span>
+        <span className="action" onClick={() => openBotChat(nav, bot.id, bot.name).catch((e) => alert(e.message))}>{t('bot.chat')}</span>
       </div>
       <div className="page no-scrollbar" style={{ padding: '16px 16px 40px' }}>
         <div style={{ textAlign: 'center' }}>
           <div className="avatar" style={{ width: 76, height: 76, margin: '0 auto', cursor: 'pointer' }} onClick={() => fileRef.current?.click()}>
             {bot.avatar && <img src={bot.avatar} alt="" />}
           </div>
-          <div className="small" style={{ marginTop: 4, fontSize: 11 }}>点头像可修改</div>
+          <div className="small" style={{ marginTop: 4, fontSize: 11 }}>{t('bot.tapAvatarToChange')}</div>
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => changeAvatar(e.target.files?.[0])} />
           {editing ? (
             <div style={{ marginTop: 12 }}>
-              <input className="input" value={name} maxLength={30} placeholder="名称" onChange={(e) => setName(e.target.value)} />
-              <textarea className="input" style={{ height: 90, resize: 'none' }} value={desc} maxLength={500} placeholder="简介" onChange={(e) => setDesc(e.target.value)} />
+              <input className="input" value={name} maxLength={30} placeholder={t('bot.name')} onChange={(e) => setName(e.target.value)} />
+              <textarea className="input" style={{ height: 90, resize: 'none' }} value={desc} maxLength={500} placeholder={t('bot.description')} onChange={(e) => setDesc(e.target.value)} />
               <div className="row">
-                <button className="btn-sm ghost" onClick={() => setEditing(false)}>取消</button>
+                <button className="btn-sm ghost" onClick={() => setEditing(false)}>{t('common.cancel')}</button>
                 <span className="grow" />
-                <button className="btn-sm" onClick={() => save({ name: name.trim(), description: desc.trim() })}>保存</button>
+                <button className="btn-sm" onClick={() => save({ name: name.trim(), description: desc.trim() })}>{t('common.save')}</button>
               </div>
             </div>
           ) : (
             <>
-              <div style={{ fontSize: 19, fontWeight: 700, marginTop: 8 }}>{bot.name}<span className="bot-tag">机器人</span></div>
-              <div className="small" style={{ marginTop: 4 }}>@{bot.username}{bot.status !== 0 && <span className="tag tag-warn" style={{ marginLeft: 6 }}>已被平台封禁</span>}</div>
-              <div style={{ fontSize: 14, marginTop: 10, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{bot.description || <span className="small">（无简介）</span>}</div>
-              <span className="accent" style={{ fontSize: 13, cursor: 'pointer', display: 'inline-block', marginTop: 8 }} onClick={() => setEditing(true)}>编辑资料</span>
+              <div style={{ fontSize: 19, fontWeight: 700, marginTop: 8 }}>{bot.name}<span className="bot-tag">{t('bot.tag')}</span></div>
+              <div className="small" style={{ marginTop: 4 }}>@{bot.username}{bot.status !== 0 && <span className="tag tag-warn" style={{ marginLeft: 6 }}>{t('bot.bannedByPlatform')}</span>}</div>
+              <div style={{ fontSize: 14, marginTop: 10, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{bot.description || <span className="small">{t('bot.noDescription')}</span>}</div>
+              <span className="accent" style={{ fontSize: 13, cursor: 'pointer', display: 'inline-block', marginTop: 8 }} onClick={() => setEditing(true)}>{t('me.editProfile')}</span>
             </>
           )}
         </div>
@@ -380,55 +380,52 @@ export function BotDetailPage() {
         <div className="card" style={{ marginTop: 16, padding: '4px 14px' }}>
           <div className="row" style={{ padding: '12px 0', borderBottom: '1px solid var(--line)' }}>
             <div className="grow">
-              <div style={{ fontSize: 15 }}>群隐私模式</div>
-              <div className="small" style={{ marginTop: 2 }}>开启：群里只收到 /命令 和 @它 的消息；关闭：收到全部群消息</div>
+              <div style={{ fontSize: 15 }}>{t('bot.privacyMode')}</div>
+              <div className="small" style={{ marginTop: 2 }}>{t('bot.privacyTip')}</div>
             </div>
-            <span className={`ch-sub-btn${bot.privacy ? '' : ' on'}`} style={{ cursor: 'pointer' }} onClick={() => save({ privacy: !bot.privacy })}>{bot.privacy ? '已开启' : '已关闭'}</span>
+            <span className={`ch-sub-btn${bot.privacy ? '' : ' on'}`} style={{ cursor: 'pointer' }} onClick={() => save({ privacy: !bot.privacy })}>{bot.privacy ? t('bot.on') : t('bot.off')}</span>
           </div>
           <div style={{ padding: '12px 0', borderBottom: '1px solid var(--line)' }}>
-            <div style={{ fontSize: 15 }}>接收方式</div>
+            <div style={{ fontSize: 15 }}>{t('bot.deliveryMode')}</div>
             <div className="small" style={{ marginTop: 2, wordBreak: 'break-all' }}>
-              {bot.webhookUrl ? `Webhook：${bot.webhookUrl}` : 'getUpdates 轮询（没有设置 Webhook）'} · 待取消息 {bot.pendingUpdates ?? 0} 条
+              {bot.webhookUrl ? t('bot.webhookUrl', { url: bot.webhookUrl }) : t('bot.polling')} · {t('bot.pendingUpdates', { n: bot.pendingUpdates ?? 0 })}
             </div>
-            {bot.lastError && <div className="small" style={{ marginTop: 4, color: 'var(--danger)' }}>最近一次推送失败：{bot.lastError}</div>}
+            {bot.lastError && <div className="small" style={{ marginTop: 4, color: 'var(--danger)' }}>{t('bot.lastError', { error: bot.lastError })}</div>}
           </div>
           <div style={{ padding: '12px 0' }}>
-            <div style={{ fontSize: 15 }}>命令菜单</div>
+            <div style={{ fontSize: 15 }}>{t('bot.commandMenu')}</div>
             <div className="small" style={{ marginTop: 2 }}>
-              {bot.commands.length ? bot.commands.map((c) => `/${c.command} ${c.description}`).join('\n') : '还没设置，程序里调用 setMyCommands 设置'}
+              {bot.commands.length ? bot.commands.map((c) => `/${c.command} ${c.description}`).join('\n') : t('bot.noCommands')}
             </div>
           </div>
         </div>
 
         <div className="card" style={{ marginTop: 12, padding: '4px 14px' }}>
-          <div className="ch-menu" onClick={reset}>重置 Token</div>
-          <div className="ch-menu" style={{ color: 'var(--danger)', borderBottom: 'none' }} onClick={remove}>删除机器人</div>
+          <div className="ch-menu" onClick={reset}>{t('bot.resetToken')}</div>
+          <div className="ch-menu" style={{ color: 'var(--danger)', borderBottom: 'none' }} onClick={remove}>{t('bot.delete')}</div>
         </div>
 
         <div style={{ marginTop: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>接入说明</div>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>{t('bot.guideTitle')}</div>
           <div className="small" style={{ lineHeight: 1.7 }}>
-            接口和 Telegram Bot API 一样，只是地址换成我们的：<br />
-            <b>{apiBase}/bot&lt;token&gt;/方法名</b><br />
-            支持 getMe、getUpdates、setWebhook、deleteWebhook、getWebhookInfo、sendMessage、sendPhoto、editMessageText、
-            editMessageReplyMarkup、deleteMessage、answerCallbackQuery、setMyCommands、getChat、getFile 等。
-            按钮只支持 inline_keyboard（url / callback_data）。chat_id：私聊是用户 id，群和频道是负数。
-            用户要先给机器人发过消息，机器人才能私聊他。
+            {t('bot.guideIntro')}<br />
+            <b>{apiBase}/bot&lt;token&gt;/{t('bot.guideMethod')}</b><br />
+            {t('bot.guideBody')}
           </div>
-          <div className="small" style={{ marginTop: 10 }}>命令行试一下：</div>
+          <div className="small" style={{ marginTop: 10 }}>{t('bot.tryCli')}</div>
           <div className="bot-code">{`curl ${apiBase}/bot<token>/getUpdates
 
 curl -X POST ${apiBase}/bot<token>/sendMessage \\
   -H 'Content-Type: application/json' \\
-  -d '{"chat_id": 用户id, "text": "你好", "reply_markup": {"inline_keyboard": [[{"text": "点我", "callback_data": "hi"}]]}}'`}</div>
-          <div className="small">Python（python-telegram-bot）：</div>
+  -d '{"chat_id": ${t('bot.sampleUserId')}, "text": "${t('bot.sampleHello')}", "reply_markup": {"inline_keyboard": [[{"text": "${t('bot.sampleTapMe')}", "callback_data": "hi"}]]}}'`}</div>
+          <div className="small">{t('bot.samplePython')}</div>
           <div className="bot-code">{`app = (Application.builder().token(TOKEN)
        .base_url("${apiBase}/bot")
        .base_file_url("${apiBase}/file/bot")
        .build())`}</div>
-          <div className="small">Node.js（Telegraf）：</div>
+          <div className="small">{t('bot.sampleNode')}</div>
           <div className="bot-code">{`const bot = new Telegraf(TOKEN, { telegram: { apiRoot: '${location.origin}/api' } })`}</div>
-          <div className="small">Webhook 需要 https 公网地址；设置 secret_token 后每次推送都会带 X-Telegram-Bot-Api-Secret-Token 头。</div>
+          <div className="small">{t('bot.webhookNote')}</div>
         </div>
       </div>
       {token && <TokenDialog token={token} onClose={() => setToken('')} />}

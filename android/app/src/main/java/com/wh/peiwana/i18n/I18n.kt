@@ -57,6 +57,33 @@ object I18n {
         }
     }
 
+    /** 服务端生成、全群共用的中文（币群名 / 群公告 / 系统昵称）：按 zh.json 里的模板匹配，换成当前语言 */
+    private val SERVER_KEYS = listOf("coinGroup.name", "coinGroup.perpName", "coinGroup.perpNotice", "coinGroup.notice", "coinGroup.bot")
+    private val serverPatterns by lazy {
+        SERVER_KEYS.mapNotNull { k ->
+            val zh = tables[FALLBACK]?.get(k) ?: return@mapNotNull null
+            val names = Regex("\\{(\\w+)\\}").findAll(zh).map { it.groupValues[1] }.toList()
+            val re = zh.split(Regex("\\{\\w+\\}")).joinToString("(.+?)") { Regex.escape(it) }
+            Triple(k, Regex(re), names)
+        }
+    }
+
+    fun server(s: String): String {
+        if (lang == FALLBACK || '群' !in s) return s
+        for ((k, re, names) in serverPatterns) {
+            val m = re.matchEntire(s) ?: continue
+            return text(k, names.zip(m.groupValues.drop(1)).toTypedArray())
+        }
+        return s
+    }
+
+    fun localizeServer(el: kotlinx.serialization.json.JsonElement): kotlinx.serialization.json.JsonElement = when (el) {
+        is kotlinx.serialization.json.JsonObject -> kotlinx.serialization.json.JsonObject(el.mapValues { localizeServer(it.value) })
+        is kotlinx.serialization.json.JsonArray -> kotlinx.serialization.json.JsonArray(el.map { localizeServer(it) })
+        is kotlinx.serialization.json.JsonPrimitive -> if (el.isString && el.content.length in 3..400) server(el.content).let { if (it === el.content) el else kotlinx.serialization.json.JsonPrimitive(it) } else el
+        else -> el
+    }
+
     fun text(key: String, args: Array<out Pair<String, Any?>>): String {
         var s = tables[lang]?.get(key) ?: tables[FALLBACK]?.get(key) ?: key
         for ((k, v) in args) s = s.replace("{$k}", v.toString())

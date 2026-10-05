@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.Api
 import com.wh.peiwana.ui.theme.Bg2
 import com.wh.peiwana.ui.theme.TextMain
@@ -81,17 +82,17 @@ fun UpdateChecker() {
             Modifier.width(300.dp).clip(RoundedCornerShape(18.dp)).background(Bg2).padding(horizontal = 22.dp, vertical = 22.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(if (v.force) "需要更新后才能继续使用" else "发现新版本", color = TextMain, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-            Text("最新版本 ${v.latest}　当前 ${currentVersionName(context)}", color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+            Text(if (v.force) t("update.forceTitle") else t("update.newVersion"), color = TextMain, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            Text(t("update.versions", "latest" to v.latest, "current" to currentVersionName(context)), color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
             if (v.notes.isNotEmpty()) {
                 Text(
                     v.notes, color = TextMain.copy(alpha = 0.9f), fontSize = 14.sp, lineHeight = 22.sp,
                     modifier = Modifier.fillMaxWidth().heightIn(max = 180.dp).verticalScroll(rememberScrollState()).padding(top = 16.dp),
                 )
             }
-            Text("点击后用浏览器下载安装包，下载完成后打开安装", color = TextSub, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 14.dp))
+            Text(t("update.hint"), color = TextSub, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 14.dp))
             Text(
-                "立即更新", color = androidx.compose.ui.graphics.Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
+                t("update.now"), color = androidx.compose.ui.graphics.Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 16.dp).fillMaxWidth().clip(RoundedCornerShape(23.dp)).background(AccentBrush)
                     .noRippleClick {
                         runCatching {
@@ -103,7 +104,7 @@ fun UpdateChecker() {
             )
             if (!v.force) {
                 Text(
-                    "以后再说", color = TextSub, fontSize = 14.sp, textAlign = TextAlign.Center,
+                    t("update.later"), color = TextSub, fontSize = 14.sp, textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = 6.dp).fillMaxWidth().noRippleClick { later() }.padding(vertical = 10.dp),
                 )
             } else {

@@ -3,6 +3,7 @@ package com.wh.peiwana.net
 import android.annotation.SuppressLint
 import android.content.Context
 import android.provider.Settings
+import com.wh.peiwana.i18n.t
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -153,7 +154,7 @@ object Api {
                 .build()
             val req = Request.Builder().url("$BASE_URL/api/upload/avatar").post(body).build()
             val resp = client.newCall(req).execute()
-            val text = resp.body?.string() ?: throw ApiException(-1, "网络异常")
+            val text = resp.body?.string() ?: throw ApiException(-1, t("common.networkError"))
             val parsed = json.decodeFromString<ApiResp>(text)
             if (parsed.code != 0) throw ApiException(parsed.code, parsed.msg)
             (parsed.data as kotlinx.serialization.json.JsonObject)["url"]!!
@@ -172,7 +173,7 @@ object Api {
             val builder = Request.Builder().url("$BASE_URL/api/upload/$kind").post(body)
             token?.let { builder.header("Authorization", "Bearer $it") }
             val resp = client.newCall(builder.build()).execute()
-            val text = resp.body?.string() ?: throw ApiException(-1, "网络异常")
+            val text = resp.body?.string() ?: throw ApiException(-1, t("common.networkError"))
             val parsed = json.decodeFromString<ApiResp>(text)
             if (parsed.code != 0) throw ApiException(parsed.code, parsed.msg)
             (parsed.data as kotlinx.serialization.json.JsonObject)["url"]!!
@@ -203,9 +204,9 @@ object Api {
                 else -> builder.method(method, (body?.toString() ?: "{}").toRequestBody(jsonMedia))
             }
             val resp = client.newCall(builder.build()).execute()
-            val text = resp.body?.string() ?: throw ApiException(-1, "网络异常")
+            val text = resp.body?.string() ?: throw ApiException(-1, t("common.networkError"))
             val parsed = json.decodeFromString<ApiResp>(text)
             if (parsed.code != 0) throw ApiException(parsed.code, parsed.msg)
-            parsed.data
+            parsed.data?.let { com.wh.peiwana.i18n.I18n.localizeServer(it) }
         }
 }

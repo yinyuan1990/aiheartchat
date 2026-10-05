@@ -4,6 +4,7 @@ import QRCode from 'qrcode';
 import jsQR from 'jsqr';
 import { api, fmtPoints, toFen } from '../api';
 import { useApp } from '../store';
+import { t } from '../i18n';
 
 /** 收款码内容格式：peiwan://pay?sid=6位ID */
 const payQrContent = (sid: string) => `peiwan://pay?sid=${sid}`;
@@ -49,7 +50,7 @@ export function TransferPage() {
   };
 
   const startScan = async () => {
-    if (!navigator.mediaDevices?.getUserMedia) return showToast('当前环境不支持相机');
+    if (!navigator.mediaDevices?.getUserMedia) return showToast(t('transfer.noCamera'));
     setScanning(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
@@ -80,7 +81,7 @@ export function TransferPage() {
               setShortId(sid);
               lookup(sid);
             } else {
-              showToast('无法识别的二维码');
+              showToast(t('transfer.badQr'));
             }
             return;
           }
@@ -90,12 +91,12 @@ export function TransferPage() {
       requestAnimationFrame(tick);
     } catch {
       setScanning(false);
-      showToast('无法打开相机，请检查权限');
+      showToast(t('transfer.cameraDenied'));
     }
   };
 
-  const showToast = (t: string) => {
-    setToast(t);
+  const showToast = (msg: string) => {
+    setToast(msg);
     setTimeout(() => setToast(''), 2000);
   };
 
@@ -105,7 +106,7 @@ export function TransferPage() {
     try {
       setTarget(await api(`/wallet/lookup/${id}`));
     } catch {
-      showToast('未找到该 ID');
+      showToast(t('transfer.idNotFound'));
     }
   };
   // 从扫一扫进来（扫到收款码 /transfer?sid=）：直接填好
@@ -119,17 +120,17 @@ export function TransferPage() {
   }, [sidParam]);
 
   const submit = async () => {
-    if (!target) return showToast('请先输入正确的对方 ID');
+    if (!target) return showToast(t('transfer.needTarget'));
     const fen = toFen(amount);
-    if (fen <= 0) return showToast('请输入转赠积分');
-    if (fen > Number(balance)) return showToast('余额不足');
+    if (fen <= 0) return showToast(t('transfer.needAmount'));
+    if (fen > Number(balance)) return showToast(t('transfer.insufficient'));
     setBusy(true);
     try {
       await api('/wallet/transfer', {
         method: 'POST',
         body: { toShortId: target.shortId, amountFen: String(fen), remark: remark.trim() },
       });
-      showToast('转赠成功');
+      showToast(t('transfer.success'));
       setTimeout(() => nav(-1), 800);
     } catch (e: any) {
       showToast(e.message);
@@ -141,20 +142,20 @@ export function TransferPage() {
   return (
     <div className="app">
       <div className="navbar">
-        <span className="back" onClick={() => nav(-1)}>‹ 返回</span>
-        <span className="title">积分转赠</span>
+        <span className="back" onClick={() => nav(-1)}>‹ {t('common.back')}</span>
+        <span className="title">{t('transfer.title')}</span>
         <span style={{ width: 40 }} />
       </div>
 
       <div className="page no-scrollbar page-pad">
         {/* 收款人卡：大号居中输入 */}
         <div style={{ background: 'var(--bg-card)', borderRadius: 14, padding: '18px', marginBottom: 14, textAlign: 'center' }}>
-          <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>对方 ID</div>
+          <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>{t('transfer.targetId')}</div>
           <input
             value={shortId}
             inputMode="numeric"
             maxLength={6}
-            placeholder="6 位数字"
+            placeholder={t('transfer.idPlaceholder')}
             onChange={(e) => {
               const v = e.target.value.replace(/\D/g, '').slice(0, 6);
               setShortId(v);
@@ -173,23 +174,23 @@ export function TransferPage() {
               </div>
               <span style={{ fontSize: 15, fontWeight: 500 }}>{target.nickname}</span>
               <span className="grow" />
-              <span style={{ fontSize: 12, color: '#0bd07d' }}>● 已确认</span>
+              <span style={{ fontSize: 12, color: '#0bd07d' }}>● {t('transfer.confirmed')}</span>
             </div>
           ) : (
             <div className="muted" style={{ fontSize: 12 }}>
-              {shortId.length === 6 ? '正在查找…' : '输入对方的 6 位 ID 自动确认收款人'}
+              {shortId.length === 6 ? t('transfer.lookingUp') : t('transfer.idHint')}
             </div>
           )}
           <div className="row" style={{ marginTop: 14 }}>
-            <span style={{ flex: 1, color: 'var(--accent)', fontSize: 13, cursor: 'pointer' }} onClick={startScan}>扫一扫</span>
+            <span style={{ flex: 1, color: 'var(--accent)', fontSize: 13, cursor: 'pointer' }} onClick={startScan}>{t('me.scan')}</span>
             <span style={{ width: 1, height: 18, background: 'var(--line)' }} />
-            <span style={{ flex: 1, color: 'var(--accent)', fontSize: 13, cursor: 'pointer' }} onClick={showMyQr}>我的收款码</span>
+            <span style={{ flex: 1, color: 'var(--accent)', fontSize: 13, cursor: 'pointer' }} onClick={showMyQr}>{t('transfer.myQr')}</span>
           </div>
         </div>
 
         {/* 金额卡：大号居中金额 */}
         <div style={{ background: 'var(--bg-card)', borderRadius: 14, padding: '18px', marginBottom: 14, textAlign: 'center' }}>
-          <div className="muted" style={{ fontSize: 13, marginBottom: 4 }}>转赠积分</div>
+          <div className="muted" style={{ fontSize: 13, marginBottom: 4 }}>{t('transfer.amountLabel')}</div>
           <input
             value={amount}
             inputMode="decimal"
@@ -202,8 +203,8 @@ export function TransferPage() {
           />
           <div style={{ height: 1, background: 'var(--line)', margin: '0 40px 10px' }} />
           <div className="muted" style={{ fontSize: 12 }}>
-            可用余额 {fmtPoints(balance)}
-            <span style={{ color: 'var(--accent)', marginLeft: 8, cursor: 'pointer' }} onClick={() => setAmount(fmtPoints(balance))}>全部</span>
+            {t('transfer.available', { n: fmtPoints(balance) })}
+            <span style={{ color: 'var(--accent)', marginLeft: 8, cursor: 'pointer' }} onClick={() => setAmount(fmtPoints(balance))}>{t('transfer.all')}</span>
           </div>
         </div>
 
@@ -212,15 +213,15 @@ export function TransferPage() {
           <input
             value={remark}
             maxLength={50}
-            placeholder="留言（可选）"
+            placeholder={t('transfer.remarkPlaceholder')}
             onChange={(e) => setRemark(e.target.value)}
             style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 14, padding: 0 }}
           />
         </div>
 
-        <button className="btn" disabled={busy || !target || toFen(amount) <= 0} onClick={submit}>{busy ? '转赠中…' : '确认转赠'}</button>
+        <button className="btn" disabled={busy || !target || toFen(amount) <= 0} onClick={submit}>{busy ? t('transfer.sending') : t('transfer.submit')}</button>
         {me?.shortId && (
-          <p className="hint" style={{ textAlign: 'center' }}>我的 ID：{me.shortId}（告诉对方即可互转）</p>
+          <p className="hint" style={{ textAlign: 'center' }}>{t('transfer.myIdHint', { id: me.shortId })}</p>
         )}
       </div>
 
@@ -234,21 +235,21 @@ export function TransferPage() {
             style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 24, textAlign: 'center', width: 300 }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ fontSize: 16, fontWeight: 600 }}>我的收款码</div>
-            <div className="muted" style={{ fontSize: 13, margin: '4px 0 14px' }}>ID：{me?.shortId}</div>
-            <img src={myQr} alt="收款二维码" style={{ width: 230, height: 230, borderRadius: 10, background: '#fff', padding: 8 }} />
-            <div className="muted" style={{ fontSize: 12, marginTop: 12 }}>使用「积分转赠 - 扫一扫」扫码给我转积分</div>
+            <div style={{ fontSize: 16, fontWeight: 600 }}>{t('transfer.myQr')}</div>
+            <div className="muted" style={{ fontSize: 13, margin: '4px 0 14px' }}>{t('me.id', { id: me?.shortId ?? '' })}</div>
+            <img src={myQr} alt={t('transfer.qrAlt')} style={{ width: 230, height: 230, borderRadius: 10, background: '#fff', padding: 8 }} />
+            <div className="muted" style={{ fontSize: 12, marginTop: 12 }}>{t('transfer.qrHint')}</div>
             <div className="row" style={{ gap: 12, marginTop: 14, justifyContent: 'center' }}>
               <span
                 style={{ width: 100, padding: '9px 0', borderRadius: 20, background: 'rgba(255,255,255,0.08)', fontSize: 14, cursor: 'pointer' }}
                 onClick={() => {
                   const a = document.createElement('a');
                   a.href = myQr;
-                  a.download = `收款码_${me?.shortId ?? ''}.png`;
+                  a.download = t('transfer.qrFileName', { id: me?.shortId ?? '' });
                   a.click();
                 }}
               >
-                保存
+                {t('common.save')}
               </span>
               <span
                 style={{ width: 100, padding: '9px 0', borderRadius: 20, background: 'var(--accent)', color: '#fff', fontSize: 14, cursor: 'pointer' }}
@@ -257,17 +258,17 @@ export function TransferPage() {
                     const blob = await (await fetch(myQr)).blob();
                     const file = new File([blob], 'qr.png', { type: 'image/png' });
                     if (navigator.canShare?.({ files: [file] })) {
-                      await navigator.share({ files: [file], title: '我的收款码' });
+                      await navigator.share({ files: [file], title: t('transfer.myQr') });
                     } else {
-                      showToast('当前环境不支持分享，请使用保存');
+                      showToast(t('transfer.shareUnsupported'));
                     }
                   } catch {}
                 }}
               >
-                分享
+                {t('common.share')}
               </span>
             </div>
-            <div className="muted" style={{ fontSize: 14, marginTop: 12, cursor: 'pointer' }} onClick={() => setMyQr('')}>关闭</div>
+            <div className="muted" style={{ fontSize: 14, marginTop: 12, cursor: 'pointer' }} onClick={() => setMyQr('')}>{t('common.close')}</div>
           </div>
         </div>
       )}
@@ -283,7 +284,7 @@ export function TransferPage() {
             }}
           />
           <div style={{ position: 'absolute', left: 0, right: 0, bottom: '22%', textAlign: 'center', color: '#fff', fontSize: 13 }}>
-            对准对方的收款二维码
+            {t('transfer.scanHint')}
           </div>
           <div
             style={{

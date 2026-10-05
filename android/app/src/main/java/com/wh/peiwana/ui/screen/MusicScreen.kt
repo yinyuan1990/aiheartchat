@@ -49,6 +49,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import coil.compose.AsyncImage
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.Api
 import com.wh.peiwana.ui.EmptyHint
 import com.wh.peiwana.ui.NavBar
@@ -226,12 +227,12 @@ object MusicCenter {
     private fun safeName(t: MusicTrack) = t.title.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(60).ifEmpty { "music" }
 
     /** 保存到手机：系统下载管理器下到「音乐」目录（Android 10 以下没有存储权限时放 App 私有目录），通知栏可见进度 */
-    fun saveToPhone(ctx: Context, t: MusicTrack) {
-        val name = "${safeName(t)}.${extOf(t.url)}"
+    fun saveToPhone(ctx: Context, track: MusicTrack) {
+        val name = "${safeName(track)}.${extOf(track.url)}"
         try {
-            val req = android.app.DownloadManager.Request(android.net.Uri.parse(Api.fullUrl(t.url)))
-                .setTitle(t.title)
-                .setDescription("心之音 · 音乐")
+            val req = android.app.DownloadManager.Request(android.net.Uri.parse(Api.fullUrl(track.url)))
+                .setTitle(track.title)
+                .setDescription("${t("app.name")} · ${t("music.title")}")
                 .setMimeType("audio/mpeg")
                 .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                 .setAllowedOverMetered(true)
@@ -241,34 +242,34 @@ object MusicCenter {
                 req.setDestinationInExternalFilesDir(ctx, android.os.Environment.DIRECTORY_MUSIC, name)
             }
             (ctx.getSystemService(Context.DOWNLOAD_SERVICE) as android.app.DownloadManager).enqueue(req)
-            android.widget.Toast.makeText(ctx, "开始下载，完成后在「音乐/心之音」目录", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(ctx, t("music.downloadStartedHint"), android.widget.Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
-            android.widget.Toast.makeText(ctx, "下载失败：${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(ctx, t("music.downloadFailed", "msg" to e.message), android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 
     /** 分享链接（微信/QQ 等以文字发出，点开是落地页） */
-    fun shareLinkTo(ctx: Context, t: MusicTrack) {
-        val text = "${t.title}${if (t.performer.isNotEmpty()) " - ${t.performer}" else ""}\n${shareLink(t)}"
+    fun shareLinkTo(ctx: Context, track: MusicTrack) {
+        val text = "${track.title}${if (track.performer.isNotEmpty()) " - ${track.performer}" else ""}\n${shareLink(track)}"
         val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(android.content.Intent.EXTRA_SUBJECT, t.title)
+            putExtra(android.content.Intent.EXTRA_SUBJECT, track.title)
             putExtra(android.content.Intent.EXTRA_TEXT, text)
         }
-        ctx.startActivity(android.content.Intent.createChooser(intent, "分享音乐").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+        ctx.startActivity(android.content.Intent.createChooser(intent, t("music.shareChooser")).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
     /** 分享音乐文件本身：先下到缓存再用 FileProvider 发出（文件大，要等一会） */
     @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
-    fun shareFileTo(ctx: Context, t: MusicTrack) {
+    fun shareFileTo(ctx: Context, track: MusicTrack) {
         val app = ctx.applicationContext
-        android.widget.Toast.makeText(app, "正在准备文件（${"%.0f".format(t.size / 1048576.0)}MB）…", android.widget.Toast.LENGTH_SHORT).show()
+        android.widget.Toast.makeText(app, t("music.preparing", "n" to "%.0f".format(track.size / 1048576.0)), android.widget.Toast.LENGTH_SHORT).show()
         kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val result = runCatching {
                 val dir = java.io.File(app.cacheDir, "share_music").apply { mkdirs() }
-                val file = java.io.File(dir, "${safeName(t)}.${extOf(t.url)}")
-                if (!file.exists() || file.length() != t.size.toLong()) {
-                    java.net.URL(Api.fullUrl(t.url)).openStream().use { input -> file.outputStream().use { input.copyTo(it) } }
+                val file = java.io.File(dir, "${safeName(track)}.${extOf(track.url)}")
+                if (!file.exists() || file.length() != track.size.toLong()) {
+                    java.net.URL(Api.fullUrl(track.url)).openStream().use { input -> file.outputStream().use { input.copyTo(it) } }
                 }
                 androidx.core.content.FileProvider.getUriForFile(app, "${app.packageName}.fileprovider", file)
             }
@@ -277,12 +278,12 @@ object MusicCenter {
                     val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                         type = "audio/*"
                         putExtra(android.content.Intent.EXTRA_STREAM, uri)
-                        putExtra(android.content.Intent.EXTRA_SUBJECT, t.title)
+                        putExtra(android.content.Intent.EXTRA_SUBJECT, track.title)
                         addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
-                    app.startActivity(android.content.Intent.createChooser(intent, "发送音乐文件").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                    app.startActivity(android.content.Intent.createChooser(intent, t("music.sendFile")).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
                 }.onFailure {
-                    android.widget.Toast.makeText(app, "准备文件失败：${it.message}", android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(app, t("music.prepareFailed", "msg" to it.message), android.widget.Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -295,7 +296,7 @@ object MusicCenter {
 @Composable
 fun NowPlayingBar(onOpen: () -> Unit) {
     val ctx = LocalContext.current
-    val t = MusicCenter.current.value ?: return
+    val track = MusicCenter.current.value ?: return
     val playing by MusicCenter.isPlaying
     val buffering by MusicCenter.buffering
     val rate by MusicCenter.rate
@@ -308,9 +309,9 @@ fun NowPlayingBar(onOpen: () -> Unit) {
     ) {
         Box(Modifier.size(34.dp).noRippleClick { MusicCenter.toggle(ctx) }, contentAlignment = Alignment.Center) { PlayPauseIcon(playing, TextMain, 20.dp) }
         Column(Modifier.weight(1f).noRippleClick(onOpen).padding(horizontal = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(t.title, color = TextMain, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(track.title, color = TextMain, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                (t.performer.ifEmpty { source.ifEmpty { "未知艺术家" } }) + if (buffering) " · 缓冲中…" else "",
+                (track.performer.ifEmpty { source.ifEmpty { t("music.unknownArtist") } }) + if (buffering) " · " + t("music.buffering") else "",
                 color = TextSub, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
@@ -362,7 +363,7 @@ fun MusicScreen(onBack: () -> Unit) {
     val data by MusicCenter.data
     LaunchedEffect(Unit) { MusicCenter.load() }
     Column(Modifier.fillMaxSize().background(Bg)) {
-        NavBar(data?.source?.title?.ifEmpty { null } ?: "音乐", onBack)
+        NavBar(data?.source?.title?.ifEmpty { null } ?: t("music.title"), onBack)
         Box(Modifier.weight(1f)) { MusicSheetContent(onClose = null) }
     }
 }
@@ -384,8 +385,8 @@ private fun MusicSheetContent(onClose: (() -> Unit)?) {
         if (onClose != null) {
             Row(Modifier.fillMaxWidth().padding(16.dp, 4.dp, 8.dp, 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(data?.source?.title?.ifEmpty { null } ?: "音乐", color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text("最多保留 100 首" + (data?.list?.size?.takeIf { it > 0 }?.let { " · 共 $it 首" } ?: ""), color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
+                    Text(data?.source?.title?.ifEmpty { null } ?: t("music.title"), color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(t("music.keep100") + (data?.list?.size?.takeIf { it > 0 }?.let { " · " + t("music.totalN", "n" to it) } ?: ""), color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
                 }
                 Box(Modifier.size(34.dp).noRippleClick(onClose), contentAlignment = Alignment.Center) { CloseIcon(TextMain, 16.dp) }
             }
@@ -395,8 +396,8 @@ private fun MusicSheetContent(onClose: (() -> Unit)?) {
         Box(Modifier.weight(1f)) {
             val d = data
             when {
-                !loaded || d == null -> EmptyHint("加载中…")
-                d.list.isEmpty() -> EmptyHint("还没有歌曲\n稍后再来看看")
+                !loaded || d == null -> EmptyHint(t("common.loading"))
+                d.list.isEmpty() -> EmptyHint(t("music.emptyLater"))
                 else -> androidx.compose.material3.pulltorefresh.PullToRefreshBox(
                     isRefreshing = refreshing,
                     onRefresh = { scope.launch { refreshing = true; MusicCenter.load(force = true); refreshing = false } },
@@ -404,7 +405,7 @@ private fun MusicSheetContent(onClose: (() -> Unit)?) {
                 ) {
                     LazyColumn(Modifier.fillMaxSize()) {
                         if (onClose == null) item(key = "head") {
-                            Text("最多保留 100 首 · 共 ${d.list.size} 首", color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(16.dp, 10.dp, 16.dp, 2.dp))
+                            Text(t("music.keep100") + " · " + t("music.totalN", "n" to d.list.size), color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(16.dp, 10.dp, 16.dp, 2.dp))
                         }
                         items(d.list, key = { it.id }) { t ->
                             val active = current?.id == t.id
@@ -444,7 +445,7 @@ private fun MusicSheetContent(onClose: (() -> Unit)?) {
 
 /** 底部大播放器：封面 + 标题/艺术家 / 进度（可点）+ 时间 + 倍速 / 随机 · 上一首 · 播放 · 下一首 · 循环 */
 @Composable
-private fun BigPlayer(t: MusicTrack?, subtitleFallback: String) {
+private fun BigPlayer(track: MusicTrack?, subtitleFallback: String) {
     val ctx = LocalContext.current
     val playing by MusicCenter.isPlaying
     val rate by MusicCenter.rate
@@ -452,10 +453,10 @@ private fun BigPlayer(t: MusicTrack?, subtitleFallback: String) {
     val repeatOne by MusicCenter.repeatOne
     var pos by remember { mutableStateOf(0L) }
     var dur by remember { mutableStateOf(0L) }
-    LaunchedEffect(t?.id, playing) {
+    LaunchedEffect(track?.id, playing) {
         while (true) {
             pos = MusicCenter.positionMs()
-            dur = MusicCenter.durationMs().takeIf { it > 0 } ?: ((t?.duration ?: 0).toLong() * 1000)
+            dur = MusicCenter.durationMs().takeIf { it > 0 } ?: ((track?.duration ?: 0).toLong() * 1000)
             delay(500)
         }
     }
@@ -464,21 +465,21 @@ private fun BigPlayer(t: MusicTrack?, subtitleFallback: String) {
     Column(Modifier.fillMaxWidth().background(Bg)) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
         Column(Modifier.fillMaxWidth().padding(16.dp, 12.dp, 16.dp, 14.dp)) {
-        if (t != null) {
+        if (track != null) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                MusicCover(t, 52.dp, spinning = false, round = false)
+                MusicCover(track, 52.dp, spinning = false, round = false)
                 Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                    Text(t.title, color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(t.performer.ifEmpty { "未知艺术家" }, color = TextSub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 3.dp))
+                    Text(track.title, color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(track.performer.ifEmpty { t("music.unknownArtist") }, color = TextSub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 3.dp))
                 }
                 // 保存到手机 / 分享（链接 或 文件）
-                Box(Modifier.size(36.dp).noRippleClick { MusicCenter.saveToPhone(ctx, t) }, contentAlignment = Alignment.Center) { DownloadIcon(TextMain) }
+                Box(Modifier.size(36.dp).noRippleClick { MusicCenter.saveToPhone(ctx, track) }, contentAlignment = Alignment.Center) { DownloadIcon(TextMain) }
                 var showShare by remember { mutableStateOf(false) }
                 Box {
                     Box(Modifier.size(36.dp).noRippleClick { showShare = true }, contentAlignment = Alignment.Center) { ShareIcon(TextMain) }
                     androidx.compose.material3.DropdownMenu(expanded = showShare, onDismissRequest = { showShare = false }) {
-                        androidx.compose.material3.DropdownMenuItem(text = { Text("分享链接", fontSize = 14.sp) }, onClick = { showShare = false; MusicCenter.shareLinkTo(ctx, t) })
-                        androidx.compose.material3.DropdownMenuItem(text = { Text("发送音乐文件", fontSize = 14.sp) }, onClick = { showShare = false; MusicCenter.shareFileTo(ctx, t) })
+                        androidx.compose.material3.DropdownMenuItem(text = { Text(t("music.shareLink"), fontSize = 14.sp) }, onClick = { showShare = false; MusicCenter.shareLinkTo(ctx, track) })
+                        androidx.compose.material3.DropdownMenuItem(text = { Text(t("music.sendFile"), fontSize = 14.sp) }, onClick = { showShare = false; MusicCenter.shareFileTo(ctx, track) })
                     }
                 }
             }
@@ -501,7 +502,7 @@ private fun BigPlayer(t: MusicTrack?, subtitleFallback: String) {
                 Text(fmtDur(dur), color = TextDim, fontSize = 11.sp, modifier = Modifier.width(56.dp), textAlign = TextAlign.End)
             }
         } else {
-            Text("点上面的歌开始播放", color = TextSub, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp))
+            Text(t("music.tapToPlay"), color = TextSub, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp))
         }
         Row(Modifier.fillMaxWidth().padding(top = 8.dp, start = 8.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Box(Modifier.size(44.dp).noRippleClick { MusicCenter.toggleShuffle() }, contentAlignment = Alignment.Center) { ShuffleIcon(if (shuffle) Accent else TextMain) }

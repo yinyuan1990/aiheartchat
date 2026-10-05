@@ -1,4 +1,5 @@
 import { CSSProperties, useCallback, useRef, useState } from 'react';
+import { t } from '../../i18n';
 
 /** 搜索行右侧的快捷 emoji（Telegram 同款顺序）：贴纸按 emoji 过滤，GIF 当搜索词 */
 export const QUICK_EMOJIS = ['❤️', '👍', '👎', '🎉', '👋', '😀', '😢', '😠'];
@@ -73,7 +74,7 @@ export function SearchIcon({ size = 15 }: { size?: number }) {
  * - 贴纸页传 onTap：整条胶囊是个按钮（和「+」一样弹表情商店 sheet 并聚焦搜索），点快捷 emoji 直接带着它去搜；
  * - 表情 / GIF 页不传：点胶囊变成输入框就地搜，快捷 emoji 点亮一个当过滤词。
  */
-export function SearchRow({ value, onChange, chip, onChip, placeholder = '搜索', onTap }: {
+export function SearchRow({ value, onChange, chip, onChip, placeholder = t('common.search'), onTap }: {
   value: string; onChange: (v: string) => void; chip: string; onChip: (e: string) => void; placeholder?: string; onTap?: () => void;
 }) {
   const [focus, setFocus] = useState(false);

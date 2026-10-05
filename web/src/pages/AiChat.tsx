@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useApp } from '../store';
 import { WebPreview } from '../components/WebPreview';
+import { t } from '../i18n';
 
 interface AiMsg {
   id: string;
@@ -64,14 +65,14 @@ export function AiChatPage() {
       const reply = await api<AiMsg>('/ai/chat', { method: 'POST', body: { content } });
       setMessages((prev) => [...prev, reply]);
     } catch (e: any) {
-      showToast(e.message ?? 'AI 暂时不可用');
+      showToast(e.message ?? t('ai.unavailable'));
     } finally {
       setThinking(false);
     }
   };
 
   const clear = async () => {
-    if (!window.confirm('清空与 AI 的全部对话记录？')) return;
+    if (!window.confirm(t('ai.clearConfirm'))) return;
     try {
       await api('/ai/clear', { method: 'POST' });
       setMessages([]);
@@ -84,13 +85,13 @@ export function AiChatPage() {
     <div className="app">
       <div className="navbar">
         <span className="back" onClick={() => nav(-1)}>‹</span>
-        <span className="title">AI 助手</span>
-        <span className="action" style={{ color: 'var(--text-2)' }} onClick={clear}>清空</span>
+        <span className="title">{t('ai.title')}</span>
+        <span className="action" style={{ color: 'var(--text-2)' }} onClick={clear}>{t('chat.clear')}</span>
       </div>
 
       <div className="page page-pad">
         {messages.length === 0 && !thinking && (
-          <div className="empty">我是 AI 助手，完全免费{'\n'}有什么想问的尽管说</div>
+          <div className="empty">{t('ai.empty')}</div>
         )}
         {messages.map((m) => {
           const mine = m.role === 'user';
@@ -108,8 +109,8 @@ export function AiChatPage() {
                   >
                     <span style={{ fontSize: 22 }}>🌐</span>
                     <span>
-                      <span style={{ display: 'block', fontSize: 14 }}>网页内容</span>
-                      <span style={{ display: 'block', fontSize: 11, color: 'var(--accent)', marginTop: 2 }}>点击打开预览 ›</span>
+                      <span style={{ display: 'block', fontSize: 14 }}>{t('ai.webContent')}</span>
+                      <span style={{ display: 'block', fontSize: 11, color: 'var(--accent)', marginTop: 2 }}>{t('ai.openPreview')}</span>
                     </span>
                   </div>
                 )}
@@ -126,7 +127,7 @@ export function AiChatPage() {
           <div className="bubble-row" style={{ gap: 8, alignItems: 'flex-start' }}>
             {AI_AVATAR}
             <div className="bubble-wrap">
-              <div className="bubble theirs" style={{ color: 'var(--text-2)' }}>正在思考…</div>
+              <div className="bubble theirs" style={{ color: 'var(--text-2)' }}>{t('ai.thinking')}</div>
             </div>
           </div>
         )}
@@ -138,12 +139,12 @@ export function AiChatPage() {
           className="input grow"
           style={{ marginBottom: 0, borderRadius: 20, height: 40 }}
           value={input}
-          placeholder="随便问点什么…"
+          placeholder={t('ai.inputHint')}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && send()}
         />
         {input.trim() && !thinking && (
-          <button className="btn-sm" style={{ height: 40, borderRadius: 20, flexShrink: 0 }} onClick={send}>发送</button>
+          <button className="btn-sm" style={{ height: 40, borderRadius: 20, flexShrink: 0 }} onClick={send}>{t('common.send')}</button>
         )}
       </div>
 

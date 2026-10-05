@@ -44,6 +44,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.Api
 import com.wh.peiwana.ui.theme.Accent
 import com.wh.peiwana.ui.theme.Accent2
@@ -57,7 +58,7 @@ val AccentBrush = Brush.horizontalGradient(listOf(Accent, Accent2))
 
 /** 内部网页全屏预览（共用：AI 生成的 HTML 或新闻原文 url） */
 @Composable
-fun WebPreviewDialog(html: String? = null, url: String? = null, title: String = "网页预览", onClose: () -> Unit) {
+fun WebPreviewDialog(html: String? = null, url: String? = null, title: String = t("web.preview"), onClose: () -> Unit) {
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onClose,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
@@ -72,16 +73,16 @@ fun WebPreviewDialog(html: String? = null, url: String? = null, title: String = 
                 Text(title, color = TextMain, fontSize = 14.sp, maxLines = 1, modifier = Modifier.weight(1f))
                 if (url != null) {
                     val ctx = androidx.compose.ui.platform.LocalContext.current
-                    Text("浏览器打开", color = TextSub, fontSize = 14.sp, modifier = Modifier.padding(end = 14.dp).noRippleClick {
+                    Text(t("web.openInBrowser"), color = TextSub, fontSize = 14.sp, modifier = Modifier.padding(end = 14.dp).noRippleClick {
                         runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
                     })
-                    Text("复制链接", color = TextSub, fontSize = 14.sp, modifier = Modifier.padding(end = 14.dp).noRippleClick {
+                    Text(t("web.copyLink"), color = TextSub, fontSize = 14.sp, modifier = Modifier.padding(end = 14.dp).noRippleClick {
                         val cm = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                         cm.setPrimaryClip(android.content.ClipData.newPlainText("link", url))
-                        android.widget.Toast.makeText(ctx, "已复制", android.widget.Toast.LENGTH_SHORT).show()
+                        android.widget.Toast.makeText(ctx, t("common.copied"), android.widget.Toast.LENGTH_SHORT).show()
                     })
                 }
-                Text("关闭", color = Accent, fontSize = 14.sp, modifier = Modifier.noRippleClick(onClose))
+                Text(t("common.close"), color = Accent, fontSize = 14.sp, modifier = Modifier.noRippleClick(onClose))
             }
             var web by remember { mutableStateOf<android.webkit.WebView?>(null) }
             androidx.activity.compose.BackHandler {
@@ -251,7 +252,7 @@ fun MediaViewer(groups: List<List<MediaItem>>, startGroup: Int = 0, startIndex: 
                 }
                 // 角标：第几条 / 共几条 · 第几张 / 共几张
                 val label = buildString {
-                    if (gs.size > 1) append("${g + 1}/${gs.size} 条")
+                    if (gs.size > 1) append(t("media.postIndex", "i" to g + 1, "n" to gs.size))
                     if (items.size > 1) { if (isNotEmpty()) append(" · "); append("${hPager.currentPage + 1}/${items.size}") }
                 }
                 if (label.isNotEmpty()) Text(label, color = Color.White, fontSize = 13.sp, modifier = Modifier.align(Alignment.TopCenter).padding(top = 40.dp))
@@ -336,7 +337,7 @@ fun ImageViewer(urls: List<String>, startIndex: Int = 0, onScanQr: ((String) -> 
                         scope.launch {
                             val text = runCatching { com.wh.peiwana.ui.screen.decodeQrFromUrl(ctx, Api.fullUrl(urls[pager.currentPage])) }.getOrNull()
                             scanning = false
-                            if (text == null) android.widget.Toast.makeText(ctx, "图片里没有认出二维码", android.widget.Toast.LENGTH_SHORT).show()
+                            if (text == null) android.widget.Toast.makeText(ctx, t("qr.notFoundInImage"), android.widget.Toast.LENGTH_SHORT).show()
                             else {
                                 onClose()
                                 onScanQr(text)
@@ -347,7 +348,7 @@ fun ImageViewer(urls: List<String>, startIndex: Int = 0, onScanQr: ((String) -> 
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 ScanIcon(Color.White, 16.dp)
-                Text(if (scanning) "  识别中…" else "  识别二维码", color = Color.White, fontSize = 14.sp)
+                Text("  " + if (scanning) t("qr.recognizing") else t("qr.recognize"), color = Color.White, fontSize = 14.sp)
             }
         }
     }
@@ -432,14 +433,14 @@ fun RoundBadge(count: Int, modifier: Modifier = Modifier, color: Color = Accent)
 fun timeAgo(iso: String): String {
     if (iso.isEmpty()) return ""
     return try {
-        val t = java.time.Instant.parse(iso).toEpochMilli()
-        val diff = System.currentTimeMillis() - t
+        val ts = java.time.Instant.parse(iso).toEpochMilli()
+        val diff = System.currentTimeMillis() - ts
         val min = diff / 60000
         when {
-            min < 1 -> "刚刚"
-            min < 60 -> "$min 分钟前"
-            min < 1440 -> "${min / 60} 小时前"
-            else -> "${min / 1440} 天前"
+            min < 1 -> t("time.justNow")
+            min < 60 -> t("time.minutesAgo", "n" to min)
+            min < 1440 -> t("time.hoursAgo", "n" to min / 60)
+            else -> t("time.daysAgo", "n" to min / 1440)
         }
     } catch (_: Exception) { "" }
 }

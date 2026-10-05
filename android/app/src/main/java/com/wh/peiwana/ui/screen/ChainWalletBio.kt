@@ -10,6 +10,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import com.wh.peiwana.i18n.t
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -73,10 +74,10 @@ object ChainWalletBio {
 
     /** 结果：Result.success(true) 已开启，success(false) 用户取消；失败带原因 */
     fun enable(activity: Activity, password: String, done: (Result<Boolean>) -> Unit) {
-        if (!available(activity)) return done(Result.failure(IllegalStateException("这台手机没有录入指纹")))
+        if (!available(activity)) return done(Result.failure(IllegalStateException(t("bio.noFingerprint"))))
         val cipher = runCatching { Cipher.getInstance(GCM).apply { init(Cipher.ENCRYPT_MODE, newKey()) } }
             .getOrElse { return done(Result.failure(it)) }
-        prompt(activity, cipher, "开启指纹解锁", "验证指纹后，下次打开钱包可以直接用指纹解锁") { c, err ->
+        prompt(activity, cipher, t("bio.enableTitle"), t("bio.enableSubtitle")) { c, err ->
             when {
                 err != null -> done(Result.failure(IllegalStateException(err)))
                 c == null -> done(Result.success(false))
@@ -112,7 +113,7 @@ object ChainWalletBio {
         } catch (e: Exception) {
             return done(Result.failure(e))
         }
-        prompt(activity, cipher, "指纹解锁钱包", null) { c, err ->
+        prompt(activity, cipher, t("bio.unlockTitle"), null) { c, err ->
             when {
                 err != null -> done(Result.failure(IllegalStateException(err)))
                 c == null -> done(Result.success(null))
@@ -133,7 +134,7 @@ object ChainWalletBio {
         val b = BiometricPrompt.Builder(activity).setTitle(title)
         if (subtitle != null) b.setSubtitle(subtitle)
         if (Build.VERSION.SDK_INT >= 30) b.setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
-        b.setNegativeButton("用密码", exec) { _, _ -> answer(null, null) }
+        b.setNegativeButton(t("bio.usePassword"), exec) { _, _ -> answer(null, null) }
         b.build().authenticate(BiometricPrompt.CryptoObject(cipher), CancellationSignal(), exec, object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                 answer(result.cryptoObject?.cipher, if (result.cryptoObject?.cipher == null) "no cipher" else null)

@@ -16,6 +16,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.WsClient
 
 /**
@@ -109,7 +110,7 @@ class KeepAliveService : Service() {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             nm.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "消息保活", NotificationManager.IMPORTANCE_LOW).apply {
+                NotificationChannel(CHANNEL_ID, t("notify.keepAliveChannel"), NotificationManager.IMPORTANCE_LOW).apply {
                     setShowBadge(false)
                 },
             )
@@ -121,8 +122,8 @@ class KeepAliveService : Service() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("陪玩")
-            .setContentText("运行中，实时接收消息与来电")
+            .setContentTitle(t("notify.keepAliveTitle"))
+            .setContentText(t("notify.keepAliveText"))
             .setOngoing(true)
             .setContentIntent(pending)
             .setPriority(NotificationCompat.PRIORITY_LOW)

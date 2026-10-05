@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { openNativeChat } from '../bridge';
 import { api } from '../api';
 import { MomentCard, MomentItem } from './Plaza';
+import { t } from '../i18n';
 
 /** 关注动态（原主页「关注」tab，入口移到「我的」） */
 export function FollowMomentsPage() {
@@ -30,12 +31,12 @@ export function FollowMomentsPage() {
   return (
     <div className="app">
       <div className="navbar">
-        <span className="back" onClick={() => nav(-1)}>‹ 返回</span>
-        <span className="title">关注动态</span>
+        <span className="back" onClick={() => nav(-1)}>‹ {t('common.back')}</span>
+        <span className="title">{t('me.followMoments')}</span>
       </div>
       <div className="page no-scrollbar">
         {loaded && items.length === 0 && (
-          <div className="empty">关注的人还没有动态<br />去遇见里关注一些人吧</div>
+          <div className="empty">{t('moments.followEmpty')}<br />{t('moments.followEmptyHint')}</div>
         )}
         {items.map((m) => (
           <MomentCard key={m.id} m={m} onOpenDetail={() => nav(`/moment/${m.id}`)} onGreet={() => greet(m)} />

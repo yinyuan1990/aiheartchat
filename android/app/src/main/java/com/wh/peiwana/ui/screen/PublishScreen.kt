@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.Api
 import com.wh.peiwana.ui.*
 import com.wh.peiwana.ui.theme.*
@@ -94,12 +95,12 @@ fun PublishScreen(onBack: () -> Unit, onDone: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxWidth().padding(16.dp, 14.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.size(40.dp).noRippleClick(onBack), contentAlignment = Alignment.Center) { Text("×", color = TextSub, fontSize = 26.sp) }
-            Text("发布动态", color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.weight(1f))
-            Text(if (busy) "上传中" else "", color = TextSub, fontSize = 12.sp)
+            Text(t("publish.title"), color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.weight(1f))
+            Text(if (busy) t("publish.uploading") else "", color = TextSub, fontSize = 12.sp)
         }
         Column(modifier = Modifier.weight(1f).padding(horizontal = 16.dp)) {
             Row(modifier = Modifier.padding(bottom = 14.dp).clip(RoundedCornerShape(11.dp)).background(Bg3).padding(3.dp)) {
-                listOf("photo" to "图文", "video" to "视频").forEach { (k, label) ->
+                listOf("photo" to t("publish.photo"), "video" to t("common.video")).forEach { (k, label) ->
                     Box(modifier = Modifier.weight(1f).clip(RoundedCornerShape(9.dp)).background(if (mode == k) Bg else Color.Transparent).clickable { mode = k }.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
                         Text(label, color = if (mode == k) TextMain else TextSub, fontSize = 13.sp)
                     }
@@ -119,7 +120,7 @@ fun PublishScreen(onBack: () -> Unit, onDone: () -> Unit) {
             } else {
                 if (videoUrl.isEmpty()) {
                     Box(modifier = Modifier.fillMaxWidth().aspectRatio(16 / 9f).clip(RoundedCornerShape(12.dp)).background(Bg2).clickable { pickVideo.launch("video/*") }, contentAlignment = Alignment.Center) {
-                        Text("+ 选择视频", color = TextDim, fontSize = 13.sp)
+                        Text(t("publish.pickVideo"), color = TextDim, fontSize = 13.sp)
                     }
                 } else {
                     Box(modifier = Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(12.dp)).background(Color.Black).clickable { pickVideo.launch("video/*") }, contentAlignment = Alignment.Center) {
@@ -133,12 +134,12 @@ fun PublishScreen(onBack: () -> Unit, onDone: () -> Unit) {
                             modifier = Modifier.fillMaxSize(),
                         )
                         Text("▶", color = Color.White, fontSize = 40.sp)
-                        Text("重选", color = Color.White, fontSize = 12.sp, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).clip(RoundedCornerShape(10.dp)).background(Color.Black.copy(alpha = 0.5f)).padding(horizontal = 8.dp, vertical = 3.dp))
+                        Text(t("publish.repick"), color = Color.White, fontSize = 12.sp, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).clip(RoundedCornerShape(10.dp)).background(Color.Black.copy(alpha = 0.5f)).padding(horizontal = 8.dp, vertical = 3.dp))
                     }
                 }
             }
-            OutlinedTextField(value = content, onValueChange = { content = it }, placeholder = { Text("添加作品描述…") }, modifier = Modifier.fillMaxWidth().padding(top = 14.dp).height(120.dp))
-            OutlinedTextField(value = city, onValueChange = { city = it }, placeholder = { Text("所在城市（可选）") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 10.dp))
+            OutlinedTextField(value = content, onValueChange = { content = it }, placeholder = { Text(t("publish.descHint")) }, modifier = Modifier.fillMaxWidth().padding(top = 14.dp).height(120.dp))
+            OutlinedTextField(value = city, onValueChange = { city = it }, placeholder = { Text(t("publish.cityHint")) }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 10.dp))
         }
         Column(modifier = Modifier.padding(16.dp)) {
             if (busy) {
@@ -147,9 +148,9 @@ fun PublishScreen(onBack: () -> Unit, onDone: () -> Unit) {
                     color = Accent, trackColor = Bg3,
                     modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
                 )
-                Text("上传中 ${(progress * 100).toInt()}%", color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
+                Text(t("publish.uploadingPct", "n" to (progress * 100).toInt()), color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
             }
-            AccentButton("发布", enabled = !busy) {
+            AccentButton(t("publish.submit"), enabled = !busy) {
                 scope.launch {
                     val body = buildJsonObject {
                         put("type", JsonPrimitive(if (mode == "video") 2 else 1))

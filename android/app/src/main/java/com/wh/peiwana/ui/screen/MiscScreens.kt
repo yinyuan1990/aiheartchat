@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.*
 import com.wh.peiwana.ui.*
 import com.wh.peiwana.ui.theme.*
@@ -79,7 +80,7 @@ fun MomentDetailScreen(id: String, onBack: () -> Unit, onOpenChat: (String, Stri
             Text("  ${moment.user?.nickname ?: ""}", color = TextMain, fontSize = 15.sp, modifier = Modifier.weight(1f))
             // 自己的动态不显示私聊按钮
             if (moment.user?.id != com.wh.peiwana.net.Session.uid) {
-                Box(modifier = Modifier.clip(RoundedCornerShape(15.dp)).background(Bg3).clickable { moment.user?.let { onOpenChat(it.id, it.nickname) } }.padding(horizontal = 14.dp, vertical = 6.dp)) { Text("私聊", color = TextSub, fontSize = 13.sp) }
+                Box(modifier = Modifier.clip(RoundedCornerShape(15.dp)).background(Bg3).clickable { moment.user?.let { onOpenChat(it.id, it.nickname) } }.padding(horizontal = 14.dp, vertical = 6.dp)) { Text(t("moments.chat"), color = TextSub, fontSize = 13.sp) }
             }
         }
         LazyColumn(modifier = Modifier.weight(1f).padding(horizontal = 16.dp)) {
@@ -103,13 +104,13 @@ fun MomentDetailScreen(id: String, onBack: () -> Unit, onOpenChat: (String, Stri
                         }
                     }
                 }
-                Text("全部评论（${comments.size}）", color = TextMain, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 14.dp))
+                Text(t("moments.allComments", "n" to comments.size), color = TextMain, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 14.dp))
             }
             items(comments, key = { it.id }) { c ->
                 Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.Top) {
                     Avatar(c.user?.avatar, 34)
                     Column(modifier = Modifier.padding(start = 10.dp)) {
-                        Text(c.user?.nickname + (if (c.replyToNickname.isNotEmpty()) " 回复 @${c.replyToNickname}" else ""), color = TextSub, fontSize = 12.sp)
+                        Text(c.user?.nickname + (if (c.replyToNickname.isNotEmpty()) " " + t("moments.repliedTo", "name" to c.replyToNickname) else ""), color = TextSub, fontSize = 12.sp)
                         if (c.content.isNotEmpty()) Text(c.content, color = TextMain, fontSize = 14.sp, modifier = Modifier.padding(top = 2.dp))
                         if (c.imageUrl.isNotEmpty()) AsyncImage(model = Api.fullUrl(c.imageUrl), contentDescription = null, modifier = Modifier.padding(top = 4.dp).width(120.dp).clip(RoundedCornerShape(8.dp)))
                         c.sticker?.let { StickerImage(it, if (it.isGif) 160.dp else 96.dp, modifier = Modifier.padding(top = 4.dp)) }
@@ -136,7 +137,7 @@ fun MomentDetailScreen(id: String, onBack: () -> Unit, onOpenChat: (String, Stri
                 ) { SmileIcon(if (showSticker) Accent else TextSub, 20.dp) }
                 Spacer(Modifier.width(8.dp))
                 Box(Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).background(Bg3).padding(horizontal = 14.dp, vertical = 10.dp)) {
-                    if (input.isEmpty()) Text("说点什么…", color = TextSub, fontSize = 14.sp)
+                    if (input.isEmpty()) Text(t("moments.saySomething"), color = TextSub, fontSize = 14.sp)
                     BasicTextField(
                         value = input, onValueChange = { if (it.length <= 500) input = it },
                         textStyle = TextStyle(color = TextMain, fontSize = 15.sp),
@@ -159,7 +160,7 @@ fun MomentDetailScreen(id: String, onBack: () -> Unit, onOpenChat: (String, Stri
                                                         input = ""; sticker = null; showSticker = false; loadC()
                         }
                     }
-                }.padding(horizontal = 16.dp, vertical = 10.dp)) { Text("发送", color = Color.White, fontSize = 13.sp) }
+                }.padding(horizontal = 16.dp, vertical = 10.dp)) { Text(t("common.send"), color = Color.White, fontSize = 13.sp) }
             }
             if (showSticker) EmojiPanel(onPick = { sticker = it }, onEmoji = { input += it }, onDelete = { input = dropLastGrapheme(input) }, onKeyboard = { showSticker = false; inputFocus.requestFocus(); keyboard?.show() })
         }
@@ -176,13 +177,13 @@ fun GiftsReceivedScreen(onBack: () -> Unit) {
     var items by remember { mutableStateOf<List<GiftDef>>(emptyList()) }
     LaunchedEffect(Unit) { items = runCatching { Api.getList<GiftDef>("/gifts/received") }.getOrDefault(emptyList()) }
     Column(Modifier.fillMaxSize()) {
-        NavBar("礼物墙", onBack)
+        NavBar(t("gifts.title"), onBack)
         LazyVerticalGrid(columns = GridCells.Fixed(3), contentPadding = PaddingValues(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(items, key = { it.id }) { g ->
                 Column(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Bg2).alpha(if (g.count > 0) 1f else 0.35f).padding(vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     AsyncImage(model = Api.fullUrl(g.icon), contentDescription = null, modifier = Modifier.size(52.dp))
                     Text(g.name, color = TextMain, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
-                    Text("${fmtPoints(g.price)} 积分", color = TextSub, fontSize = 11.sp)
+                    Text(t("task.pointsN", "n" to fmtPoints(g.price)), color = TextSub, fontSize = 11.sp)
                     Text("× ${g.count}", color = if (g.count > 0) Accent else TextDim, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
                 }
             }
@@ -198,16 +199,16 @@ fun GuideApplyScreen(onBack: () -> Unit) {
     var toast by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize()) {
-        NavBar("搭子认证", onBack)
+        NavBar(t("me.guideApply"), onBack)
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("认证需提交真实姓名与身份证号，审核通过即同时完成实名认证", color = TextDim, fontSize = 12.sp)
-            OutlinedTextField(realName, { realName = it }, placeholder = { Text("真实姓名") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(idCard, { idCard = it }, placeholder = { Text("身份证号") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(intro, { intro = it }, placeholder = { Text("介绍自己的城市、兴趣爱好") }, modifier = Modifier.fillMaxWidth().height(100.dp))
+            Text(t("guide.applyHint"), color = TextDim, fontSize = 12.sp)
+            OutlinedTextField(realName, { realName = it }, placeholder = { Text(t("realname.name")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(idCard, { idCard = it }, placeholder = { Text(t("realname.idCardNo")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(intro, { intro = it }, placeholder = { Text(t("guide.introHint")) }, modifier = Modifier.fillMaxWidth().height(100.dp))
             Spacer(Modifier.height(6.dp))
-            AccentButton("提交认证") {
-                if (realName.isEmpty() || idCard.isEmpty() || intro.isEmpty()) { toast = "请填写完整"; return@AccentButton }
-                scope.launch { runCatching { Api.request("/guide/apply", "POST", buildJsonObject { put("realName", JsonPrimitive(realName)); put("idCardNo", JsonPrimitive(idCard)); put("intro", JsonPrimitive(intro)) }) }.onSuccess { toast = "已提交，等待审核"; onBack() }.onFailure { toast = it.message ?: "失败" } }
+            AccentButton(t("realname.submit")) {
+                if (realName.isEmpty() || idCard.isEmpty() || intro.isEmpty()) { toast = t("guide.fillAll"); return@AccentButton }
+                scope.launch { runCatching { Api.request("/guide/apply", "POST", buildJsonObject { put("realName", JsonPrimitive(realName)); put("idCardNo", JsonPrimitive(idCard)); put("intro", JsonPrimitive(intro)) }) }.onSuccess { toast = t("guide.submitted"); onBack() }.onFailure { toast = it.message ?: t("common.fail") } }
             }
             if (toast.isNotEmpty()) Text(toast, color = Accent, fontSize = 13.sp)
         }
@@ -274,10 +275,10 @@ fun EditProfileScreen(onBack: () -> Unit) {
     // 年纪滚轮选择
     var showAgePicker by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
-        NavBar("编辑资料", onBack) {
-            Text(if (saving) "保存中" else "保存", color = Accent, fontSize = 14.sp, modifier = Modifier.noRippleClick {
+        NavBar(t("me.editProfile"), onBack) {
+            Text(if (saving) t("profile.saving") else t("common.save"), color = Accent, fontSize = 14.sp, modifier = Modifier.noRippleClick {
                 if (saving) return@noRippleClick
-                if (nickname.isBlank()) { toast = "昵称不能为空"; return@noRippleClick }
+                if (nickname.isBlank()) { toast = t("profile.nicknameEmpty"); return@noRippleClick }
                 saving = true
                 scope.launch {
                     val body = buildJsonObject {
@@ -293,8 +294,8 @@ fun EditProfileScreen(onBack: () -> Unit) {
                             put("photos", kotlinx.serialization.json.buildJsonArray { photos.forEach { add(JsonPrimitive(it)) } })
                         })
                     }
-                        .onSuccess { toast = "保存成功"; onBack() }
-                        .onFailure { toast = it.message ?: "保存失败"; saving = false }
+                        .onSuccess { toast = t("profile.saveSuccess"); onBack() }
+                        .onFailure { toast = it.message ?: t("common.saveFailed"); saving = false }
                 }
             })
         }
@@ -307,30 +308,30 @@ fun EditProfileScreen(onBack: () -> Unit) {
                 Box(Modifier.noRippleClick { pickAvatar.launch("image/*") }) {
                     Avatar(avatar, 92)
                     Text(
-                        "更换", color = Color.White, fontSize = 10.sp,
+                        t("profile.change"), color = Color.White, fontSize = 10.sp,
                         modifier = Modifier.align(Alignment.BottomCenter)
                             .clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.55f))
                             .padding(horizontal = 10.dp, vertical = 2.dp),
                     )
                 }
-                Text("点击更换头像", color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
+                Text(t("profile.changeAvatar"), color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
             }
             // ===== 基本信息 =====
             EditCard {
-                EditRow("昵称") { EditField(nickname, { nickname = it.take(16) }, "填写昵称") }
+                EditRow(t("profile.nickname")) { EditField(nickname, { nickname = it.take(16) }, t("profile.nicknameHint")) }
                 EditDivider()
-                EditRow("年纪", onClick = { showAgePicker = true }) {
+                EditRow(t("profile.age"), onClick = { showAgePicker = true }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("$age 岁", color = TextMain, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                        Text(t("profile.ageYears", "n" to age), color = TextMain, fontSize = 15.sp, modifier = Modifier.weight(1f))
                         Text("›", color = TextDim, fontSize = 20.sp)
                     }
                 }
                 EditDivider()
-                EditRow("城市") {
+                EditRow(t("profile.city")) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        EditField(city, { city = it }, "填写或点右侧定位", Modifier.weight(1f))
+                        EditField(city, { city = it }, t("profile.cityHint"), Modifier.weight(1f))
                         Text(
-                            if (locating) "定位中…" else "定位", color = Accent, fontSize = 13.sp,
+                            if (locating) t("profile.locating") else t("profile.locate"), color = Accent, fontSize = 13.sp,
                             modifier = Modifier.padding(start = 10.dp).noRippleClick {
                                 locPerm.launch(arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION))
                             },
@@ -341,10 +342,10 @@ fun EditProfileScreen(onBack: () -> Unit) {
             // ===== 视频价格（仅女生） =====
             if (user.gender == 2) {
                 EditCard {
-                    EditRow("视频价格") {
+                    EditRow(t("profile.videoPrice")) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             EditField(videoPrice, { videoPrice = it.filter { c -> c.isDigit() || c == '.' } }, "0", Modifier.weight(1f), KeyboardType.Decimal)
-                            Text("积分/分钟", color = TextDim, fontSize = 13.sp)
+                            Text(t("profile.perMin"), color = TextDim, fontSize = 13.sp)
                         }
                     }
                     EditDivider()
@@ -352,7 +353,7 @@ fun EditProfileScreen(onBack: () -> Unit) {
                     val priceFen = ((videoPrice.toDoubleOrNull() ?: 0.0) * 100).toInt()
                     val incomeFen = (priceFen - feeCut).coerceAtLeast(0)
                     Text(
-                        "平台手续费 ${fmtPoints(feeCut.toString())} 积分/分钟，你的收入 ${fmtPoints(incomeFen.toString())} 积分/分钟（价格须高于手续费）",
+                        t("profile.feeHint", "fee" to fmtPoints(feeCut.toString()), "income" to fmtPoints(incomeFen.toString())),
                         color = if (priceFen > feeCut) TextDim else Danger, fontSize = 11.sp, lineHeight = 16.sp,
                         modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
                     )
@@ -361,9 +362,9 @@ fun EditProfileScreen(onBack: () -> Unit) {
             // ===== 签名 =====
             EditCard {
                 Column(Modifier.fillMaxWidth().padding(vertical = 14.dp)) {
-                    Text("签名", color = TextSub, fontSize = 14.sp)
+                    Text(t("profile.bio"), color = TextSub, fontSize = 14.sp)
                     Box(Modifier.fillMaxWidth().padding(top = 10.dp)) {
-                        if (signature.isEmpty()) Text("介绍一下自己…", color = TextDim, fontSize = 15.sp)
+                        if (signature.isEmpty()) Text(t("profile.bioPlaceholder"), color = TextDim, fontSize = 15.sp)
                         BasicTextField(
                             signature, { signature = it.take(80) },
                             textStyle = TextStyle(color = TextMain, fontSize = 15.sp, lineHeight = 22.sp),
@@ -378,13 +379,13 @@ fun EditProfileScreen(onBack: () -> Unit) {
             EditCard {
                 Column(Modifier.fillMaxWidth().padding(vertical = 14.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("照片墙", color = TextSub, fontSize = 14.sp)
+                        Text(t("profile.photoWall"), color = TextSub, fontSize = 14.sp)
                         Spacer(Modifier.weight(1f))
                         Text("${photos.size}/8", color = if (photos.size >= 8) Accent else TextDim, fontSize = 12.sp)
                     }
                     Text(
-                        if (photos.size >= 8) "已满 8 张，删除后可再添加 · 展示在你的个人主页"
-                        else "还可选 ${8 - photos.size} 张（支持多选）· 展示在你的个人主页",
+                        if (photos.size >= 8) t("profile.wallFull")
+                        else t("profile.wallRemain", "n" to 8 - photos.size),
                         color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp),
                     )
                     val cells = photos + if (photos.size < 8) listOf("+") else emptyList()
@@ -449,9 +450,9 @@ fun AgePickerSheet(initial: Int, onDismiss: () -> Unit, onConfirm: (Int) -> Unit
                     .navigationBarsPadding(),
             ) {
                 Row(Modifier.fillMaxWidth().padding(16.dp, 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("取消", color = TextSub, fontSize = 14.sp, modifier = Modifier.noRippleClick(onDismiss))
-                    Text("选择年纪", color = TextMain, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
-                    Text("确定", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.noRippleClick { onConfirm(pending) })
+                    Text(t("common.cancel"), color = TextSub, fontSize = 14.sp, modifier = Modifier.noRippleClick(onDismiss))
+                    Text(t("profile.pickAge"), color = TextMain, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                    Text(t("common.ok"), color = Accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.noRippleClick { onConfirm(pending) })
                 }
                 AgeWheel(initial = initial, onCentered = { pending = it })
                 Spacer(Modifier.height(12.dp))

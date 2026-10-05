@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import jsQR from 'jsqr';
+import { t } from '../i18n';
 
 /** 从扫码结果里提取群邀请码（兼容 peiwan://group?code=xxx 和纯码） */
 export function parseGroupCode(text: string): string | null {
@@ -64,7 +65,7 @@ export function QrScanner({ hint, onResult, onClose }: { hint: string; onResult:
 
   useEffect(() => {
     if (!navigator.mediaDevices?.getUserMedia) {
-      alert('当前环境不支持相机');
+      alert(t('qr.noCamera'));
       cb.current.onClose();
       return;
     }
@@ -99,7 +100,7 @@ export function QrScanner({ hint, onResult, onClose }: { hint: string; onResult:
       await video.play();
       requestAnimationFrame(tick);
     }).catch(() => {
-      alert('无法打开相机，请检查权限');
+      alert(t('qr.cameraDenied'));
       cb.current.onClose();
     });
 

@@ -47,6 +47,7 @@ import androidx.webkit.WebMessageCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.wh.peiwana.BuildConfig
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.Api
 import com.wh.peiwana.net.UserProfile
 import kotlinx.coroutines.launch
@@ -254,7 +255,7 @@ fun ChainWalletScreen(
         scanLauncher.launch(
             ScanOptions()
                 .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                .setPrompt("扫描收款地址二维码")
+                .setPrompt(t("chainWallet.scanPrompt"))
                 .setBeepEnabled(false)
                 .setOrientationLocked(true)
                 .setCaptureActivity(PortraitCaptureActivity::class.java),
@@ -369,7 +370,7 @@ fun ChainWalletScreen(
         bridgeScope.launch {
             runCatching { Api.request("/im/coin-group", "POST", coin)?.jsonObject }
                 .onSuccess { openGroupChat(it) }
-                .onFailure { Toast.makeText(ctx, it.message ?: "进不了讨论群", Toast.LENGTH_SHORT).show() }
+                .onFailure { Toast.makeText(ctx, it.message ?: t("chainWallet.groupJoinFailed"), Toast.LENGTH_SHORT).show() }
         }
     }
     val shell = remember {
@@ -422,16 +423,16 @@ fun ChainWalletScreen(
     diag?.let { text ->
         AlertDialog(
             onDismissRequest = { diag = null },
-            title = { Text("诊断信息") },
+            title = { Text(t("chainWallet.diagnostics")) },
             text = { Text(text, fontSize = 12.sp) },
             confirmButton = {
                 TextButton(onClick = {
                     (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.setPrimaryClip(ClipData.newPlainText("diag", text))
-                    Toast.makeText(ctx, "已复制", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(ctx, t("common.copied"), Toast.LENGTH_SHORT).show()
                     diag = null
-                }) { Text("复制") }
+                }) { Text(t("common.copy")) }
             },
-            dismissButton = { TextButton(onClick = { diag = null }) { Text("关闭") } },
+            dismissButton = { TextButton(onClick = { diag = null }) { Text(t("common.close")) } },
         )
     }
 
@@ -441,9 +442,9 @@ fun ChainWalletScreen(
                 Box(Modifier.size(40.dp).noRippleClick { back() }, contentAlignment = Alignment.Center) {
                     BackIcon(TextMain, 24.dp)
                 }
-                Text("链上钱包", color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                Text(t("me.chainWallet"), color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
                 Box(Modifier.size(56.dp, 40.dp).noRippleClick(onBack), contentAlignment = Alignment.Center) {
-                    Text("关闭", color = TextSub, fontSize = 14.sp)
+                    Text(t("common.close"), color = TextSub, fontSize = 14.sp)
                 }
             }
             if (progress in 1..99) {
@@ -465,7 +466,7 @@ fun ChainWalletScreen(
                         color = TextMain, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        (if (secure) "🔒 " else "⚠ 不安全 · ") + cur.host.orEmpty(),
+                        (if (secure) "🔒 " else "⚠ " + t("chainWallet.notSecure") + " · ") + cur.host.orEmpty(),
                         color = if (secure) TextSub else Color(0xFFD48806), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 }
@@ -475,32 +476,32 @@ fun ChainWalletScreen(
                     }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         val page = dappCurrent.ifBlank { dappUrl!! }
-                        DropdownMenuItem(text = { Text("收藏 / 取消收藏") }, onClick = { menu = false; hub.favorite(page, dappTitle.ifBlank { null }) })
-                        DropdownMenuItem(text = { Text("复制链接") }, onClick = {
+                        DropdownMenuItem(text = { Text(t("chainWallet.toggleFavorite")) }, onClick = { menu = false; hub.favorite(page, dappTitle.ifBlank { null }) })
+                        DropdownMenuItem(text = { Text(t("chainWallet.copyLink")) }, onClick = {
                             menu = false
                             (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.setPrimaryClip(ClipData.newPlainText("url", page))
-                            Toast.makeText(ctx, "已复制", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(ctx, t("common.copied"), Toast.LENGTH_SHORT).show()
                         })
-                        DropdownMenuItem(text = { Text("刷新") }, onClick = { menu = false; dappView?.reload() })
-                        DropdownMenuItem(text = { Text("在浏览器打开") }, onClick = {
+                        DropdownMenuItem(text = { Text(t("chainWallet.refresh")) }, onClick = { menu = false; dappView?.reload() })
+                        DropdownMenuItem(text = { Text(t("chainWallet.openInBrowser")) }, onClick = {
                             menu = false
                             runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(page)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                         })
-                        DropdownMenuItem(text = { Text("分享") }, onClick = {
+                        DropdownMenuItem(text = { Text(t("common.share")) }, onClick = {
                             menu = false
                             val i = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, page)
-                            runCatching { ctx.startActivity(Intent.createChooser(i, "分享").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                            runCatching { ctx.startActivity(Intent.createChooser(i, t("common.share")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                         })
-                        DropdownMenuItem(text = { Text("诊断信息") }, onClick = {
+                        DropdownMenuItem(text = { Text(t("chainWallet.diagnostics")) }, onClick = {
                             menu = false
                             val probe = "JSON.stringify({armDapp:!!window.__armDapp,ethereum:!!window.ethereum,ours:!!(window.ethereum&&window.ethereum.isArmWallet),chainId:window.ethereum&&window.ethereum.chainId||null})"
                             dappView?.evaluateJavascript(probe) { page ->
                                 diag = listOf(
-                                    "内核 Chromium $webMajor · Android ${android.os.Build.VERSION.RELEASE} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}",
-                                    "桥：${if (bridgeOk) "新接口（androidx.webkit）" else "兼容模式（同步桥）"}",
-                                    "钱包页就绪：${if (hub.walletAttached) "是" else "否"} · 排队请求 ${hub.queued} · 等待中 ${hub.inFlight}",
-                                    "页面注入：$page",
-                                    "网址：${dappView?.url.orEmpty()}",
+                                    t("chainWallet.diag.engine", "v" to webMajor, "android" to android.os.Build.VERSION.RELEASE, "device" to "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}"),
+                                    t("chainWallet.diag.bridge", "mode" to if (bridgeOk) t("chainWallet.diag.bridgeNew") else t("chainWallet.diag.bridgeCompat")),
+                                    t("chainWallet.diag.wallet", "ready" to if (hub.walletAttached) t("chainWallet.diag.yes") else t("chainWallet.diag.no"), "queued" to hub.queued, "inFlight" to hub.inFlight),
+                                    t("chainWallet.diag.inject", "v" to page),
+                                    t("chainWallet.diag.url", "url" to dappView?.url.orEmpty()),
                                 ).joinToString("\n")
                             }
                         })
@@ -513,9 +514,9 @@ fun ChainWalletScreen(
         }
 
         when {
-            !BuildConfig.WALLET_ALLOWED -> Notice("当前版本不提供钱包功能")
+            !BuildConfig.WALLET_ALLOWED -> Notice(t("chainWallet.unavailableBuild"))
             !loaded -> Box(Modifier.fillMaxSize())
-            !chainWalletVisible(ctx, me) -> Notice("钱包功能暂未对你开放")
+            !chainWalletVisible(ctx, me) -> Notice(t("chainWallet.notEnabled"))
             webMajor in 1 until MIN_WEBVIEW_MAJOR || origin == null -> WebViewTooOld(webMajor)
             else -> AndroidView(
                 // edge-to-edge 下 adjustResize 不会缩 WebView：imePadding 让网页缩到键盘上面，浏览器再把输入框滚进来
@@ -650,7 +651,7 @@ private class WalletShell(
                 "share" -> {
                     view.post {
                         val i = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, str.orEmpty())
-                        runCatching { ctx.startActivity(Intent.createChooser(i, "分享").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                        runCatching { ctx.startActivity(Intent.createChooser(i, t("common.share")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                     }
                     send(JsonPrimitive(true))
                 }
@@ -869,7 +870,7 @@ private class SyncBridge(
         if (!ok()) return
         view.post {
             val i = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
-            runCatching { ctx.startActivity(Intent.createChooser(i, "分享").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            runCatching { ctx.startActivity(Intent.createChooser(i, t("common.share")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         }
     }
 
@@ -922,9 +923,9 @@ private fun Notice(text: String) {
 private fun WebViewTooOld(major: Int) {
     val ctx = LocalContext.current
     Column(Modifier.fillMaxSize().padding(28.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("系统 WebView 版本太旧", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text(t("chainWallet.webviewOld"), color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Text(
-            "钱包需要较新的系统网页内核（Chromium ${MIN_WEBVIEW_MAJOR}+${if (major > 0) "，当前 $major" else ""}）。请到应用商店更新「Android System WebView」或 Chrome 后再打开。",
+            t("chainWallet.webviewOldBody", "min" to MIN_WEBVIEW_MAJOR, "current" to if (major > 0) t("chainWallet.webviewCurrent", "v" to major) else ""),
             color = TextSub, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 12.dp),
         )
         Box(
@@ -936,6 +937,6 @@ private fun WebViewTooOld(major: Int) {
                     }
                 }
                 .padding(horizontal = 24.dp, vertical = 12.dp),
-        ) { Text("去更新", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
+        ) { Text(t("chainWallet.goUpdate"), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
     }
 }

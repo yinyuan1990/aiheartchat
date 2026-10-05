@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { openNativeChat } from '../bridge';
 import { api } from '../api';
 import { useApp } from '../store';
+import { t } from '../i18n';
 
 /** 地陪项目主页：项目内自己的规则与功能入口（独立页面，带返回栏） */
 export function GuideProjectPage() {
@@ -10,8 +11,8 @@ export function GuideProjectPage() {
   return (
     <div className="app">
       <div className="navbar" style={{ borderBottom: 'none' }}>
-        <span className="back" onClick={() => nav(-1)}>‹ 返回</span>
-        <span className="title">同城搭子</span>
+        <span className="back" onClick={() => nav(-1)}>‹ {t('common.back')}</span>
+        <span className="title">{t('guide.localBuddy')}</span>
         <span style={{ width: 40 }} />
       </div>
       <div className="page no-scrollbar" style={{ padding: '4px 16px' }}>
@@ -33,12 +34,12 @@ export function GuideProjectBody() {
   }, []);
 
   const entries = [
-    { title: '找搭子', desc: '按城市寻找认证搭子', to: '/people/guide' },
-    { title: '找人', desc: '发现新朋友打招呼', to: '/people/all' },
+    { title: t('guide.findBuddy'), desc: t('guide.findBuddyDesc'), to: '/people/guide' },
+    { title: t('guide.findPeople'), desc: t('guide.findPeopleDesc'), to: '/people/all' },
     isFemale
-      ? { title: '接单大厅', desc: '报名接单赚积分', to: '/task/hall' }
-      : { title: '发布约单', desc: '时间地点报酬托管', to: '/task/post' },
-    { title: isFemale ? '我的接单' : '我的约单', desc: '查看进行中的约单', to: '/task/mine' },
+      ? { title: t('guide.taskHall'), desc: t('guide.taskHallDesc'), to: '/task/hall' }
+      : { title: t('guide.postTask'), desc: t('guide.postTaskDesc'), to: '/task/post' },
+    { title: isFemale ? t('me.myTasksGuide') : t('me.myTasks'), desc: t('guide.myTasksDesc'), to: '/task/mine' },
   ];
 
   const greet = async (p: any) => {
@@ -71,8 +72,8 @@ export function GuideProjectBody() {
       {guides.length > 0 && (
         <>
           <div className="row" style={{ margin: '20px 0 10px' }}>
-            <span style={{ fontSize: 15, fontWeight: 600 }} className="grow">推荐搭子</span>
-            <span className="small" style={{ cursor: 'pointer' }} onClick={() => nav('/people/guide')}>全部 ›</span>
+            <span style={{ fontSize: 15, fontWeight: 600 }} className="grow">{t('guide.recommended')}</span>
+            <span className="small" style={{ cursor: 'pointer' }} onClick={() => nav('/people/guide')}>{t('guide.viewAll')} ›</span>
           </div>
           {guides.map((p) => (
             <div key={p.id} className="row" style={{ padding: '10px 0', borderBottom: '1px solid var(--line)' }}>
@@ -82,17 +83,17 @@ export function GuideProjectBody() {
               <div className="grow">
                 <div style={{ fontSize: 15 }}>
                   {p.nickname} <span className="muted">· {p.age}</span>
-                  <span className="tag tag-accent" style={{ marginLeft: 6 }}>认证</span>
+                  <span className="tag tag-accent" style={{ marginLeft: 6 }}>{t('me.verified')}</span>
                 </div>
-                <div className="small ellipsis" style={{ marginTop: 3 }}>{p.cityName ? `${p.cityName} · ` : ''}{p.signature || '这个人很神秘'}</div>
+                <div className="small ellipsis" style={{ marginTop: 3 }}>{p.cityName ? `${p.cityName} · ` : ''}{p.signature || t('people.mysterious')}</div>
               </div>
-              <button className="btn-sm" onClick={() => greet(p)}>打招呼</button>
+              <button className="btn-sm" onClick={() => greet(p)}>{t('people.sayHi')}</button>
             </div>
           ))}
         </>
       )}
       {guides.length === 0 && (
-        <div className="empty" style={{ padding: 40 }}>暂无认证搭子<br />可以先去「找人」打招呼</div>
+        <div className="empty" style={{ padding: 40 }}>{t('guide.noBuddies')}<br />{t('guide.noBuddiesHint')}</div>
       )}
     </>
   );

@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { addMine, removeMine, reorderMine, StickerPayload, StickerSet, useStickers } from '../stickers';
 import { baseEmoji, SearchIcon } from './emoji-panel/shared';
 import { StickerView } from './StickerView';
+import { t } from '../i18n';
 
-const KIND: Record<string, string> = { static: '静态', animated: '动态', video: '动态' };
+const KIND: Record<string, string> = { static: t('emoji.kindStatic'), animated: t('emoji.kindAnimated'), video: t('emoji.kindAnimated') };
 
 /**
  * 表情商店 / 我的贴纸管理（底部弹出的半屏 sheet）。
@@ -46,7 +47,7 @@ export function StickerStoreSheet({ mode, initialQuery = '', autoFocus = false, 
       <div className="row" style={{ gap: 12, alignItems: 'center' }}>
         <div className="grow" style={{ minWidth: 0 }}>
           <div style={{ fontSize: 16, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title}</div>
-          <div className="small">{s.items.length} 张贴图 · {KIND[s.kind] ?? ''}</div>
+          <div className="small">{t('emoji.nStickers', { n: s.items.length })} · {KIND[s.kind] ?? ''}</div>
         </div>
         {actions}
       </div>
@@ -66,26 +67,26 @@ export function StickerStoreSheet({ mode, initialQuery = '', autoFocus = false, 
         <div className="row" style={{ padding: '12px 12px 8px', gap: 10 }}>
           <div className="row grow" style={{ background: 'var(--bg-input)', borderRadius: 10, height: 36, padding: '0 10px', gap: 6 }}>
             <span style={{ color: 'var(--text-3)', display: 'flex' }}><SearchIcon size={15} /></span>
-            <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder={mode === 'store' ? '搜索贴纸' : '搜索我的贴纸'} style={{ border: 0, outline: 0, background: 'transparent', fontSize: 15, flex: 1, color: 'var(--text)' }} />
+            <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder={mode === 'store' ? t('emoji.searchStickers') : t('emoji.searchMyStickers')} style={{ border: 0, outline: 0, background: 'transparent', fontSize: 15, flex: 1, color: 'var(--text)' }} />
             {q && <span onClick={() => { setQ(''); inputRef.current?.focus(); }} style={{ fontSize: 13, color: 'var(--text-3)', cursor: 'pointer' }}>✕</span>}
           </div>
-          <span className="accent" style={{ fontSize: 16, cursor: 'pointer', flexShrink: 0 }} onClick={onClose}>完成</span>
+          <span className="accent" style={{ fontSize: 16, cursor: 'pointer', flexShrink: 0 }} onClick={onClose}>{t('common.done')}</span>
         </div>
         <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto' }}>
-          {mode === 'manage' && <div className="small" style={{ padding: '4px 16px 0' }}>我的贴纸（{mine.length}）· 拖不动？用置顶调顺序</div>}
+          {mode === 'manage' && <div className="small" style={{ padding: '4px 16px 0' }}>{t('emoji.myStickersHint', { n: mine.length })}</div>}
           {mode === 'manage' && list.map(({ set: s, preview }, i) => row(s, preview, (
             <div className="row" style={{ gap: 6 }}>
-              {i > 0 && !q && btn('置顶', () => run(s.id, () => reorderMine([s.id, ...mineIds.filter((x) => x !== s.id)])), false, busy === s.id)}
-              {btn('移除', () => run(s.id, () => removeMine(s.id)), false, busy === s.id)}
+              {i > 0 && !q && btn(t('emoji.moveTop'), () => run(s.id, () => reorderMine([s.id, ...mineIds.filter((x) => x !== s.id)])), false, busy === s.id)}
+              {btn(t('emoji.remove'), () => run(s.id, () => removeMine(s.id)), false, busy === s.id)}
             </div>
           )))}
           {mode === 'store' && list.map(({ set: s, preview }) => {
             const added = mineIds.includes(s.id);
             return row(s, preview, added
-              ? btn('已添加', () => run(s.id, () => removeMine(s.id)), false, busy === s.id)
-              : btn('添加', () => run(s.id, () => addMine(s.id)), true, busy === s.id));
+              ? btn(t('emoji.added'), () => run(s.id, () => removeMine(s.id)), false, busy === s.id)
+              : btn(t('emoji.add'), () => run(s.id, () => addMine(s.id)), true, busy === s.id));
           })}
-          {!list.length && <div className="empty" style={{ padding: 30, fontSize: 13 }}>{sets.length ? '没有匹配的贴纸包' : '表情包还在路上…'}</div>}
+          {!list.length && <div className="empty" style={{ padding: 30, fontSize: 13 }}>{sets.length ? t('emoji.noMatchingSets') : t('emoji.setsComing')}</div>}
           <div style={{ height: 30 }} />
         </div>
       </div>

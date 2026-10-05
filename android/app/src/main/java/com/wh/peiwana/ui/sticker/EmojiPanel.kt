@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.Api
 import com.wh.peiwana.ui.noRippleClick
 import com.wh.peiwana.ui.theme.*
@@ -119,7 +120,7 @@ fun EmojiPanel(
                 Row(
                     Modifier.align(Alignment.Center).shadow(6.dp, RoundedCornerShape(20.dp)).clip(RoundedCornerShape(20.dp)).background(Bg).padding(3.dp),
                 ) {
-                    listOf(PanelMode.GIF to "GIF", PanelMode.STICKER to "贴纸", PanelMode.EMOJI to "表情").forEach { (m, label) ->
+                    listOf(PanelMode.GIF to "GIF", PanelMode.STICKER to t("emoji.tabStickers"), PanelMode.EMOJI to t("emoji.tabEmoji")).forEach { (m, label) ->
                         val on = mode == m
                         Text(
                             label, color = if (on) TextMain else TextSub, fontSize = 14.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
@@ -344,9 +345,10 @@ private fun StickerPane(chrome: PanelChrome, onPick: (StickerPayload) -> Unit, o
     val expanded = rememberBarExpanded(row)
     ShowAtTop(chrome, grid)
 
-    val sections = remember(mine, recent) {
+    val recentTitle = t("emoji.recent")
+    val sections = remember(mine, recent, recentTitle) {
         buildList {
-            if (recent.isNotEmpty()) add(Section("recent", "最近使用", recent))
+            if (recent.isNotEmpty()) add(Section("recent", recentTitle, recent))
             mine.forEach { add(Section("s${it.id}", it.title, it.items)) }
         }
     }
@@ -378,8 +380,8 @@ private fun StickerPane(chrome: PanelChrome, onPick: (StickerPayload) -> Unit, o
         AnimatedVisibility(visible = !chrome.hidden, enter = expandVertically(), exit = shrinkVertically()) {
             Column {
                 LazyRow(state = row, modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    item("store") { BarCell(false, expanded, "表情商店", onClick = { onStore(null) }) { PlusCircleIcon(TextSub, 26.dp) } }
-                    item("recent") { BarCell(activeKey == "recent", expanded, "最近使用", onClick = { jump("recent") }) { ClockIcon(TextSub, 20.dp) } }
+                    item("store") { BarCell(false, expanded, t("emoji.store"), onClick = { onStore(null) }) { PlusCircleIcon(TextSub, 26.dp) } }
+                    item("recent") { BarCell(activeKey == "recent", expanded, t("emoji.recent"), onClick = { jump("recent") }) { ClockIcon(TextSub, 20.dp) } }
                     items(mine, key = { "m${it.id}" }) { s ->
                         BarCell(activeKey == "s${s.id}", expanded, s.title, onClick = { jump("s${s.id}") }) { Cover(s) }
                     }
@@ -387,7 +389,7 @@ private fun StickerPane(chrome: PanelChrome, onPick: (StickerPayload) -> Unit, o
                         BarCell(false, expanded, s.title, badge = true, onClick = { add(s.id) }) { Box(Modifier.alpha(if (adding == s.id) 0.4f else 1f)) { Cover(s) } }
                     }
                 }
-                SearchRow("", {}, "", { onStore(it) }, "搜索", onTap = { onStore("") })
+                SearchRow("", {}, "", { onStore(it) }, t("common.search"), onTap = { onStore("") })
             }
         }
         LazyVerticalGrid(
@@ -404,10 +406,10 @@ private fun StickerPane(chrome: PanelChrome, onPick: (StickerPayload) -> Unit, o
             }
             if (sections.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) {
                 Column(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(if (mine.isEmpty()) "还没有贴纸包" else "还没用过贴纸，往下挑一个", color = TextDim, fontSize = 13.sp)
+                    Text(if (mine.isEmpty()) t("emoji.noPacks") else t("emoji.noRecentStickers"), color = TextDim, fontSize = 13.sp)
                     if (mine.isEmpty()) {
                         Spacer(Modifier.height(10.dp))
-                        Box(Modifier.clip(RoundedCornerShape(15.dp)).background(Accent).noRippleClick { onStore(null) }.padding(horizontal = 16.dp, vertical = 7.dp)) { Text("去表情商店添加", color = Color.White, fontSize = 13.sp) }
+                        Box(Modifier.clip(RoundedCornerShape(15.dp)).background(Accent).noRippleClick { onStore(null) }.padding(horizontal = 16.dp, vertical = 7.dp)) { Text(t("emoji.goStore"), color = Color.White, fontSize = 13.sp) }
                     }
                 }
             }
@@ -422,7 +424,7 @@ private fun Cover(s: StickerSetItem) {
 }
 
 @Composable
-private fun AddBtn(busy: Boolean, primary: Boolean = true, label: String = "添加", onClick: () -> Unit) {
+private fun AddBtn(busy: Boolean, primary: Boolean = true, label: String = t("emoji.add"), onClick: () -> Unit) {
     Box(
         Modifier.clip(RoundedCornerShape(14.dp)).background(if (primary) Accent else Bg3).alpha(if (busy) 0.5f else 1f).noRippleClick { if (!busy) onClick() }.padding(horizontal = 14.dp, vertical = 5.dp),
     ) { Text(label, color = if (primary) Color.White else TextMain, fontSize = 13.sp) }
@@ -447,10 +449,12 @@ private fun EmojiPane(chrome: PanelChrome, onEmoji: (String) -> Unit, onSearch: 
     ShowAtTop(chrome, grid)
 
     // 分区：最近 + 各分类；每区 1 个标题 + N 个
-    val sections = remember(groups, recent) {
+    val recentTitle = t("emoji.recent")
+    val groupNames = groups.map { groupName(it) }
+    val sections = remember(groups, recent, recentTitle, groupNames) {
         buildList {
-            if (recent.isNotEmpty()) add(Triple("recent", "最近使用", recent))
-            groups.forEach { g -> add(Triple(g.key, g.name, g.items.map { it[0] })) }
+            if (recent.isNotEmpty()) add(Triple("recent", recentTitle, recent))
+            groups.forEachIndexed { i, g -> add(Triple(g.key, groupNames[i], g.items.map { it[0] })) }
         }
     }
     val starts = remember(sections) { sections.runningFold(0) { acc, s -> acc + 1 + s.third.size } }
@@ -475,12 +479,12 @@ private fun EmojiPane(chrome: PanelChrome, onEmoji: (String) -> Unit, onSearch: 
         AnimatedVisibility(visible = !chrome.hidden, enter = expandVertically(), exit = shrinkVertically()) {
             Column {
                 LazyRow(state = row, modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    item("recent") { BarCell(activeKey == "recent", expanded, "最近使用", onClick = { jump("recent") }) { ClockIcon(TextSub, 20.dp) } }
+                    item("recent") { BarCell(activeKey == "recent", expanded, recentTitle, onClick = { jump("recent") }) { ClockIcon(TextSub, 20.dp) } }
                     items(groups, key = { it.key }) { g ->
-                        BarCell(activeKey == g.key, expanded, g.name, onClick = { jump(g.key) }) { Text(g.icon, fontSize = 20.sp, modifier = Modifier.alpha(if (activeKey == g.key) 1f else 0.6f)) }
+                        BarCell(activeKey == g.key, expanded, groupName(g), onClick = { jump(g.key) }) { Text(g.icon, fontSize = 20.sp, modifier = Modifier.alpha(if (activeKey == g.key) 1f else 0.6f)) }
                     }
                 }
-                SearchRow("", {}, "", { onSearch(it) }, "搜索表情", onTap = { onSearch("") })
+                SearchRow("", {}, "", { onSearch(it) }, t("emoji.searchEmoji"), onTap = { onSearch("") })
             }
         }
         LazyVerticalGrid(
@@ -492,9 +496,15 @@ private fun EmojiPane(chrome: PanelChrome, onEmoji: (String) -> Unit, onSearch: 
                 item(key = "h$key", span = { GridItemSpan(maxLineSpan) }) { SectionHeader(title) }
                 items(items.size, key = { "$key-$it" }) { i -> EmojiCell(items[i], onEmoji) }
             }
-            if (groups.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { EmptyText("加载中…") }
+            if (groups.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { EmptyText(t("common.loading")) }
         }
     }
+}
+
+/** 分类名按 key 本地化；没有对应文案的新分类用后端给的名字 */
+private fun groupName(g: EmojiGroup): String {
+    val k = "emoji.group.${g.key}"
+    return t(k).takeIf { it != k } ?: g.name
 }
 
 @Composable
@@ -520,7 +530,7 @@ private fun GifPane(chrome: PanelChrome, onPick: (StickerPayload) -> Unit, onSea
 
     Column(Modifier.fillMaxSize()) {
         AnimatedVisibility(visible = !chrome.hidden, enter = expandVertically(), exit = shrinkVertically()) {
-            SearchRow("", {}, "", { onSearch(it) }, "搜索 GIF", onTap = { onSearch("") })
+            SearchRow("", {}, "", { onSearch(it) }, t("emoji.searchGif"), onTap = { onSearch("") })
         }
         LazyVerticalGrid(
             columns = GridCells.Fixed(3), state = grid,
@@ -529,12 +539,12 @@ private fun GifPane(chrome: PanelChrome, onPick: (StickerPayload) -> Unit, onSea
             horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             if (recent.isNotEmpty()) {
-                item(key = "hr", span = { GridItemSpan(maxLineSpan) }) { SectionHeader("最近使用") }
+                item(key = "hr", span = { GridItemSpan(maxLineSpan) }) { SectionHeader(t("emoji.recent")) }
                 items(recent, key = { "r${it.id}" }) { p -> GifTile(p) { onPick(p) } }
             }
-            item(key = "ht", span = { GridItemSpan(maxLineSpan) }) { SectionHeader("热门") }
+            item(key = "ht", span = { GridItemSpan(maxLineSpan) }) { SectionHeader(t("emoji.trending")) }
             items(feed.items, key = { it.id }) { p -> GifTile(p) { onPick(p) } }
-            item(span = { GridItemSpan(maxLineSpan) }) { GifFooter(feed, "暂无 GIF") }
+            item(span = { GridItemSpan(maxLineSpan) }) { GifFooter(feed, t("emoji.noGif")) }
         }
     }
 }
@@ -561,7 +571,7 @@ private fun rememberGifFeed(query: String): GifFeed {
                     runCatching { StickerStore.searchGifs(query, "") }.onSuccess { (l2, n2) -> if (l2.size > list.size) { feed.items = l2; feed.next = n2 } }
                 }
             }
-            .onFailure { feed.error = it.message ?: "加载失败" }
+            .onFailure { feed.error = it.message ?: t("common.loadFailed") }
         feed.loading = false
     }
     return feed
@@ -586,7 +596,7 @@ private fun GifPaging(grid: LazyGridState, feed: GifFeed) {
 @Composable
 private fun GifFooter(feed: GifFeed, emptyHint: String) {
     when {
-        feed.loading -> EmptyText(if (feed.items.isEmpty()) "正在拉取 GIF，第一次会慢几秒…" else "加载更多…")
+        feed.loading -> EmptyText(if (feed.items.isEmpty()) t("emoji.gifFirstLoad") else t("emoji.loadingMore"))
         feed.error.isNotEmpty() -> EmptyText(feed.error)
         feed.items.isEmpty() -> EmptyText(emptyHint)
     }
@@ -622,7 +632,7 @@ private fun SearchSheetShell(placeholder: String, query: String, onQuery: (Strin
                     if (query.isNotEmpty()) Text("✕", color = TextDim, fontSize = 13.sp, modifier = Modifier.noRippleClick { onQuery("") }.padding(start = 6.dp))
                 }
                 Spacer(Modifier.width(12.dp))
-                Text("完成", color = Accent, fontSize = 16.sp, modifier = Modifier.noRippleClick(onClose))
+                Text(t("common.done"), color = Accent, fontSize = 16.sp, modifier = Modifier.noRippleClick(onClose))
             }
             LazyRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 items(QUICK_EMOJIS) { e ->
@@ -653,15 +663,15 @@ fun GifSearchSheet(initialQuery: String, onPick: (StickerPayload) -> Unit, onClo
     val grid = rememberLazyGridState()
     GifPaging(grid, feed)
 
-    SearchSheetShell("搜索 GIF", q, { q = it }, onClose) {
+    SearchSheetShell(t("emoji.searchGif"), q, { q = it }, onClose) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(3), state = grid, modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(0.dp, 0.dp, 0.dp, 30.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            if (query.isEmpty()) item(key = "ht", span = { GridItemSpan(maxLineSpan) }) { SectionHeader("热门") }
+            if (query.isEmpty()) item(key = "ht", span = { GridItemSpan(maxLineSpan) }) { SectionHeader(t("emoji.trending")) }
             items(feed.items, key = { it.id }) { p -> GifTile(p) { onPick(p); onClose() } }
-            item(span = { GridItemSpan(maxLineSpan) }) { GifFooter(feed, if (query.isEmpty()) "暂无 GIF" else "没有找到相关 GIF") }
+            item(span = { GridItemSpan(maxLineSpan) }) { GifFooter(feed, if (query.isEmpty()) t("emoji.noGif") else t("emoji.noGifFound")) }
         }
     }
 }
@@ -676,12 +686,12 @@ fun EmojiSearchSheet(initialQuery: String, onEmoji: (String) -> Unit, onClose: (
     val recent = EmojiStore.recent
     val results = remember(EmojiStore.groups, query, recent) { if (query.isEmpty()) recent else EmojiStore.search(query) }
 
-    SearchSheetShell("搜索表情", q, { q = it }, onClose, autoFocus = false) {
+    SearchSheetShell(t("emoji.searchEmoji"), q, { q = it }, onClose, autoFocus = false) {
         LazyVerticalGrid(columns = GridCells.Fixed(8), modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(6.dp, 0.dp, 6.dp, 30.dp)) {
-            if (query.isEmpty() && recent.isNotEmpty()) item(key = "hr", span = { GridItemSpan(maxLineSpan) }) { SectionHeader("最近使用") }
+            if (query.isEmpty() && recent.isNotEmpty()) item(key = "hr", span = { GridItemSpan(maxLineSpan) }) { SectionHeader(t("emoji.recent")) }
             items(results.size, key = { "q$it" }) { i -> EmojiCell(results[i], onEmoji) }
             if (results.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) {
-                EmptyText(if (query.isEmpty()) "输入关键词搜表情，比如「笑」「猫」「爱心」" else "没有匹配的表情")
+                EmptyText(if (query.isEmpty()) t("emoji.searchHint") else t("emoji.noMatch"))
             }
         }
     }
@@ -709,7 +719,7 @@ fun StickerStoreSheet(manage: Boolean, initialQuery: String = "", focusSearch: B
     var busy by remember { mutableStateOf<Int?>(null) }
     var toast by remember { mutableStateOf("") }
     LaunchedEffect(toast) { if (toast.isNotEmpty()) { delay(1600); toast = "" } }
-    val kindName = mapOf("static" to "静态", "animated" to "动态", "video" to "动态")
+    val kindName = mapOf("static" to t("emoji.kindStatic"), "animated" to t("emoji.kindAnimated"), "video" to t("emoji.kindAnimated"))
     // 搜索：按包名，或按贴纸 emoji（面板搜索行的快捷 emoji 直接带进来）；搜 emoji 时预览只放命中的贴纸
     val list = remember(all, mine, q, manage) {
         val src = if (manage) mine else all
@@ -729,7 +739,7 @@ fun StickerStoreSheet(manage: Boolean, initialQuery: String = "", focusSearch: B
     }
     fun run(id: Int, block: suspend () -> Unit) {
         busy = id
-        scope.launch { runCatching { block() }.onFailure { toast = it.message ?: "操作失败" }; busy = null }
+        scope.launch { runCatching { block() }.onFailure { toast = it.message ?: t("common.failed") }; busy = null }
     }
 
     ModalBottomSheet(onDismissRequest = onClose, sheetState = state, containerColor = Bg, dragHandle = null, shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)) {
@@ -740,31 +750,31 @@ fun StickerStoreSheet(manage: Boolean, initialQuery: String = "", focusSearch: B
                         SearchIcon(TextDim, 15.dp)
                         Spacer(Modifier.width(6.dp))
                         Box(Modifier.weight(1f)) {
-                            if (q.isEmpty()) Text(if (manage) "搜索我的贴纸" else "搜索贴纸", color = TextDim, fontSize = 15.sp)
+                            if (q.isEmpty()) Text(if (manage) t("emoji.searchMine") else t("emoji.searchStickers"), color = TextDim, fontSize = 15.sp)
                             BasicTextField(q, { q = it }, singleLine = true, textStyle = TextStyle(color = TextMain, fontSize = 15.sp), cursorBrush = SolidColor(Accent), modifier = Modifier.fillMaxWidth().focusRequester(focus))
                         }
                         if (q.isNotEmpty()) Text("✕", color = TextDim, fontSize = 13.sp, modifier = Modifier.noRippleClick { q = "" }.padding(start = 6.dp))
                     }
                     Spacer(Modifier.width(12.dp))
-                    Text("完成", color = Accent, fontSize = 16.sp, modifier = Modifier.noRippleClick(onClose))
+                    Text(t("common.done"), color = Accent, fontSize = 16.sp, modifier = Modifier.noRippleClick(onClose))
                 }
                 LazyColumn(Modifier.fillMaxSize()) {
-                    if (manage) item { Text("我的贴纸（${mine.size}）", color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(16.dp, 4.dp, 16.dp, 0.dp)) }
+                    if (manage) item { Text(t("emoji.myStickersN", "n" to mine.size), color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(16.dp, 4.dp, 16.dp, 0.dp)) }
                     items(list, key = { it.first.id }) { (s, preview) ->
                         val idx = mineIds.indexOf(s.id)
                         StoreRow(s, preview, kindName[s.kind] ?: "") {
                             if (manage) {
-                                if (idx > 0 && q.isEmpty()) AddBtn(busy == s.id, primary = false, label = "置顶") { run(s.id) { StickerStore.reorderMine(ctx, listOf(s.id) + mineIds.filter { it != s.id }) } }
+                                if (idx > 0 && q.isEmpty()) AddBtn(busy == s.id, primary = false, label = t("emoji.pin")) { run(s.id) { StickerStore.reorderMine(ctx, listOf(s.id) + mineIds.filter { it != s.id }) } }
                                 Spacer(Modifier.width(6.dp))
-                                AddBtn(busy == s.id, primary = false, label = "移除") { run(s.id) { StickerStore.removeMine(ctx, s.id) } }
+                                AddBtn(busy == s.id, primary = false, label = t("emoji.remove")) { run(s.id) { StickerStore.removeMine(ctx, s.id) } }
                             } else if (s.id in mineIds) {
-                                AddBtn(busy == s.id, primary = false, label = "已添加") { run(s.id) { StickerStore.removeMine(ctx, s.id) } }
+                                AddBtn(busy == s.id, primary = false, label = t("emoji.added")) { run(s.id) { StickerStore.removeMine(ctx, s.id) } }
                             } else {
                                 AddBtn(busy == s.id) { run(s.id) { StickerStore.addMine(ctx, s.id) } }
                             }
                         }
                     }
-                    if (list.isEmpty()) item { EmptyText(if (all.isEmpty()) "表情包还在路上…" else "没有匹配的贴纸包") }
+                    if (list.isEmpty()) item { EmptyText(if (all.isEmpty()) t("emoji.packsComing") else t("emoji.noPackMatch")) }
                     item { Spacer(Modifier.height(30.dp)) }
                 }
             }
@@ -783,7 +793,7 @@ private fun StoreRow(s: StickerSetItem, preview: List<StickerPayload>, kind: Str
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(s.title, color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("${s.items.size} 张贴图 · $kind", color = TextSub, fontSize = 12.sp)
+                Text(t("emoji.packInfo", "n" to s.items.size, "kind" to kind), color = TextSub, fontSize = 12.sp)
             }
             Row(verticalAlignment = Alignment.CenterVertically) { actions() }
         }

@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.Api
 import com.wh.peiwana.net.MsgReaction
 import com.wh.peiwana.net.ReplyPreview
@@ -66,14 +67,14 @@ val FORWARDABLE = setOf("text", "image", "video", "audio", "location", "sticker"
 
 fun msgSnippet(type: String, content: String): String = when (type) {
     "text" -> content.replace(Regex("\\s+"), " ").take(60)
-    "image" -> "[图片]"
-    "video" -> "[视频]"
-    "audio" -> "[语音]"
-    "sticker" -> "[表情]"
-    "location" -> "[位置]"
-    "gift" -> "[礼物]"
-    "transfer", "callout", "payreq", "perp" -> chainCardPreview(type, content) ?: "[消息]"
-    else -> if (type.startsWith("call")) "[通话]" else "[消息]"
+    "image" -> t("msg.snippet.image")
+    "video" -> t("msg.snippet.video")
+    "audio" -> t("msg.snippet.audio")
+    "sticker" -> t("msg.snippet.sticker")
+    "location" -> t("msg.snippet.location")
+    "gift" -> t("msg.snippet.gift")
+    "transfer", "callout", "payreq", "perp" -> chainCardPreview(type, content) ?: t("msg.snippet.message")
+    else -> if (type.startsWith("call")) t("msg.snippet.call") else t("msg.snippet.message")
 }
 
 // ---------- 链接 ----------
@@ -109,9 +110,9 @@ fun LinkText(text: String, color: Color, fontSize: TextUnit, lineHeight: TextUni
     }
     val annotated = remember(text) {
         buildAnnotatedString {
-            parts.forEach { (t, url) ->
-                if (url == null) append(t)
-                else withLink(LinkAnnotation.Clickable(url, TextLinkStyles(SpanStyle(color = BotBlue, textDecoration = TextDecoration.Underline))) { openUrl = url }) { append(t) }
+            parts.forEach { (seg, url) ->
+                if (url == null) append(seg)
+                else withLink(LinkAnnotation.Clickable(url, TextLinkStyles(SpanStyle(color = BotBlue, textDecoration = TextDecoration.Underline))) { openUrl = url }) { append(seg) }
             }
         }
     }
@@ -140,8 +141,8 @@ data class ReaderUser(val id: String, val nickname: String = "", val avatar: Str
 data class ReadInfo(val read: Boolean? = null, val readAt: String? = null, val count: Int? = null, val users: List<ReaderUser> = emptyList())
 
 private fun fmtReadAt(iso: String): String = runCatching {
-    val t = java.time.Instant.parse(iso).atZone(java.time.ZoneId.systemDefault())
-    "%d月%d日 %02d:%02d".format(t.monthValue, t.dayOfMonth, t.hour, t.minute)
+    val tm = java.time.Instant.parse(iso).atZone(java.time.ZoneId.systemDefault())
+    t("msg.readDate", "m" to tm.monthValue, "d" to tm.dayOfMonth, "time" to "%02d:%02d".format(tm.hour, tm.minute))
 }.getOrDefault("")
 
 /** Telegram 式消息菜单：顶上一排表情，自己的消息显示已读时间，下面按类型给操作（传 null 的不显示） */
@@ -178,10 +179,11 @@ fun MsgMenuDialog(msgId: String, mine: Boolean, convType: Int, myReaction: Strin
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Bg)) {
                 info?.let { r ->
                     val line = if (convType == 1) {
-                        if (r.read == true) "✓✓ ${r.readAt?.let { fmtReadAt(it) + " " } ?: ""}已读" else "✓ 未读"
+                        val at = r.readAt?.let { fmtReadAt(it) }.orEmpty()
+                        if (r.read == true) "✓✓ " + (if (at.isNotEmpty()) t("msg.readAt", "time" to at) else t("msg.read")) else "✓ " + t("msg.unread")
                     } else {
                         val n = r.count ?: 0
-                        if (n > 0) "✓✓ $n 人已读 ${if (showReaders) "⌃" else "›"}" else "✓✓ 还没人读"
+                        if (n > 0) "✓✓ ${t("msg.readByN", "n" to n)} ${if (showReaders) "⌃" else "›"}" else "✓✓ " + t("msg.readByNone")
                     }
                     Text(line, color = TextSub, fontSize = 13.sp, modifier = Modifier.fillMaxWidth().background(Bg2).noRippleClick { if ((r.count ?: 0) > 0) showReaders = !showReaders }.padding(16.dp, 9.dp))
                     if (showReaders) Column(Modifier.fillMaxWidth().background(Bg2).heightIn(max = 160.dp).padding(horizontal = 16.dp)) {
@@ -193,14 +195,14 @@ fun MsgMenuDialog(msgId: String, mine: Boolean, convType: Int, myReaction: Strin
                     }
                 }
                 val items = listOf(
-                    "回复" to actions.onReply, "拷贝" to actions.onCopy, "保存" to actions.onSave,
-                    (if (pinned) "取消置顶" else "置顶") to actions.onPin, "转发" to actions.onForward,
-                    "举报" to actions.onReport, "删除" to actions.onDelete, "选择" to actions.onSelect,
+                    "msg.reply" to actions.onReply, "msg.copy" to actions.onCopy, "common.save" to actions.onSave,
+                    (if (pinned) "msg.unpin" else "msg.pin") to actions.onPin, "msg.forward" to actions.onForward,
+                    "common.report" to actions.onReport, "common.delete" to actions.onDelete, "msg.select" to actions.onSelect,
                 ).filter { it.second != null }
-                items.forEachIndexed { i, (label, fn) ->
+                items.forEachIndexed { i, (key, fn) ->
                     if (i > 0 || info != null) Box(Modifier.fillMaxWidth().height(0.5.dp).background(Line))
                     Text(
-                        label, color = if (label == "删除") Danger else TextMain, fontSize = 15.sp,
+                        t(key), color = if (key == "common.delete") Danger else TextMain, fontSize = 15.sp,
                         modifier = Modifier.fillMaxWidth().noRippleClick { run(fn) }.padding(16.dp, 12.dp),
                     )
                 }
@@ -237,7 +239,7 @@ fun ReplyQuote(r: ReplyPreview, onClick: () -> Unit) {
             AsyncImage(Api.fullUrl(r.content), null, contentScale = ContentScale.Crop, modifier = Modifier.padding(start = 6.dp).size(28.dp).clip(RoundedCornerShape(3.dp)))
         }
         Column(Modifier.padding(horizontal = 8.dp, vertical = 3.dp)) {
-            if (r.deleted) Text("原消息已删除", color = TextSub, fontSize = 12.sp)
+            if (r.deleted) Text(t("msg.originalDeleted"), color = TextSub, fontSize = 12.sp)
             else {
                 Text(r.senderNickname, color = BotBlue, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                 Text(if (r.type == "text") r.content else msgSnippet(r.type, ""), color = TextMain, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -253,7 +255,7 @@ fun ReplyBar(nickname: String, snippet: String, onCancel: () -> Unit) {
         Text("↩", color = BotBlue, fontSize = 18.sp)
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text("回复 $nickname", color = BotBlue, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(t("msg.replyTo", "name" to nickname), color = BotBlue, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
             Text(snippet, color = TextSub, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Text("×", color = TextDim, fontSize = 22.sp, modifier = Modifier.noRippleClick(onCancel).padding(horizontal = 6.dp))
@@ -275,7 +277,7 @@ fun PinBar(pins: List<PinItem>, index: Int, canUnpin: Boolean, onJump: () -> Uni
         }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text("置顶消息${if (pins.size > 1) " #${index % pins.size + 1}" else ""}", color = BotBlue, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Text("${t("msg.pinnedMessage")}${if (pins.size > 1) " #${index % pins.size + 1}" else ""}", color = BotBlue, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             Text(if (p.type == "text") p.content else msgSnippet(p.type, ""), color = TextSub, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (canUnpin) Text("×", color = TextDim, fontSize = 22.sp, modifier = Modifier.noRippleClick(onUnpin).padding(horizontal = 6.dp))
@@ -291,19 +293,23 @@ fun DeleteMsgDialog(count: Int, canForAll: Boolean, convType: Int, peerName: Str
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Bg2,
-        title = { Text(if (count > 1) "删除 $count 条消息？" else "删除消息？", color = TextMain) },
+        title = { Text(if (count > 1) t("msg.deleteN", "n" to count) else t("msg.deleteOne"), color = TextMain) },
         text = {
             if (canForAll) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.noRippleClick { forAll = !forAll }) {
                 Checkbox(forAll, { forAll = it }, colors = CheckboxDefaults.colors(checkedColor = Accent))
-                Text(if (convType == 1) "同时为 $peerName 删除" else "为所有人删除", color = TextMain, fontSize = 14.sp)
-            } else Text("只会在你这边删除，对方仍能看到。", color = TextSub)
+                Text(if (convType == 1) t("msg.deleteForPeer", "name" to peerName) else t("msg.deleteForAll"), color = TextMain, fontSize = 14.sp)
+            } else Text(t("msg.deleteForMeHint"), color = TextSub)
         },
-        confirmButton = { Text("删除", color = Danger, fontWeight = FontWeight.SemiBold, modifier = Modifier.noRippleClick { onConfirm(canForAll && forAll) }.padding(8.dp)) },
-        dismissButton = { Text("取消", color = TextSub, modifier = Modifier.noRippleClick(onDismiss).padding(8.dp)) },
+        confirmButton = { Text(t("common.delete"), color = Danger, fontWeight = FontWeight.SemiBold, modifier = Modifier.noRippleClick { onConfirm(canForAll && forAll) }.padding(8.dp)) },
+        dismissButton = { Text(t("common.cancel"), color = TextSub, modifier = Modifier.noRippleClick(onDismiss).padding(8.dp)) },
     )
 }
 
-private val REPORT_REASONS = listOf("垃圾广告", "色情低俗", "诈骗", "辱骂骚扰", "违法违规", "其他")
+/** 提交给服务端的举报理由（中文原值） → 界面文字 key */
+private val REPORT_REASONS = listOf(
+    "垃圾广告" to "msg.report.spam", "色情低俗" to "msg.report.porn", "诈骗" to "msg.report.fraud",
+    "辱骂骚扰" to "msg.report.abuse", "违法违规" to "msg.report.illegal", "其他" to "msg.report.other",
+)
 
 @Composable
 fun ReportMsgDialog(msgId: String, onDone: (String) -> Unit, onDismiss: () -> Unit) {
@@ -313,25 +319,25 @@ fun ReportMsgDialog(msgId: String, onDone: (String) -> Unit, onDismiss: () -> Un
     fun submit(reason: String) = scope.launch {
         val tip = runCatching {
             val r = Api.request("/im/messages/$msgId/report", "POST", buildJsonObject { put("reason", reason) })
-            if (r?.jsonObject?.get("duplicated")?.jsonPrimitive?.content == "true") "已经举报过了，我们会尽快处理" else "已举报，我们会尽快处理"
-        }.getOrElse { it.message ?: "举报失败" }
+            if (r?.jsonObject?.get("duplicated")?.jsonPrimitive?.content == "true") t("msg.reportDuplicated") else t("msg.reported")
+        }.getOrElse { it.message ?: t("msg.reportFailed") }
         onDone(tip)
     }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Bg2,
-        title = { Text("举报这条消息", color = TextMain) },
+        title = { Text(t("msg.reportTitle"), color = TextMain) },
         text = {
             if (!other) Column {
-                REPORT_REASONS.forEach { r ->
-                    Text(r, color = TextMain, fontSize = 15.sp, modifier = Modifier.fillMaxWidth().noRippleClick { if (r == "其他") other = true else submit(r) }.padding(vertical = 11.dp))
+                REPORT_REASONS.forEach { (r, key) ->
+                    Text(t(key), color = TextMain, fontSize = 15.sp, modifier = Modifier.fillMaxWidth().noRippleClick { if (r == "其他") other = true else submit(r) }.padding(vertical = 11.dp))
                 }
-            } else androidx.compose.material3.OutlinedTextField(text, { text = it.take(200) }, placeholder = { Text("说说是什么问题", color = TextDim) }, minLines = 3)
+            } else androidx.compose.material3.OutlinedTextField(text, { text = it.take(200) }, placeholder = { Text(t("msg.reportPlaceholder"), color = TextDim) }, minLines = 3)
         },
         confirmButton = {
-            if (other) Text("提交", color = if (text.isBlank()) TextDim else Accent, modifier = Modifier.noRippleClick { if (text.isNotBlank()) submit("其他：${text.trim()}") }.padding(8.dp))
+            if (other) Text(t("common.submit"), color = if (text.isBlank()) TextDim else Accent, modifier = Modifier.noRippleClick { if (text.isNotBlank()) submit("其他：${text.trim()}") }.padding(8.dp))
         },
-        dismissButton = { Text("取消", color = TextSub, modifier = Modifier.noRippleClick(onDismiss).padding(8.dp)) },
+        dismissButton = { Text(t("common.cancel"), color = TextSub, modifier = Modifier.noRippleClick(onDismiss).padding(8.dp)) },
     )
 }
 
@@ -352,6 +358,7 @@ fun ForwardDialog(fromConvId: String, ids: List<String>, onDone: (String, List<S
     fun send() {
         busy = true
         scope.launch {
+            var ok = false
             val tip = runCatching {
                 val body = buildJsonObject {
                     put("fromConversationId", fromConvId)
@@ -367,19 +374,20 @@ fun ForwardDialog(fromConvId: String, ids: List<String>, onDone: (String, List<S
                 }
                 val r = Api.request("/im/messages/forward", "POST", body)
                 val failed = r?.jsonObject?.get("results")?.jsonArray?.filter { it.jsonObject["ok"]?.jsonPrimitive?.content != "true" }.orEmpty()
-                if (failed.isEmpty()) "已转发" else "${failed.size} 个会话转发失败：${failed[0].jsonObject["error"]?.jsonPrimitive?.content ?: ""}"
-            }.getOrElse { it.message ?: "转发失败" }
+                ok = failed.isEmpty()
+                if (ok) t("msg.forwarded") else t("msg.forwardPartialFail", "n" to failed.size, "error" to (failed[0].jsonObject["error"]?.jsonPrimitive?.content ?: ""))
+            }.getOrElse { it.message ?: t("msg.forwardFailed") }
             busy = false
-            onDone(tip, if (tip == "已转发") picked else emptyList())
+            onDone(tip, if (ok) picked else emptyList())
         }
     }
 
     Dialog(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().heightIn(max = 560.dp).clip(RoundedCornerShape(16.dp)).background(Bg2).padding(16.dp)) {
-            Text(if (ids.size > 1) "转发 ${ids.size} 条消息到…" else "转发到…", color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.align(Alignment.CenterHorizontally))
+            Text(if (ids.size > 1) t("msg.forwardNTo", "n" to ids.size) else t("msg.forwardTo"), color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.align(Alignment.CenterHorizontally))
             Spacer(Modifier.height(10.dp))
             Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Bg3).padding(12.dp, 9.dp)) {
-                if (q.isEmpty()) Text("搜索", color = TextDim, fontSize = 14.sp)
+                if (q.isEmpty()) Text(t("common.search"), color = TextDim, fontSize = 14.sp)
                 androidx.compose.foundation.text.BasicTextField(q, { q = it }, singleLine = true, textStyle = androidx.compose.ui.text.TextStyle(color = TextMain, fontSize = 14.sp), modifier = Modifier.fillMaxWidth())
             }
             LazyColumn(Modifier.weight(1f, fill = false).padding(top = 6.dp)) {
@@ -392,7 +400,7 @@ fun ForwardDialog(fromConvId: String, ids: List<String>, onDone: (String, List<S
                         Avatar(c.peer?.avatar ?: c.group?.avatar, 38)
                         Spacer(Modifier.width(10.dp))
                         Text(name(c), color = TextMain, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                        if (c.group != null) Text(if (c.group.kind == 2) " · 频道" else " · 群", color = TextSub, fontSize = 12.sp)
+                        if (c.group != null) Text(" · " + if (c.group.kind == 2) t("msg.tagChannel") else t("msg.tagGroup"), color = TextSub, fontSize = 12.sp)
                         if (c.peer?.isBot == true) BotTag()
                         Spacer(Modifier.weight(1f))
                         SelectCircle(on)
@@ -403,7 +411,7 @@ fun ForwardDialog(fromConvId: String, ids: List<String>, onDone: (String, List<S
             Box(
                 Modifier.fillMaxWidth().height(44.dp).clip(RoundedCornerShape(22.dp)).background(if (picked.isEmpty() || busy) Bg3 else Accent).noRippleClick { if (picked.isNotEmpty() && !busy) send() },
                 contentAlignment = Alignment.Center,
-            ) { Text(if (busy) "发送中…" else "发送${if (picked.isNotEmpty()) "（${picked.size}）" else ""}", color = if (picked.isEmpty()) TextDim else Color.White, fontSize = 15.sp) }
+            ) { Text(if (busy) t("msg.sending") else if (picked.isNotEmpty()) t("msg.sendN", "n" to picked.size) else t("common.send"), color = if (picked.isEmpty()) TextDim else Color.White, fontSize = 15.sp) }
         }
     }
 }
@@ -421,7 +429,7 @@ fun SelectCircle(on: Boolean) {
 fun copyToClipboard(ctx: Context, text: String) {
     val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     cm.setPrimaryClip(ClipData.newPlainText("msg", text))
-    Toast.makeText(ctx, "已复制", Toast.LENGTH_SHORT).show()
+    Toast.makeText(ctx, t("common.copied"), Toast.LENGTH_SHORT).show()
 }
 
 /** 保存图片 / 视频到相册（Android 10+ 走 MediaStore，不需要存储权限；更老的系统交给浏览器下载） */
@@ -446,7 +454,7 @@ suspend fun saveMediaToGallery(ctx: Context, url: String, type: String) {
             true
         }.getOrDefault(false)
     }
-    Toast.makeText(ctx, if (ok) "已保存到相册" else "保存失败", Toast.LENGTH_SHORT).show()
+    Toast.makeText(ctx, if (ok) t("msg.savedToGallery") else t("msg.saveFailed"), Toast.LENGTH_SHORT).show()
 }
 
 /** 把一组 id 打包成 JSON 数组（删除 / 转发接口用） */

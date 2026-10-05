@@ -16,6 +16,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.Api
 import com.wh.peiwana.net.Moment
 import com.wh.peiwana.ui.NavBar
@@ -30,7 +31,7 @@ fun MyMomentsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { items = runCatching { Api.getList<Moment>("/moments/mine") }.getOrDefault(emptyList()) }
     Column(Modifier.fillMaxSize()) {
-        NavBar("我的动态", onBack)
+        NavBar(t("me.myMoments"), onBack)
         LazyVerticalGrid(columns = GridCells.Fixed(2), contentPadding = PaddingValues(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(items, key = { it.id }) { m ->
                 val cover = if (m.type == 2) m.coverUrl else m.images.firstOrNull() ?: ""
@@ -40,7 +41,7 @@ fun MyMomentsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                         else Box(Modifier.fillMaxWidth().height(110.dp).background(Bg3).padding(14.dp)) { Text(m.content, color = TextMain, fontSize = 14.sp, maxLines = 4) }
                         Column(Modifier.padding(10.dp)) {
                             if (cover.isNotEmpty() && m.content.isNotEmpty()) Text(m.content, color = TextMain, fontSize = 13.sp, maxLines = 2)
-                            Text("赞 ${m.likeCount} · 评 ${m.commentCount}", color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                            Text(t("moments.stats", "likes" to m.likeCount, "comments" to m.commentCount), color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
                         }
                     }
                     Box(
@@ -50,17 +51,17 @@ fun MyMomentsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                     ) { Text("×", color = androidx.compose.ui.graphics.Color.White, fontSize = 16.sp) }
                 }
             }
-            if (items.isEmpty()) item { Text("还没发布过动态", color = TextSub, modifier = Modifier.padding(40.dp)) }
+            if (items.isEmpty()) item { Text(t("moments.empty"), color = TextSub, modifier = Modifier.padding(40.dp)) }
         }
     }
     deleting?.let { m ->
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { deleting = null },
             containerColor = Bg2,
-            title = { Text("删除动态", color = TextMain) },
-            text = { Text("删除后不可恢复，确定删除这条动态吗？", color = TextSub) },
+            title = { Text(t("moments.deleteTitle"), color = TextMain) },
+            text = { Text(t("moments.deleteConfirm"), color = TextSub) },
             confirmButton = {
-                Text("删除", color = Danger, modifier = Modifier.noRippleClick {
+                Text(t("common.delete"), color = Danger, modifier = Modifier.noRippleClick {
                     scope.launch {
                         runCatching { Api.request("/moments/${m.id}", "DELETE") }
                             .onSuccess { items = items - m }
@@ -68,7 +69,7 @@ fun MyMomentsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                     }
                 }.padding(8.dp))
             },
-            dismissButton = { Text("取消", color = TextSub, modifier = Modifier.noRippleClick { deleting = null }.padding(8.dp)) },
+            dismissButton = { Text(t("common.cancel"), color = TextSub, modifier = Modifier.noRippleClick { deleting = null }.padding(8.dp)) },
         )
     }
 }

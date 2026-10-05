@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { addRecentEmoji, searchEmojis, useEmojis } from '../../emojis';
 import { searchGifs, StickerPayload } from '../../stickers';
 import { baseEmoji, QUICK_EMOJIS, SearchIcon } from './shared';
+import { t } from '../../i18n';
 
 /**
  * 搜索 sheet 外壳（和表情商店 sheet 同一套）：顶部搜索框（自动聚焦）+「完成」，
@@ -23,7 +24,7 @@ function SheetShell({ placeholder, query, onQuery, onClose, autoFocus = true, ch
             <input ref={inputRef} value={query} onChange={(e) => onQuery(e.target.value)} placeholder={placeholder} style={{ border: 0, outline: 0, background: 'transparent', fontSize: 15, flex: 1, color: 'var(--text)' }} />
             {query && <span onClick={() => { onQuery(''); inputRef.current?.focus(); }} style={{ fontSize: 13, color: 'var(--text-3)', cursor: 'pointer' }}>✕</span>}
           </div>
-          <span className="accent" style={{ fontSize: 16, cursor: 'pointer', flexShrink: 0 }} onClick={onClose}>完成</span>
+          <span className="accent" style={{ fontSize: 16, cursor: 'pointer', flexShrink: 0 }} onClick={onClose}>{t('common.done')}</span>
         </div>
         <div className="no-scrollbar" style={{ display: 'flex', gap: 4, padding: '2px 12px 8px', overflowX: 'auto' }}>
           {QUICK_EMOJIS.map((e) => {
@@ -51,7 +52,7 @@ export function GifSearchSheet({ initialQuery, onPick, onClose }: { initialQuery
 
   useEffect(() => {
     const id = ++seq.current;
-    const t = window.setTimeout(async () => {
+    const timer = window.setTimeout(async () => {
       setLoading(true); setError('');
       try {
         const r = await searchGifs(query, '');
@@ -66,12 +67,12 @@ export function GifSearchSheet({ initialQuery, onPick, onClose }: { initialQuery
           }, 3000);
         }
       } catch (e: any) {
-        if (id === seq.current) setError(e.message || '加载失败');
+        if (id === seq.current) setError(e.message || t('common.loadFailed'));
       } finally {
         if (id === seq.current) setLoading(false);
       }
     }, QUICK_EMOJIS.includes(query) || !query ? 0 : 400);
-    return () => window.clearTimeout(t);
+    return () => window.clearTimeout(timer);
   }, [query]);
 
   const more = async () => {
@@ -90,9 +91,9 @@ export function GifSearchSheet({ initialQuery, onPick, onClose }: { initialQuery
   };
 
   return (
-    <SheetShell placeholder="搜索 GIF" query={q} onQuery={setQ} onClose={onClose}>
+    <SheetShell placeholder={t('emoji.searchGif')} query={q} onQuery={setQ} onClose={onClose}>
       <div onScroll={(e) => { const el = e.currentTarget; if (el.scrollHeight - el.scrollTop - el.clientHeight < 300) void more(); }} style={{ height: '100%', overflowY: 'auto' }} className="no-scrollbar">
-        {!query && <div className="small" style={{ padding: '2px 12px 6px' }}>热门</div>}
+        {!query && <div className="small" style={{ padding: '2px 12px 6px' }}>{t('emoji.trending')}</div>}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
           {items.map((p) => (
             <div key={p.id} onClick={() => { onPick(p); onClose(); }} style={{ aspectRatio: '1', overflow: 'hidden', background: 'var(--bg-input)', cursor: 'pointer' }}>
@@ -100,8 +101,8 @@ export function GifSearchSheet({ initialQuery, onPick, onClose }: { initialQuery
             </div>
           ))}
         </div>
-        {loading && <div className="empty" style={{ padding: 16, fontSize: 12 }}>{items.length ? '加载更多…' : '正在拉取 GIF，第一次会慢几秒…'}</div>}
-        {!loading && !items.length && !error && <div className="empty" style={{ padding: 30, fontSize: 13 }}>{query ? '没有找到相关 GIF' : '暂无 GIF'}</div>}
+        {loading && <div className="empty" style={{ padding: 16, fontSize: 12 }}>{items.length ? t('emoji.loadingMore') : t('emoji.gifFirstLoad')}</div>}
+        {!loading && !items.length && !error && <div className="empty" style={{ padding: 30, fontSize: 13 }}>{query ? t('emoji.noGifFound') : t('emoji.noGif')}</div>}
         {error && <div className="empty" style={{ padding: 30, fontSize: 13 }}>{error}</div>}
         <div style={{ height: 30 }} />
       </div>
@@ -117,8 +118,8 @@ export function EmojiSearchSheet({ initialQuery, onEmoji, onClose }: { initialQu
   const results = useMemo(() => (query ? searchEmojis(groups, query).map((r) => r[0]) : recent), [groups, query, recent]);
 
   return (
-    <SheetShell placeholder="搜索表情" query={q} onQuery={setQ} onClose={onClose} autoFocus={false}>
-      {!query && recent.length > 0 && <div className="small" style={{ padding: '2px 12px 4px' }}>最近使用</div>}
+    <SheetShell placeholder={t('emoji.searchEmoji')} query={q} onQuery={setQ} onClose={onClose} autoFocus={false}>
+      {!query && recent.length > 0 && <div className="small" style={{ padding: '2px 12px 4px' }}>{t('emoji.recent')}</div>}
       {results.length ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', padding: '0 6px' }}>
           {results.map((e, i) => (
@@ -126,7 +127,7 @@ export function EmojiSearchSheet({ initialQuery, onEmoji, onClose }: { initialQu
           ))}
         </div>
       ) : (
-        <div className="empty" style={{ padding: 30, fontSize: 13 }}>{query ? '没有匹配的表情' : '输入关键词搜表情，比如「笑」「猫」「爱心」'}</div>
+        <div className="empty" style={{ padding: 30, fontSize: 13 }}>{query ? t('emoji.noMatch') : t('emoji.searchHint')}</div>
       )}
       <div style={{ height: 30 }} />
     </SheetShell>

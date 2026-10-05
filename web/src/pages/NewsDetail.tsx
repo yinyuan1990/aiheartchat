@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { WebPreview } from '../components/WebPreview';
+import { t } from '../i18n';
 
 interface NewsItem {
   id: string;
@@ -21,12 +22,12 @@ interface NewsArticle extends NewsItem {
 function formatAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const min = Math.floor(diff / 60000);
-  if (min < 1) return '刚刚';
-  if (min < 60) return `${min} 分钟前`;
+  if (min < 1) return t('time.justNow');
+  if (min < 60) return t('time.minutesAgo', { n: min });
   const hours = Math.floor(min / 60);
-  if (hours < 24) return `${hours} 小时前`;
+  if (hours < 24) return t('time.hoursAgo', { n: hours });
   const days = Math.floor(hours / 24);
-  if (days < 30) return `${days} 天前`;
+  if (days < 30) return t('time.daysAgo', { n: days });
   return new Date(iso).toLocaleDateString('zh-CN');
 }
 
@@ -74,11 +75,11 @@ export function NewsListPage() {
     <div className="app">
       <div className="navbar">
         <span className="back" onClick={() => nav(-1)}>‹</span>
-        <span className="title">花边新闻</span>
+        <span className="title">{t('news.title')}</span>
         <span style={{ width: 20 }} />
       </div>
       <div className="page">
-        {loaded && list.length === 0 && <div className="empty">暂无内容，稍后再来看看</div>}
+        {loaded && list.length === 0 && <div className="empty">{t('news.empty')}</div>}
         {list.map((n) => (
           <div key={n.id} style={{ padding: '14px 16px 0', cursor: 'pointer' }} onClick={() => open(n)}>
             <div style={{ fontSize: 16, fontWeight: 600, lineHeight: 1.5 }}>{n.title}</div>
@@ -97,7 +98,7 @@ export function NewsListPage() {
         ))}
         {hasMore && (
           <div className="small" style={{ textAlign: 'center', padding: 14, cursor: 'pointer', color: 'var(--text-2)' }} onClick={loadMore}>
-            {loadingMore ? '加载中…' : '加载更多'}
+            {loadingMore ? t('common.loading') : t('news.loadMore')}
           </div>
         )}
       </div>
@@ -120,12 +121,12 @@ export function NewsDetailPage() {
     <div className="app">
       <div className="navbar">
         <span className="back" onClick={() => nav(-1)}>‹</span>
-        <span className="title">花边新闻</span>
+        <span className="title">{t('news.title')}</span>
         <span style={{ width: 20 }} />
       </div>
       <div className="page" style={{ padding: '18px 16px 40px' }}>
         {!article ? (
-          <div className="empty">加载中…</div>
+          <div className="empty">{t('common.loading')}</div>
         ) : (
           <>
             <h2 style={{ fontSize: 21, lineHeight: 1.45, fontWeight: 700 }}>{article.title}</h2>
@@ -146,7 +147,7 @@ export function NewsDetailPage() {
                 rel="noreferrer"
                 style={{ display: 'inline-block', marginTop: 6, fontSize: 13, color: 'var(--accent)' }}
               >
-                查看原文 ›
+                {t('news.viewSourceWeb')} ›
               </a>
             )}
           </>

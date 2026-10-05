@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.Api
 import com.wh.peiwana.ui.*
 import com.wh.peiwana.ui.theme.*
@@ -95,7 +96,7 @@ fun HallScreen(
 
     if (u == null) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("加载中…", color = TextSub, fontSize = 13.sp)
+            Text(t("common.loading"), color = TextSub, fontSize = 13.sp)
         }
     } else {
         AndroidView(
@@ -241,7 +242,7 @@ private class HallJsBridge(
                 putExtra(android.content.Intent.EXTRA_TEXT, text)
             }
             runCatching {
-                ctx.startActivity(android.content.Intent.createChooser(intent, "分享").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                ctx.startActivity(android.content.Intent.createChooser(intent, t("common.share")).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
             }.onFailure { GameLog.w("bridge.shareText failed: ${it.message}") }
         }
     }
@@ -319,14 +320,14 @@ fun GuideProjectScreen(myGender: Int, onBack: () -> Unit, onNav: (String) -> Uni
     LaunchedEffect(Unit) { guides = runCatching { Api.getList<com.wh.peiwana.net.Person>("/guide/list") }.getOrDefault(emptyList()).take(6) }
 
     val entries = listOf(
-        Triple("找搭子", "按城市寻找认证搭子", "people/guide"),
-        Triple("找人", "发现新朋友打招呼", "people/all"),
-        if (isFemale) Triple("接单大厅", "报名接单赚积分", "task/hall") else Triple("发布约单", "时间地点报酬托管", "task/post"),
-        Triple(if (isFemale) "我的接单" else "我的约单", "查看进行中的约单", "task/mine"),
+        Triple(t("hall.findBuddy"), t("hall.findBuddySub"), "people/guide"),
+        Triple(t("hall.findPeople"), t("hall.findPeopleSub"), "people/all"),
+        if (isFemale) Triple(t("hall.taskHall"), t("hall.taskHallSub"), "task/hall") else Triple(t("hall.postTask"), t("hall.postTaskSub"), "task/post"),
+        Triple(if (isFemale) t("me.myTasksGuide") else t("me.myTasks"), t("hall.myTasksSub"), "task/mine"),
     )
 
     Column(modifier = Modifier.fillMaxSize()) {
-        NavBar("同城搭子", onBack)
+        NavBar(t("hall.localBuddy"), onBack)
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 entries.take(2).forEach { EntryCard(it, Modifier.weight(1f)) { onNav(it.third) } }
@@ -335,7 +336,7 @@ fun GuideProjectScreen(myGender: Int, onBack: () -> Unit, onNav: (String) -> Uni
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 entries.drop(2).forEach { EntryCard(it, Modifier.weight(1f)) { onNav(it.third) } }
             }
-            Text("推荐搭子", color = TextMain, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 16.dp))
+            Text(t("hall.recommended"), color = TextMain, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 16.dp))
         }
         LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp)) {
             items(guides, key = { it.id }) { p ->
@@ -343,14 +344,14 @@ fun GuideProjectScreen(myGender: Int, onBack: () -> Unit, onNav: (String) -> Uni
                     Avatar(p.avatar, 48)
                     Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
                         Text("${p.nickname} · ${p.age}", color = TextMain, fontSize = 15.sp)
-                        Text(if (p.signature.isNotEmpty()) p.signature else "这个人很神秘", color = TextSub, fontSize = 12.sp, maxLines = 1)
+                        Text(if (p.signature.isNotEmpty()) p.signature else t("hall.mystery"), color = TextSub, fontSize = 12.sp, maxLines = 1)
                     }
                     Box(modifier = Modifier.clip(RoundedCornerShape(15.dp)).background(Accent).clickable { onOpenChat(p.id, p.nickname) }.padding(horizontal = 14.dp, vertical = 6.dp)) {
-                        Text("打招呼", color = Color.White, fontSize = 13.sp)
+                        Text(t("hall.sayHi"), color = Color.White, fontSize = 13.sp)
                     }
                 }
             }
-            if (guides.isEmpty()) item { Box(Modifier.fillMaxWidth().padding(40.dp), Alignment.Center) { Text("暂无认证搭子", color = TextSub) } }
+            if (guides.isEmpty()) item { Box(Modifier.fillMaxWidth().padding(40.dp), Alignment.Center) { Text(t("hall.noBuddies"), color = TextSub) } }
         }
     }
 }
@@ -373,9 +374,9 @@ fun PeopleScreen(mode: String, onBack: () -> Unit, onOpenChat: (String, String) 
         items = runCatching { Api.getList<com.wh.peiwana.net.Person>(if (tab == "guide") "/guide/list" else "/guide/discover") }.getOrDefault(emptyList())
     }
     Column(modifier = Modifier.fillMaxSize()) {
-        NavBar(if (tab == "guide") "找搭子" else "找人", onBack)
+        NavBar(if (tab == "guide") t("hall.findBuddy") else t("hall.findPeople"), onBack)
         Row(modifier = Modifier.padding(16.dp, 0.dp, 16.dp, 10.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-            listOf("guide" to "认证", "all" to "全部").forEach { (k, label) ->
+            listOf("guide" to t("me.verified"), "all" to t("hall.all")).forEach { (k, label) ->
                 Text(label, color = if (tab == k) TextMain else TextSub, fontSize = if (tab == k) 17.sp else 16.sp, fontWeight = if (tab == k) FontWeight.Bold else FontWeight.Normal, modifier = Modifier.noRippleClick { tab = k })
             }
         }
@@ -386,17 +387,17 @@ fun PeopleScreen(mode: String, onBack: () -> Unit, onOpenChat: (String, String) 
                     Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("${p.nickname} · ${p.age}", color = TextMain, fontSize = 15.sp)
-                            if (p.isGuide) Text(" 认证", color = Accent, fontSize = 11.sp)
+                            if (p.isGuide) Text(" " + t("me.verified"), color = Accent, fontSize = 11.sp)
                         }
-                        Text(if (p.signature.isNotEmpty()) p.signature else "这个人很神秘", color = TextSub, fontSize = 12.sp, maxLines = 1)
+                        Text(if (p.signature.isNotEmpty()) p.signature else t("hall.mystery"), color = TextSub, fontSize = 12.sp, maxLines = 1)
                         if (p.cityName.isNotEmpty()) Text(p.cityName, color = TextDim, fontSize = 11.sp)
                     }
                     Box(modifier = Modifier.clip(RoundedCornerShape(15.dp)).background(Accent).clickable { onOpenChat(p.id, p.nickname) }.padding(horizontal = 14.dp, vertical = 6.dp)) {
-                        Text("打招呼", color = Color.White, fontSize = 13.sp)
+                        Text(t("hall.sayHi"), color = Color.White, fontSize = 13.sp)
                     }
                 }
             }
-            if (items.isEmpty()) item { Box(Modifier.fillMaxWidth().padding(40.dp), Alignment.Center) { Text("暂无用户", color = TextSub) } }
+            if (items.isEmpty()) item { Box(Modifier.fillMaxWidth().padding(40.dp), Alignment.Center) { Text(t("hall.noUsers"), color = TextSub) } }
         }
     }
 }

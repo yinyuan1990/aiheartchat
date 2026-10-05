@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.Api
 import com.wh.peiwana.net.MessagePayload
 import com.wh.peiwana.net.WsClient
@@ -87,10 +88,10 @@ private fun usd(v: Double?): String? = when {
 fun chainCardPreview(type: String, content: String): String? {
     val o = obj(content)
     return when (type) {
-        "transfer" -> "[转账] ${tokenAmount(o?.str("amount"), o?.str("decimals")?.toIntOrNull() ?: 0)} ${o?.str("symbol") ?: ""}".trim()
-        "callout" -> "[喊单] $${o?.str("symbol") ?: ""}"
+        "transfer" -> "${t("card.tag.transfer")} ${tokenAmount(o?.str("amount"), o?.str("decimals")?.toIntOrNull() ?: 0)} ${o?.str("symbol") ?: ""}".trim()
+        "callout" -> "${t("card.tag.callout")} $${o?.str("symbol") ?: ""}"
         "perp" -> perpPreview(content)
-        "payreq" -> o?.str("amount")?.let { "[收款] ${tokenAmount(it, o.str("decimals")?.toIntOrNull() ?: 0)} ${o.str("symbol").orEmpty()}".trim() } ?: "[收款] ${chainName(o?.str("chain").orEmpty())}"
+        "payreq" -> o?.str("amount")?.let { "${t("card.tag.payreq")} ${tokenAmount(it, o.str("decimals")?.toIntOrNull() ?: 0)} ${o.str("symbol").orEmpty()}".trim() } ?: "${t("card.tag.payreq")} ${chainName(o?.str("chain").orEmpty())}"
         else -> null
     }
 }
@@ -166,12 +167,12 @@ fun TransferCard(content: String, mine: Boolean) {
             Spacer(Modifier.width(10.dp))
             Column {
                 Text("$amount ${o?.str("symbol").orEmpty()}", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(if (mine) "已转账给对方" else "对方给你转账", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
+                Text(if (mine) t("card.transferSent") else t("card.transferReceived"), color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
             }
         }
         Row(Modifier.fillMaxWidth().background(TransferTint).padding(14.dp, 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("链上转账 · ${chainName(chain)}", color = Color(0xFF9A5B00), fontSize = 11.sp, modifier = Modifier.weight(1f))
-            if (o?.get("verified")?.jsonPrimitive?.booleanOrNull == true) Text("已到账 ✓", color = Color(0xFF16A34A), fontSize = 11.sp)
+            Text(t("card.onchainTransfer", "chain" to chainName(chain)), color = Color(0xFF9A5B00), fontSize = 11.sp, modifier = Modifier.weight(1f))
+            if (o?.get("verified")?.jsonPrimitive?.booleanOrNull == true) Text(t("card.arrived"), color = Color(0xFF16A34A), fontSize = 11.sp)
         }
     }
 }
@@ -200,15 +201,15 @@ fun CalloutCard(content: String, canWallet: Boolean, onOpenWallet: (String) -> U
             }
             Column(horizontalAlignment = Alignment.End) {
                 usd(o.num("priceUsd"))?.let { Text(it, color = Color.White, fontSize = 12.sp) }
-                usd(o.num("mcapUsd"))?.let { Text("市值 $it", color = Color.White.copy(alpha = 0.55f), fontSize = 10.sp) }
+                usd(o.num("mcapUsd"))?.let { Text(t("card.mcap", "v" to it), color = Color.White.copy(alpha = 0.55f), fontSize = 10.sp) }
             }
         }
         o.str("note")?.takeIf { it.isNotBlank() }?.let { Text(it, color = Color.White, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 8.dp)) }
         Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             MegaphoneIcon(Color(0xFF4ADE80), 13.dp)
-            Text(" 喊单 · ${chainName(o.str("chain").orEmpty())}", color = Color.White.copy(alpha = 0.55f), fontSize = 11.sp, modifier = Modifier.weight(1f))
+            Text(" " + t("card.calloutFooter", "chain" to chainName(o.str("chain").orEmpty())), color = Color.White.copy(alpha = 0.55f), fontSize = 11.sp, modifier = Modifier.weight(1f))
             Box(Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xFF4ADE80)).padding(10.dp, 4.dp)) {
-                Text(if (canWallet) "去看看" else "看行情", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text(if (canWallet) t("card.view") else t("card.viewMarket"), color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -226,25 +227,25 @@ fun PayreqCard(content: String, mine: Boolean, onPay: (() -> Unit)?) {
     Column(Modifier.width(230.dp).clip(RoundedCornerShape(14.dp)).background(Color.White).border(1.dp, TransferOrange, RoundedCornerShape(14.dp))) {
         Row(Modifier.fillMaxWidth().background(TransferOrange).padding(12.dp, 9.dp), verticalAlignment = Alignment.CenterVertically) {
             TransferIcon(Color.White, 16.dp)
-            Text(" 收款 · ${chainName(chain)}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text(" " + t("card.payreqHeader", "chain" to chainName(chain)), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
         }
         Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(amount ?: o.str("symbol")?.let { "收 $it" } ?: "金额由付款人填写", color = Color(0xFF111111), fontSize = if (amount != null) 20.sp else 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(amount ?: o.str("symbol")?.let { t("card.receiveSymbol", "symbol" to it) } ?: t("card.amountByPayer"), color = Color(0xFF111111), fontSize = if (amount != null) 20.sp else 14.sp, fontWeight = FontWeight.SemiBold)
             o.str("note")?.takeIf { it.isNotBlank() }?.let { Text(it, color = Color(0xFF555555), fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp)) }
-            qr?.let { androidx.compose.foundation.Image(it, contentDescription = "收款二维码", modifier = Modifier.padding(top = 8.dp).size(140.dp)) }
+            qr?.let { androidx.compose.foundation.Image(it, contentDescription = t("card.payreqQr"), modifier = Modifier.padding(top = 8.dp).size(140.dp)) }
             Text(
                 address, color = Color(0xFF333333), fontSize = 11.sp, lineHeight = 15.sp,
                 modifier = Modifier.padding(top = 6.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFFF4F4F5)).noRippleClick {
                     val cm = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                     cm.setPrimaryClip(android.content.ClipData.newPlainText("address", address))
-                    android.widget.Toast.makeText(ctx, "地址已复制", android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(ctx, t("card.addressCopied"), android.widget.Toast.LENGTH_SHORT).show()
                 }.padding(8.dp, 6.dp),
             )
-            Text("点地址复制 · 只收 ${chainName(chain)} 上的币", color = Color(0xFF888888), fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp))
+            Text(t("card.payreqHint", "chain" to chainName(chain)), color = Color(0xFF888888), fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp))
             if (!mine && onPay != null) Box(
                 Modifier.padding(top = 10.dp).fillMaxWidth().height(36.dp).clip(RoundedCornerShape(18.dp)).background(TransferOrange).noRippleClick(onPay),
                 contentAlignment = Alignment.Center,
-            ) { Text("转账", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
+            ) { Text(t("card.transfer"), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
         }
     }
 }
@@ -268,14 +269,14 @@ fun ShareCardDialog(card: JsonObject, onDone: (String) -> Unit, onDismiss: () ->
         picked.mapNotNull { id -> convs.find { it.id == id } }.forEach { c ->
             WsClient.send(if (c.type == 1) 1 else 2, if (c.type == 1) c.peer!!.id else c.group!!.id, if (payreq) "payreq" else "callout", content, null)
         }
-        scope.launch { onDone(if (payreq) "收款已发到 ${picked.size} 个聊天" else "已喊单到 ${picked.size} 个聊天") }
+        scope.launch { onDone(if (payreq) t("card.payreqSent", "n" to picked.size) else t("card.calloutSent", "n" to picked.size)) }
     }
     Dialog(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().heightIn(max = 560.dp).clip(RoundedCornerShape(16.dp)).background(Bg2).padding(16.dp)) {
-            Text(if (payreq) "把收款发到…" else "喊单 $${card["symbol"]?.jsonPrimitive?.contentOrNull.orEmpty()} 到…", color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.align(Alignment.CenterHorizontally))
+            Text(if (payreq) t("card.sendPayreqTo") else t("card.calloutTo", "symbol" to card["symbol"]?.jsonPrimitive?.contentOrNull.orEmpty()), color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.align(Alignment.CenterHorizontally))
             Spacer(Modifier.height(10.dp))
             Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Bg3).padding(12.dp, 9.dp)) {
-                if (q.isEmpty()) Text("搜索", color = TextDim, fontSize = 14.sp)
+                if (q.isEmpty()) Text(t("common.search"), color = TextDim, fontSize = 14.sp)
                 androidx.compose.foundation.text.BasicTextField(q, { q = it }, singleLine = true, textStyle = androidx.compose.ui.text.TextStyle(color = TextMain, fontSize = 14.sp), modifier = Modifier.fillMaxWidth())
             }
             LazyColumn(Modifier.weight(1f, fill = false).padding(top = 6.dp)) {
@@ -288,7 +289,7 @@ fun ShareCardDialog(card: JsonObject, onDone: (String) -> Unit, onDismiss: () ->
                         Avatar(c.peer?.avatar ?: c.group?.avatar, 38)
                         Spacer(Modifier.width(10.dp))
                         Text(name(c), color = TextMain, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                        if (c.group != null) Text(if (c.group.kind == 2) " · 频道" else " · 群", color = TextSub, fontSize = 12.sp)
+                        if (c.group != null) Text(" · " + if (c.group.kind == 2) t("msg.tagChannel") else t("msg.tagGroup"), color = TextSub, fontSize = 12.sp)
                         Spacer(Modifier.weight(1f))
                         SelectCircle(on)
                     }
@@ -298,7 +299,7 @@ fun ShareCardDialog(card: JsonObject, onDone: (String) -> Unit, onDismiss: () ->
             Box(
                 Modifier.fillMaxWidth().height(44.dp).clip(RoundedCornerShape(22.dp)).background(if (picked.isEmpty()) Bg3 else Accent).noRippleClick { if (picked.isNotEmpty()) send() },
                 contentAlignment = Alignment.Center,
-            ) { Text("发送${if (picked.isNotEmpty()) "（${picked.size}）" else ""}", color = if (picked.isEmpty()) TextDim else Color.White, fontSize = 15.sp) }
+            ) { Text(if (picked.isNotEmpty()) t("msg.sendN", "n" to picked.size) else t("common.send"), color = if (picked.isEmpty()) TextDim else Color.White, fontSize = 15.sp) }
         }
     }
 }
@@ -308,13 +309,13 @@ fun ShareCardDialog(card: JsonObject, onDone: (String) -> Unit, onDismiss: () ->
 fun TransferChainDialog(addr: ChainAddr, onPick: (address: String, chain: String?) -> Unit, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Bg2).padding(16.dp)) {
-            Text("转账到哪条链", color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.align(Alignment.CenterHorizontally))
+            Text(t("card.pickChain"), color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.align(Alignment.CenterHorizontally))
             Spacer(Modifier.height(12.dp))
-            addr.evm?.let { a -> ChainChoice("EVM 链", "Arc / Ethereum / BNB / Base / Arbitrum / Polygon", a) { onPick(a, null) } }
-            addr.sol?.let { a -> ChainChoice("Solana", "SOL、USDC、pump 币等", a) { onPick(a, "sol") } }
-            addr.trx?.let { a -> ChainChoice("TRON 波场", "TRX、USDT（TRC20）", a) { onPick(a, "trx") } }
-            addr.ton?.let { a -> ChainChoice("TON", "GRAM（原 Toncoin）、USDT 等", a) { onPick(a, "ton") } }
-            Text("转账页里可以选币种和网络；转完会在聊天里发一张转账卡片。", color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+            addr.evm?.let { a -> ChainChoice(t("card.evmChain"), "Arc / Ethereum / BNB / Base / Arbitrum / Polygon", a) { onPick(a, null) } }
+            addr.sol?.let { a -> ChainChoice("Solana", t("card.solTokens"), a) { onPick(a, "sol") } }
+            addr.trx?.let { a -> ChainChoice(t("card.tron"), t("card.trxTokens"), a) { onPick(a, "trx") } }
+            addr.ton?.let { a -> ChainChoice("TON", t("card.tonTokens"), a) { onPick(a, "ton") } }
+            Text(t("card.pickChainHint"), color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
         }
     }
 }
@@ -360,7 +361,7 @@ private fun pct(v: Double) = (if (v >= 0) "+" else "") + "%.1f".format(v) + "%"
 
 fun perpPreview(content: String): String {
     val o = obj(content)
-    return "[合约喊单] ${if (o?.str("side") == "short") "做空" else "做多"} ${o?.str("coin").orEmpty()} ${o?.num("lev")?.toInt() ?: 0}x"
+    return "${t("card.tag.perp")} ${if (o?.str("side") == "short") t("card.short") else t("card.long")} ${o?.str("coin").orEmpty()} ${o?.num("lev")?.toInt() ?: 0}x"
 }
 
 /** 卡片上的「跟单」：钱包合约页按喊单填好方向、杠杆、止盈止损，保证金自己定 */
@@ -396,15 +397,15 @@ fun PerpCard(msgId: String, content: String, canWallet: Boolean, onFollow: () ->
             Text("$coin-USD", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(6.dp))
             Box(Modifier.clip(RoundedCornerShape(6.dp)).background(sideColor.copy(alpha = 0.18f)).padding(6.dp, 2.dp)) {
-                Text("${if (long) "做多" else "做空"} ${lev.toInt()}x", color = sideColor, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Text("${if (long) t("card.long") else t("card.short")} ${lev.toInt()}x", color = sideColor, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
             Spacer(Modifier.weight(1f))
             mark?.let { Text(perpPx(it), color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp) }
         }
         Row(Modifier.padding(top = 8.dp)) {
-            PerpCell("${if (o.str("orderType") == "limit") "挂单" else "开仓"}", if (entry > 0) perpPx(entry) else "—", Modifier.weight(1f))
-            PerpCell("止盈", o.num("tp")?.let { perpPx(it) } ?: "—", Modifier.weight(1f))
-            PerpCell("止损", o.num("sl")?.let { perpPx(it) } ?: "—", Modifier.weight(1f))
+            PerpCell(if (o.str("orderType") == "limit") t("card.limit") else t("card.entry"), if (entry > 0) perpPx(entry) else "—", Modifier.weight(1f))
+            PerpCell(t("card.tp"), o.num("tp")?.let { perpPx(it) } ?: "—", Modifier.weight(1f))
+            PerpCell(t("card.sl"), o.num("sl")?.let { perpPx(it) } ?: "—", Modifier.weight(1f))
         }
         // 实时状态：持仓中用最新价算收益率；结束了显示怎么结束的、最终收益率
         val (label, value, color) = when (state) {
@@ -412,17 +413,17 @@ fun PerpCard(msgId: String, content: String, canWallet: Boolean, onFollow: () ->
                 val e = st.num("entry") ?: entry
                 val l = st.num("lev") ?: lev
                 val roe = if (mark != null && e > 0) perpRoe(e, mark, l, long) else st.num("roe") ?: 0.0
-                Triple("持仓中", pct(roe), if (roe >= 0) PerpUp else PerpDown)
+                Triple(t("card.open"), pct(roe), if (roe >= 0) PerpUp else PerpDown)
             }
             "closed" -> {
                 val exit = st.num("exit") ?: 0.0
                 val roe = if (entry > 0 && exit > 0) perpRoe(entry, exit, lev, long) else 0.0
-                val why = when (st.str("reason")) { "tp" -> "止盈出局"; "sl" -> "止损出局"; "liq" -> "已强平"; else -> "已平仓" }
+                val why = when (st.str("reason")) { "tp" -> t("card.closedTp"); "sl" -> t("card.closedSl"); "liq" -> t("card.liquidated"); else -> t("card.closed") }
                 Triple(why, if (st.str("reason") == "liq") "-100%" else pct(roe), if (roe >= 0 && st.str("reason") != "liq") PerpUp else PerpDown)
             }
-            "pending" -> Triple("挂单中", st.num("px")?.let { "@ ${perpPx(it)}" } ?: "", Color.White.copy(alpha = 0.7f))
-            "none" -> Triple("未成交 / 已撤单", "", Color.White.copy(alpha = 0.5f))
-            else -> Triple("读取实时状态…", "", Color.White.copy(alpha = 0.5f))
+            "pending" -> Triple(t("card.pending"), st.num("px")?.let { "@ ${perpPx(it)}" } ?: "", Color.White.copy(alpha = 0.7f))
+            "none" -> Triple(t("card.unfilled"), "", Color.White.copy(alpha = 0.5f))
+            else -> Triple(t("card.loadingStatus"), "", Color.White.copy(alpha = 0.5f))
         }
         Row(Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF1B1F27)).padding(10.dp, 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(label, color = Color.White.copy(alpha = 0.75f), fontSize = 12.sp, modifier = Modifier.weight(1f))
@@ -431,9 +432,9 @@ fun PerpCard(msgId: String, content: String, canWallet: Boolean, onFollow: () ->
         o.str("note")?.takeIf { it.isNotBlank() }?.let { Text(it, color = Color.White, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 8.dp)) }
         Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             MegaphoneIcon(Color(0xFF4ADE80), 13.dp)
-            Text(" 合约喊单 · 收益率实时", color = Color.White.copy(alpha = 0.55f), fontSize = 11.sp, modifier = Modifier.weight(1f))
+            Text(" " + t("card.perpFooter"), color = Color.White.copy(alpha = 0.55f), fontSize = 11.sp, modifier = Modifier.weight(1f))
             if (canWallet && state != "closed") Box(Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xFF4ADE80)).noRippleClick(onFollow).padding(12.dp, 4.dp)) {
-                Text("跟单", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text(t("card.copyTrade"), color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }

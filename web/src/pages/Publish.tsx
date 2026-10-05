@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, uploadFile } from '../api';
 import { CityPickerSheet } from '../components/CityPicker';
 import { locateCity } from '../cities';
+import { t } from '../i18n';
 
 /** 发布动态：媒体区 + 描述卡片 + 设置行 */
 export function PublishPage() {
@@ -53,8 +54,8 @@ export function PublishPage() {
 
   const publish = async () => {
     const isVideo = mode === 'video';
-    if (isVideo && !videoUrl) return alert('请选择视频');
-    if (!isVideo && images.length === 0 && !content.trim()) return alert('写点什么或选择图片');
+    if (isVideo && !videoUrl) return alert(t('publish.pickVideoWeb'));
+    if (!isVideo && images.length === 0 && !content.trim()) return alert(t('publish.needContent'));
     setBusy(true);
     try {
       await api('/moments', {
@@ -93,15 +94,15 @@ export function PublishPage() {
       {/* 顶栏 */}
       <div className="row" style={{ padding: '14px 16px' }}>
         <span style={{ fontSize: 20, color: 'var(--text-2)', cursor: 'pointer', width: 40 }} onClick={() => nav(-1)}>×</span>
-        <span className="grow" style={{ textAlign: 'center', fontSize: 16, fontWeight: 600 }}>发布动态</span>
-        <span style={{ width: 40, textAlign: 'right' }} className="small">{uploading ? '上传中' : ''}</span>
+        <span className="grow" style={{ textAlign: 'center', fontSize: 16, fontWeight: 600 }}>{t('publish.title')}</span>
+        <span style={{ width: 40, textAlign: 'right' }} className="small">{uploading ? t('publish.uploading') : ''}</span>
       </div>
 
       <div className="page no-scrollbar" style={{ padding: '0 16px' }}>
         {/* 类型分段控件 */}
         <div style={{ display: 'flex', background: 'var(--bg-input)', borderRadius: 11, padding: 3, marginBottom: 14 }}>
-          <span style={segStyle(mode === 'photo')} onClick={() => setMode('photo')}>图文</span>
-          <span style={segStyle(mode === 'video')} onClick={() => setMode('video')}>视频</span>
+          <span style={segStyle(mode === 'photo')} onClick={() => setMode('photo')}>{t('publish.modePhoto')}</span>
+          <span style={segStyle(mode === 'video')} onClick={() => setMode('video')}>{t('publish.modeVideo')}</span>
         </div>
 
         {/* 媒体区 */}
@@ -131,7 +132,7 @@ export function PublishPage() {
                 }}
               >
                 <span style={{ fontSize: 24, color: 'var(--text-3)', lineHeight: 1 }}>+</span>
-                <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{images.length === 0 ? '添加图片' : `${images.length}/9`}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{images.length === 0 ? t('publish.addImage') : `${images.length}/9`}</span>
               </div>
             )}
           </div>
@@ -142,7 +143,7 @@ export function PublishPage() {
               className="small"
               style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.65)', padding: '4px 12px', borderRadius: 12, cursor: 'pointer', color: '#fff' }}
               onClick={() => videoRef.current?.click()}
-            >重选</span>
+            >{t('publish.repick')}</span>
           </div>
         ) : (
           <div
@@ -154,7 +155,7 @@ export function PublishPage() {
             }}
           >
             <span style={{ fontSize: 26, color: 'var(--text-3)', lineHeight: 1 }}>+</span>
-            <span style={{ fontSize: 12, color: 'var(--text-3)' }}>添加视频，竖屏效果最佳</span>
+            <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{t('publish.addVideo')}</span>
           </div>
         )}
 
@@ -163,7 +164,7 @@ export function PublishPage() {
           <textarea
             value={content}
             maxLength={1000}
-            placeholder="添加作品描述，让更多人认识你…"
+            placeholder={t('publish.descPlaceholder')}
             onChange={(e) => setContent(e.target.value)}
             style={{
               width: '100%', minHeight: 88, background: 'transparent', border: 'none',
@@ -180,20 +181,20 @@ export function PublishPage() {
             style={{ padding: '14px 14px', cursor: 'pointer', borderBottom: '1px solid var(--line)' }}
             onClick={() => setShowCity(true)}
           >
-            <span style={{ fontSize: 14 }} className="grow">所在位置</span>
-            <span style={{ fontSize: 14, color: cityName ? 'var(--text)' : 'var(--text-3)' }}>{cityName || '选择'}</span>
+            <span style={{ fontSize: 14 }} className="grow">{t('publish.location')}</span>
+            <span style={{ fontSize: 14, color: cityName ? 'var(--text)' : 'var(--text-3)' }}>{cityName || t('publish.choose')}</span>
             <span style={{ color: 'var(--text-3)' }}>›</span>
           </div>
           <div className="row" style={{ padding: '14px 14px' }}>
-            <span style={{ fontSize: 14 }} className="grow">谁可以看</span>
-            <span style={{ fontSize: 13, color: 'var(--text-3)' }}>仅异性可见</span>
+            <span style={{ fontSize: 14 }} className="grow">{t('publish.whoCanSee')}</span>
+            <span style={{ fontSize: 13, color: 'var(--text-3)' }}>{t('publish.oppositeSexOnly')}</span>
           </div>
         </div>
       </div>
 
       {/* 底部发布 */}
       <div style={{ padding: '10px 16px calc(12px + env(safe-area-inset-bottom))' }}>
-        <button className="btn" disabled={busy || uploading} onClick={publish}>{busy ? '发布中…' : '发布'}</button>
+        <button className="btn" disabled={busy || uploading} onClick={publish}>{busy ? t('publish.posting') : t('publish.post')}</button>
       </div>
 
       <input ref={imgRef} type="file" accept="image/*" multiple hidden onChange={(e) => addImages(e.target.files)} />

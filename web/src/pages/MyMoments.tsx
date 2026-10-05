@@ -2,14 +2,15 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { MomentItem } from './Plaza';
+import { t } from '../i18n';
 
 function formatAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const min = Math.floor(diff / 60000);
-  if (min < 1) return '刚刚';
-  if (min < 60) return `${min} 分钟前`;
+  if (min < 1) return t('time.justNow');
+  if (min < 60) return t('time.minutesAgo', { n: min });
   const hours = Math.floor(min / 60);
-  if (hours < 24) return `${hours} 小时前`;
+  if (hours < 24) return t('time.hoursAgo', { n: hours });
   return new Date(iso).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
 }
 
@@ -29,7 +30,7 @@ export function MyMomentsPage() {
 
   async function remove(e: React.MouseEvent, m: MomentItem) {
     e.stopPropagation();
-    if (!window.confirm('删除后不可恢复，确定删除这条动态吗？')) return;
+    if (!window.confirm(t('moments.deleteConfirm'))) return;
     try {
       await api(`/moments/${m.id}`, { method: 'DELETE' });
       setItems((list) => list.filter((it) => it.id !== m.id));
@@ -41,12 +42,12 @@ export function MyMomentsPage() {
   return (
     <div className="app">
       <div className="navbar">
-        <span className="back" onClick={() => nav(-1)}>‹ 返回</span>
-        <span className="title">我的动态</span>
-        <span className="action" onClick={() => nav('/publish')}>发布</span>
+        <span className="back" onClick={() => nav(-1)}>‹ {t('common.back')}</span>
+        <span className="title">{t('me.myMoments')}</span>
+        <span className="action" onClick={() => nav('/publish')}>{t('publish.post')}</span>
       </div>
       <div className="page no-scrollbar" style={{ padding: '12px 12px 24px' }}>
-        {items.length === 0 && <div className="empty">还没发布过动态<br />点右上角发布第一条</div>}
+        {items.length === 0 && <div className="empty">{t('moments.mineEmpty')}<br />{t('moments.mineEmptyHint')}</div>}
 
         {/* 双列瀑布 */}
         <div style={{ columnCount: 2, columnGap: 8 }}>
@@ -66,10 +67,10 @@ export function MyMomentsPage() {
                   <div style={{ position: 'relative' }}>
                     <img src={cover} style={{ width: '100%', display: 'block', maxHeight: 260, objectFit: 'cover' }} alt="" />
                     {m.type === 2 && (
-                      <span style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: 11, padding: '2px 8px', borderRadius: 10 }}>视频</span>
+                      <span style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: 11, padding: '2px 8px', borderRadius: 10 }}>{t('gallery.video')}</span>
                     )}
                     {m.type === 1 && m.images.length > 1 && (
-                      <span style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: 11, padding: '2px 8px', borderRadius: 10 }}>{m.images.length} 图</span>
+                      <span style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: 11, padding: '2px 8px', borderRadius: 10 }}>{t('moments.nImages', { n: m.images.length })}</span>
                     )}
                   </div>
                 ) : m.type === 2 ? (
@@ -104,14 +105,14 @@ export function MyMomentsPage() {
                   )}
                   <div className="row" style={{ fontSize: 11, color: 'var(--text-3)' }}>
                     <span className="grow">{formatAgo(m.createdAt)}{m.cityName ? ` · ${m.cityName}` : ''}</span>
-                    <span>赞 {m.likeCount} · 评 {m.commentCount}</span>
+                    <span>{t('moments.likesComments', { likes: m.likeCount, comments: m.commentCount })}</span>
                   </div>
                   <div style={{ marginTop: 8, textAlign: 'right' }}>
                     <span
                       onClick={(e) => remove(e, m)}
                       style={{ fontSize: 12, color: 'var(--danger, #ff4d4f)', padding: '3px 10px', borderRadius: 10, background: 'rgba(255,77,79,0.12)' }}
                     >
-                      删除
+                      {t('common.delete')}
                     </span>
                   </div>
                 </div>

@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.*
 import com.wh.peiwana.ui.*
 import com.wh.peiwana.ui.sticker.EmojiPanel
@@ -143,7 +144,7 @@ private fun ConfirmDialog(text: String, confirm: String, onConfirm: () -> Unit, 
         containerColor = Bg2,
         text = { Text(text, color = TextMain, fontSize = 15.sp) },
         confirmButton = { Text(confirm, color = Danger, modifier = Modifier.noRippleClick { onDismiss(); onConfirm() }.padding(8.dp)) },
-        dismissButton = { Text("取消", color = TextSub, modifier = Modifier.noRippleClick(onDismiss).padding(8.dp)) },
+        dismissButton = { Text(t("common.cancel"), color = TextSub, modifier = Modifier.noRippleClick(onDismiss).padding(8.dp)) },
     )
 }
 
@@ -151,7 +152,7 @@ private fun ConfirmDialog(text: String, confirm: String, onConfirm: () -> Unit, 
 @Composable
 private fun MemberPostSwitch(on: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().noRippleClick { onChange(!on) }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("订阅者可发消息", color = TextMain, fontSize = 15.sp, modifier = Modifier.weight(1f))
+        Text(t("channel.memberPost"), color = TextMain, fontSize = 15.sp, modifier = Modifier.weight(1f))
         androidx.compose.material3.Switch(
             checked = on, onCheckedChange = onChange,
             colors = androidx.compose.material3.SwitchDefaults.colors(checkedTrackColor = Accent),
@@ -188,7 +189,7 @@ private fun PostBody(p: ChannelPost, onMedia: () -> Unit) {
             val s = remember(p.content) { StickerStore.parse(p.content) }
             Box(Modifier.padding(start = 12.dp, top = 10.dp)) {
                 if (s != null) StickerImage(s, if (s.isGif) 220.dp else 140.dp)
-                else Text("[表情]", color = TextMain, fontSize = 15.sp)
+                else Text(t("chat.preview.sticker"), color = TextMain, fontSize = 15.sp)
             }
         }
         "audio" -> {
@@ -218,7 +219,7 @@ private fun PostBody(p: ChannelPost, onMedia: () -> Unit) {
         }
         "location" -> {
             val obj = remember(p.content) { runCatching { WsClient.json.parseToJsonElement(p.content).jsonObject }.getOrNull() }
-            val name = obj?.get("name")?.jsonPrimitive?.content ?: "位置"
+            val name = obj?.get("name")?.jsonPrimitive?.content ?: t("chat.location")
             val lat = obj?.get("lat")?.jsonPrimitive?.content
             val lng = obj?.get("lng")?.jsonPrimitive?.content
             Row(
@@ -276,7 +277,7 @@ private fun MemberBubble(p: ChannelPost, mine: Boolean, onMedia: () -> Unit, onD
             )
             PostBody(p, onMedia)
             Text(
-                if (p.pending) "发送中…" else fmtChatTime(p.createdAt), color = TextDim, fontSize = 11.sp,
+                if (p.pending) t("chat.sending") else fmtChatTime(p.createdAt), color = TextDim, fontSize = 11.sp,
                 modifier = Modifier.align(Alignment.End).padding(start = 10.dp, end = 10.dp, top = 2.dp, bottom = 6.dp),
             )
         }
@@ -302,7 +303,7 @@ private fun PostCard(ch: ChannelInfo, p: ChannelPost, onReact: (String) -> Unit,
                 if (byAuthor) p.senderNickname else ch.name, color = TextMain, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f).padding(start = 8.dp),
             )
-            if (onDelete != null && !p.pending) Text("删除", color = TextDim, fontSize = 12.sp, modifier = Modifier.noRippleClick(onDelete))
+            if (onDelete != null && !p.pending) Text(t("common.delete"), color = TextDim, fontSize = 12.sp, modifier = Modifier.noRippleClick(onDelete))
         }
         PostBody(p, onMedia)
         InlineKeyboard(p.markup, p.id, Modifier.fillMaxWidth().padding(horizontal = 12.dp))
@@ -312,7 +313,7 @@ private fun PostCard(ch: ChannelInfo, p: ChannelPost, onReact: (String) -> Unit,
                 if (!p.pending) ReactChip("☺+", false) { picker = !picker }
             }
             if (p.pending) {
-                Text("发送中…", color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(start = 8.dp))
+                Text(t("chat.sending"), color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(start = 8.dp))
             } else {
                 Row(Modifier.padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     EyeIcon(TextDim, 13.dp)
@@ -339,7 +340,7 @@ private fun PostCard(ch: ChannelInfo, p: ChannelPost, onReact: (String) -> Unit,
             Row(Modifier.fillMaxWidth().clickable(onClick = onComments).padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 BubbleIcon(Accent, 16.dp)
                 Text(
-                    if (p.commentCount > 0) "  ${p.commentCount} 条评论" else "  评论",
+                    if (p.commentCount > 0) "  " + t("channel.commentsN", "n" to p.commentCount) else "  " + t("channel.comments"),
                     color = Accent, fontSize = 13.sp, modifier = Modifier.weight(1f),
                 )
                 Text("›", color = TextDim, fontSize = 18.sp)
@@ -361,13 +362,13 @@ fun ChannelScreen(
     LaunchedEffect(walletResult) {
         val r = walletResult ?: return@LaunchedEffect
         onWalletResultUsed()
-        toast(ctx, "转账成功，正在核对链上交易…")
+        toast(ctx, t("chat.transfer.verifying"))
         runCatching { postTransferCard("", r) }
-            .onSuccess { toast(ctx, "已到账，转账卡片发到了和对方的私聊") }
-            .onFailure { toast(ctx, "转账卡片没发出去：${it.message ?: "请稍后再试"}（钱已经转了，可以在钱包里查）") }
+            .onSuccess { toast(ctx, t("channel.transferDone")) }
+            .onFailure { toast(ctx, t("chat.transfer.cardFailed", "msg" to (it.message ?: t("chat.tryLater")))) }
     }
     val pay = remember(myUserId, onOpenWallet) {
-        ChannelPay(myUserId, onOpenWallet?.let { open -> { p: ChannelPost -> payreqPath(p.content, p.id, p.senderNickname.ifEmpty { "频道" })?.let(open) } })
+        ChannelPay(myUserId, onOpenWallet?.let { open -> { p: ChannelPost -> payreqPath(p.content, p.id, p.senderNickname.ifEmpty { t("channel.title") })?.let(open) } })
     }
     CompositionLocalProvider(LocalChannelPay provides pay) {
         ChannelScreenBody(groupId, myUserId, onBack, onExit, onOpenComments)
@@ -423,7 +424,7 @@ private fun ChannelScreenBody(groupId: String, myUserId: String, onBack: () -> U
                 val conv = c.conversationId
                 if (c.isMember && last != null && conv != null) WsClient.markRead(conv, last.id)
             }
-            .onFailure { error = it.message ?: "频道不存在" }
+            .onFailure { error = it.message ?: t("channel.notFound") }
         WsClient.connect()
     }
 
@@ -458,7 +459,7 @@ private fun ChannelScreenBody(groupId: String, myUserId: String, onBack: () -> U
                     val tempId = frame["tempId"]?.jsonPrimitive?.content
                     if (posts.any { it.pending && it.tempId == tempId }) {
                         posts = posts.filterNot { it.pending && it.tempId == tempId }
-                        toast(ctx, frame["msg"]?.jsonPrimitive?.content ?: "发送失败")
+                        toast(ctx, frame["msg"]?.jsonPrimitive?.content ?: t("chat.sendFailed"))
                     }
                 }
                 "channel_stats" -> {
@@ -530,7 +531,7 @@ private fun ChannelScreenBody(groupId: String, myUserId: String, onBack: () -> U
             }.onFailure { failed++ }
         }
         if (caption.isNotBlank()) sendRaw("text", caption.trim())
-        if (failed > 0) toast(ctx, "$failed 张图片发送失败")
+        if (failed > 0) toast(ctx, t("chat.imagesFailed", "n" to failed))
     }
 
     val locPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { g ->
@@ -546,7 +547,7 @@ private fun ChannelScreenBody(groupId: String, myUserId: String, onBack: () -> U
                     val r = Api.json.decodeFromJsonElement(ReactResp.serializer(), d)
                     posts = posts.map { if (it.id == p.id) it.copy(reactions = r.reactions, myReaction = r.myReaction) else it }
                 }
-                .onFailure { toast(ctx, it.message ?: "操作失败") }
+                .onFailure { toast(ctx, it.message ?: t("common.failed")) }
         }
     }
 
@@ -555,7 +556,7 @@ private fun ChannelScreenBody(groupId: String, myUserId: String, onBack: () -> U
         scope.launch {
             runCatching { Api.request("/im/channel/$groupId/mute", "POST", buildJsonObject { put("muted", JsonPrimitive(muted)) }) }
                 .onSuccess { ch = c.copy(muted = muted) }
-                .onFailure { toast(ctx, it.message ?: "操作失败") }
+                .onFailure { toast(ctx, it.message ?: t("common.failed")) }
         }
     }
 
@@ -567,8 +568,8 @@ private fun ChannelScreenBody(groupId: String, myUserId: String, onBack: () -> U
     val c = ch
     if (c == null) {
         Column(Modifier.fillMaxSize()) {
-            NavBar("频道", onBack)
-            EmptyHint(error.ifEmpty { "加载中…" })
+            NavBar(t("channel.title"), onBack)
+            EmptyHint(error.ifEmpty { t("common.loading") })
         }
         return
     }
@@ -580,7 +581,7 @@ private fun ChannelScreenBody(groupId: String, myUserId: String, onBack: () -> U
                 Avatar(c.avatar, 36)
                 Column(Modifier.padding(start = 10.dp)) {
                     Text(c.name, color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text("${fmtCount(c.subscribers)} 位订阅者", color = TextSub, fontSize = 12.sp)
+                    Text(t("channel.subscribersN", "n" to fmtCount(c.subscribers)), color = TextSub, fontSize = 12.sp)
                 }
             }
             Text("···", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.noRippleClick { showInfo = true }.padding(horizontal = 12.dp))
@@ -593,13 +594,13 @@ private fun ChannelScreenBody(groupId: String, myUserId: String, onBack: () -> U
         ) {
             if (header == 1) item("more") {
                 Text(
-                    "查看更早的帖子", color = TextSub, fontSize = 12.sp, textAlign = TextAlign.Center,
+                    t("channel.olderPosts"), color = TextSub, fontSize = 12.sp, textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().noRippleClick { loadMore() }.padding(10.dp),
                 )
             }
             if (posts.isEmpty()) item("empty") {
                 Text(
-                    if (c.canSend ?: c.canPost) "发第一条帖子吧，订阅者都会收到" else "频道还没有发帖",
+                    if (c.canSend ?: c.canPost) t("channel.emptyCanPost") else t("channel.emptyNoPosts"),
                     color = TextSub, fontSize = 14.sp, textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(vertical = 80.dp),
                 )
@@ -628,7 +629,7 @@ private fun ChannelScreenBody(groupId: String, myUserId: String, onBack: () -> U
                         Modifier.weight(1f).heightIn(min = 40.dp).clip(RoundedCornerShape(20.dp)).background(Bg3).padding(horizontal = 14.dp, vertical = 9.dp),
                         contentAlignment = Alignment.CenterStart,
                     ) {
-                        if (input.isEmpty()) Text(if (c.canPost) "发帖…" else "发消息…", color = TextDim, fontSize = 15.sp)
+                        if (input.isEmpty()) Text(if (c.canPost) t("channel.postHint") else t("channel.msgHint"), color = TextDim, fontSize = 15.sp)
                         BasicTextField(
                             value = input, onValueChange = { input = it },
                             textStyle = TextStyle(color = TextMain, fontSize = 15.sp),
@@ -654,7 +655,7 @@ private fun ChannelScreenBody(groupId: String, myUserId: String, onBack: () -> U
                             Modifier.height(40.dp).clip(RoundedCornerShape(20.dp)).background(Accent)
                                 .noRippleClick { sendRaw("text", input.trim()); input = "" }.padding(horizontal = 16.dp),
                             contentAlignment = Alignment.Center,
-                        ) { Text("发送", color = Color.White, fontSize = 14.sp) }
+                        ) { Text(t("common.send"), color = Color.White, fontSize = 14.sp) }
                     }
                 }
                 if (showSticker) {
@@ -678,15 +679,15 @@ private fun ChannelScreenBody(groupId: String, myUserId: String, onBack: () -> U
                             val last = posts.lastOrNull { !it.pending }
                             val conv = n.conversationId
                             if (last != null && conv != null) WsClient.markRead(conv, last.id)
-                        }.onFailure { toast(ctx, it.message ?: "订阅失败") }
+                        }.onFailure { toast(ctx, it.message ?: t("channel.subscribeFailed")) }
                     }
                 }.padding(vertical = 15.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 when {
-                    !c.isMember -> Text("订阅", color = Accent, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                    c.muted -> Text("取消静音", color = TextMain, fontSize = 15.sp)
-                    else -> Text("静音", color = TextMain, fontSize = 15.sp)
+                    !c.isMember -> Text(t("channel.subscribe"), color = Accent, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    c.muted -> Text(t("channel.unmute"), color = TextMain, fontSize = 15.sp)
+                    else -> Text(t("channel.mute"), color = TextMain, fontSize = 15.sp)
                 }
             }
         }
@@ -704,11 +705,11 @@ private fun ChannelScreenBody(groupId: String, myUserId: String, onBack: () -> U
         )
     }
     confirmDelete?.let { p ->
-        ConfirmDialog("删除这条帖子？评论和表情回应会一起删除", "删除", onDismiss = { confirmDelete = null }, onConfirm = {
+        ConfirmDialog(t("channel.deletePostConfirm"), t("common.delete"), onDismiss = { confirmDelete = null }, onConfirm = {
             scope.launch {
                 runCatching { Api.request("/im/channel/posts/${p.id}/delete", "POST") }
                     .onSuccess { if (p.id !in dying) removePosts(setOf(p.id)) }
-                    .onFailure { toast(ctx, it.message ?: "删除失败") }
+                    .onFailure { toast(ctx, it.message ?: t("chat.deleteFailed")) }
             }
         })
     }
@@ -741,7 +742,7 @@ private fun ChannelInfoSheet(ch: ChannelInfo, onClose: () -> Unit, onChanged: (C
         scope.launch {
             runCatching { Api.request("/im/channel/${ch.id}", "PUT", body)!! }
                 .onSuccess { onChanged(Api.json.decodeFromJsonElement(ChannelInfo.serializer(), it)); editing = false }
-                .onFailure { toast(ctx, it.message ?: "保存失败") }
+                .onFailure { toast(ctx, it.message ?: t("channel.saveFailed")) }
         }
     }
     val pickAvatar = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -750,7 +751,7 @@ private fun ChannelInfoSheet(ch: ChannelInfo, onClose: () -> Unit, onChanged: (C
                 val b = ctx.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
                 Api.upload("image", b, "c.jpg", "image/jpeg")
             }.onSuccess { save(buildJsonObject { put("avatar", JsonPrimitive(it)) }) }
-                .onFailure { toast(ctx, it.message ?: "上传失败") }
+                .onFailure { toast(ctx, it.message ?: t("channel.uploadFailed")) }
         }
     }
 
@@ -758,39 +759,39 @@ private fun ChannelInfoSheet(ch: ChannelInfo, onClose: () -> Unit, onChanged: (C
         Column(Modifier.fillMaxWidth().clearFocusOnTap().padding(horizontal = 20.dp).padding(bottom = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(Modifier.noRippleClick { if (ch.canPost) pickAvatar.launch("image/*") }) { Avatar(ch.avatar, 72) }
             if (editing) {
-                OutlinedTextField(name, { if (it.length <= 50) name = it }, placeholder = { Text("频道名称") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 12.dp))
-                OutlinedTextField(desc, { if (it.length <= 500) desc = it }, placeholder = { Text("频道简介") }, minLines = 3, maxLines = 6, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+                OutlinedTextField(name, { if (it.length <= 50) name = it }, placeholder = { Text(t("channel.name")) }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 12.dp))
+                OutlinedTextField(desc, { if (it.length <= 500) desc = it }, placeholder = { Text(t("channel.desc")) }, minLines = 3, maxLines = 6, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.End) {
-                    Text("取消", color = TextSub, fontSize = 14.sp, modifier = Modifier.noRippleClick { editing = false }.padding(10.dp))
-                    Text("保存", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.noRippleClick {
+                    Text(t("common.cancel"), color = TextSub, fontSize = 14.sp, modifier = Modifier.noRippleClick { editing = false }.padding(10.dp))
+                    Text(t("common.save"), color = Accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.noRippleClick {
                         save(buildJsonObject { put("name", JsonPrimitive(name)); put("description", JsonPrimitive(desc)) })
                     }.padding(10.dp))
                 }
             } else {
                 Text(ch.name, color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp))
-                Text("${fmtCount(ch.subscribers)} 位订阅者 · 频道主 ${ch.owner?.nickname ?: ""}", color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                Text(t("channel.subscribersOwner", "n" to fmtCount(ch.subscribers), "name" to (ch.owner?.nickname ?: "")), color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                 if (ch.description.isNotEmpty()) {
                     Text(ch.description, color = TextMain, fontSize = 14.sp, lineHeight = 22.sp, modifier = Modifier.fillMaxWidth().padding(top = 12.dp))
                 }
                 if (ch.retentionDays > 0) {
-                    Text("消息保留 ${ch.retentionDays} 天，超过自动删除", color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp))
+                    Text(t("channel.retention", "n" to ch.retentionDays), color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp))
                 }
                 Box(Modifier.padding(top = 16.dp).fillMaxWidth().height(1.dp).background(Line))
                 val menu: @Composable (String, Color, () -> Unit) -> Unit = { label, color, onClick ->
                     Text(label, color = color, fontSize = 15.sp, modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 14.dp))
                 }
-                if (ch.canPost) menu("编辑频道资料", TextMain) { name = ch.name; desc = ch.description; editing = true }
+                if (ch.canPost) menu(t("channel.editInfo"), TextMain) { name = ch.name; desc = ch.description; editing = true }
                 if (ch.canPost) MemberPostSwitch(ch.memberPost) { save(buildJsonObject { put("memberPost", JsonPrimitive(it)) }) }
-                if (ch.isMember) menu("分享频道（二维码 / 邀请码）", TextMain) { showShare = true }
-                if (owner) menu("机器人（自动发帖）", TextMain) { showBots = true }
-                if (ch.isMember && !owner) menu(if (ch.muted) "取消静音" else "静音", TextMain) {
+                if (ch.isMember) menu(t("channel.share"), TextMain) { showShare = true }
+                if (owner) menu(t("channel.bots"), TextMain) { showBots = true }
+                if (ch.isMember && !owner) menu(if (ch.muted) t("channel.unmute") else t("channel.mute"), TextMain) {
                     scope.launch {
                         runCatching { Api.request("/im/channel/${ch.id}/mute", "POST", buildJsonObject { put("muted", JsonPrimitive(!ch.muted)) }) }
                             .onSuccess { onChanged(ch.copy(muted = !ch.muted)) }
                     }
                 }
-                if (owner) menu("清空所有消息", Danger) { confirmClear = true }
-                if (ch.isMember) menu(if (owner) "删除频道" else "退订", Danger) { confirmLeave = true }
+                if (owner) menu(t("channel.clearAll"), Danger) { confirmClear = true }
+                if (ch.isMember) menu(if (owner) t("channel.delete") else t("channel.unsubscribe"), Danger) { confirmLeave = true }
             }
         }
     }
@@ -798,22 +799,22 @@ private fun ChannelInfoSheet(ch: ChannelInfo, onClose: () -> Unit, onChanged: (C
     if (showBots) AddBotSheet(groupId = ch.id, channel = true, onDismiss = { showBots = false })
     if (confirmLeave) {
         ConfirmDialog(
-            if (owner) "删除频道后所有订阅者都看不到它，确定删除？" else "确定退订这个频道？",
-            if (owner) "删除" else "退订",
+            if (owner) t("channel.deleteConfirm") else t("channel.unsubscribeConfirm"),
+            if (owner) t("common.delete") else t("channel.unsubscribe"),
             onDismiss = { confirmLeave = false },
             onConfirm = {
                 scope.launch {
                     runCatching { Api.request("/im/channel/${ch.id}/${if (owner) "delete" else "unsubscribe"}", "POST") }
                         .onSuccess { onExit() }
-                        .onFailure { toast(ctx, it.message ?: "操作失败") }
+                        .onFailure { toast(ctx, it.message ?: t("common.failed")) }
                 }
             },
         )
     }
     if (confirmClear) {
         ConfirmDialog(
-            "清空频道里的所有消息？评论、表情回应和图片 / 视频 / 语音文件会一起永久删除，无法恢复。",
-            "清空",
+            t("channel.clearConfirm"),
+            t("chat.clear"),
             onDismiss = { confirmClear = false },
             onConfirm = {
                 confirmClear = false
@@ -821,10 +822,10 @@ private fun ChannelInfoSheet(ch: ChannelInfo, onClose: () -> Unit, onChanged: (C
                     runCatching { Api.request("/im/channel/${ch.id}/clear", "POST") }
                         .onSuccess { r ->
                             val n = r?.jsonObject?.get("deleted")?.jsonPrimitive?.intOrNull ?: 0
-                            toast(ctx, if (n > 0) "已清空 $n 条消息" else "频道里没有消息")
+                            toast(ctx, if (n > 0) t("channel.clearedN", "n" to n) else t("channel.noMessages"))
                             onClose()
                         }
-                        .onFailure { toast(ctx, it.message ?: "清空失败") }
+                        .onFailure { toast(ctx, it.message ?: t("channel.clearFailed")) }
                 }
             },
         )
@@ -866,18 +867,18 @@ fun ChannelCommentsScreen(msgId: String, canAdmin: Boolean, myUserId: String, on
             }.onSuccess {
                 input = ""; sticker = null; replyTo = null; showEmoji = false
                 load()
-            }.onFailure { toast(ctx, it.message ?: "评论失败") }
+            }.onFailure { toast(ctx, it.message ?: t("channel.commentFailed")) }
             busy = false
         }
     }
 
     Column(Modifier.fillMaxSize()) {
-        NavBar(list?.let { "${it.size} 条评论" } ?: "评论", onBack)
+        NavBar(list?.let { t("channel.commentsN", "n" to it.size) } ?: t("channel.comments"), onBack)
         val items = list
         Box(Modifier.weight(1f).fillMaxWidth().noRippleClick { showEmoji = false; focus.clearFocus(); keyboard?.hide() }) {
             when {
-                items == null -> EmptyHint("加载中…")
-                items.isEmpty() -> EmptyHint("还没有评论，来抢沙发")
+                items == null -> EmptyHint(t("common.loading"))
+                items.isEmpty() -> EmptyHint(t("channel.noComments"))
                 else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 16.dp)) {
                     items(items, key = { it.id }) { c ->
                         Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.Top) {
@@ -886,9 +887,9 @@ fun ChannelCommentsScreen(msgId: String, canAdmin: Boolean, myUserId: String, on
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(c.user?.nickname ?: "", color = TextMain, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                                     Text("  ${fmtChatTime(c.createdAt)}", color = TextDim, fontSize = 11.sp, modifier = Modifier.weight(1f))
-                                    Text("回复", color = Accent, fontSize = 12.sp, modifier = Modifier.noRippleClick { replyTo = c; inputFocus.requestFocus(); keyboard?.show() }.padding(horizontal = 6.dp))
+                                    Text(t("chat.reply"), color = Accent, fontSize = 12.sp, modifier = Modifier.noRippleClick { replyTo = c; inputFocus.requestFocus(); keyboard?.show() }.padding(horizontal = 6.dp))
                                     if (c.user?.id == myUserId || canAdmin) {
-                                        Text("删除", color = TextDim, fontSize = 12.sp, modifier = Modifier.noRippleClick { confirmDelete = c }.padding(start = 6.dp))
+                                        Text(t("common.delete"), color = TextDim, fontSize = 12.sp, modifier = Modifier.noRippleClick { confirmDelete = c }.padding(start = 6.dp))
                                     }
                                 }
                                 if (c.content.isNotEmpty() || c.replyToNickname.isNotEmpty()) {
@@ -937,8 +938,8 @@ fun ChannelCommentsScreen(msgId: String, canAdmin: Boolean, myUserId: String, on
                         Spacer(Modifier.width(10.dp))
                     }
                     replyTo?.let { r ->
-                        Text("回复 @${r.user?.nickname ?: ""}", color = TextSub, fontSize = 12.sp, modifier = Modifier.weight(1f))
-                        Text("取消", color = TextSub, fontSize = 12.sp, modifier = Modifier.noRippleClick { replyTo = null })
+                        Text(t("channel.replyTo", "name" to (r.user?.nickname ?: "")), color = TextSub, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                        Text(t("common.cancel"), color = TextSub, fontSize = 12.sp, modifier = Modifier.noRippleClick { replyTo = null })
                     } ?: Spacer(Modifier.weight(1f))
                 }
             }
@@ -953,7 +954,7 @@ fun ChannelCommentsScreen(msgId: String, canAdmin: Boolean, myUserId: String, on
                     Modifier.weight(1f).heightIn(min = 40.dp).clip(RoundedCornerShape(20.dp)).background(Bg3).padding(horizontal = 14.dp, vertical = 9.dp),
                     contentAlignment = Alignment.CenterStart,
                 ) {
-                    if (input.isEmpty()) Text(replyTo?.let { "回复 @${it.user?.nickname ?: ""}" } ?: "说点什么…", color = TextDim, fontSize = 15.sp)
+                    if (input.isEmpty()) Text(replyTo?.let { t("channel.replyTo", "name" to (it.user?.nickname ?: "")) } ?: t("channel.commentHint"), color = TextDim, fontSize = 15.sp)
                     BasicTextField(
                         value = input, onValueChange = { if (it.length <= 500) input = it },
                         textStyle = TextStyle(color = TextMain, fontSize = 15.sp),
@@ -968,7 +969,7 @@ fun ChannelCommentsScreen(msgId: String, canAdmin: Boolean, myUserId: String, on
                     Modifier.height(40.dp).clip(RoundedCornerShape(20.dp)).background(if (canSend) Accent else Bg3)
                         .noRippleClick { send() }.padding(horizontal = 16.dp),
                     contentAlignment = Alignment.Center,
-                ) { Text("发送", color = if (canSend) Color.White else TextDim, fontSize = 14.sp) }
+                ) { Text(t("common.send"), color = if (canSend) Color.White else TextDim, fontSize = 14.sp) }
             }
             if (showEmoji) {
                 EmojiPanel(
@@ -982,11 +983,11 @@ fun ChannelCommentsScreen(msgId: String, canAdmin: Boolean, myUserId: String, on
     }
 
     confirmDelete?.let { c ->
-        ConfirmDialog("删除这条评论？", "删除", onDismiss = { confirmDelete = null }, onConfirm = {
+        ConfirmDialog(t("channel.deleteCommentConfirm"), t("common.delete"), onDismiss = { confirmDelete = null }, onConfirm = {
             scope.launch {
                 runCatching { Api.request("/im/channel/comments/${c.id}/delete", "POST") }
                     .onSuccess { list = list?.filterNot { it.id == c.id } }
-                    .onFailure { toast(ctx, it.message ?: "删除失败") }
+                    .onFailure { toast(ctx, it.message ?: t("chat.deleteFailed")) }
             }
         })
     }
@@ -1066,14 +1067,14 @@ fun CreateChannelScreen(onBack: () -> Unit, onCreated: (groupId: String) -> Unit
             runCatching {
                 val b = ctx.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
                 avatar = Api.upload("image", b, "c.jpg", "image/jpeg")
-            }.onFailure { toast(ctx, it.message ?: "上传失败") }
+            }.onFailure { toast(ctx, it.message ?: t("channel.uploadFailed")) }
             busy = false
         }
     }
 
     val pick = { if (!busy) pickAvatar.launch("image/*") }
     Column(Modifier.fillMaxSize().background(GroupBg)) {
-        NavBar("新建频道", onBack)
+        NavBar(t("channel.new"), onBack)
         Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
             Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(Modifier.size(88.dp).noRippleClick(pick)) {
@@ -1084,7 +1085,7 @@ fun CreateChannelScreen(onBack: () -> Unit, onCreated: (groupId: String) -> Unit
                             else -> CameraGlyph(30.dp, Color.White)
                         }
                         if (busy) Box(Modifier.fillMaxSize().background(Color(0x73000000)), contentAlignment = Alignment.Center) {
-                            Text("上传中…", color = Color.White, fontSize = 12.sp)
+                            Text(t("channel.uploading"), color = Color.White, fontSize = 12.sp)
                         }
                     }
                     Box(
@@ -1093,17 +1094,17 @@ fun CreateChannelScreen(onBack: () -> Unit, onCreated: (groupId: String) -> Unit
                     ) { CameraGlyph(14.dp, Accent) }
                 }
                 Text(
-                    if (avatar.isEmpty()) "设置频道头像" else "更换头像", color = Accent, fontSize = 14.sp,
+                    if (avatar.isEmpty()) t("channel.setAvatar") else t("channel.changeAvatar"), color = Accent, fontSize = 14.sp,
                     modifier = Modifier.padding(top = 8.dp).noRippleClick(pick),
                 )
             }
 
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Bg)) {
-                GroupField(name, "频道名称", 50, singleLine = true) { name = it }
+                GroupField(name, t("channel.name"), 50, singleLine = true) { name = it }
                 Box(Modifier.padding(start = 16.dp).fillMaxWidth().height(0.5.dp).background(Line))
-                GroupField(desc, "简介（可选）", 500, singleLine = false) { desc = it }
+                GroupField(desc, t("channel.descOptional"), 500, singleLine = false) { desc = it }
             }
-            GroupCaption("简介会显示在频道资料页，告诉别人这个频道发什么。")
+            GroupCaption(t("channel.descCaption"))
 
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Bg)
@@ -1113,26 +1114,25 @@ fun CreateChannelScreen(onBack: () -> Unit, onCreated: (groupId: String) -> Unit
                 Box(Modifier.size(30.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF34C759)), contentAlignment = Alignment.Center) {
                     BubbleGlyph(16.dp, Color.White)
                 }
-                Text("订阅者可发消息", color = TextMain, fontSize = 16.sp, modifier = Modifier.weight(1f).padding(start = 12.dp))
+                Text(t("channel.memberPost"), color = TextMain, fontSize = 16.sp, modifier = Modifier.weight(1f).padding(start = 12.dp))
                 androidx.compose.material3.Switch(
                     checked = memberPost, onCheckedChange = { memberPost = it },
                     colors = androidx.compose.material3.SwitchDefaults.colors(checkedTrackColor = Accent),
                 )
             }
             GroupCaption(
-                (if (memberPost) "所有订阅者都能在频道里发帖，你可以删除任何人的帖子。" else "只有你能发帖，订阅者可以看、点表情、评论。") +
-                    "创建后也能在频道资料里修改。",
+                if (memberPost) t("channel.memberPostOnCaption") else t("channel.memberPostOffCaption"),
             )
 
             quota?.let { q ->
                 Text(
-                    if (left == 0) "已达到创建上限（最多 ${q.limit} 个频道）" else "还能创建 $left 个频道（共 ${q.limit} 个）",
+                    if (left == 0) t("channel.quotaFull", "n" to q.limit) else t("channel.quotaLeft", "left" to left, "n" to q.limit),
                     color = TextSub, fontSize = 12.sp, textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
                 )
             }
-            AccentButton(if (busy) "请稍候…" else "创建频道", enabled = !busy && name.isNotBlank() && left != 0) {
-                if (name.isBlank()) { toast(ctx, "请填写频道名称"); return@AccentButton }
+            AccentButton(if (busy) t("channel.pleaseWait") else t("channel.create"), enabled = !busy && name.isNotBlank() && left != 0) {
+                if (name.isBlank()) { toast(ctx, t("channel.nameRequired")); return@AccentButton }
                 busy = true
                 scope.launch {
                     runCatching {
@@ -1144,7 +1144,7 @@ fun CreateChannelScreen(onBack: () -> Unit, onCreated: (groupId: String) -> Unit
                         })!!
                         Api.json.decodeFromJsonElement(ChannelInfo.serializer(), d)
                     }.onSuccess { onCreated(it.id) }
-                        .onFailure { toast(ctx, it.message ?: "创建失败") }
+                        .onFailure { toast(ctx, it.message ?: t("channel.createFailed")) }
                     busy = false
                 }
             }
@@ -1167,14 +1167,14 @@ fun ChannelsScreen(onBack: () -> Unit, onOpen: (groupId: String) -> Unit, onCrea
     }
 
     Column(Modifier.fillMaxSize()) {
-        NavBar("发现频道", onBack, action = {
-            Text("创建", color = Accent, fontSize = 14.sp, modifier = Modifier.noRippleClick(onCreate))
+        NavBar(t("channel.discover"), onBack, action = {
+            Text(t("channel.createShort"), color = Accent, fontSize = 14.sp, modifier = Modifier.noRippleClick(onCreate))
         })
         Box(
             Modifier.padding(horizontal = 16.dp, vertical = 6.dp).fillMaxWidth().height(36.dp).clip(RoundedCornerShape(18.dp)).background(Bg3).padding(horizontal = 14.dp),
             contentAlignment = Alignment.CenterStart,
         ) {
-            if (q.isEmpty()) Text("搜索频道", color = TextSub, fontSize = 14.sp)
+            if (q.isEmpty()) Text(t("channel.search"), color = TextSub, fontSize = 14.sp)
             BasicTextField(
                 value = q, onValueChange = { q = it.take(30) },
                 textStyle = TextStyle(color = TextMain, fontSize = 14.sp),
@@ -1184,8 +1184,8 @@ fun ChannelsScreen(onBack: () -> Unit, onOpen: (groupId: String) -> Unit, onCrea
         }
         val items = list
         when {
-            items == null -> EmptyHint("加载中…")
-            items.isEmpty() -> EmptyHint(if (q.isNotBlank()) "没有找到相关频道" else "还没有频道，创建第一个吧")
+            items == null -> EmptyHint(t("common.loading"))
+            items.isEmpty() -> EmptyHint(if (q.isNotBlank()) t("channel.searchEmpty") else t("channel.listEmpty"))
             else -> LazyColumn(Modifier.fillMaxSize()) {
                 items(items, key = { it.id }) { c ->
                     Row(
@@ -1196,15 +1196,15 @@ fun ChannelsScreen(onBack: () -> Unit, onOpen: (groupId: String) -> Unit, onCrea
                         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(c.name, color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                                Text("  ${fmtCount(c.subscribers)} 订阅", color = TextDim, fontSize = 11.sp)
+                                Text("  " + t("channel.subsShort", "n" to fmtCount(c.subscribers)), color = TextDim, fontSize = 11.sp)
                             }
                             Text(
-                                c.description.ifEmpty { "频道主 ${c.ownerNickname}" },
+                                c.description.ifEmpty { t("channel.ownerBy", "name" to c.ownerNickname) },
                                 color = TextSub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 3.dp),
                             )
                         }
                         Text(
-                            if (c.isMember) "已订阅" else "订阅",
+                            if (c.isMember) t("channel.subscribed") else t("channel.subscribe"),
                             color = if (c.isMember) TextSub else Color.White, fontSize = 12.sp,
                             modifier = Modifier.clip(RoundedCornerShape(14.dp)).background(if (c.isMember) Bg3 else Accent)
                                 .noRippleClick {
@@ -1212,7 +1212,7 @@ fun ChannelsScreen(onBack: () -> Unit, onOpen: (groupId: String) -> Unit, onCrea
                                     else scope.launch {
                                         runCatching { Api.request("/im/channel/${c.id}/subscribe", "POST") }
                                             .onSuccess { list = list?.map { x -> if (x.id == c.id) x.copy(isMember = true, subscribers = x.subscribers + 1) else x } }
-                                            .onFailure { toast(ctx, it.message ?: "订阅失败") }
+                                            .onFailure { toast(ctx, it.message ?: t("channel.subscribeFailed")) }
                                     }
                                 }
                                 .padding(horizontal = 14.dp, vertical = 6.dp),

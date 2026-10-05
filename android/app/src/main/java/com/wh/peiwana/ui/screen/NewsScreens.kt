@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.border
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.Api
 import com.wh.peiwana.ui.EmptyHint
 import com.wh.peiwana.ui.NavBar
@@ -94,7 +95,7 @@ fun QuoteSection() {
 
     val items = list ?: return
     if (items.isEmpty()) {
-        EmptyHint("今天的励志话正在路上…")
+        EmptyHint(t("news.quoteEmpty"))
         return
     }
     val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
@@ -169,7 +170,7 @@ private fun QuotePage(q: DailyQuote, index: Int, total: Int, hasMore: Boolean, t
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(artDate(q.day), color = TextSub, fontSize = 12.sp, letterSpacing = 2.sp)
                 if (q.day == today) {
-                    Text("今日", color = Accent, fontSize = 11.sp, letterSpacing = 2.sp)
+                    Text(t("news.today"), color = Accent, fontSize = 11.sp, letterSpacing = 2.sp)
                 }
             }
             Text(
@@ -186,7 +187,7 @@ private fun QuotePage(q: DailyQuote, index: Int, total: Int, hasMore: Boolean, t
 @Composable
 fun NewsListScreen(onOpenNews: (String) -> Unit, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
-        NavBar("花边新闻", onBack)
+        NavBar(t("news.title"), onBack)
         NewsSection(onOpenNews = onOpenNews)
     }
 }
@@ -226,7 +227,7 @@ fun NewsSection(onOpenNews: (String) -> Unit) {
     ) {
     LazyColumn(Modifier.fillMaxSize()) {
         if (items.isEmpty()) {
-            item(key = "empty") { EmptyHint("暂无内容，稍后再来看看") }
+            item(key = "empty") { EmptyHint(t("news.empty")) }
         }
         items(items, key = { it.id }) { n ->
             Column(
@@ -260,7 +261,7 @@ fun NewsSection(onOpenNews: (String) -> Unit) {
             item(key = "more") {
                 LaunchedEffect(Unit) { loadMore() }
                 Text(
-                    "加载中…", color = TextDim, fontSize = 12.sp,
+                    t("common.loading"), color = TextDim, fontSize = 12.sp,
                     modifier = Modifier.fillMaxWidth().padding(14.dp),
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
@@ -278,10 +279,10 @@ fun NewsDetailScreen(newsId: String, onBack: () -> Unit) {
         article = runCatching { Api.getObj<NewsArticle>("/news/$newsId") }.getOrNull()
     }
     Column(Modifier.fillMaxSize()) {
-        NavBar("热点", onBack)
+        NavBar(t("news.hot"), onBack)
         val a = article
         if (a == null) {
-            EmptyHint("加载中…")
+            EmptyHint(t("common.loading"))
         } else {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp, 10.dp, 16.dp, 40.dp)) {
                 Text(a.title, color = TextMain, fontSize = 21.sp, fontWeight = FontWeight.Bold, lineHeight = 30.sp)
@@ -306,7 +307,7 @@ fun NewsDetailScreen(newsId: String, onBack: () -> Unit) {
                 if (a.sourceUrl.isNotEmpty()) {
                     val ctx = androidx.compose.ui.platform.LocalContext.current
                     Text(
-                        "查看原文 ›", color = Accent, fontSize = 13.sp,
+                        t("news.viewSource"), color = Accent, fontSize = 13.sp,
                         modifier = Modifier.padding(top = 10.dp).noRippleClick {
                             runCatching {
                                 ctx.startActivity(

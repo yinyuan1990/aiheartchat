@@ -55,8 +55,8 @@ function Shell() {
       if (frame.op === 'notify') {
         const d = frame.data ?? {};
         const text = frame.event === 'comment_reply'
-          ? `${d.from} 回复了你的评论：${d.preview}`
-          : `${d.from} 评论了你的动态：${d.preview}`;
+          ? t('moments.notifyReply', { from: d.from, preview: d.preview })
+          : t('moments.notifyComment', { from: d.from, preview: d.preview });
         setToast(text);
         setTimeout(() => setToast(''), 3000);
       }
@@ -154,7 +154,7 @@ function Boot() {
 
   return (
     <div className="app">
-      <div className="empty">进入中…</div>
+      <div className="empty">{t('app.entering')}</div>
     </div>
   );
 }

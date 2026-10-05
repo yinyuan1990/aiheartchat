@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
+import com.wh.peiwana.i18n.t
 import com.wh.peiwana.net.Api
 import com.wh.peiwana.net.Session
 import com.wh.peiwana.rtc.VoiceRoomManager
@@ -71,7 +72,7 @@ fun VoiceRoomDialog(groupId: String, groupName: String, onDismiss: () -> Unit) {
         if (ok) {
             VoiceRoomManager.join(groupId)
         } else {
-            android.widget.Toast.makeText(ctx, "需要麦克风权限才能加入语音房", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(ctx, t("voiceRoom.micRequired"), android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -80,9 +81,9 @@ fun VoiceRoomDialog(groupId: String, groupName: String, onDismiss: () -> Unit) {
             Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Bg2).padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("语音房", color = TextMain, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            Text(t("chat.menu.voiceRoom"), color = TextMain, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(4.dp))
-            Text("$groupName · ${roomMembers.size}/$max 人", color = TextSub, fontSize = 12.sp)
+            Text("$groupName · " + t("voiceRoom.occupancy", "n" to roomMembers.size, "max" to max), color = TextSub, fontSize = 12.sp)
             Spacer(Modifier.height(18.dp))
 
             // 席位：房内成员 + 空位占位（每行 3 个）
@@ -125,7 +126,7 @@ fun VoiceRoomDialog(groupId: String, groupName: String, onDismiss: () -> Unit) {
                                 }
                                 Spacer(Modifier.height(4.dp))
                                 Text(
-                                    if (slot.id == Session.uid) "我" else (slot.nickname ?: ""),
+                                    if (slot.id == Session.uid) t("voiceRoom.me") else (slot.nickname ?: ""),
                                     color = if (speaking) green else if (slot.id == Session.uid) Accent else TextSub,
                                     fontSize = 11.sp, maxLines = 1, textAlign = TextAlign.Center,
                                 )
@@ -134,7 +135,7 @@ fun VoiceRoomDialog(groupId: String, groupName: String, onDismiss: () -> Unit) {
                                     Text("+", color = TextDim, fontSize = 18.sp)
                                 }
                                 Spacer(Modifier.height(4.dp))
-                                Text("空位", color = TextDim, fontSize = 11.sp)
+                                Text(t("voiceRoom.emptySeat"), color = TextDim, fontSize = 11.sp)
                             }
                         }
                     }
@@ -147,7 +148,7 @@ fun VoiceRoomDialog(groupId: String, groupName: String, onDismiss: () -> Unit) {
             if (inRoom) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        if (muted) "已静音" else "静音",
+                        if (muted) t("voiceRoom.muted") else t("voiceRoom.mute"),
                         color = if (muted) Color.White else TextMain, fontSize = 14.sp, textAlign = TextAlign.Center,
                         modifier = Modifier.weight(1f).clip(RoundedCornerShape(22.dp))
                             .background(if (muted) Accent else Bg3)
@@ -155,7 +156,7 @@ fun VoiceRoomDialog(groupId: String, groupName: String, onDismiss: () -> Unit) {
                             .padding(vertical = 12.dp),
                     )
                     Text(
-                        "退出语音房",
+                        t("voiceRoom.leave"),
                         color = Color.White, fontSize = 14.sp, textAlign = TextAlign.Center,
                         modifier = Modifier.weight(1f).clip(RoundedCornerShape(22.dp))
                             .background(Danger)
@@ -168,14 +169,14 @@ fun VoiceRoomDialog(groupId: String, groupName: String, onDismiss: () -> Unit) {
                 if (token.isNotEmpty()) {
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        "分享二维码邀请好友",
+                        t("voiceRoom.shareQr"),
                         color = Accent, fontSize = 13.sp,
                         modifier = Modifier.noRippleClick { showShare = true },
                     )
                 }
             } else {
                 Text(
-                    if (joining) "加入中…" else if (isFull) "房间已满" else if (roomMembers.isEmpty()) "开启语音房（仅群主）" else "加入语音房",
+                    if (joining) t("group.joining") else if (isFull) t("voiceRoom.full") else if (roomMembers.isEmpty()) t("voiceRoom.start") else t("voiceRoom.join"),
                     color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
                         .background(if (joining || isFull) Bg3 else Accent)
@@ -186,7 +187,7 @@ fun VoiceRoomDialog(groupId: String, groupName: String, onDismiss: () -> Unit) {
 
             Spacer(Modifier.height(10.dp))
             Text(
-                if (inRoom) "关闭面板不会退出，可回聊天页继续说话" else "加入后房内成员可实时语音",
+                if (inRoom) t("voiceRoom.hintInRoom") else t("voiceRoom.hintOutRoom"),
                 color = TextDim, fontSize = 11.sp,
             )
         }
@@ -255,33 +256,33 @@ fun VoiceRoomShareDialog(groupId: String, groupName: String, onDismiss: () -> Un
                 )
             } else {
                 Box(Modifier.fillMaxWidth().height(320.dp), contentAlignment = Alignment.Center) {
-                    Text("生成中…", color = TextSub, fontSize = 13.sp)
+                    Text(t("voiceRoom.generating"), color = TextSub, fontSize = 13.sp)
                 }
             }
             Spacer(Modifier.height(14.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    "保存图片",
+                    t("voiceRoom.saveImage"),
                     color = TextMain, fontSize = 14.sp, textAlign = TextAlign.Center,
                     modifier = Modifier.weight(1f).clip(RoundedCornerShape(22.dp)).background(Bg3)
                         .noRippleClick {
                             cardBmp?.let {
                                 val ok = saveQrToGallery(ctx, it, "语音房邀请")
-                                android.widget.Toast.makeText(ctx, if (ok) "已保存到相册" else "保存失败", android.widget.Toast.LENGTH_SHORT).show()
+                                android.widget.Toast.makeText(ctx, if (ok) t("msg.savedToGallery") else t("msg.saveFailed"), android.widget.Toast.LENGTH_SHORT).show()
                             }
                         }
                         .padding(vertical = 12.dp),
                 )
                 Text(
-                    "分享发送",
+                    t("voiceRoom.shareSend"),
                     color = Color.White, fontSize = 14.sp, textAlign = TextAlign.Center,
                     modifier = Modifier.weight(1f).clip(RoundedCornerShape(22.dp)).background(Accent)
-                        .noRippleClick { cardBmp?.let { shareQr(ctx, it, "分享语音房") } }
+                        .noRippleClick { cardBmp?.let { shareQr(ctx, it, t("voiceRoom.shareTitle")) } }
                         .padding(vertical = 12.dp),
                 )
             }
             Spacer(Modifier.height(8.dp))
-            Text("关闭", color = TextDim, fontSize = 13.sp, modifier = Modifier.noRippleClick(onDismiss).padding(6.dp))
+            Text(t("common.close"), color = TextDim, fontSize = 13.sp, modifier = Modifier.noRippleClick(onDismiss).padding(6.dp))
         }
     }
 }
@@ -331,17 +332,20 @@ suspend fun buildVroomShareBitmap(
 
         // 绿色徽标（含波形小竖条）
         val badgePaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF21B84F.toInt() }
-        c.drawRoundRect(android.graphics.RectF(left, 76f, left + 196f, 138f), 31f, 31f, badgePaint)
+        val badgeText = t("chat.menu.voiceRoom")
+        val badgeTextPaint = paint(android.graphics.Color.WHITE, 30f, bold = true)
+        val badgeW = maxOf(196f, 72f + badgeTextPaint.measureText(badgeText) + 34f)
+        c.drawRoundRect(android.graphics.RectF(left, 76f, left + badgeW, 138f), 31f, 31f, badgePaint)
         val barPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE }
         val barX = left + 28f
         val barH = floatArrayOf(14f, 26f, 18f)
         barH.forEachIndexed { i, bh ->
             c.drawRoundRect(android.graphics.RectF(barX + i * 12f, 107f - bh / 2, barX + i * 12f + 6f, 107f + bh / 2), 3f, 3f, barPaint)
         }
-        c.drawText("语音房", barX + 44f, 118f, paint(android.graphics.Color.WHITE, 30f, bold = true))
+        c.drawText(badgeText, barX + 44f, 118f, badgeTextPaint)
 
         // 标题（超长省略）
-        val title = android.text.TextUtils.ellipsize("$groupName 的语音房", paint(black, 46f, bold = true), right - left, android.text.TextUtils.TruncateAt.END).toString()
+        val title = android.text.TextUtils.ellipsize(t("voiceRoom.cardTitle", "name" to groupName), paint(black, 46f, bold = true), right - left, android.text.TextUtils.TruncateAt.END).toString()
         c.drawText(title, left, 228f, paint(black, 46f, bold = true))
 
         // 群主行：头像 + 昵称 + 「群主」
@@ -357,20 +361,20 @@ suspend fun buildVroomShareBitmap(
         }
         val ownerText = android.text.TextUtils.ellipsize(ownerName.ifEmpty { groupName }, paint(black, 30f), right - left - 220f, android.text.TextUtils.TruncateAt.END).toString()
         c.drawText(ownerText, left + 84f, 312f, paint(black, 30f))
-        c.drawText("群主", left + 84f + paint(black, 30f).measureText(ownerText) + 18f, 310f, paint(gray, 24f))
+        c.drawText(t("voiceRoom.owner"), left + 84f + paint(black, 30f).measureText(ownerText) + 18f, 310f, paint(gray, 24f))
 
         // 加入条件（左）/ 收听人数（右）
-        c.drawText("加入条件", left, 430f, paint(gray, 24f))
-        c.drawText("扫码即入", left, 482f, paint(black, 36f, bold = true))
-        c.drawText("语音房", right, 430f, paint(gray, 24f, alignRight = true))
-        c.drawText("${listeners}人收听", right, 482f, paint(black, 36f, bold = true, alignRight = true))
+        c.drawText(t("voiceRoom.joinCondition"), left, 430f, paint(gray, 24f))
+        c.drawText(t("voiceRoom.scanToJoinShort"), left, 482f, paint(black, 36f, bold = true))
+        c.drawText(badgeText, right, 430f, paint(gray, 24f, alignRight = true))
+        c.drawText(t("voiceRoom.listeners", "n" to listeners), right, 482f, paint(black, 36f, bold = true, alignRight = true))
 
         // 分隔线
         c.drawRect(left, 540f, right, 542f, android.graphics.Paint().apply { color = 0xFFEDEDF0.toInt() })
 
         // 品牌 + 二维码
-        c.drawText("心之音", left, 668f, paint(black, 40f, bold = true))
-        c.drawText("扫一扫，加入语音房", left, 720f, paint(gray, 24f))
+        c.drawText(t("app.name"), left, 668f, paint(black, 40f, bold = true))
+        c.drawText(t("voiceRoom.scanToJoin"), left, 720f, paint(gray, 24f))
         val qrBg = android.graphics.RectF(right - 224f, 596f, right, 820f)
         c.drawRoundRect(qrBg, 18f, 18f, android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFF4F4F6.toInt() })
         val qr = makeQrBitmap(qrContent, 192)

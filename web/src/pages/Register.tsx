@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, getDeviceId, setToken, UserProfile } from '../api';
 import { useApp } from '../store';
+import { t } from '../i18n';
 
 const AGES = Array.from({ length: 43 }, (_, i) => 18 + i); // 18 - 60
 const ITEM_H = 44;
@@ -32,9 +33,9 @@ function AgeWheel({ value, onConfirm, onClose }: { value: number | null; onConfi
     <div className="mask bottom" onClick={onClose}>
       <div className="sheet" style={{ padding: 0 }} onClick={(e) => e.stopPropagation()}>
         <div className="row" style={{ padding: '14px 16px' }}>
-          <span className="muted" style={{ cursor: 'pointer', fontSize: 15 }} onClick={onClose}>取消</span>
-          <span className="grow" style={{ textAlign: 'center', fontWeight: 600 }}>年纪</span>
-          <span className="accent" style={{ cursor: 'pointer', fontSize: 15 }} onClick={() => onConfirm(current)}>确定</span>
+          <span className="muted" style={{ cursor: 'pointer', fontSize: 15 }} onClick={onClose}>{t('common.cancel')}</span>
+          <span className="grow" style={{ textAlign: 'center', fontWeight: 600 }}>{t('profile.age')}</span>
+          <span className="accent" style={{ cursor: 'pointer', fontSize: 15 }} onClick={() => onConfirm(current)}>{t('common.ok')}</span>
         </div>
         <div style={{ position: 'relative', height: ITEM_H * 5 }}>
           {/* 中间选中带 */}
@@ -90,10 +91,10 @@ export function RegisterPage() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const submit = async () => {
-    if (!avatarFile) return setError('请选择头像');
-    if (!nickname.trim()) return setError('请填写昵称');
-    if (!age) return setError('请选择年纪');
-    if (!gender) return setError('请选择性别');
+    if (!avatarFile) return setError(t('register.needAvatar'));
+    if (!nickname.trim()) return setError(t('register.needNickname'));
+    if (!age) return setError(t('register.needAge'));
+    if (!gender) return setError(t('register.needGender'));
     setLoading(true);
     setError('');
     try {
@@ -101,7 +102,7 @@ export function RegisterPage() {
       form.append('file', avatarFile);
       const uploadRes = await fetch('/api/upload/avatar', { method: 'POST', body: form });
       const uploadJson = await uploadRes.json();
-      if (uploadJson.code !== 0) throw new Error(uploadJson.msg || '头像上传失败');
+      if (uploadJson.code !== 0) throw new Error(uploadJson.msg || t('register.avatarUploadFailed'));
 
       const r = await api<{ token: string; user: UserProfile; inviter?: { id: string } | null }>('/auth/register', {
         method: 'POST',
@@ -122,12 +123,12 @@ export function RegisterPage() {
   return (
     <div className="app">
       <div className="page page-pad" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center', fontSize: 28, fontWeight: 700, letterSpacing: 6, marginBottom: 30 }}>心之音</div>
+        <div style={{ textAlign: 'center', fontSize: 28, fontWeight: 700, letterSpacing: 6, marginBottom: 30 }}>{t('app.name')}</div>
 
         {/* 头像 */}
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
           <div className="avatar" style={{ width: 88, height: 88, cursor: 'pointer', border: '1px solid var(--line)' }} onClick={() => fileRef.current?.click()}>
-            {avatarPreview ? <img src={avatarPreview} alt="" /> : <span className="small">点击选择头像</span>}
+            {avatarPreview ? <img src={avatarPreview} alt="" /> : <span className="small">{t('register.pickAvatar')}</span>}
           </div>
           <input
             ref={fileRef} type="file" accept="image/*" hidden
@@ -140,17 +141,17 @@ export function RegisterPage() {
         </div>
 
         {/* 昵称 */}
-        <input className="input" value={nickname} maxLength={30} placeholder="昵称" onChange={(e) => setNickname(e.target.value)} />
+        <input className="input" value={nickname} maxLength={30} placeholder={t('profile.nickname')} onChange={(e) => setNickname(e.target.value)} />
 
         {/* 年纪：选择器 */}
         <div className="input row" style={{ cursor: 'pointer', justifyContent: 'space-between' }} onClick={() => setShowAge(true)}>
-          <span style={{ color: age ? 'var(--text)' : 'var(--text-3)' }}>{age ? `${age} 岁` : '年纪'}</span>
+          <span style={{ color: age ? 'var(--text)' : 'var(--text-3)' }}>{age ? t('profile.ageYears', { n: age }) : t('profile.age')}</span>
           <span className="muted">›</span>
         </div>
 
         {/* 性别：小巧胶囊 */}
         <div className="row" style={{ justifyContent: 'center', gap: 14, margin: '6px 0 4px' }}>
-          {([[1, '男'], [2, '女']] as const).map(([v, label]) => (
+          {([[1, t('register.male')], [2, t('register.female')]] as const).map(([v, label]) => (
             <span
               key={v}
               onClick={() => setGender(v)}
@@ -165,17 +166,17 @@ export function RegisterPage() {
             </span>
           ))}
         </div>
-        <div className="small" style={{ textAlign: 'center', marginBottom: 8 }}>性别注册后不可修改</div>
+        <div className="small" style={{ textAlign: 'center', marginBottom: 8 }}>{t('profile.genderLocked')}</div>
 
         {error && <p className="hint" style={{ color: 'var(--danger)' }}>{error}</p>}
 
-        <button className="btn mt12" disabled={loading} onClick={submit}>{loading ? '创建中…' : '进入'}</button>
-        <p className="hint">无需密码，账号与本机自动绑定，卸载重装自动恢复</p>
+        <button className="btn mt12" disabled={loading} onClick={submit}>{loading ? t('register.creating') : t('register.enter')}</button>
+        <p className="hint">{t('register.deviceHint')}</p>
         <p className="hint" style={{ marginTop: 6 }}>
-          本平台仅限年满 18 周岁用户使用，注册即代表您已满 18 周岁并同意
-          <span style={{ color: 'var(--accent)', cursor: 'pointer' }} onClick={() => nav('/agreement/user')}>《用户协议》</span>
-          与
-          <span style={{ color: 'var(--accent)', cursor: 'pointer' }} onClick={() => nav('/agreement/privacy')}>《隐私政策》</span>
+          {t('register.consent')}
+          <span style={{ color: 'var(--accent)', cursor: 'pointer' }} onClick={() => nav('/agreement/user')}>{t('register.userAgreement')}</span>
+          {t('register.and')}
+          <span style={{ color: 'var(--accent)', cursor: 'pointer' }} onClick={() => nav('/agreement/privacy')}>{t('register.privacyPolicy')}</span>
         </p>
       </div>
 

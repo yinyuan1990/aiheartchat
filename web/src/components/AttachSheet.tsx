@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { t } from '../i18n';
 
 export type AttachAction = 'gift' | 'location' | 'voiceCall' | 'videoCall';
 
@@ -64,8 +65,8 @@ export function AttachSheet({
   useEffect(() => () => pickedRef.current.forEach((p) => URL.revokeObjectURL(p.url)), []);
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(''), 1800);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setToast(''), 1800);
+    return () => clearTimeout(timer);
   }, [toast]);
 
   /** 收起动画走完再回调 */
@@ -82,7 +83,7 @@ export function AttachSheet({
     const files = Array.from(list ?? []);
     if (!files.length) return;
     const room = MAX_PICK - selected.length;
-    if (files.length > room) setToast(`最多选择 ${MAX_PICK} 张`);
+    if (files.length > room) setToast(t('attach.maxPick', { n: MAX_PICK }));
     const items = files.map((file) => ({
       id: ++seq.current,
       file,
@@ -97,7 +98,7 @@ export function AttachSheet({
     setSelected((v) => {
       if (v.includes(id)) return v.filter((x) => x !== id);
       if (v.length >= MAX_PICK) {
-        setToast(`最多选择 ${MAX_PICK} 张`);
+        setToast(t('attach.maxPick', { n: MAX_PICK }));
         return v;
       }
       return [...v, id];
@@ -112,11 +113,11 @@ export function AttachSheet({
   };
 
   const tabs: { key: string; label: string; icon: React.ReactNode; action?: AttachAction }[] = [
-    { key: 'album', label: '相册', icon: icons.photo },
-    ...(isSingle ? [{ key: 'gift', label: '礼物', icon: icons.gift, action: 'gift' as const }] : []),
-    { key: 'location', label: '位置', icon: icons.pin, action: 'location' as const },
-    ...(isSingle ? [{ key: 'voice', label: '语音通话', icon: icons.phone, action: 'voiceCall' as const }] : []),
-    ...(isSingle && canVideoCall ? [{ key: 'video', label: '视频通话', icon: icons.video, action: 'videoCall' as const }] : []),
+    { key: 'album', label: t('attach.album'), icon: icons.photo },
+    ...(isSingle ? [{ key: 'gift', label: t('attach.gift'), icon: icons.gift, action: 'gift' as const }] : []),
+    { key: 'location', label: t('attach.location'), icon: icons.pin, action: 'location' as const },
+    ...(isSingle ? [{ key: 'voice', label: t('attach.voiceCall'), icon: icons.phone, action: 'voiceCall' as const }] : []),
+    ...(isSingle && canVideoCall ? [{ key: 'video', label: t('attach.videoCall'), icon: icons.video, action: 'videoCall' as const }] : []),
   ];
 
   return (
@@ -125,7 +126,7 @@ export function AttachSheet({
         <div className="att-grabber" />
         <div className="att-head">
           <span className="att-close" onClick={() => exit()}>{icons.close}</span>
-          <span className="att-title">相册</span>
+          <span className="att-title">{t('attach.album')}</span>
         </div>
 
         <div className="att-grid">
@@ -148,7 +149,7 @@ export function AttachSheet({
           </label>
           <label className="att-cell att-pick">
             {icons.photo}
-            <span>从相册选择</span>
+            <span>{t('attach.pickFromAlbum')}</span>
             <input
               type="file"
               accept="image/*,video/*"
@@ -174,14 +175,14 @@ export function AttachSheet({
         <div className="att-bottom">
           {selected.length === 0 ? (
             <div className="att-tabs">
-              {tabs.map((t) => (
+              {tabs.map((tab) => (
                 <div
-                  key={t.key}
-                  className={`att-tab${t.action ? '' : ' on'}`}
-                  onClick={() => t.action && exit(() => onAction(t.action!))}
+                  key={tab.key}
+                  className={`att-tab${tab.action ? '' : ' on'}`}
+                  onClick={() => tab.action && exit(() => onAction(tab.action!))}
                 >
-                  {t.icon}
-                  <span>{t.label}</span>
+                  {tab.icon}
+                  <span>{tab.label}</span>
                 </div>
               ))}
             </div>
@@ -189,7 +190,7 @@ export function AttachSheet({
             <div className="att-caption">
               <input
                 value={caption}
-                placeholder="添加说明…"
+                placeholder={t('attach.captionHint')}
                 onChange={(e) => setCaption(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && send()}
               />

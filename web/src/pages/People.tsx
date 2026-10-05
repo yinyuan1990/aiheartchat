@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { openNativeChat } from '../bridge';
 import { api } from '../api';
+import { t } from '../i18n';
 
 interface PersonItem {
   id: string;
@@ -40,16 +41,16 @@ export function PeoplePage() {
   return (
     <div className="app">
       <div className="navbar">
-        <span className="back" onClick={() => nav(-1)}>‹ 返回</span>
-        <span className="title">{tab === 'guide' ? '找搭子' : '找人'}</span>
+        <span className="back" onClick={() => nav(-1)}>‹ {t('common.back')}</span>
+        <span className="title">{tab === 'guide' ? t('guide.findBuddy') : t('guide.findPeople')}</span>
         <span style={{ width: 40 }} />
       </div>
       <div className="top-tabs">
-        <span className={`top-tab${tab === 'guide' ? ' active' : ''}`} onClick={() => setTab('guide')}>认证</span>
-        <span className={`top-tab${tab === 'all' ? ' active' : ''}`} onClick={() => setTab('all')}>全部</span>
+        <span className={`top-tab${tab === 'guide' ? ' active' : ''}`} onClick={() => setTab('guide')}>{t('me.verified')}</span>
+        <span className={`top-tab${tab === 'all' ? ' active' : ''}`} onClick={() => setTab('all')}>{t('guide.viewAll')}</span>
       </div>
       <div className="page">
-        {items.length === 0 && <div className="empty">{tab === 'guide' ? '暂无认证搭子' : '暂无用户'}</div>}
+        {items.length === 0 && <div className="empty">{tab === 'guide' ? t('guide.noBuddies') : t('people.noUsers')}</div>}
         {items.map((p) => (
           <div key={p.id} className="card" style={{ margin: '0 16px 8px' }}>
             <div className="row">
@@ -59,12 +60,12 @@ export function PeoplePage() {
               <div className="grow">
                 <div style={{ fontSize: 15 }}>
                   {p.nickname} <span className="muted">· {p.age}</span>
-                  {p.isGuide && <span className="tag tag-accent" style={{ marginLeft: 6 }}>认证</span>}
+                  {p.isGuide && <span className="tag tag-accent" style={{ marginLeft: 6 }}>{t('me.verified')}</span>}
                 </div>
-                <div className="muted ellipsis" style={{ marginTop: 4 }}>{p.signature || '这个人很神秘'}</div>
+                <div className="muted ellipsis" style={{ marginTop: 4 }}>{p.signature || t('people.mysterious')}</div>
                 {p.cityName && <div className="small" style={{ marginTop: 2 }}>{p.cityName}</div>}
               </div>
-              <button className="btn-sm" onClick={() => greet(p)}>打招呼</button>
+              <button className="btn-sm" onClick={() => greet(p)}>{t('people.sayHi')}</button>
             </div>
             {p.albums && p.albums.length > 0 && (
               <div className="grid-photos">

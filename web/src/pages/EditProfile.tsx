@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, fmtPoints, toFen, uploadFile, UserProfile } from '../api';
 import { useApp } from '../store';
 import { CityPickerSheet } from '../components/CityPicker';
+import { t } from '../i18n';
 
 const AGES = Array.from({ length: 43 }, (_, i) => 18 + i);
 
@@ -63,7 +64,7 @@ export function EditProfilePage() {
     const remain = 8 - photos.length;
     if (!files || files.length === 0 || remain <= 0) return;
     const picked = Array.from(files).slice(0, remain);
-    if (files.length > remain) alert(`最多 8 张，还可选 ${remain} 张，已自动保留前 ${remain} 张`);
+    if (files.length > remain) alert(t('profile.wallLimit', { n: remain }));
     setUploadingPhoto(true);
     try {
       const urls: string[] = [];
@@ -78,9 +79,9 @@ export function EditProfilePage() {
   };
 
   const save = async () => {
-    if (!nickname.trim()) return alert('昵称不能为空');
+    if (!nickname.trim()) return alert(t('profile.nicknameEmpty'));
     if (me?.gender === 2 && videoPrice && toFen(videoPrice) <= feeCut) {
-      return alert(`视频价格须高于平台手续费 ${fmtPoints(feeCut)} 积分/分钟`);
+      return alert(t('profile.priceTooLow', { fee: fmtPoints(feeCut) }));
     }
     setBusy(true);
     try {
@@ -107,14 +108,14 @@ export function EditProfilePage() {
     }
   };
 
-  if (!me) return <div className="app"><div className="empty">加载中…</div></div>;
+  if (!me) return <div className="app"><div className="empty">{t('common.loading')}</div></div>;
 
   return (
     <div className="app">
       <div className="navbar">
-        <span className="back" onClick={() => nav(-1)}>‹ 返回</span>
-        <span className="title">编辑资料</span>
-        <span className="action" onClick={save}>{busy ? '…' : '保存'}</span>
+        <span className="back" onClick={() => nav(-1)}>‹ {t('common.back')}</span>
+        <span className="title">{t('me.editProfile')}</span>
+        <span className="action" onClick={save}>{busy ? '…' : t('common.save')}</span>
       </div>
 
       <div className="page no-scrollbar" style={{ padding: '16px' }}>
@@ -127,15 +128,15 @@ export function EditProfilePage() {
             <span style={{
               position: 'absolute', bottom: -2, left: '50%', transform: 'translateX(-50%)', fontSize: 10,
               background: 'rgba(0,0,0,0.55)', color: '#fff', padding: '2px 10px', borderRadius: 10, whiteSpace: 'nowrap',
-            }}>更换</span>
+            }}>{t('profile.change')}</span>
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8 }}>点击更换头像</div>
+          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8 }}>{t('profile.changeAvatar')}</div>
         </div>
 
         {/* 表单卡片 */}
         <div style={{ background: 'var(--bg-card)', borderRadius: 12 }}>
           <div className="row" style={{ padding: '14px', borderBottom: '1px solid var(--line)' }}>
-            <span style={{ fontSize: 14, width: 64 }} className="muted">昵称</span>
+            <span style={{ fontSize: 14, width: 64 }} className="muted">{t('profile.nickname')}</span>
             <input
               value={nickname}
               maxLength={30}
@@ -144,41 +145,41 @@ export function EditProfilePage() {
             />
           </div>
           <div className="row" style={{ padding: '14px', borderBottom: '1px solid var(--line)', cursor: 'pointer' }} onClick={() => setShowAge(true)}>
-            <span style={{ fontSize: 14, width: 64 }} className="muted">年纪</span>
-            <span className="grow" style={{ textAlign: 'right', fontSize: 15 }}>{age} 岁</span>
+            <span style={{ fontSize: 14, width: 64 }} className="muted">{t('profile.age')}</span>
+            <span className="grow" style={{ textAlign: 'right', fontSize: 15 }}>{t('profile.ageYears', { n: age })}</span>
             <span style={{ color: 'var(--text-3)', marginLeft: 6 }}>›</span>
           </div>
           <div className="row" style={{ padding: '14px', borderBottom: '1px solid var(--line)', cursor: 'pointer' }} onClick={() => setShowCity(true)}>
-            <span style={{ fontSize: 14, width: 64 }} className="muted">城市</span>
-            <span className="grow" style={{ textAlign: 'right', fontSize: 15, color: cityName ? 'var(--text)' : 'var(--text-3)' }}>{cityName || '选择'}</span>
+            <span style={{ fontSize: 14, width: 64 }} className="muted">{t('profile.city')}</span>
+            <span className="grow" style={{ textAlign: 'right', fontSize: 15, color: cityName ? 'var(--text)' : 'var(--text-3)' }}>{cityName || t('profile.select')}</span>
             <span style={{ color: 'var(--text-3)', marginLeft: 6 }}>›</span>
           </div>
           {me.gender === 2 && (
             <div style={{ padding: '14px', borderBottom: '1px solid var(--line)' }}>
               <div className="row">
-                <span style={{ fontSize: 14 }} className="muted">视频价格</span>
+                <span style={{ fontSize: 14 }} className="muted">{t('profile.videoPrice')}</span>
                 <span className="grow" />
                 <input
                   inputMode="decimal"
                   value={videoPrice}
-                  placeholder="须高于手续费"
+                  placeholder={t('profile.pricePlaceholder')}
                   onChange={(e) => setVideoPrice(e.target.value.replace(/[^\d.]/g, ''))}
                   style={{ width: 90, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 15, textAlign: 'right' }}
                 />
-                <span className="small" style={{ marginLeft: 4 }}>积分/分钟</span>
+                <span className="small" style={{ marginLeft: 4 }}>{t('profile.perMin')}</span>
               </div>
               {/* 手续费提示：收入 = 价格 - 手续费 */}
               <div style={{ fontSize: 12, marginTop: 6, color: toFen(videoPrice) > feeCut ? 'var(--text-3)' : '#ff4d4f' }}>
-                平台手续费 {fmtPoints(feeCut)} 积分/分钟，你的收入 {fmtPoints(Math.max(0, toFen(videoPrice) - feeCut))} 积分/分钟（价格须高于手续费）
+                {t('profile.feeHint', { fee: fmtPoints(feeCut), income: fmtPoints(Math.max(0, toFen(videoPrice) - feeCut)) })}
               </div>
             </div>
           )}
           <div style={{ padding: '14px' }}>
-            <div className="muted" style={{ fontSize: 14, marginBottom: 8 }}>签名</div>
+            <div className="muted" style={{ fontSize: 14, marginBottom: 8 }}>{t('profile.bio')}</div>
             <textarea
               value={signature}
               maxLength={80}
-              placeholder="介绍一下自己…"
+              placeholder={t('profile.bioPlaceholder')}
               onChange={(e) => setSignature(e.target.value)}
               style={{ width: '100%', minHeight: 64, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 14, lineHeight: 1.6, resize: 'none', padding: 0 }}
             />
@@ -189,14 +190,14 @@ export function EditProfilePage() {
         {/* 照片墙：最多 8 张，展示在个人主页 */}
         <div style={{ background: 'var(--bg-card)', borderRadius: 12, padding: 14, marginTop: 16 }}>
           <div className="row" style={{ alignItems: 'center' }}>
-            <span className="muted" style={{ fontSize: 14 }}>照片墙</span>
+            <span className="muted" style={{ fontSize: 14 }}>{t('profile.photoWall')}</span>
             <span className="grow" />
             <span style={{ fontSize: 12, color: photos.length >= 8 ? 'var(--accent)' : 'var(--text-3)' }}>{photos.length}/8</span>
           </div>
           <div className="small" style={{ color: 'var(--text-3)', marginTop: 2 }}>
             {photos.length >= 8
-              ? '已满 8 张，删除后可再添加 · 展示在你的个人主页'
-              : `还可选 ${8 - photos.length} 张（支持多选）· 展示在你的个人主页`}
+              ? t('profile.wallFull')
+              : t('profile.wallRemain', { n: 8 - photos.length })}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 10 }}>
             {photos.map((u, i) => (
@@ -224,7 +225,7 @@ export function EditProfilePage() {
           </div>
         </div>
 
-        <p className="hint">性别注册后不可修改</p>
+        <p className="hint">{t('profile.genderLocked')}</p>
       </div>
 
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => changeAvatar(e.target.files)} />
@@ -241,7 +242,7 @@ export function EditProfilePage() {
       {showAge && (
         <div className="mask bottom" onClick={() => setShowAge(false)}>
           <div className="sheet no-scrollbar" style={{ maxHeight: '46vh' }} onClick={(e) => e.stopPropagation()}>
-            <div className="muted" style={{ textAlign: 'center', marginBottom: 12 }}>选择年纪</div>
+            <div className="muted" style={{ textAlign: 'center', marginBottom: 12 }}>{t('profile.pickAge')}</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
               {AGES.map((a) => (
                 <div

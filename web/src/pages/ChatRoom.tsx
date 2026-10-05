@@ -47,10 +47,10 @@ function DownloadDialog({ onClose }: { onClose: () => void }) {
   return (
     <div className="mask" onClick={onClose}>
       <div className="dialog" onClick={(e) => e.stopPropagation()}>
-        <h3>请下载 App</h3>
-        <p>网页版不支持语音与视频通话<br />请下载 App 体验完整功能</p>
-        <button className="btn" onClick={() => (location.href = '/site/')}>前往下载</button>
-        <button className="btn btn-ghost" style={{ marginTop: 10 }} onClick={onClose}>取消</button>
+        <h3>{t('chat.download.title')}</h3>
+        <p>{t('chat.download.desc1')}<br />{t('chat.download.desc2')}</p>
+        <button className="btn" onClick={() => (location.href = '/site/')}>{t('chat.download.go')}</button>
+        <button className="btn btn-ghost" style={{ marginTop: 10 }} onClick={onClose}>{t('common.cancel')}</button>
       </div>
     </div>
   );
@@ -80,39 +80,39 @@ export function GroupShareView({ groupId, onBack, channel }: { groupId: string; 
   }, [share?.code]);
 
   const save = async () => {
-    if (mode === 'pwd' && !pwd.trim()) { alert('请输入密码'); return; }
+    if (mode === 'pwd' && !pwd.trim()) { alert(t('group.share.enterPwd')); return; }
     setSaving(true);
     try {
       const s = await api<any>(`/im/group/${groupId}/share`, { method: 'POST', body: { password: mode === 'pwd' ? pwd.trim() : '' } });
       setShare(s);
-      alert('已保存');
+      alert(t('common.saved'));
     } catch (e: any) {
       alert(e.message);
     }
     setSaving(false);
   };
 
-  if (!share) return <div className="empty" style={{ padding: 30 }}>加载中…</div>;
+  if (!share) return <div className="empty" style={{ padding: 30 }}>{t('common.loading')}</div>;
 
   return (
     <div style={{ textAlign: 'center' }}>
       <div className="small" style={{ marginBottom: 12 }}>
-        {channel ? '扫码或输入邀请码即可订阅' : share.hasPassword ? '扫码或输码后需输入密码才能加入' : '扫码或输入邀请码即可加入'}
+        {channel ? t('group.share.hintChannel') : share.hasPassword ? t('group.share.hintPwd') : t('group.share.hint')}
       </div>
-      {qrUrl && <img src={qrUrl} alt="二维码" style={{ width: 200, height: 200, borderRadius: 12, background: '#fff', padding: 8 }} />}
+      {qrUrl && <img src={qrUrl} alt={t('group.share.qr')} style={{ width: 200, height: 200, borderRadius: 12, background: '#fff', padding: 8 }} />}
       <div
         style={{ display: 'inline-flex', alignItems: 'center', gap: 8, margin: '12px auto 0', padding: '8px 14px', background: 'var(--bg-input)', borderRadius: 8, cursor: 'pointer' }}
-        onClick={() => { navigator.clipboard?.writeText(share.code); alert('邀请码已复制'); }}
+        onClick={() => { navigator.clipboard?.writeText(share.code); alert(t('group.share.codeCopied')); }}
       >
         <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: 3 }}>{share.code}</span>
-        <span className="accent" style={{ fontSize: 12 }}>复制</span>
+        <span className="accent" style={{ fontSize: 12 }}>{t('common.copy')}</span>
       </div>
 
       {share.canEdit && !channel && (
         <div style={{ marginTop: 16 }}>
           {/* 模式切换 + 行内小保存按钮 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {([['none', '无密码'], ['pwd', '有密码']] as const).map(([k, label]) => (
+            {([['none', t('group.share.noPwd')], ['pwd', t('group.share.withPwd')]] as const).map(([k, label]) => (
               <span
                 key={k}
                 onClick={() => setMode(k)}
@@ -127,16 +127,16 @@ export function GroupShareView({ groupId, onBack, channel }: { groupId: string; 
             <span
               onClick={() => !saving && save()}
               style={{ padding: '5px 16px', borderRadius: 13, fontSize: 12, cursor: 'pointer', background: 'var(--accent-grad)', color: '#fff' }}
-            >{saving ? '保存中…' : '保存'}</span>
+            >{saving ? t('common.saving') : t('common.save')}</span>
           </div>
           {mode === 'pwd' && (
-            <input className="input" placeholder="设置入群密码" value={pwd} maxLength={20} style={{ marginTop: 10, marginBottom: 0 }} onChange={(e) => setPwd(e.target.value)} />
+            <input className="input" placeholder={t('group.share.pwdPlaceholder')} value={pwd} maxLength={20} style={{ marginTop: 10, marginBottom: 0 }} onChange={(e) => setPwd(e.target.value)} />
           )}
         </div>
       )}
 
       <div style={{ borderTop: '1px solid var(--line)', marginTop: 16, paddingTop: 10 }}>
-        <span className="small" style={{ cursor: 'pointer' }} onClick={onBack}>‹ {channel ? '返回' : '返回群信息'}</span>
+        <span className="small" style={{ cursor: 'pointer' }} onClick={onBack}>‹ {channel ? t('common.back') : t('group.share.backToInfo')}</span>
       </div>
     </div>
   );
@@ -167,7 +167,7 @@ function GroupInfoSheet({ groupId, onClose, onExit }: { groupId: string; onClose
       await api(`/im/group/${groupId}`, { method: 'PUT', body: { avatar: url } });
       load();
     } catch (e: any) {
-      alert(e.message || '修改失败');
+      alert(e.message || t('group.info.updateFailed'));
     }
   };
 
@@ -191,7 +191,7 @@ function GroupInfoSheet({ groupId, onClose, onExit }: { groupId: string; onClose
   };
 
   const kick = async (userId: string, nickname: string) => {
-    if (!confirm(`移出成员 ${nickname}？`)) return;
+    if (!confirm(t('group.info.kickConfirm', { name: nickname }))) return;
     try {
       await api(`/im/group/${groupId}/kick/${userId}`, { method: 'POST' });
       load();
@@ -202,7 +202,7 @@ function GroupInfoSheet({ groupId, onClose, onExit }: { groupId: string; onClose
 
   const leaveOrDissolve = async () => {
     const isOwner = myRole === 'owner';
-    if (!confirm(isOwner ? '确定解散该群？' : '确定退出该群？')) return;
+    if (!confirm(isOwner ? t('group.info.dissolveConfirm') : t('group.info.leaveConfirm'))) return;
     try {
       await api(`/im/group/${groupId}/${isOwner ? 'dissolve' : 'leave'}`, { method: 'POST' });
       onExit();
@@ -222,7 +222,7 @@ function GroupInfoSheet({ groupId, onClose, onExit }: { groupId: string; onClose
             className="accent"
             style={{ position: 'absolute', top: 16, right: 18, fontSize: 13, cursor: 'pointer' }}
             onClick={() => setShowShare(true)}
-          >分享</span>
+          >{t('common.share')}</span>
         )}
         {/* 群头像（群主/管理员点击可换） */}
         <div style={{ textAlign: 'center', marginBottom: 8 }}>
@@ -233,11 +233,11 @@ function GroupInfoSheet({ groupId, onClose, onExit }: { groupId: string; onClose
           >
             {info.avatar && <img src={info.avatar} alt="" />}
           </div>
-          {canEditInfo && <div className="small" style={{ marginTop: 4, fontSize: 11 }}>点头像可修改</div>}
+          {canEditInfo && <div className="small" style={{ marginTop: 4, fontSize: 11 }}>{t('group.info.tapAvatar')}</div>}
           <input ref={avatarFileRef} type="file" accept="image/*" hidden onChange={(e) => changeAvatar(e.target.files?.[0])} />
         </div>
         <div style={{ textAlign: 'center', fontWeight: 600, marginBottom: 4 }}>{info.name}</div>
-        <div className="small" style={{ textAlign: 'center', marginBottom: 14 }}>共 {info.members?.length ?? 0} 人</div>
+        <div className="small" style={{ textAlign: 'center', marginBottom: 14 }}>{t('group.memberCount', { n: info.members?.length ?? 0 })}</div>
 
         {showShare ? (
           <GroupShareView groupId={groupId} onBack={() => setShowShare(false)} />
@@ -251,9 +251,9 @@ function GroupInfoSheet({ groupId, onClose, onExit }: { groupId: string; onClose
                     {m.avatar && <img src={m.avatar} alt="" />}
                   </div>
                   <div className="small ellipsis" style={{ marginTop: 4 }}>
-                    {m.nickname}{m.role === 'owner' && <span className="accent"> 主</span>}
+                    {m.nickname}{m.role === 'owner' && <span className="accent"> {t('group.info.ownerTag')}</span>}
                   </div>
-                  {m.isBot && <div style={{ fontSize: 10, color: '#2f7cf6' }}>机器人</div>}
+                  {m.isBot && <div style={{ fontSize: 10, color: '#2f7cf6' }}>{t('chat.bot')}</div>}
                   {myRole === 'owner' && m.role !== 'owner' && (
                     <span
                       onClick={() => kick(m.id, m.nickname)}
@@ -265,31 +265,31 @@ function GroupInfoSheet({ groupId, onClose, onExit }: { groupId: string; onClose
               {/* 邀请入口 */}
               <div style={{ textAlign: 'center', cursor: 'pointer' }} onClick={openInvite}>
                 <div style={{ width: 48, height: 48, margin: '0 auto', borderRadius: 24, border: '1px dashed #333', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-3)', fontSize: 20 }}>+</div>
-                <div className="small" style={{ marginTop: 4 }}>邀请</div>
+                <div className="small" style={{ marginTop: 4 }}>{t('group.info.invite')}</div>
               </div>
               {canEditInfo && (
                 <div style={{ textAlign: 'center', cursor: 'pointer' }} onClick={() => setShowBots(true)}>
                   <div style={{ width: 48, height: 48, margin: '0 auto', borderRadius: 24, border: '1px dashed #2f7cf6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2f7cf6', fontSize: 13 }}>Bot</div>
-                  <div className="small" style={{ marginTop: 4 }}>机器人</div>
+                  <div className="small" style={{ marginTop: 4 }}>{t('chat.bot')}</div>
                 </div>
               )}
             </div>
 
             {info.notice && (
               <div className="card" style={{ marginTop: 16 }}>
-                <div className="small">群公告</div>
+                <div className="small">{t('group.info.notice')}</div>
                 <div style={{ fontSize: 14, marginTop: 4 }}>{info.notice}</div>
               </div>
             )}
 
             <button className="btn btn-ghost mt12" style={{ color: 'var(--danger)', marginTop: 18 }} onClick={leaveOrDissolve}>
-              {myRole === 'owner' ? '解散群聊' : '退出群聊'}
+              {myRole === 'owner' ? t('group.info.dissolve') : t('group.info.leave')}
             </button>
           </>
         ) : (
           <>
-            <div className="small" style={{ marginBottom: 10 }}>选择要邀请的人</div>
-            {people.length === 0 && <div className="empty" style={{ padding: 20 }}>暂无可邀请的用户</div>}
+            <div className="small" style={{ marginBottom: 10 }}>{t('group.info.pickInvitees')}</div>
+            {people.length === 0 && <div className="empty" style={{ padding: 20 }}>{t('group.info.noInvitees')}</div>}
             {people.map((p) => (
               <div key={p.id} className="row" style={{ padding: '8px 0', cursor: 'pointer' }} onClick={() => {
                 const next = new Set(selected);
@@ -301,14 +301,14 @@ function GroupInfoSheet({ groupId, onClose, onExit }: { groupId: string; onClose
                 </div>
                 <div className="grow">{p.nickname}</div>
                 <span style={{ color: selected.has(p.id) ? 'var(--accent)' : 'var(--text-3)' }}>
-                  {selected.has(p.id) ? '已选' : '选择'}
+                  {selected.has(p.id) ? t('common.selected') : t('common.select')}
                 </span>
               </div>
             ))}
             <div className="row mt12">
-              <button className="btn-sm ghost" onClick={() => setShowInvite(false)}>返回</button>
+              <button className="btn-sm ghost" onClick={() => setShowInvite(false)}>{t('common.back')}</button>
               <span className="grow" />
-              <button className="btn-sm" onClick={invite}>邀请（{selected.size}）</button>
+              <button className="btn-sm" onClick={invite}>{t('group.info.inviteN', { n: selected.size })}</button>
             </div>
           </>
         )}
@@ -337,7 +337,7 @@ function GiftSheet({ toUserId, onClose, onSent }: { toUserId: string; onClose: (
       onSent();
       // 送出后不关面板，刷新余额，可连续赠送
       api<any>('/wallet').then((w) => setBalance(w.balance)).catch(() => {});
-      setSentTip('已送出');
+      setSentTip(t('chat.gift.sentWeb'));
       setTimeout(() => setSentTip(''), 1500);
     } catch (e: any) {
       alert(e.message);
@@ -347,20 +347,20 @@ function GiftSheet({ toUserId, onClose, onSent }: { toUserId: string; onClose: (
   return (
     <div className="mask bottom" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
-        <div style={{ textAlign: 'center', fontWeight: 600 }}>送礼物</div>
+        <div style={{ textAlign: 'center', fontWeight: 600 }}>{t('chat.gift.title')}</div>
         <div className="gift-grid">
           {gifts.map((g) => (
             <div key={g.id} className={`gift-item${selected === g.id ? ' selected' : ''}`} onClick={() => setSelected(g.id)}>
               <img src={g.icon} alt="" style={{ width: 42, height: 42, display: 'block', margin: '0 auto 4px' }} />
               <div style={{ fontSize: 12 }}>{g.name}</div>
-              <div className="price">{fmtPoints(g.price)} 积分</div>
+              <div className="price">{t('chat.points', { n: fmtPoints(g.price) })}</div>
             </div>
           ))}
         </div>
         <div className="row">
-          <span className="muted grow">余额 {fmtPoints(balance)} 积分</span>
+          <span className="muted grow">{t('chat.gift.balance', { n: fmtPoints(balance) })}</span>
           {sentTip && <span style={{ color: 'var(--accent)', fontSize: 13, marginRight: 10 }}>{sentTip}</span>}
-          <button className="btn-sm" onClick={send}>赠送</button>
+          <button className="btn-sm" onClick={send}>{t('chat.gift.give')}</button>
         </div>
       </div>
     </div>
@@ -400,7 +400,7 @@ export function AudioBubble({ a }: { a: any }) {
       <span className={`voice-bars${playing ? ' playing' : ''}`}>
         <span /><span /><span />
       </span>
-      <span>语音 {a.duration ? `${a.duration}"` : ''}</span>
+      <span>{t('msg.voice')} {a.duration ? `${a.duration}"` : ''}</span>
     </span>
   );
 }
@@ -426,7 +426,7 @@ function MsgBubble({ m, mine, convType, myId, onImage, onMenu, onReact, onJump }
     case 'sticker': {
       const p = parseSticker(m.content);
       // GIF 比贴纸大一号、带圆角；贴纸不画气泡底
-      body = p ? <StickerView p={p} size={p.format === 'mp4' ? 220 : 140} /> : <span>[表情]</span>;
+      body = p ? <StickerView p={p} size={p.format === 'mp4' ? 220 : 140} /> : <span>{t('msg.preview.sticker')}</span>;
       break;
     }
     case 'video':
@@ -448,7 +448,7 @@ function MsgBubble({ m, mine, convType, myId, onImage, onMenu, onReact, onJump }
           onClick={() => loc.lat && window.open(`https://uri.amap.com/marker?position=${loc.lng},${loc.lat}`, '_blank')}
         >
           <span style={{ fontSize: 16 }}>◎</span>
-          <span>{loc.name || loc.address || '位置'}</span>
+          <span>{loc.name || loc.address || t('msg.location')}</span>
         </span>
       );
       break;
@@ -460,8 +460,8 @@ function MsgBubble({ m, mine, convType, myId, onImage, onMenu, onReact, onJump }
         <span className="row" style={{ gap: 10 }}>
           {gift.icon && <img src={gift.icon} style={{ width: 42, height: 42, borderRadius: 8 }} alt="" />}
           <span style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <span style={{ fontWeight: 500 }}>{mine ? '送出' : '收到'}「{gift.name ?? '礼物'}」</span>
-            <span style={{ fontSize: 12, opacity: 0.9 }}>{fmtPoints(gift.price)} 积分</span>
+            <span style={{ fontWeight: 500 }}>{t(mine ? 'msg.gift.sent' : 'msg.gift.received', { name: gift.name ?? t('msg.gift.default') })}</span>
+            <span style={{ fontSize: 12, opacity: 0.9 }}>{t('chat.points', { n: fmtPoints(gift.price) })}</span>
           </span>
         </span>
       );
@@ -483,11 +483,11 @@ function MsgBubble({ m, mine, convType, myId, onImage, onMenu, onReact, onJump }
       if (m.type === 'call' || m.type.startsWith('call')) {
         let c: any = {};
         try { c = JSON.parse(m.content); } catch {}
-        const label = c.callType === 2 ? '视频通话' : '语音通话';
+        const label = c.callType === 2 ? t('msg.call.video') : t('msg.call.voice');
         const dur = c.duration ?? 0;
         const text = c.result === 'end'
           ? `${label} ${String(Math.floor(dur / 60)).padStart(2, '0')}:${String(dur % 60).padStart(2, '0')}`
-          : c.result === 'reject' ? `${label} 已拒绝` : `${label} 已取消`;
+          : c.result === 'reject' ? t('msg.call.rejected', { label }) : t('msg.call.canceled', { label });
         body = <span className="row" style={{ gap: 8 }}><span style={{ fontSize: 15 }}>{c.callType === 2 ? '▣' : '✆'}</span><span>{text}</span></span>;
       } else {
         body = <LinkText text={m.content} style={{ whiteSpace: 'pre-wrap' }} />;
@@ -511,25 +511,25 @@ function MsgBubble({ m, mine, convType, myId, onImage, onMenu, onReact, onJump }
         }}
         onContextMenu={(e) => { e.preventDefault(); onMenu(e.clientX, e.clientY); }}
         onTouchStart={(e) => {
-          const t = e.touches[0];
+          const touch = e.touches[0];
           pressed.current = false;
-          press.current = setTimeout(() => { pressed.current = true; onMenu(t.clientX, t.clientY); }, 450);
+          press.current = setTimeout(() => { pressed.current = true; onMenu(touch.clientX, touch.clientY); }, 450);
         }}
         onTouchMove={() => clearTimeout(press.current)}
         onTouchEnd={() => clearTimeout(press.current)}
       >
         {/* 对齐 iOS：只显示对方昵称，自己的不显示 */}
-        {!mine && <div className="small" style={{ marginBottom: 3 }}>{m.senderNickname}{m.senderIsBot && convType === 2 && <span className="bot-tag">机器人</span>}</div>}
+        {!mine && <div className="small" style={{ marginBottom: 3 }}>{m.senderNickname}{m.senderIsBot && convType === 2 && <span className="bot-tag">{t('chat.bot')}</span>}</div>}
         <div className={`bubble ${mine ? 'mine' : 'theirs'}${isMedia ? ' media' : ''}`} style={{ opacity: m.pending ? 0.6 : 1 }}>
-          {m.fwdFrom && <div className="fwd-from">转发自 {m.fwdFrom}</div>}
+          {m.fwdFrom && <div className="fwd-from">{t('msg.fwdFrom', { name: m.fwdFrom })}</div>}
           {m.replyTo && <ReplyQuote r={m.replyTo} onClick={() => onJump(m.replyTo!.id)} />}
           {body}
         </div>
         {m.markup && <InlineKeyboard markup={m.markup} messageId={m.id} />}
         <ReactionChips reactions={m.reactions} myId={myId} onToggle={onReact} />
         <div className="msg-meta" style={{ justifyContent: mine ? 'flex-end' : 'flex-start' }}>
-          {m.pending && <span>发送中…</span>}
-          {mine && convType === 1 && !m.pending && <span className={m.isRead ? '' : 'accent'}>{m.isRead ? '已读' : '未读'}</span>}
+          {m.pending && <span>{t('msg.sending')}</span>}
+          {mine && convType === 1 && !m.pending && <span className={m.isRead ? '' : 'accent'}>{m.isRead ? t('msg.read') : t('msg.unread')}</span>}
         </div>
       </div>
       {mine && avatar}
@@ -616,7 +616,7 @@ export function ChatRoomPage() {
       const list = await api<MsgItem[]>(`/im/messages?conversationId=${conversationId}&aroundId=${id}`);
       if (!list.some((m) => m.id === id)) {
         focusId.current = null;
-        showToast('原消息已不存在');
+        showToast(t('msg.originalGone'));
         return;
       }
       setMessages(list);
@@ -684,7 +684,7 @@ export function ChatRoomPage() {
       } else if (frame.op === 'error') {
         // 发送被后端拒绝（如积分不足）：提示并撤回乐观显示的消息
         setMessages((prev) => prev.filter((m) => !(m.pending && (frame.tempId ? m.tempId === frame.tempId : true))));
-        showToast(frame.msg ?? '发送失败');
+        showToast(frame.msg ?? t('msg.sendFailed'));
       } else if (frame.op === 'read' && frame.conversationId === conversationId) {
         // 对方已读：把我发出的、id 不大于回执 msgId 的消息标记为已读
         const readUpTo = BigInt(frame.msgId);
@@ -734,7 +734,7 @@ export function ChatRoomPage() {
       const r = await api<{ reactions: Reaction[] }>(`/im/messages/${msgId}/react`, { method: 'POST', body: { emoji } });
       setMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, reactions: r.reactions } : m)));
     } catch (e: any) {
-      showToast(e.message || '操作失败');
+      showToast(e.message || t('common.failed'));
     }
   };
 
@@ -742,14 +742,14 @@ export function ChatRoomPage() {
     try {
       await api(`/im/messages/${msgId}/pin`, { method: 'POST', body: { pin } });
       loadPins();
-      showToast(pin ? '已置顶' : '已取消置顶');
+      showToast(pin ? t('msg.pinned') : t('msg.unpinned'));
     } catch (e: any) {
-      showToast(e.message || '操作失败');
+      showToast(e.message || t('common.failed'));
     }
   };
 
   const copyText = (text: string) => {
-    navigator.clipboard?.writeText(text).then(() => showToast('已复制')).catch(() => showToast('复制失败'));
+    navigator.clipboard?.writeText(text).then(() => showToast(t('common.copied'))).catch(() => showToast(t('msg.copyFailed')));
   };
 
   const isMine = (m: MsgItem) => !!me && m.senderId === me.id;
@@ -781,7 +781,7 @@ export function ChatRoomPage() {
       setMessages((prev) => prev.filter((m) => !ids.includes(m.id)));
     } catch (e: any) {
       undust(els);
-      showToast(e.message || '删除失败');
+      showToast(e.message || t('msg.deleteFailed'));
     }
   };
 
@@ -794,14 +794,14 @@ export function ChatRoomPage() {
   });
   const copySelected = () => {
     const texts = selected.filter((m) => m.type === 'text');
-    if (!texts.length) return showToast('选中的消息里没有文字');
-    copyText(texts.map((m) => (state.convType === 2 ? `${m.senderNickname}：${m.content}` : m.content)).join('\n'));
+    if (!texts.length) return showToast(t('msg.noTextSelected'));
+    copyText(texts.map((m) => (state.convType === 2 ? t('msg.copyLine', { name: m.senderNickname, text: m.content }) : m.content)).join('\n'));
     setSelecting(null);
   };
   const forwardSelected = () => {
     const ok = selected.filter((m) => FORWARDABLE.has(m.type)).map((m) => m.id);
-    if (!ok.length) return showToast('礼物、通话记录不能转发');
-    if (ok.length < selected.length) showToast('礼物、通话记录不会被转发');
+    if (!ok.length) return showToast(t('msg.cantForward'));
+    if (ok.length < selected.length) showToast(t('msg.someNotForwarded'));
     setForwardIds(ok);
   };
 
@@ -842,7 +842,7 @@ export function ChatRoomPage() {
       }
     }
     if (caption.trim()) sendRaw('text', caption.trim());
-    if (failed) showToast(`${failed} 个文件发送失败`);
+    if (failed) showToast(t('msg.filesFailed', { n: failed }));
   };
 
   const handleAttach = (a: AttachAction) => {
@@ -852,13 +852,13 @@ export function ChatRoomPage() {
   };
 
   const sendLocation = () => {
-    if (!navigator.geolocation) return alert('当前环境不支持定位');
+    if (!navigator.geolocation) return alert(t('msg.locUnsupported'));
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude, longitude } = pos.coords;
         sendRaw('location', JSON.stringify({ lat: latitude, lng: longitude, name: nearestCity(latitude, longitude) }));
       },
-      () => alert('定位失败，请允许定位权限'),
+      () => alert(t('msg.locFailed')),
     );
   };
 
@@ -866,7 +866,7 @@ export function ChatRoomPage() {
     <div className="app">
       <div className="navbar">
         <span className="back" onClick={() => nav(-1)}>‹</span>
-        <span className="title ellipsis">{state.title ?? '聊天'}{bot && <span className="bot-tag">机器人</span>}</span>
+        <span className="title ellipsis">{state.title ?? t('chat.title')}{bot && <span className="bot-tag">{t('chat.bot')}</span>}</span>
         <span className="nav-more">
           <span className="nav-more-btn" onClick={() => setNavMenu(true)}>···</span>
           {navMenu && (
@@ -879,8 +879,8 @@ export function ChatRoomPage() {
                   onClick={async () => {
                     setNavMenu(false);
                     const tip = state.convType === 1
-                      ? '清空后双方的聊天记录都将删除，不可恢复。确定清空吗？'
-                      : '将删除我在本群发送的全部消息，所有成员都将不再看到。确定清空吗？';
+                      ? t('chat.clearConfirmDirect')
+                      : t('chat.clearConfirmGroup');
                     if (!window.confirm(tip)) return;
                     try {
                       await api(`/im/conversations/${conversationId}/clear`, { method: 'POST' });
@@ -904,7 +904,7 @@ export function ChatRoomPage() {
           index={pinIdx}
           canUnpin={canPin}
           onJump={() => { jumpTo(pins[pinIdx % pins.length].id); setPinIdx((i) => (i + 1) % pins.length); }}
-          onUnpin={() => { const p = pins[pinIdx % pins.length]; if (confirm('取消置顶这条消息？')) togglePin(p.id, false); }}
+          onUnpin={() => { const p = pins[pinIdx % pins.length]; if (confirm(t('msg.unpinConfirm'))) togglePin(p.id, false); }}
         />
       )}
 
@@ -914,7 +914,7 @@ export function ChatRoomPage() {
             <div className="avatar" style={{ width: 64, height: 64, margin: '0 auto' }}>{bot.avatar && <img src={bot.avatar} alt="" />}</div>
             <div style={{ fontWeight: 700, fontSize: 17, marginTop: 10 }}>{bot.name}</div>
             <div className="small" style={{ marginTop: 2 }}>@{bot.username}</div>
-            <div style={{ fontSize: 14, marginTop: 12, whiteSpace: 'pre-wrap', lineHeight: 1.6, textAlign: 'left' }}>{bot.description || '这是一个机器人，点下面的「开始」和它聊天'}</div>
+            <div style={{ fontSize: 14, marginTop: 12, whiteSpace: 'pre-wrap', lineHeight: 1.6, textAlign: 'left' }}>{bot.description || t('chat.botIntro')}</div>
           </div>
         )}
         {messages.map((m, i) => {
@@ -955,14 +955,14 @@ export function ChatRoomPage() {
       {/* 底部输入区（微信式，对齐 iOS）：输入框 + 圆形加号呼出功能面板，发送键仅有文字时出现 */}
       {selecting ? (
         <div className="sel-bar">
-          <span onClick={() => setSelecting(null)}>取消</span>
-          <span className="grow small" style={{ cursor: 'default' }}>已选 {selecting.size} 条</span>
-          <span className={selected.length ? '' : 'off'} onClick={() => selected.length && copySelected()}>拷贝</span>
-          <span className={selected.length ? '' : 'off'} onClick={() => selected.length && forwardSelected()}>转发</span>
-          <span className={selected.length ? '' : 'off'} style={selected.length ? { color: 'var(--danger)' } : undefined} onClick={() => selected.length && setDeleteIds(selected.map((m) => m.id))}>删除</span>
+          <span onClick={() => setSelecting(null)}>{t('common.cancel')}</span>
+          <span className="grow small" style={{ cursor: 'default' }}>{t('msg.selectedN', { n: selecting.size })}</span>
+          <span className={selected.length ? '' : 'off'} onClick={() => selected.length && copySelected()}>{t('msg.copy')}</span>
+          <span className={selected.length ? '' : 'off'} onClick={() => selected.length && forwardSelected()}>{t('msg.forward')}</span>
+          <span className={selected.length ? '' : 'off'} style={selected.length ? { color: 'var(--danger)' } : undefined} onClick={() => selected.length && setDeleteIds(selected.map((m) => m.id))}>{t('common.delete')}</span>
         </div>
       ) : bot && loaded && messages.length === 0 ? (
-        <div className="ch-bottom"><span className="accent" style={{ fontWeight: 600 }} onClick={() => sendCommand('start')}>开始</span></div>
+        <div className="ch-bottom"><span className="accent" style={{ fontWeight: 600 }} onClick={() => sendCommand('start')}>{t('chat.botStart')}</span></div>
       ) : (
       <div style={{ background: 'var(--bg-card)', position: 'relative' }}>
         {replyTo && <ReplyBar m={replyTo} onCancel={() => setReplyTo(null)} />}
@@ -976,7 +976,7 @@ export function ChatRoomPage() {
         <div className="row" style={{ padding: 8, gap: 8 }}>
           {bot && bot.commands.length > 0 && (
             <span
-              title="命令菜单"
+              title={t('chat.botCommands')}
               style={{ width: 40, height: 40, borderRadius: 20, flexShrink: 0, background: showCmds ? 'rgba(47,124,246,0.15)' : 'var(--bg-input)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#2f7cf6', fontSize: 18, fontWeight: 700 }}
               onClick={() => { setShowCmds((v) => !v); setShowSticker(false); }}
             >/</span>
@@ -986,7 +986,7 @@ export function ChatRoomPage() {
             className="input grow"
             style={{ marginBottom: 0, borderRadius: 20, height: 40 }}
             value={input}
-            placeholder="发消息"
+            placeholder={t('chat.inputPlaceholder')}
             onChange={(e) => setInput(e.target.value)}
             onFocus={() => setShowSticker(false)}
             onKeyDown={(e) => e.key === 'Enter' && send()}
@@ -1000,7 +1000,7 @@ export function ChatRoomPage() {
             onClick={() => { setShowAttach(true); setShowSticker(false); }}
           >+</span>
           {input.trim() && (
-            <button className="btn-sm" style={{ height: 40, borderRadius: 20, flexShrink: 0 }} onClick={send}>发送</button>
+            <button className="btn-sm" style={{ height: 40, borderRadius: 20, flexShrink: 0 }} onClick={send}>{t('common.send')}</button>
           )}
         </div>
         {showSticker && (
@@ -1045,14 +1045,14 @@ export function ChatRoomPage() {
               setQrBusy(true);
               const text = await decodeQrFromImage(fullImage).catch(() => null);
               setQrBusy(false);
-              if (!text) return showToast('图片里没有认出二维码');
+              if (!text) return showToast(t('chat.noQrFound'));
               setFullImage(null);
               setScanText(text);
             }}
             style={{ position: 'fixed', bottom: 48, left: '50%', transform: 'translateX(-50%)', padding: '9px 16px', borderRadius: 20, background: 'rgba(255,255,255,0.18)', color: '#fff', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', whiteSpace: 'nowrap' }}
           >
             <ScanIcon size={16} color="#fff" />
-            {qrBusy ? '识别中…' : '识别二维码'}
+            {qrBusy ? t('chat.qrScanning') : t('chat.scanQr')}
           </span>
         </div>
       )}
