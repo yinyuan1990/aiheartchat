@@ -5,7 +5,7 @@ import SwiftUI
 /// 聊天「+」弹框（Telegram 式）：顶部 × / 相册切换，3 列相册网格（第一格相机），
 /// 底部悬浮胶囊切 相册 / 礼物 / 位置 / 通话；选了图后胶囊换成「添加说明 + 发送」。
 enum AttachAction {
-    case gift, transfer, location, voiceCall, videoCall
+    case gift, transfer, location, voice, voiceCall, videoCall
 }
 
 private let attachMaxPick = 9
@@ -16,6 +16,8 @@ struct AttachSheet: View {
     let canVideoCall: Bool
     /// 链上钱包转账（单聊、有钱包入口）
     var canTransfer: Bool = false
+    /// 群 / 频道：胶囊里放「语音」（单聊的语音在输入框左边，胶囊放不下）
+    var canVoice: Bool = false
     let onClose: () -> Void
     let onSendAssets: ([PHAsset], String) -> Void
     /// 拍照 / 系统相册兜底选的图（已是 JPEG）
@@ -176,6 +178,7 @@ struct AttachSheet: View {
         if isSingle { list.append(Tab(id: "gift", icon: "gift.fill", label: t("attach.gift"), action: .gift)) }
         if canTransfer { list.append(Tab(id: "transfer", icon: "arrow.left.arrow.right", label: t("attach.transfer"), action: .transfer)) }
         list.append(Tab(id: "location", icon: "location.fill", label: t("attach.location"), action: .location))
+        if canVoice { list.append(Tab(id: "voiceMsg", icon: "mic.fill", label: t("attach.voice"), action: .voice)) }
         if isSingle {
             list.append(Tab(id: "voice", icon: "phone.fill", label: t("attach.voiceCall"), action: .voiceCall))
             if canVideoCall { list.append(Tab(id: "video", icon: "video.fill", label: t("attach.videoCall"), action: .videoCall)) }

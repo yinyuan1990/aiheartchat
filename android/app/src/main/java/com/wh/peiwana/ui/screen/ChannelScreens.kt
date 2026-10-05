@@ -119,7 +119,22 @@ private data class ChannelPost(
     val senderIsBot: Boolean = false,
     /** 订阅者发的：普通聊天气泡，不带评论 / 浏览数 / 表情回应 */
     val memberMsg: Boolean = false,
+    /** 本地刚选的图：本地预览、上传任务 key、上传状态（null = 已传完） */
+    @kotlinx.serialization.Transient val local: String? = null,
+    @kotlinx.serialization.Transient val upKey: String? = null,
+    @kotlinx.serialization.Transient val up: UploadState? = null,
 )
+
+/** 还没发出去的帖子：上传失败 / 上传中 / 发送中；已发出返回 null */
+private fun pendingLabel(p: ChannelPost): String? = when {
+    p.up?.failed == true -> t("chat.upload.failed")
+    p.up != null -> t("chat.upload.uploading")
+    p.pending -> t("chat.sending")
+    else -> null
+}
+
+/** 帖子图片上传失败点重试（按 upKey） */
+private val LocalChannelRetry = staticCompositionLocalOf<(String) -> Unit> { {} }
 
 @Serializable
 private data class ReactResp(val reactions: List<ChannelReaction> = emptyList(), val myReaction: String? = null)
@@ -173,10 +188,16 @@ private fun ReactChip(label: String, on: Boolean, onClick: () -> Unit) {
 private fun PostBody(p: ChannelPost, onMedia: () -> Unit) {
     val ctx = LocalContext.current
     when (p.type) {
-        "image" -> AsyncImage(
-            model = Api.fullUrl(p.content), contentDescription = null, contentScale = ContentScale.FillWidth,
-            modifier = Modifier.padding(top = 8.dp).fillMaxWidth().heightIn(max = 460.dp).noRippleClick(onMedia),
-        )
+        "image" -> {
+            val retry = LocalChannelRetry.current
+            Box(Modifier.padding(top = 8.dp).fillMaxWidth()) {
+                AsyncImage(
+                    model = imageModel(p.local, p.content), contentDescription = null, contentScale = ContentScale.FillWidth,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = if (p.local != null) 120.dp else 0.dp, max = 460.dp).noRippleClick(onMedia),
+                )
+                UploadOverlay(p.up, p.pending, { p.upKey?.let(retry) }, Modifier.matchParentSize())
+            }
+        }
         "video" -> Box(
             Modifier.padding(top = 8.dp).fillMaxWidth().aspectRatio(16f / 9f).background(Color.Black).noRippleClick(onMedia),
             contentAlignment = Alignment.Center,
@@ -265,7 +286,7 @@ private fun MemberBubble(p: ChannelPost, mine: Boolean, onMedia: () -> Unit, onD
             Spacer(Modifier.width(8.dp))
         }
         Column(
-            sizeMod.clip(shape).background(if (mine) BubbleMine else Bg).alpha(if (p.pending) 0.6f else 1f)
+            sizeMod.clip(shape).background(if (mine) BubbleMine else Bg).alpha(if (p.pending && p.type != "image") 0.6f else 1f)
                 .pointerInput(onDelete, p.pending) {
                     detectTapGestures(onLongPress = { if (onDelete != null && !p.pending) onDelete() })
                 },
@@ -277,7 +298,7 @@ private fun MemberBubble(p: ChannelPost, mine: Boolean, onMedia: () -> Unit, onD
             )
             PostBody(p, onMedia)
             Text(
-                if (p.pending) t("chat.sending") else fmtChatTime(p.createdAt), color = TextDim, fontSize = 11.sp,
+                pendingLabel(p) ?: fmtChatTime(p.createdAt), color = if (p.up?.failed == true) Danger else TextDim, fontSize = 11.sp,
                 modifier = Modifier.align(Alignment.End).padding(start = 10.dp, end = 10.dp, top = 2.dp, bottom = 6.dp),
             )
         }
@@ -293,7 +314,7 @@ private fun PostCard(ch: ChannelInfo, p: ChannelPost, onReact: (String) -> Unit,
     val sizeMod = if (fixed) Modifier.width(maxW) else Modifier.widthIn(min = 220.dp, max = maxW).width(IntrinsicSize.Max)
     Column(
         Modifier.padding(horizontal = 12.dp, vertical = 5.dp).then(sizeMod)
-            .clip(RoundedCornerShape(14.dp)).background(Bg).alpha(if (p.pending) 0.6f else 1f),
+            .clip(RoundedCornerShape(14.dp)).background(Bg).alpha(if (p.pending && p.type != "image") 0.6f else 1f),
     ) {
         // 频道主 / 机器人发的算频道发帖；订阅者（和其他管理员）发的显示作者
         val byAuthor = p.senderId != ch.ownerId && !p.senderIsBot && p.senderNickname.isNotEmpty()
@@ -313,7 +334,7 @@ private fun PostCard(ch: ChannelInfo, p: ChannelPost, onReact: (String) -> Unit,
                 if (!p.pending) ReactChip("☺+", false) { picker = !picker }
             }
             if (p.pending) {
-                Text(t("chat.sending"), color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(start = 8.dp))
+                Text(pendingLabel(p) ?: "", color = if (p.up?.failed == true) Danger else TextDim, fontSize = 11.sp, modifier = Modifier.padding(start = 8.dp))
             } else {
                 Row(Modifier.padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     EyeIcon(TextDim, 13.dp)
@@ -386,6 +407,7 @@ private fun ChannelScreenBody(groupId: String, myUserId: String, onBack: () -> U
     var stickBottom by remember { mutableStateOf(true) }
     var input by remember { mutableStateOf("") }
     var showSticker by remember { mutableStateOf(false) }
+    var voiceMode by remember { mutableStateOf(false) }
     var showAttach by remember { mutableStateOf(false) }
     var showInfo by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf<ChannelPost?>(null) }
@@ -398,7 +420,7 @@ private fun ChannelScreenBody(groupId: String, myUserId: String, onBack: () -> U
     fun removePosts(ids: Set<String>) {
         if (ids.isEmpty()) return
         val visible = listState.layoutInfo.visibleItemsInfo.map { it.key.toString() }.toSet()
-        val keyOf = posts.associate { it.id to (it.tempId ?: it.id) }
+        val keyOf = posts.associate { it.id to (it.upKey ?: it.tempId ?: it.id) }
         val (show, hide) = ids.partition { keyOf[it] in visible }
         if (hide.isNotEmpty()) posts = posts.filterNot { it.id in hide }
         if (show.isEmpty()) return
@@ -456,7 +478,7 @@ private fun ChannelScreenBody(groupId: String, myUserId: String, onBack: () -> U
                     posts = posts.map { if (it.tempId == tempId) it.copy(id = msgId, createdAt = at ?: it.createdAt, pending = false) else it }
                 }
                 "error" -> {
-                    val tempId = frame["tempId"]?.jsonPrimitive?.content
+                    val tempId = frame["tempId"]?.jsonPrimitive?.content ?: return@addListener
                     if (posts.any { it.pending && it.tempId == tempId }) {
                         posts = posts.filterNot { it.pending && it.tempId == tempId }
                         toast(ctx, frame["msg"]?.jsonPrimitive?.content ?: t("chat.sendFailed"))
@@ -522,16 +544,70 @@ private fun ChannelScreenBody(groupId: String, myUserId: String, onBack: () -> U
         posts = posts + ChannelPost(tempId, myUserId, type, content, java.time.Instant.now().toString(), views = 1, tempId = tempId, pending = true, memberMsg = !c.canPost)
     }
 
-    fun sendImages(uris: List<Uri>, caption: String) = scope.launch {
-        var failed = 0
-        for (uri in uris) {
-            runCatching {
-                val b = ctx.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
-                sendRaw("image", Api.upload("image", b, "img.jpg", "image/jpeg"))
-            }.onFailure { failed++ }
+    // ---------- 发图：选好立刻显示（本地预览 + 进度圈），后台上传，按选择顺序发出 ----------
+    val upUris = remember { mutableMapOf<String, Uri>() }
+    fun setUp(key: String, up: UploadState?) {
+        posts = posts.map { if (it.upKey == key) it.copy(up = up) else it }
+    }
+
+    suspend fun uploadOne(key: String): String? {
+        val uri = upUris[key] ?: return null
+        setUp(key, UploadState(0f))
+        return runCatching {
+            val (bytes, mime) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { compressImage(ctx, uri) }
+            Api.upload("image", bytes, if (mime == "image/gif") "img.gif" else "img.jpg", mime) { p ->
+                if (posts.firstOrNull { it.upKey == key }?.up?.failed == false) setUp(key, UploadState(p))
+            }
+        }.onSuccess { setUp(key, null) }
+            .onFailure { setUp(key, UploadState(failed = true)) }
+            .getOrNull()
+    }
+
+    fun sendUploaded(key: String, url: String): String? {
+        val c = ch ?: return null
+        val p = posts.firstOrNull { it.upKey == key } ?: return null
+        val meta = parseImage(p.content)
+        val content = imageContent(url, meta.g, meta.w, meta.h)
+        val tempId = WsClient.send(2, c.id, "image", content)
+        posts = posts.map { if (it.upKey == key) it.copy(id = tempId, tempId = tempId, content = content) else it }
+        upUris.remove(key)
+        return tempId
+    }
+
+    fun sendImages(uris: List<Uri>, caption: String) {
+        val c = ch ?: return
+        if (uris.isEmpty()) return
+        val g = if (uris.size > 1) newAlbumId() else null
+        stickBottom = true
+        scope.launch {
+            val stamp = System.currentTimeMillis()
+            val items = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                uris.mapIndexed { i, uri -> Triple("l_${stamp}_${i}_${(1000..9999).random()}", uri, readImageSize(ctx, uri)) }
+            }
+            val now = java.time.Instant.now().toString()
+            items.forEach { (key, uri, _) -> upUris[key] = uri }
+            posts = posts + items.map { (key, uri, wh) ->
+                ChannelPost(
+                    key, myUserId, "image", imageContent("", g, wh.first, wh.second), now, views = 1, pending = true, memberMsg = !c.canPost,
+                    local = uri.toString(), upKey = key, up = UploadState(0f),
+                )
+            }
+            ChatUploadScope.launch {
+                uploadInOrder(items.map { it.first }, { uploadOne(it) }, { k, u -> sendUploaded(k, u)?.let { awaitAck(it) } })
+                if (caption.isNotBlank()) sendRaw("text", caption.trim())
+            }
         }
-        if (caption.isNotBlank()) sendRaw("text", caption.trim())
-        if (failed > 0) toast(ctx, t("chat.imagesFailed", "n" to failed))
+    }
+
+    fun retryUpload(key: String) {
+        ChatUploadScope.launch { uploadOne(key)?.let { sendUploaded(key, it) } }
+    }
+
+    fun sendVoice(bytes: ByteArray, dur: Int) = scope.launch {
+        runCatching {
+            val url = Api.upload("audio", bytes, "a.m4a", "audio/m4a")
+            sendRaw("audio", buildJsonObject { put("url", JsonPrimitive(url)); put("duration", JsonPrimitive(dur)) }.toString())
+        }.onFailure { toast(ctx, it.message ?: t("chat.sendFailed")) }
     }
 
     val locPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { g ->
@@ -562,7 +638,7 @@ private fun ChannelScreenBody(groupId: String, myUserId: String, onBack: () -> U
 
     fun openMedia(p: ChannelPost) {
         val media = posts.filter { !it.pending && (it.type == "image" || it.type == "video") }
-        viewer = media.map { listOf(MediaItem(it.type, it.content)) } to media.indexOfFirst { it.id == p.id }.coerceAtLeast(0)
+        viewer = media.map { listOf(MediaItem(it.type, if (it.type == "image") it.local ?: imageUrl(it.content) else it.content)) } to media.indexOfFirst { it.id == p.id }.coerceAtLeast(0)
     }
 
     val c = ch
@@ -587,6 +663,7 @@ private fun ChannelScreenBody(groupId: String, myUserId: String, onBack: () -> U
             Text("···", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.noRippleClick { showInfo = true }.padding(horizontal = 12.dp))
         }
 
+        CompositionLocalProvider(LocalChannelRetry provides { key: String -> retryUpload(key) }) {
         LazyColumn(
             state = listState,
             modifier = Modifier.weight(1f).fillMaxWidth().background(Bg2).noRippleClick { showSticker = false; focus.clearFocus(); keyboard?.hide() },
@@ -605,7 +682,7 @@ private fun ChannelScreenBody(groupId: String, myUserId: String, onBack: () -> U
                     modifier = Modifier.fillMaxWidth().padding(vertical = 80.dp),
                 )
             }
-            items(posts, key = { it.tempId ?: it.id }) { p ->
+            items(posts, key = { it.upKey ?: it.tempId ?: it.id }) { p ->
                 Box(Modifier.dustOut(p.id in dying) { posts = posts.filterNot { it.id == p.id }; dying = dying - p.id }) {
                     if (p.memberMsg) MemberBubble(
                         p, mine = p.senderId == myUserId,
@@ -621,11 +698,19 @@ private fun ChannelScreenBody(groupId: String, myUserId: String, onBack: () -> U
                 }
             }
         }
+        }
 
         if (c.canSend ?: c.canPost) {
             Column(Modifier.background(Bg2).imePadding().navigationBarsPadding()) {
                 Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.Bottom) {
                     Box(
+                        Modifier.size(40.dp).clip(CircleShape).background(Bg3).noRippleClick { voiceMode = !voiceMode; showSticker = false; focus.clearFocus(); keyboard?.hide() },
+                        contentAlignment = Alignment.Center,
+                    ) { if (voiceMode) KeyboardIcon(TextSub, 20.dp) else WaveformIcon(TextSub, 18.dp) }
+                    Spacer(Modifier.width(8.dp))
+                    if (voiceMode) {
+                        VoiceHoldBar(Modifier.weight(1f)) { bytes, dur -> sendVoice(bytes, dur) }
+                    } else Box(
                         Modifier.weight(1f).heightIn(min = 40.dp).clip(RoundedCornerShape(20.dp)).background(Bg3).padding(horizontal = 14.dp, vertical = 9.dp),
                         contentAlignment = Alignment.CenterStart,
                     ) {
@@ -641,7 +726,7 @@ private fun ChannelScreenBody(groupId: String, myUserId: String, onBack: () -> U
                     Spacer(Modifier.width(8.dp))
                     Box(
                         Modifier.size(40.dp).clip(CircleShape).background(if (showSticker) BubbleMine else Bg3)
-                            .noRippleClick { focus.clearFocus(); keyboard?.hide(); showSticker = !showSticker },
+                            .noRippleClick { focus.clearFocus(); keyboard?.hide(); voiceMode = false; showSticker = !showSticker },
                         contentAlignment = Alignment.Center,
                     ) { SmileIcon(if (showSticker) Accent else TextSub, 22.dp) }
                     Spacer(Modifier.width(8.dp))
@@ -649,7 +734,7 @@ private fun ChannelScreenBody(groupId: String, myUserId: String, onBack: () -> U
                         Modifier.size(40.dp).clip(CircleShape).background(Bg3).noRippleClick { focus.clearFocus(); keyboard?.hide(); showSticker = false; showAttach = true },
                         contentAlignment = Alignment.Center,
                     ) { PlusIcon(TextSub, 22.dp) }
-                    if (input.isNotBlank()) {
+                    if (input.isNotBlank() && !voiceMode) {
                         Spacer(Modifier.width(8.dp))
                         Box(
                             Modifier.height(40.dp).clip(RoundedCornerShape(20.dp)).background(Accent)
@@ -697,10 +782,12 @@ private fun ChannelScreenBody(groupId: String, myUserId: String, onBack: () -> U
         AttachSheet(
             isSingle = false,
             canVideoCall = false,
+            canVoice = true,
             onDismiss = { showAttach = false },
             onSend = { uris, caption -> sendImages(uris, caption) },
             onAction = { a ->
                 if (a == AttachAction.Location) locPerm.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                if (a == AttachAction.Voice) { voiceMode = true; showSticker = false }
             },
         )
     }

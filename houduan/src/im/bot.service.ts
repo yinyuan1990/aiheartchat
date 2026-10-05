@@ -906,9 +906,14 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
         if (cmd) m.entities = [{ type: 'bot_command', offset: 0, length: cmd[0].length }];
         break;
       }
-      case 'image':
-        m.photo = [{ file_id: content, file_unique_id: uniqueId(content), width: 0, height: 0 }];
+      case 'image': {
+        // 多图相册：地址后面带 #g=相册id&w=宽&h=高（客户端写的），对应 Telegram 的 media_group_id
+        const [url, frag = ''] = content.split('#');
+        const q = new URLSearchParams(frag);
+        m.photo = [{ file_id: url, file_unique_id: uniqueId(url), width: Number(q.get('w') ?? 0) || 0, height: Number(q.get('h') ?? 0) || 0 }];
+        if (q.get('g')) m.media_group_id = q.get('g');
         break;
+      }
       case 'video':
         m.video = { file_id: content, file_unique_id: uniqueId(content), width: 0, height: 0, duration: 0 };
         break;

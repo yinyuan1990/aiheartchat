@@ -1,7 +1,30 @@
 import { BadRequestException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { execFile } from 'child_process';
 import { randomUUID } from 'crypto';
+import { readFile, rm, writeFile } from 'fs/promises';
 import * as Minio from 'minio';
+import { tmpdir } from 'os';
+import { join } from 'path';
+
+/** ffmpeg 转成 AAC m4a（单声道 64k） */
+async function toM4a(input: Buffer): Promise<Buffer> {
+  const base = join(tmpdir(), `voice-${randomUUID()}`);
+  try {
+    await writeFile(`${base}.in`, input);
+    await new Promise<void>((res, rej) =>
+      execFile('ffmpeg', ['-y', '-loglevel', 'error', '-i', `${base}.in`, '-vn', '-ac', '1', '-c:a', 'aac', '-b:a', '64k', '-f', 'mp4', `${base}.m4a`], { timeout: 30_000 }, (err, _o, stderr) =>
+        err ? rej(new Error(`ffmpeg: ${String(stderr || err.message).slice(0, 200)}`)) : res(),
+      ),
+    );
+    const out = await readFile(`${base}.m4a`);
+    if (out.length < 100) throw new Error('ffmpeg 输出为空');
+    return out;
+  } finally {
+    await rm(`${base}.in`, { force: true });
+    await rm(`${base}.m4a`, { force: true });
+  }
+}
 
 const ALLOWED: Record<string, string[]> = {
   image: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
@@ -56,8 +79,16 @@ export class UploadService implements OnModuleInit {
     if (!allowed?.includes(file.mimetype)) throw new BadRequestException('不支持的文件类型');
     const maxSize = kind === 'image' ? 20 * 1024 * 1024 : kind === 'audio' ? 10 * 1024 * 1024 : 200 * 1024 * 1024;
     if (file.size > maxSize) throw new BadRequestException('文件过大');
+    // 网页版录音是 webm / ogg（Opus），iOS 播不了，统一转成 m4a
+    if (kind === 'audio' && /webm|ogg/.test(file.mimetype)) {
+      const m4a = await toM4a(file.buffer).catch((e) => {
+        this.logger.warn(`语音转码失败: ${e}`);
+        return null;
+      });
+      if (m4a) file = { buffer: m4a, mimetype: 'audio/mp4', size: m4a.length };
+    }
 
-    const ext = file.mimetype.split('/')[1].replace('quicktime', 'mov').replace('x-m4a', 'm4a').replace('mpeg', kind === 'audio' ? 'mp3' : 'mpeg').replace('octet-stream', 'm4a');
+    const ext = kind === 'audio' && file.mimetype === 'audio/mp4' ? 'm4a' : file.mimetype.split('/')[1].replace('quicktime', 'mov').replace('x-m4a', 'm4a').replace('mpeg', kind === 'audio' ? 'mp3' : 'mpeg').replace('octet-stream', 'm4a');
     const object = `${kind}/${new Date().toISOString().slice(0, 10)}/${randomUUID()}.${ext}`;
     await this.client.putObject(this.bucket, object, file.buffer, file.size, {
       'Content-Type': file.mimetype,

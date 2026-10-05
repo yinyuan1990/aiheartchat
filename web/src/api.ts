@@ -78,6 +78,30 @@ export async function uploadFile(kind: 'image' | 'video', file: File): Promise<s
   return json.data.url as string;
 }
 
+/** 带进度的上传（onProgress 0～1） */
+export function uploadBlob(kind: 'image' | 'video' | 'audio', blob: Blob, filename: string, onProgress?: (p: number) => void): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append('file', blob, filename);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `/api/upload/${kind}`);
+    xhr.setRequestHeader('Authorization', `Bearer ${getToken()}`);
+    xhr.setRequestHeader('Accept-Language', lang());
+    if (onProgress) xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
+    xhr.onload = () => {
+      try {
+        const json = JSON.parse(xhr.responseText);
+        if (json.code !== 0) return reject(new Error(json.msg || t('common.uploadFailed')));
+        resolve(json.data.url as string);
+      } catch {
+        reject(new Error(t('common.uploadFailed')));
+      }
+    };
+    xhr.onerror = () => reject(new Error(t('common.uploadFailed')));
+    xhr.send(form);
+  });
+}
+
 export interface UserProfile {
   id: string;
   shortId?: string;

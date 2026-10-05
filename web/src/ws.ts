@@ -97,6 +97,22 @@ class WsManager {
     return tempId;
   }
 
+  /**
+   * 等服务端确认这条消息（ack / error），最多 ms 毫秒。
+   * 连发几条时要一条一条等：服务端并发处理同一连接的帧，连着发入库顺序不固定。
+   */
+  waitAck(tempId: string, ms = 8000): Promise<boolean> {
+    return new Promise((resolve) => {
+      const done = (ok: boolean) => { off(); clearTimeout(timer); resolve(ok); };
+      const off = this.on((f) => {
+        if (f.tempId !== tempId) return;
+        if (f.op === 'ack') done(true);
+        else if (f.op === 'error') done(false);
+      });
+      const timer = setTimeout(() => done(false), ms);
+    });
+  }
+
   markRead(conversationId: string, msgId: string) {
     this.raw({ op: 'read', conversationId, msgId });
   }

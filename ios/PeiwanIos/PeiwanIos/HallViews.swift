@@ -49,7 +49,8 @@ struct HallView: View {
             var base = cfg?.url ?? ""
             if base.isEmpty { base = "\(Api.baseURL)/site/#/hall-embed" }
             let sep = base.contains("?") ? "&" : "?"
-            hallUrl = URL(string: withIndexCacheBuster("\(base)\(sep)token=\(Api.token ?? "")&embed=1"))
+            // lang：大厅网页跟 App 当前语言走（不带时网页按系统语言）
+            hallUrl = URL(string: withIndexCacheBuster("\(base)\(sep)token=\(Api.token ?? "")&embed=1&lang=\(I18nStore.shared.lang)"))
             GameLog.log("hall: load url=\(base) (cfg='\(cfg?.url ?? "")')")
         }
     }

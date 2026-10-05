@@ -213,6 +213,23 @@ textarea.input { resize: none; min-height: 90px; }
   50% { height: 15px; }
 }
 .bubble.media img, .bubble.media video { display: block; max-width: 220px; max-height: 280px; border-radius: 10px; }
+/* 多图相册（Telegram 式拼版） */
+.album { position: relative; border-radius: 12px; overflow: hidden; background: var(--bg-input); }
+.album-cell { position: absolute; overflow: hidden; background: var(--bg-input); }
+.bubble.media .album img, .album img { display: block; width: 100%; height: 100%; max-width: none; max-height: none; object-fit: cover; border-radius: 0; cursor: pointer; }
+.img-wrap { position: relative; display: inline-block; vertical-align: top; }
+/* 图片上传中：进度圈 / 转圈 / 失败重试 */
+.up-mask { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; background: rgba(0, 0, 0, 0.18); }
+.up-spin { animation: up-spin 0.9s linear infinite; }
+@keyframes up-spin { to { transform: rotate(360deg); } }
+.up-fail { width: 34px; height: 34px; border-radius: 17px; background: var(--danger); color: #fff; font-weight: 700; font-size: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.up-tip { font-size: 11px; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); }
+/* 按住说话 */
+.voice-hold { flex: 1; height: 40px; border-radius: 20px; background: var(--bg-input); display: flex; align-items: center; justify-content: center; font-size: 14px; user-select: none; -webkit-user-select: none; cursor: pointer; touch-action: none; }
+.voice-hold.on { background: var(--accent); color: #fff; }
+.voice-overlay { position: fixed; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 150; min-width: 150px; padding: 18px 20px; border-radius: 14px; background: rgba(0, 0, 0, 0.72); color: #fff; font-size: 13px; display: flex; flex-direction: column; align-items: center; gap: 10px; pointer-events: none; }
+.voice-overlay .voice-bars { transform: scale(1.8); margin: 6px 0; }
+.voice-overlay.cancel { background: rgba(200, 30, 50, 0.85); }
 .msg-meta { font-size: 10px; color: var(--text-3); margin-top: 4px; display: flex; gap: 6px; }
 
 /* 状态标签 */

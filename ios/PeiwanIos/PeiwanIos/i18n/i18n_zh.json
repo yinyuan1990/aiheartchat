@@ -2535,5 +2535,17 @@
   "cw.assets.gramName": "Gram（原 Toncoin）",
   "cw.vault.appOnly": "只有在{app} App 里才能开启",
   "cw.vault.minLength": "至少 {n} 位",
-  "cw.unlock.forgot": "忘记密码无法找回。可以删除本机钱包后，用助记词重新导入并设置新密码。"
+  "cw.unlock.forgot": "忘记密码无法找回。可以删除本机钱包后，用助记词重新导入并设置新密码。",
+  "chat.upload.retry": "点击重试",
+  "chat.upload.failed": "发送失败",
+  "chat.upload.uploading": "上传中",
+  "chat.voice.unsupported": "当前浏览器不支持录音",
+  "chat.voice.denied": "没有麦克风权限",
+  "chat.voice.tooShort": "说话时间太短",
+  "chat.voice.releaseCancel": "松开手指，取消发送",
+  "chat.voice.slideCancel": "手指上滑，取消发送",
+  "chat.voice.keyboard": "切换到键盘",
+  "attach.voice": "语音",
+  "chat.myLocation": "我的位置",
+  "chat.locating": "正在定位…"
 }

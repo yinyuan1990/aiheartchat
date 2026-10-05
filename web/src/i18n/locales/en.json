@@ -2535,5 +2535,17 @@
   "cw.assets.gramName": "Gram (formerly Toncoin)",
   "cw.vault.appOnly": "Only available in the {app} app",
   "cw.vault.minLength": "At least {n} characters",
-  "cw.unlock.forgot": "A forgotten password can't be recovered. You can delete the wallet on this device, then re-import it with your recovery phrase and set a new password."
+  "cw.unlock.forgot": "A forgotten password can't be recovered. You can delete the wallet on this device, then re-import it with your recovery phrase and set a new password.",
+  "chat.upload.retry": "Tap to retry",
+  "chat.upload.failed": "Failed",
+  "chat.upload.uploading": "Uploading",
+  "chat.voice.unsupported": "This browser can't record audio",
+  "chat.voice.denied": "Microphone access denied",
+  "chat.voice.tooShort": "Too short",
+  "chat.voice.releaseCancel": "Release to cancel",
+  "chat.voice.slideCancel": "Slide up to cancel",
+  "chat.voice.keyboard": "Keyboard",
+  "attach.voice": "Voice",
+  "chat.myLocation": "My location",
+  "chat.locating": "Locating…"
 }

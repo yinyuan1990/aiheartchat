@@ -61,8 +61,10 @@ struct ChannelPost: Codable {
     var senderIsBot: Bool? = nil
     /// 订阅者发的：普通聊天气泡，不带评论 / 浏览数 / 表情回应
     var memberMsg: Bool? = nil
+    /// 本地刚选的图：上传任务的 key（预览图、进度、失败重试按它找）
+    var upKey: String? = nil
 
-    var key: String { tempId ?? id }
+    var key: String { upKey ?? tempId ?? id }
 }
 
 private struct ChannelListItem: Codable, Identifiable {
@@ -125,6 +127,10 @@ private struct ChannelPostCard: View {
 
     /// 订阅者自己发的（靠右、粉色气泡）
     var mine: Bool = false
+    /// 本地刚选的图：预览、上传状态、失败重试
+    var localImage: UIImage? = nil
+    var upload: UploadState? = nil
+    var onRetry: () -> Void = {}
 
     private var isMemberMsg: Bool { p.memberMsg == true }
     /// 气泡最大宽度；文字类按内容收缩（Telegram 式），图片 / 视频 / 贴纸 / 带按钮的固定宽
@@ -137,7 +143,14 @@ private struct ChannelPostCard: View {
         if isMemberMsg { return t == "image" || t == "video" }
         return t == "image" || t == "video" || t == "sticker" || !(p.markup?.inlineKeyboard ?? []).isEmpty
     }
-    private var bubbleTime: String { pending ? t("channel.sending") : fmtTime(p.createdAt) }
+    private var bubbleTime: String { pendingLabel ?? fmtTime(p.createdAt) }
+    /// 还没发出去：上传失败 / 上传中 / 发送中
+    private var pendingLabel: String? {
+        if upload?.failed == true { return t("chat.upload.failed") }
+        if upload != nil { return t("chat.upload.uploading") }
+        return pending ? t("channel.sending") : nil
+    }
+    private var dimmed: Bool { pending && p.type != "image" }
 
     @ViewBuilder var body: some View {
         if isMemberMsg {
@@ -175,7 +188,7 @@ private struct ChannelPostCard: View {
                 reactionRows
                 Spacer(minLength: 0)
                 if pending {
-                    Text(t("channel.sending")).font(.system(size: 11)).foregroundStyle(Theme.textDim)
+                    Text(pendingLabel ?? "").font(.system(size: 11)).foregroundStyle(upload?.failed == true ? Color.red : Theme.textDim)
                 } else {
                     HStack(spacing: 3) {
                         Image(systemName: "eye").font(.system(size: 10))
@@ -225,15 +238,16 @@ private struct ChannelPostCard: View {
         }
         .background(Theme.bg)
         .clipShape(RoundedRectangle(cornerRadius: 14))
-        .opacity(pending ? 0.6 : 1)
+        .opacity(dimmed ? 0.6 : 1)
     }
 
     @ViewBuilder private var postBody: some View {
         switch p.type ?? "text" {
         case "image":
-            RemoteImage(url: content)
+            ChatImageView(url: imageUrlOf(content), local: localImage)
                 .frame(maxWidth: .infinity).frame(height: 260)
                 .clipped()
+                .overlay(UploadOverlay(state: upload, sending: pending, onRetry: onRetry))
                 .contentShape(Rectangle())
                 .onTapGesture(perform: onMedia)
                 .padding(.top, 8)
@@ -304,7 +318,7 @@ private struct ChannelPostCard: View {
         }
         .background(mine ? Theme.bubbleMine : Theme.bg)
         .clipShape(RoundedRectangle(cornerRadius: 16))
-        .opacity(pending ? 0.6 : 1)
+        .opacity(dimmed ? 0.6 : 1)
         .contextMenu {
             if canDelete && !pending {
                 Button(role: .destructive, action: onDelete) {
@@ -406,6 +420,14 @@ struct ChannelView: View {
     @State private var removeListener: (() -> Void)?
     @State private var walletOk = false
     @FocusState private var inputFocused: Bool
+    // 发图：本地预览、上传进度 / 失败、待传的原图（按 upKey）
+    @State private var localImages: [String: UIImage] = [:]
+    @State private var uploads: [String: UploadState] = [:]
+    @State private var upSources: [String: UploadSource] = [:]
+    // 语音
+    @State private var voiceMode = false
+    @State private var recording = false
+    private let recorderBox = VoiceRecorder()
 
     var body: some View {
         Group {
@@ -415,6 +437,13 @@ struct ChannelView: View {
                 EmptyHint(text: loadError.isEmpty ? t("common.loading") : loadError)
             }
         }
+        .overlay {
+            if recording {
+                RecordingOverlay(recorder: recorderBox)
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: recording)
         .fullBg()
         .toast($toastMsg)
         .navigationBarTitleDisplayMode(.inline)
@@ -441,6 +470,7 @@ struct ChannelView: View {
             AttachSheet(
                 isSingle: false,
                 canVideoCall: false,
+                canVoice: true,
                 onClose: { showAttach = false },
                 onSendAssets: sendAttachAssets,
                 onSendDatas: sendAttachDatas,
@@ -526,7 +556,10 @@ struct ChannelView: View {
                                     onComments: { route = .channelComments(p.id, c.canPost == true) },
                                     onMedia: { openMedia(p) },
                                     onDelete: { deleteTarget = p; showDelete = true },
-                                    mine: isMine(p)
+                                    mine: isMine(p),
+                                    localImage: p.upKey.flatMap { localImages[$0] },
+                                    upload: p.upKey.flatMap { uploads[$0] },
+                                    onRetry: { if let k = p.upKey { retryUpload(k) } }
                                 )
                             }
                             .frame(maxWidth: .infinity, alignment: postAlignment(p))
@@ -550,13 +583,26 @@ struct ChannelView: View {
         if c.sendable {
             VStack(spacing: 0) {
                 HStack(alignment: .bottom, spacing: 8) {
-                    CompatVerticalTextField(text: $input, prompt: Text(c.canPost == true ? t("channel.postHint") : t("channel.msgHint")).foregroundColor(Theme.textDim), lineRange: 1...6)
-                        .focused($inputFocused)
-                        .foregroundStyle(Theme.text)
-                        .padding(.horizontal, 14).padding(.vertical, 9)
-                        .background(RoundedRectangle(cornerRadius: 20).fill(Theme.bg3))
                     Button {
-                        inputFocused = false; showSticker.toggle()
+                        voiceMode.toggle(); showSticker = false; inputFocused = false
+                    } label: {
+                        Image(systemName: voiceMode ? "keyboard" : "waveform")
+                            .font(.system(size: 17)).foregroundStyle(Theme.textSub)
+                            .frame(width: 40, height: 40)
+                            .background(Circle().fill(Theme.bg3))
+                    }
+                    .buttonStyle(.plain)
+                    if voiceMode {
+                        holdToTalk
+                    } else {
+                        CompatVerticalTextField(text: $input, prompt: Text(c.canPost == true ? t("channel.postHint") : t("channel.msgHint")).foregroundColor(Theme.textDim), lineRange: 1...6)
+                            .focused($inputFocused)
+                            .foregroundStyle(Theme.text)
+                            .padding(.horizontal, 14).padding(.vertical, 9)
+                            .background(RoundedRectangle(cornerRadius: 20).fill(Theme.bg3))
+                    }
+                    Button {
+                        inputFocused = false; voiceMode = false; showSticker.toggle()
                     } label: {
                         Image(systemName: "face.smiling")
                             .font(.system(size: 19)).foregroundStyle(showSticker ? Theme.accent : Theme.textSub)
@@ -573,7 +619,7 @@ struct ChannelView: View {
                             .background(Circle().fill(Theme.bg3))
                     }
                     .buttonStyle(.plain)
-                    if !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    if !voiceMode && !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Button {
                             sendRaw("text", input.trimmingCharacters(in: .whitespacesAndNewlines))
                             input = ""
@@ -614,6 +660,30 @@ struct ChannelView: View {
             }
             .buttonStyle(.plain)
             .background(Theme.bg2)
+        }
+    }
+
+    private var holdToTalk: some View {
+        Text(recording ? t("chat.releaseToSend") : t("chat.holdToTalk"))
+            .font(.system(size: 14))
+            .foregroundStyle(recording ? .white : Theme.text)
+            .frame(maxWidth: .infinity).frame(height: 40)
+            .background(Capsule().fill(recording ? Theme.accent : Theme.bg3))
+            .onLongPressGesture(minimumDuration: 60, maximumDistance: 80, pressing: { pressing in
+                if pressing { recording = true; recorderBox.start() }
+                else if recording { recording = false; finishRecording() }
+            }, perform: {})
+    }
+
+    private func finishRecording() {
+        guard let (data, dur) = recorderBox.stop() else { return }
+        Task { @MainActor in
+            do {
+                let url = try await Api.upload("audio", data: data, filename: "a.m4a", mime: "audio/m4a")
+                sendRaw("audio", "{\"url\":\"\(url)\",\"duration\":\(dur)}")
+            } catch {
+                toastMsg = error.localizedDescription
+            }
         }
     }
 
@@ -662,8 +732,8 @@ struct ChannelView: View {
             posts[idx].pending = false
             if let at = frameStr(frame["createdAt"]) { posts[idx].createdAt = at }
         case "error":
-            let tempId = frameStr(frame["tempId"])
-            guard let idx = posts.firstIndex(where: { $0.pending == true && $0.tempId == tempId }) else { return }
+            guard let tempId = frameStr(frame["tempId"]),
+                  let idx = posts.firstIndex(where: { $0.pending == true && $0.tempId == tempId }) else { return }
             posts.remove(at: idx)
             toastMsg = frame["msg"] as? String ?? t("channel.sendFailed")
         case "channel_stats":
@@ -730,47 +800,119 @@ struct ChannelView: View {
         ))
     }
 
+    // MARK: 发图：选好立刻显示（本地预览 + 进度圈），后台上传，按选择顺序发出
+
     private func sendAttachAssets(_ assets: [PHAsset], caption: String) {
         showAttach = false
-        Task {
-            var datas: [Data] = []
-            for a in assets {
-                if let d = await AttachMedia.jpegData(a) { datas.append(d) }
+        let items: [(String, UploadSource, Int, Int)] = assets.map { a in
+            ("local_\(UUID().uuidString.prefix(12))", UploadSource.asset(a), a.pixelWidth, a.pixelHeight)
+        }
+        startImageSend(items, caption: caption)
+        for (i, a) in assets.enumerated() {
+            let key = items[i].0
+            Task { @MainActor in
+                if localImages[key] == nil, let img = await AttachMedia.preview(a) { localImages[key] = img }
             }
-            await uploadAndSend(datas, caption: caption, expected: assets.count)
         }
     }
 
     private func sendAttachDatas(_ datas: [Data], caption: String) {
         showAttach = false
-        Task { await uploadAndSend(datas, caption: caption, expected: datas.count) }
+        var items: [(String, UploadSource, Int, Int)] = []
+        for d in datas {
+            let key = "local_\(UUID().uuidString.prefix(12))"
+            let img = UIImage(data: d)
+            if let img { localImages[key] = img }
+            items.append((key, UploadSource.data(d), Int(img?.size.width ?? 0), Int(img?.size.height ?? 0)))
+        }
+        startImageSend(items, caption: caption)
+    }
+
+    /// items：(upKey, 原图, 宽, 高)
+    private func startImageSend(_ items: [(String, UploadSource, Int, Int)], caption: String) {
+        guard let c = ch, !items.isEmpty else { return }
+        stickBottom = true
+        let g: String? = items.count > 1 ? newAlbumId() : nil
+        let now = ISO8601DateFormatter().string(from: Date())
+        for it in items {
+            upSources[it.0] = it.1
+            uploads[it.0] = UploadState()
+            posts.append(ChannelPost(
+                id: it.0, senderId: state.user?.id ?? "", type: "image", content: imageContent("", g: g, w: it.2, h: it.3),
+                createdAt: now, views: 1, pending: true,
+                senderNickname: state.user?.nickname, senderAvatar: state.user?.avatar,
+                memberMsg: c.canPost != true, upKey: it.0
+            ))
+        }
+        let keys = items.map { $0.0 }
+        let text = caption.trimmingCharacters(in: .whitespacesAndNewlines)
+        Task { @MainActor in
+            await uploadInOrder(keys, upload: { k in await uploadOne(k) }, send: { k, url in
+                if let tid = sendUploaded(k, url) { _ = await awaitAck(tid) }
+            })
+            if !text.isEmpty { sendRaw("text", text) }
+        }
     }
 
     @MainActor
-    private func uploadAndSend(_ datas: [Data], caption: String, expected: Int) async {
-        var failed = expected - datas.count
-        for data in datas {
-            if let url = try? await Api.upload("image", data: data, filename: "img.jpg", mime: "image/jpeg") {
-                sendRaw("image", url)
-            } else {
-                failed += 1
-            }
+    private func uploadOne(_ key: String) async -> String? {
+        guard let src = upSources[key] else { return nil }
+        uploads[key] = UploadState()
+        var data: Data?
+        switch src {
+        case .data(let d): data = d
+        case .asset(let a): data = await AttachMedia.jpegData(a)
         }
-        let text = caption.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !text.isEmpty { sendRaw("text", text) }
-        if failed > 0 { toastMsg = t("chat.imagesFailed", ["n": failed]) }
+        guard let data else {
+            uploads[key] = UploadState(progress: 0, failed: true)
+            return nil
+        }
+        if localImages[key] == nil, let img = UIImage(data: data) { localImages[key] = img }
+        do {
+            let url = try await Api.upload("image", data: data, filename: "img.jpg", mime: "image/jpeg", progress: { p in
+                if let s = uploads[key], !s.failed { uploads[key] = UploadState(progress: p, failed: false) }
+            })
+            uploads[key] = nil
+            return url
+        } catch {
+            uploads[key] = UploadState(progress: 0, failed: true)
+            return nil
+        }
+    }
+
+    @MainActor @discardableResult
+    private func sendUploaded(_ key: String, _ url: String) -> String? {
+        guard let c = ch, let idx = posts.firstIndex(where: { $0.upKey == key }) else { return nil }
+        let meta = parseImage(posts[idx].content ?? "")
+        let content = imageContent(url, g: meta.g, w: meta.w, h: meta.h)
+        let tempId = WsClient.shared.send(convType: 2, targetId: c.id, msgType: "image", content: content)
+        posts[idx].id = tempId
+        posts[idx].tempId = tempId
+        posts[idx].content = content
+        upSources[key] = nil
+        return tempId
+    }
+
+    private func retryUpload(_ key: String) {
+        Task { @MainActor in
+            if let url = await uploadOne(key) { sendUploaded(key, url) }
+        }
     }
 
     private func handleAttach(_ action: AttachAction) {
         showAttach = false
+        if case .voice = action { voiceMode = true; showSticker = false; return }
         guard case .location = action else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            toastMsg = t("chat.locating")
             CityLocator.shared.currentLocation { loc, addr in
                 DispatchQueue.main.async {
+                    // 没拿到位置就提示，不发 0,0
+                    guard let loc else { toastMsg = t("msg.locFailed"); return }
                     let dict: [String: Any] = [
-                        "name": addr ?? "我的位置",
-                        "lat": loc?.coordinate.latitude ?? 0,
-                        "lng": loc?.coordinate.longitude ?? 0,
+                        "name": (addr?.isEmpty == false) ? addr! : t("chat.myLocation"),
+                        "lat": loc.coordinate.latitude,
+                        "lng": loc.coordinate.longitude,
                     ]
                     if let d = try? JSONSerialization.data(withJSONObject: dict), let s = String(data: d, encoding: .utf8) {
                         sendRaw("location", s)
@@ -849,8 +991,11 @@ struct ChannelView: View {
     }
 
     private func openMedia(_ p: ChannelPost) {
+        guard p.pending != true else { return }
         let list = posts.filter { $0.pending != true && ($0.type == "image" || $0.type == "video") }
-        let groups = list.map { [MediaItemModel(type: $0.type ?? "image", url: Api.fullUrl($0.content ?? ""), cover: nil)] }
+        let groups = list.map { x in
+            [MediaItemModel(type: x.type ?? "image", url: Api.fullUrl(x.type == "image" ? imageUrlOf(x.content ?? "") : (x.content ?? "")), cover: nil)]
+        }
         media = MediaTarget(groups: groups, group: list.firstIndex(where: { $0.id == p.id }) ?? 0, index: 0)
     }
 }

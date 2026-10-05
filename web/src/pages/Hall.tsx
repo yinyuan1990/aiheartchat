@@ -6,7 +6,7 @@ import { GuideProjectBody } from './GuideProject';
 import { TreeholeFeed } from './Treehole';
 import { GalleryFeed } from './Gallery';
 import { PullToRefresh } from '../components/PullToRefresh';
-import { t } from '../i18n';
+import { lang, t } from '../i18n';
 
 interface ProjectItem {
   id: number;
@@ -119,10 +119,14 @@ export function HallPage() {
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [loaded, setLoaded] = useState(false);
   // 养眼图片 tab 名称（后台可改）：先用上次缓存的，再拉最新
-  const [galleryTitle, setGalleryTitle] = useState(() => sessionStorage.getItem(GALLERY_TITLE_KEY) || t('gallery.defaultTitle'));
+  // 非中文界面：后台填了英文名才返回，空串时用自带的默认名；缓存按语言分开
+  const titleKey = `${GALLERY_TITLE_KEY}_${lang()}`;
+  const [galleryTitle, setGalleryTitle] = useState(() => sessionStorage.getItem(titleKey) || t('gallery.defaultTitle'));
   useEffect(() => {
     api<{ title: string }>('/gallery/settings').then((s) => {
-      if (s?.title) { setGalleryTitle(s.title); sessionStorage.setItem(GALLERY_TITLE_KEY, s.title); }
+      const title = s?.title || t('gallery.defaultTitle');
+      setGalleryTitle(title);
+      sessionStorage.setItem(titleKey, title);
     }).catch(() => {});
   }, []);
 

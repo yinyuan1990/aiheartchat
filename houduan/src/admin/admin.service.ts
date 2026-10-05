@@ -424,7 +424,7 @@ export class AdminService {
    * h5/game 的 entry 必须是 http(s) 完整地址，game 必须有图标；orientation 为游戏屏幕方向（portrait/landscape）。
    */
   upsertModule(data: {
-    id?: number; name: string; icon?: string; desc?: string; cover?: string; type: string; entry: string;
+    id?: number; name: string; nameEn?: string; icon?: string; desc?: string; descEn?: string; cover?: string; type: string; entry: string;
     orientation?: string; sort?: number; enabled?: boolean; visibleGender?: number;
   }) {
     if (!['native', 'h5', 'game'].includes(data.type)) throw new BadRequestException('type 非法');
@@ -436,8 +436,10 @@ export class AdminService {
     if (!['portrait', 'landscape'].includes(orientation)) throw new BadRequestException('屏幕方向非法');
     const payload = {
       name: data.name,
+      nameEn: (data.nameEn ?? '').trim().slice(0, 60),
       icon: data.icon ?? '',
       desc: data.desc ?? '',
+      descEn: (data.descEn ?? '').trim().slice(0, 200),
       cover: data.cover ?? '',
       type: data.type,
       entry,

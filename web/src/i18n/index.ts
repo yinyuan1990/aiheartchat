@@ -24,7 +24,16 @@ function systemLang(): string {
   return sys === 'zh' ? 'zh' : sys in tables ? sys : 'en';
 }
 
+/** App 内嵌页（大厅 hall-embed）地址带 lang=xx：跟 App 当前语言走，并记住给后续页面用 */
+function urlLang(): string | null {
+  const q = new URLSearchParams(`${location.search.slice(1)}&${location.hash.split('?')[1] ?? ''}`);
+  const l = q.get('lang');
+  return l && l in tables ? l : null;
+}
+
 const current = (() => {
+  const fromUrl = urlLang();
+  if (fromUrl) localStorage.setItem(KEY, fromUrl);
   const c = langChoice();
   return c !== SYSTEM && c in tables ? c : systemLang();
 })();

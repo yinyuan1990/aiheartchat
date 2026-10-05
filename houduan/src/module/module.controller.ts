@@ -1,6 +1,7 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Headers, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/current-user.decorator';
+import { langOf } from '../i18n/translate';
 import { PrismaService } from '../prisma/prisma.service';
 import { HallTabsService } from './hall-tabs.service';
 
@@ -19,16 +20,19 @@ export class ModuleController {
     return { order: await this.hallTabs.order() };
   }
 
+  /** 非中文请求：后台填了英文名 / 简介就换成英文（没填的照旧中文，种子项目再由 DATA_EN 兜底） */
   @Get()
-  async list(@CurrentUser() userId: bigint) {
+  async list(@CurrentUser() userId: bigint, @Headers('accept-language') acceptLang?: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    return this.prisma.appModule.findMany({
+    const rows = await this.prisma.appModule.findMany({
       where: {
         enabled: true,
         OR: [{ visibleGender: 0 }, { visibleGender: user?.gender ?? 0 }],
       },
       orderBy: { sort: 'asc' },
     });
+    if (!langOf(acceptLang)) return rows;
+    return rows.map((m) => ({ ...m, name: m.nameEn || m.name, desc: m.descEn || m.desc }));
   }
 
   /**

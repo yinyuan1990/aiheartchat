@@ -64,9 +64,9 @@ export class GalleryService implements OnModuleInit {
   // ---------- 设置 ----------
 
   /** 后台设置：tab 名称 / 保留天数 / 是否屏蔽文案 都按受众分开（M 男看 / F 女看）；屏蔽文案默认男频屏蔽、女频不屏蔽 */
-  async settings(): Promise<{ titleM: string; titleF: string; daysM: number; daysF: number; hideTextM: boolean; hideTextF: boolean }> {
+  async settings(): Promise<{ titleM: string; titleF: string; titleEnM: string; titleEnF: string; daysM: number; daysF: number; hideTextM: boolean; hideTextF: boolean }> {
     const rows = await this.prisma.sysSetting.findMany({
-      where: { key: { in: ['gallery_title_m', 'gallery_title_f', 'gallery_title', 'gallery_days_m', 'gallery_days_f', 'gallery_days', 'gallery_hide_text_m', 'gallery_hide_text_f'] } },
+      where: { key: { in: ['gallery_title_m', 'gallery_title_f', 'gallery_title', 'gallery_title_en_m', 'gallery_title_en_f', 'gallery_days_m', 'gallery_days_f', 'gallery_days', 'gallery_hide_text_m', 'gallery_hide_text_f'] } },
     });
     const get = (k: string) => rows.find((r) => r.key === k)?.value ?? '';
     const clampDays = (v: string, fallback: number) => Math.min(60, Math.max(1, Number(v) || fallback));
@@ -76,6 +76,8 @@ export class GalleryService implements OnModuleInit {
     return {
       titleM: get('gallery_title_m') || legacyTitle,
       titleF: get('gallery_title_f') || legacyTitle,
+      titleEnM: get('gallery_title_en_m'),
+      titleEnF: get('gallery_title_en_f'),
       daysM: clampDays(get('gallery_days_m'), legacyDays),
       daysF: clampDays(get('gallery_days_f'), legacyDays),
       hideTextM: bool(get('gallery_hide_text_m'), true),
@@ -83,21 +85,30 @@ export class GalleryService implements OnModuleInit {
     };
   }
 
-  /** 某个受众的 tab 名 / 保留天数 / 是否屏蔽文案 */
-  async forAudience(audience: number): Promise<{ title: string; days: number; hideText: boolean }> {
+  /** 某个受众的 tab 名 / 保留天数 / 是否屏蔽文案；foreign = 非中文界面：用英文名，没填返回空串（客户端用自己的默认名） */
+  async forAudience(audience: number, foreign = false): Promise<{ title: string; days: number; hideText: boolean }> {
     const s = await this.settings();
-    return audience === 2 ? { title: s.titleF, days: s.daysF, hideText: s.hideTextF } : { title: s.titleM, days: s.daysM, hideText: s.hideTextM };
+    const title = audience === 2 ? (foreign ? s.titleEnF : s.titleF) : (foreign ? s.titleEnM : s.titleM);
+    return audience === 2 ? { title, days: s.daysF, hideText: s.hideTextF } : { title, days: s.daysM, hideText: s.hideTextM };
   }
 
   /** 用户端：按自己性别拿 tab 名称与天数 */
-  async userSettings(userId: bigint) {
+  async userSettings(userId: bigint, foreign = false) {
     const me = await this.prisma.user.findUnique({ where: { id: userId }, select: { gender: true } });
-    return this.forAudience(me?.gender === 2 ? 2 : 1);
+    return this.forAudience(me?.gender === 2 ? 2 : 1, foreign);
   }
 
-  async saveSettings(data: { titleM?: string; titleF?: string; daysM?: number; daysF?: number; hideTextM?: boolean; hideTextF?: boolean }) {
+  async saveSettings(data: { titleM?: string; titleF?: string; titleEnM?: string; titleEnF?: string; daysM?: number; daysF?: number; hideTextM?: boolean; hideTextF?: boolean }) {
     const titleM = String(data.titleM ?? '').trim().slice(0, 12);
     const titleF = String(data.titleF ?? '').trim().slice(0, 12);
+    // 英文名不传就不动（老后台页面没有这两个框）
+    const setEn = async (key: string, v?: string) => {
+      if (v === undefined) return;
+      const value = String(v).trim().slice(0, 24);
+      await this.prisma.sysSetting.upsert({ where: { key }, create: { key, value }, update: { value } });
+    };
+    await setEn('gallery_title_en_m', data.titleEnM);
+    await setEn('gallery_title_en_f', data.titleEnF);
     const daysM = Math.min(60, Math.max(1, Number(data.daysM) || DEFAULT_DAYS));
     const daysF = Math.min(60, Math.max(1, Number(data.daysF) || DEFAULT_DAYS));
     const set = (key: string, value: string) => this.prisma.sysSetting.upsert({ where: { key }, create: { key, value }, update: { value } });
@@ -113,10 +124,10 @@ export class GalleryService implements OnModuleInit {
   // ---------- 对外接口（登录用户） ----------
 
   /** 按登录用户性别分流（男看 audience 1，女看 2），只出保留期内的，最新在前，beforeId 翻页 */
-  async list(userId: bigint, beforeId?: bigint) {
+  async list(userId: bigint, beforeId?: bigint, foreign = false) {
     const me = await this.prisma.user.findUnique({ where: { id: userId }, select: { gender: true } });
     const audience = me?.gender === 2 ? 2 : 1;
-    const { title, days, hideText } = await this.forAudience(audience);
+    const { title, days, hideText } = await this.forAudience(audience, foreign);
     const cutoff = new Date(Date.now() - days * 86_400_000);
     const rows = await this.prisma.galleryPost.findMany({
       where: { audience, postedAt: { gte: cutoff }, ...(beforeId ? { id: { lt: beforeId } } : {}) },

@@ -53,7 +53,8 @@ fun HallScreen(
         }.onFailure { GameLog.w("hall: GET /modules/hall failed: $it") }.getOrNull()
         val base = if (cfg.isNullOrEmpty()) "${Api.BASE_URL}/site/#/hall-embed" else cfg
         val sep = if (base.contains("?")) "&" else "?"
-        url = withIndexCacheBuster("$base${sep}token=${Api.token ?: ""}&embed=1")
+        // lang：大厅网页跟 App 当前语言走（不带时网页按系统语言）
+        url = withIndexCacheBuster("$base${sep}token=${Api.token ?: ""}&embed=1&lang=${com.wh.peiwana.i18n.I18n.lang}")
         GameLog.d("hall: load url=${url?.substringBefore("token=")}token=*** (cfg='${cfg ?: ""}')")
     }
 
@@ -78,6 +79,15 @@ fun HallScreen(
         val w = webView ?: return@LaunchedEffect
         val id = musicCur?.id?.let { "\"$it\"" } ?: "null"
         w.evaluateJavascript("window.PeiwanMusicState&&window.PeiwanMusicState({id:$id,playing:$musicPlaying})", null)
+    }
+    // App 里切了语言：大厅网页换成新语言重新加载（只改地址里 hash 后的 lang 不会重新加载页面）
+    val appLang = com.wh.peiwana.i18n.I18n.lang
+    var loadedLang by remember { mutableStateOf(appLang) }
+    LaunchedEffect(appLang, webView) {
+        val w = webView ?: return@LaunchedEffect
+        if (appLang == loadedLang) return@LaunchedEffect
+        loadedLang = appLang
+        w.evaluateJavascript("history.replaceState(history.state,'',location.href.replace(/([?&])lang=[\\w-]+/,'\$1lang=$appLang'));location.reload()", null)
     }
     androidx.activity.compose.BackHandler(enabled = active && canGoBack) { webView?.goBack() }
     // 切到大厅 tab：打一条尺寸/进度日志（黑屏时看这里是不是 0x0），并强制 WebView 重绘一次

@@ -77,7 +77,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.math.roundToInt
 
-enum class AttachAction { Gift, Transfer, Location, VoiceCall, VideoCall }
+enum class AttachAction { Gift, Transfer, Location, Voice, VoiceCall, VideoCall }
 
 private const val MAX_PICK = 9
 
@@ -133,6 +133,8 @@ fun AttachSheet(
     canVideoCall: Boolean,
     /** 链上钱包转账（单聊、有钱包入口） */
     canTransfer: Boolean = false,
+    /** 群 / 频道：胶囊里放「语音」（单聊的语音在输入框左边，胶囊放不下） */
+    canVoice: Boolean = false,
     onDismiss: () -> Unit,
     onSend: (List<Uri>, String) -> Unit,
     onAction: (AttachAction) -> Unit,
@@ -400,7 +402,7 @@ fun AttachSheet(
                     .padding(bottom = 8.dp),
             ) {
                 if (selection.isEmpty()) {
-                    AttachTabBar(isSingle, canVideoCall, canTransfer) { a -> exit { onAction(a) } }
+                    AttachTabBar(isSingle, canVideoCall, canTransfer, canVoice) { a -> exit { onAction(a) } }
                 } else {
                     CaptionBar(caption, { caption = it }, selection.size) {
                         val picked = selection
@@ -497,12 +499,13 @@ private fun DeniedTip(onGrant: () -> Unit, onSystemPicker: () -> Unit) {
 private data class AttachTab(val label: String, val action: AttachAction?, val icon: @Composable (Color) -> Unit)
 
 @Composable
-private fun AttachTabBar(isSingle: Boolean, canVideoCall: Boolean, canTransfer: Boolean, onAction: (AttachAction) -> Unit) {
+private fun AttachTabBar(isSingle: Boolean, canVideoCall: Boolean, canTransfer: Boolean, canVoice: Boolean, onAction: (AttachAction) -> Unit) {
     val tabs = buildList {
         add(AttachTab(t("attach.album"), null) { ImageIcon(it, 24.dp) })
         if (isSingle) add(AttachTab(t("attach.gift"), AttachAction.Gift) { GiftIcon(it, 24.dp) })
         if (canTransfer) add(AttachTab(t("attach.transfer"), AttachAction.Transfer) { TransferIcon(it, 24.dp) })
         add(AttachTab(t("attach.location"), AttachAction.Location) { LocationArrowIcon(it, 22.dp) })
+        if (canVoice) add(AttachTab(t("attach.voice"), AttachAction.Voice) { MicIcon(it, 22.dp) })
         if (isSingle) {
             add(AttachTab(t("attach.voiceCall"), AttachAction.VoiceCall) { PhoneIcon(it, 22.dp) })
             if (canVideoCall) add(AttachTab(t("attach.videoCall"), AttachAction.VideoCall) { VideoIcon(it, 24.dp) })

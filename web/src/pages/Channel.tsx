@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { api, uploadFile } from '../api';
+import { api, uploadBlob, uploadFile } from '../api';
+import { imageContent, imageUrl, newAlbumId, parseImage, readImageSize, shrinkImage, uploadInOrder } from '../album';
+import { KeyboardGlyph, UploadMask, UploadState, VoiceHoldButton } from '../components/ChatMedia';
 import { useApp } from '../store';
 import { wsManager, MessagePayload } from '../ws';
 import { nearestCity } from '../cities';
@@ -58,6 +60,10 @@ interface Post {
   tempId?: string;
   markup?: InlineMarkup | null;
   memberMsg?: boolean;
+  /** 本地刚选的图：本地预览、上传任务 key、上传状态 */
+  local?: string;
+  upKey?: string;
+  up?: UploadState;
 }
 
 const postEl = (id: string) => document.querySelector(`[data-mid="${CSS.escape(id)}"]`);
@@ -71,10 +77,18 @@ function postTime(iso: string) {
   return d.toDateString() === now.toDateString() ? hm : `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
 }
 
-function PostBody({ p, onImage }: { p: Post; onImage: (url: string) => void }) {
+/** onRetry：上传失败点重试（按 upKey 找回原文件） */
+function PostBody({ p, onImage, onRetry }: { p: Post; onImage: (url: string) => void; onRetry?: (key: string) => void }) {
   switch (p.type) {
-    case 'image':
-      return <img src={p.content} alt="" className="ch-media" onClick={() => onImage(p.content)} />;
+    case 'image': {
+      const src = p.local || imageUrl(p.content);
+      return (
+        <div className="img-wrap" style={{ display: 'block' }}>
+          <img src={src} alt="" className="ch-media" onClick={() => onImage(src)} />
+          <UploadMask state={p.up} sending={p.pending} onRetry={() => p.upKey && onRetry?.(p.upKey)} />
+        </div>
+      );
+    }
     case 'video':
       return <video src={p.content} controls playsInline className="ch-media" style={{ background: '#000' }} />;
     case 'sticker': {
@@ -101,27 +115,28 @@ function PostBody({ p, onImage }: { p: Post; onImage: (url: string) => void }) {
 }
 
 /** 一条帖子：频道头 + 内容 + 表情回应 + 浏览数 / 时间 + 评论入口 */
-function PostCard({ ch, p, onReact, onComments, onImage, onDelete }: {
+function PostCard({ ch, p, onReact, onComments, onImage, onDelete, onRetry }: {
   ch: ChannelInfo;
   p: Post;
   onReact: (emoji: string) => void;
   onComments: () => void;
   onImage: (url: string) => void;
   onDelete?: () => void;
+  onRetry?: (key: string) => void;
 }) {
   const [picker, setPicker] = useState(false);
   // 频道主 / 机器人发的算频道发帖；订阅者（和其他管理员）发的显示作者
   const byAuthor = p.senderId !== ch.ownerId && !p.senderIsBot && !!p.senderNickname;
   const headAvatar = byAuthor ? p.senderAvatar : ch.avatar;
   return (
-    <div className={`ch-post${p.type === 'image' || p.type === 'video' || p.markup ? ' media' : ''}`} style={{ opacity: p.pending ? 0.6 : 1 }} data-mid={p.id}>
+    <div className={`ch-post${p.type === 'image' || p.type === 'video' || p.markup ? ' media' : ''}`} style={{ opacity: p.pending && p.type !== 'image' ? 0.6 : 1 }} data-mid={p.id}>
       <div className="ch-post-head">
         <div className="avatar" style={{ width: 28, height: 28 }}>{headAvatar && <img src={headAvatar} alt="" />}</div>
         <span className="ellipsis" style={{ fontWeight: 600, fontSize: 14 }}>{byAuthor ? p.senderNickname : ch.name}</span>
         <span className="grow" />
         {onDelete && !p.pending && <span className="small" style={{ cursor: 'pointer' }} onClick={onDelete}>{t('common.delete')}</span>}
       </div>
-      <PostBody p={p} onImage={onImage} />
+      <PostBody p={p} onImage={onImage} onRetry={onRetry} />
       {p.markup && <InlineKeyboard markup={p.markup} messageId={p.id} />}
       <div className="ch-post-foot">
         <div className="ch-reacts">
@@ -133,7 +148,7 @@ function PostCard({ ch, p, onReact, onComments, onImage, onDelete }: {
           {!p.pending && <span className="ch-react add" onClick={() => setPicker((v) => !v)}>☺+</span>}
         </div>
         <span className="small" style={{ whiteSpace: 'nowrap' }}>
-          {p.pending ? t('channel.sending') : <>👁 {fmtCount(p.views)} · {postTime(p.createdAt)}</>}
+          {p.up?.failed ? <span style={{ color: 'var(--danger)' }}>{t('chat.upload.failed')}</span> : p.pending ? t(p.up ? 'chat.upload.uploading' : 'channel.sending') : <>👁 {fmtCount(p.views)} · {postTime(p.createdAt)}</>}
         </span>
       </div>
       {picker && (
@@ -154,14 +169,14 @@ function PostCard({ ch, p, onReact, onComments, onImage, onDelete }: {
 }
 
 /** 订阅者发的消息：普通聊天气泡（我的在右边），没有评论 / 浏览数 / 表情回应；长按或右键删除 */
-function MemberBubble({ p, mine, onImage, onDelete }: { p: Post; mine: boolean; onImage: (url: string) => void; onDelete?: () => void }) {
+function MemberBubble({ p, mine, onImage, onDelete, onRetry }: { p: Post; mine: boolean; onImage: (url: string) => void; onDelete?: () => void; onRetry?: (key: string) => void }) {
   const timer = useRef<number>();
   const media = p.type === 'image' || p.type === 'video';
   const askDelete = () => {
     if (onDelete && !p.pending && confirm(t('channel.deleteMessageConfirm'))) onDelete();
   };
   return (
-    <div className={`ch-msg${mine ? ' mine' : ''}`} style={{ opacity: p.pending ? 0.6 : 1 }} data-testid="member-msg" data-mid={p.id}>
+    <div className={`ch-msg${mine ? ' mine' : ''}`} style={{ opacity: p.pending && p.type !== 'image' ? 0.6 : 1 }} data-testid="member-msg" data-mid={p.id}>
       {!mine && <div className="avatar" style={{ width: 32, height: 32, flexShrink: 0 }}>{p.senderAvatar && <img src={p.senderAvatar} alt="" />}</div>}
       <div
         className={`ch-msg-bubble${media ? ' media' : ''}`}
@@ -171,8 +186,8 @@ function MemberBubble({ p, mine, onImage, onDelete }: { p: Post; mine: boolean; 
         onTouchMove={() => window.clearTimeout(timer.current)}
       >
         {!mine && <div className="ch-msg-name">{p.senderNickname}</div>}
-        <PostBody p={p} onImage={onImage} />
-        <div className="ch-msg-time">{p.pending ? t('channel.sending') : postTime(p.createdAt)}</div>
+        <PostBody p={p} onImage={onImage} onRetry={onRetry} />
+        <div className="ch-msg-time">{p.up?.failed ? t('chat.upload.failed') : p.pending ? t(p.up ? 'chat.upload.uploading' : 'channel.sending') : postTime(p.createdAt)}</div>
       </div>
     </div>
   );
@@ -294,11 +309,16 @@ export function ChannelPage() {
   const me = useApp((s) => s.user);
   const [ch, setCh] = useState<ChannelInfo | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
+  const postsRef = useRef(posts);
+  postsRef.current = posts;
+  const upFiles = useRef<Record<string, File>>({});
   const [hasMore, setHasMore] = useState(true);
   const [input, setInput] = useState('');
   const [showInfo, setShowInfo] = useState(false);
   const [showAttach, setShowAttach] = useState(false);
   const [showSticker, setShowSticker] = useState(false);
+  const [voiceMode, setVoiceMode] = useState(false);
+  useEffect(() => () => postsRef.current.forEach((p) => p.local && URL.revokeObjectURL(p.local)), []);
   const [fullImage, setFullImage] = useState<string | null>(null);
   const [error, setError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -336,7 +356,7 @@ export function ChannelPage() {
       } else if (frame.op === 'ack') {
         setPosts((prev) => prev.map((p) => (p.tempId === frame.tempId ? { ...p, id: frame.msgId, createdAt: frame.createdAt, pending: false } : p)));
       } else if (frame.op === 'error') {
-        setPosts((prev) => prev.filter((p) => !(p.pending && p.tempId === frame.tempId)));
+        setPosts((prev) => prev.filter((p) => !(p.pending && p.tempId && p.tempId === frame.tempId)));
         alert(frame.msg ?? t('channel.sendFailed'));
       } else if (frame.op === 'channel_stats' && frame.data?.conversationId === conv) {
         const d = frame.data;
@@ -429,20 +449,91 @@ export function ChannelPage() {
     sendRaw('text', text);
     setInput('');
   };
+  const setUp = (key: string, up: UploadState | undefined) =>
+    setPosts((prev) => prev.map((p) => (p.upKey === key ? { ...p, up } : p)));
+
+  const uploadOne = async (key: string): Promise<string | null> => {
+    const file = upFiles.current[key];
+    if (!file) return null;
+    setUp(key, { progress: 0 });
+    try {
+      const blob = await shrinkImage(file);
+      let last = 0;
+      const url = await uploadBlob('image', blob, 'img.jpg', (p) => {
+        if (p - last < 0.02 && p < 1) return;
+        last = p;
+        setUp(key, { progress: p });
+      });
+      setUp(key, undefined);
+      return url;
+    } catch {
+      setUp(key, { failed: true });
+      return null;
+    }
+  };
+
+  const sendUploaded = (key: string, url: string) => {
+    const p = postsRef.current.find((x) => x.upKey === key);
+    if (!p || !ch) return;
+    const content = imageContent(url, parseImage(p.content));
+    const tempId = wsManager.send(2, ch.id, 'image', content);
+    setPosts((prev) => prev.map((x) => (x.upKey === key ? { ...x, id: tempId, tempId, content } : x)));
+    delete upFiles.current[key];
+    return wsManager.waitAck(tempId);
+  };
+
+  /** 选好的图立刻显示（本地预览 + 进度圈），后台上传，按选择顺序发出 */
+  const sendImages = async (files: File[]) => {
+    if (!me || !ch || !files.length) return;
+    stickBottom.current = true;
+    const g = files.length > 1 ? newAlbumId() : undefined;
+    const items = await Promise.all(files.map(async (file, i) => {
+      const local = URL.createObjectURL(file);
+      const { w, h } = await readImageSize(local);
+      const key = `l_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`;
+      upFiles.current[key] = file;
+      return { key, local, w, h };
+    }));
+    const now = new Date().toISOString();
+    setPosts((prev) => [...prev, ...items.map((it): Post => ({
+      id: it.key, upKey: it.key, local: it.local, up: { progress: 0 }, senderId: me.id, senderNickname: me.nickname, senderAvatar: me.avatar,
+      type: 'image', content: imageContent('', { g, w: it.w, h: it.h }), createdAt: now,
+      views: 1, reactions: [], myReaction: null, commentCount: 0, pending: true, memberMsg: !ch.canPost,
+    }))]);
+    await uploadInOrder(items.map((it) => it.key), uploadOne, sendUploaded);
+  };
+
+  const retryUpload = async (key: string) => {
+    const url = await uploadOne(key);
+    if (url) sendUploaded(key, url);
+  };
+
+  const sendVoice = async (blob: Blob, duration: number) => {
+    try {
+      const ext = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm';
+      const url = await uploadBlob('audio', blob, `voice.${ext}`);
+      sendRaw('audio', JSON.stringify({ url, duration }));
+    } catch (e: any) {
+      alert(e.message || t('channel.sendFailed'));
+    }
+  };
+
   const sendMedia = async (files: File[], caption: string) => {
+    const imagesDone = sendImages(files.filter((f) => !f.type.startsWith('video')));
     let failed = 0;
-    for (const f of files) {
+    for (const f of files.filter((x) => x.type.startsWith('video'))) {
       try {
-        const video = f.type.startsWith('video');
-        sendRaw(video ? 'video' : 'image', await uploadFile(video ? 'video' : 'image', f));
+        sendRaw('video', await uploadFile('video', f));
       } catch {
         failed++;
       }
     }
+    await imagesDone;
     if (caption.trim()) sendRaw('text', caption.trim());
     if (failed) alert(t('channel.filesFailed', { n: failed }));
   };
   const handleAttach = (a: AttachAction) => {
+    if (a === 'voice') { setVoiceMode(true); setShowSticker(false); return; }
     if (a !== 'location') return;
     if (!navigator.geolocation) return alert(t('channel.geoUnsupported'));
     navigator.geolocation.getCurrentPosition(
@@ -488,6 +579,7 @@ export function ChannelPage() {
             mine={p.senderId === me?.id}
             onImage={setFullImage}
             onDelete={ch.canPost || p.senderId === me?.id ? () => deletePost(p) : undefined}
+            onRetry={retryUpload}
           />
         ) : (
           <PostCard
@@ -498,6 +590,7 @@ export function ChannelPage() {
             onImage={setFullImage}
             onComments={() => nav(`/channel/post/${p.id}`, { state: { channelName: ch.name, canAdmin: ch.canPost } })}
             onDelete={ch.canPost || p.senderId === me?.id ? () => deletePost(p) : undefined}
+            onRetry={retryUpload}
           />
         ))}
         <div ref={bottomRef} style={{ height: 8 }} />
@@ -506,19 +599,30 @@ export function ChannelPage() {
       {canSend ? (
         <div style={{ background: 'var(--bg-card)' }}>
           <div className="row" style={{ padding: 8, gap: 8 }}>
-            <input
-              ref={inputRef}
-              className="input grow"
-              style={{ marginBottom: 0, borderRadius: 20, height: 40 }}
-              value={input}
-              placeholder={ch.canPost ? t('channel.postPlaceholder') : t('channel.messagePlaceholder')}
-              onChange={(e) => setInput(e.target.value)}
-              onFocus={() => setShowSticker(false)}
-              onKeyDown={(e) => e.key === 'Enter' && send()}
-            />
-            <span className="ch-round" style={showSticker ? { background: '#ffe1e7', color: 'var(--accent)' } : undefined} onClick={() => setShowSticker((v) => !v)}>☺</span>
+            <span
+              className="ch-round"
+              title={voiceMode ? t('chat.voice.keyboard') : t('msg.voice')}
+              onClick={() => { setVoiceMode((v) => !v); setShowSticker(false); if (voiceMode) setTimeout(() => inputRef.current?.focus(), 0); }}
+            >
+              {voiceMode ? <KeyboardGlyph /> : <span className="voice-bars"><span /><span /><span /></span>}
+            </span>
+            {voiceMode ? (
+              <VoiceHoldButton onSend={sendVoice} onError={(m) => alert(m)} />
+            ) : (
+              <input
+                ref={inputRef}
+                className="input grow"
+                style={{ marginBottom: 0, borderRadius: 20, height: 40 }}
+                value={input}
+                placeholder={ch.canPost ? t('channel.postPlaceholder') : t('channel.messagePlaceholder')}
+                onChange={(e) => setInput(e.target.value)}
+                onFocus={() => setShowSticker(false)}
+                onKeyDown={(e) => e.key === 'Enter' && send()}
+              />
+            )}
+            <span className="ch-round" style={showSticker ? { background: '#ffe1e7', color: 'var(--accent)' } : undefined} onClick={() => { setShowSticker((v) => !v); setVoiceMode(false); }}>☺</span>
             <span className="ch-round" onClick={() => { setShowAttach(true); setShowSticker(false); }}>+</span>
-            {input.trim() && <button className="btn-sm" style={{ height: 40, borderRadius: 20 }} onClick={send}>{t('common.send')}</button>}
+            {input.trim() && !voiceMode && <button className="btn-sm" style={{ height: 40, borderRadius: 20 }} onClick={send}>{t('common.send')}</button>}
           </div>
           {showSticker && (
             <EmojiPanel
@@ -540,7 +644,7 @@ export function ChannelPage() {
       )}
 
       {showAttach && (
-        <AttachSheet isSingle={false} canVideoCall={false} onClose={() => setShowAttach(false)} onSend={sendMedia} onAction={handleAttach} />
+        <AttachSheet isSingle={false} canVoice canVideoCall={false} onClose={() => setShowAttach(false)} onSend={sendMedia} onAction={handleAttach} />
       )}
       {showInfo && (
         <ChannelInfoSheet

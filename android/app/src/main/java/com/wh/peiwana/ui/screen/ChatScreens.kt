@@ -118,10 +118,18 @@ data class MsgItem(
     val replyTo: ReplyPreview? = null,
     val fwdFrom: String? = null,
     val reactions: List<MsgReaction> = emptyList(),
+    /** 本地刚选的图（content://）：上传期间和发出后都用它显示 */
+    @kotlinx.serialization.Transient val local: String? = null,
+    /** 本地上传任务的 key（进度、失败重试按它找） */
+    @kotlinx.serialization.Transient val upKey: String? = null,
 ) {
-    /** 本地刚发、还没收到服务端 ack（id 还是 tempId） */
-    val pending: Boolean get() = id.startsWith("t_")
+    /** 本地刚发、还没收到服务端 ack（id 还是 tempId，或图片还没传完的 l_ 本地 id） */
+    val pending: Boolean get() = id.startsWith("t_") || id.startsWith("l_")
 }
+
+/** 聊天列表一行的 key：相册按相册 id，本地刚选的图按上传 key（发出、确认换 id 时不重建） */
+internal fun chatRowKey(row: List<MsgItem>): String =
+    if (row.size > 1) "g_" + (parseImage(row[0].content).g ?: row[0].id) else row[0].upKey ?: row[0].id
 
 private fun parseIso(iso: String?): java.time.Instant? =
     if (iso.isNullOrEmpty()) null else runCatching { java.time.Instant.parse(iso) }.getOrNull()
@@ -503,7 +511,10 @@ fun ChatRoomScreen(
     fun removeMsgs(ids: Collection<String>) {
         val todo = ids.toSet() - dying
         if (todo.isEmpty()) return
-        val visible = listState.layoutInfo.visibleItemsInfo.map { it.key.toString() }.toSet()
+        val keys = listState.layoutInfo.visibleItemsInfo.map { it.key.toString() }.toSet()
+        // 相册只删其中几张时不播动画，剩下的重新拼版
+        val visible = groupAlbums(messages).filter { chatRowKey(it) in keys && (it.size == 1 || it.all { m -> m.id in todo }) }
+            .flatten().map { it.id }.toSet()
         val (show, hide) = todo.partition { it in visible }
         if (hide.isNotEmpty()) messages = messages.filterNot { it.id in hide }
         if (show.isEmpty()) return
@@ -514,6 +525,9 @@ fun ChatRoomScreen(
             dying = dying - show.toSet()
         }
     }
+    /** 列表按行排（相册一行），这两个把消息换算成行号 */
+    fun rowIndexOf(id: String) = groupAlbums(messages).indexOfFirst { r -> r.any { it.id == id } }
+    fun lastRow() = (groupAlbums(messages).size - 1).coerceAtLeast(0)
     val ctx = LocalContext.current
     var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
     var recFile by remember { mutableStateOf<File?>(null) }
@@ -663,7 +677,7 @@ fun ChatRoomScreen(
                     val msg = frame["msg"]?.jsonPrimitive?.content ?: t("chat.sendFailed")
                     android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_SHORT).show()
                     val tid = frame["tempId"]?.jsonPrimitive?.content
-                    (if (tid != null) messages.firstOrNull { it.id == tid } else messages.lastOrNull { it.pending })?.let { last -> messages = messages - last }
+                    (if (tid != null) messages.firstOrNull { it.id == tid } else messages.lastOrNull { it.id.startsWith("t_") })?.let { last -> messages = messages - last }
                 }
                 "conv_cleared" -> {
                     // 有人清空了记录（单聊=全部，群聊=其发送的消息）：重新拉取同步
@@ -679,7 +693,7 @@ fun ChatRoomScreen(
         if (focusTarget.isNotEmpty()) {
             val target = focusTarget
             focusTarget = ""
-            val idx = messages.indexOfFirst { it.id == target }
+            val idx = rowIndexOf(target)
             if (idx >= 0) {
                 // 目标消息上方留两条上下文
                 listState.scrollToItem((idx - 2).coerceAtLeast(0))
@@ -688,7 +702,7 @@ fun ChatRoomScreen(
             }
         }
         // 首次进入直接定位到底部，之后新消息平滑滚动
-        listState.scrollToItem(messages.size - 1)
+        listState.scrollToItem(lastRow())
     }
     LaunchedEffect(flashId) {
         if (flashId != null) { kotlinx.coroutines.delay(1600); flashId = null }
@@ -696,14 +710,14 @@ fun ChatRoomScreen(
     // 键盘高度变化时把列表滚到底，内容随键盘上移、最后一条贴着输入框
     val imeBottom = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current)
     LaunchedEffect(imeBottom) {
-        if (messages.isNotEmpty()) runCatching { listState.scrollToItem(messages.size - 1) }
+        if (messages.isNotEmpty()) runCatching { listState.scrollToItem(lastRow()) }
     }
 
     // ---------- 长按菜单的操作 ----------
 
     /** 跳到某条消息（引用 / 置顶）：不在当前列表就按 aroundId 重新拉一段 */
     fun jumpTo(id: String) = scope.launch {
-        val idx = messages.indexOfFirst { it.id == id }
+        val idx = rowIndexOf(id)
         if (idx >= 0) {
             listState.scrollToItem((idx - 2).coerceAtLeast(0))
             flashId = id
@@ -718,7 +732,7 @@ fun ChatRoomScreen(
         if (sameSize) {
             kotlinx.coroutines.delay(50)
             focusTarget = ""
-            listState.scrollToItem((list.indexOfFirst { it.id == id } - 2).coerceAtLeast(0))
+            listState.scrollToItem((rowIndexOf(id) - 2).coerceAtLeast(0))
             flashId = id
         }
     }
@@ -753,7 +767,7 @@ fun ChatRoomScreen(
         onReact = { react(m.id, it) },
         onReply = { replyTo = m; showSticker = false; voiceMode = false; runCatching { inputFocus.requestFocus() } },
         onCopy = if (m.type == "text") ({ copyToClipboard(ctx, m.content) }) else null,
-        onSave = if (m.type == "image" || m.type == "video") ({ scope.launch { saveMediaToGallery(ctx, m.content, m.type) } }) else null,
+        onSave = if (m.type == "image" || m.type == "video") ({ scope.launch { saveMediaToGallery(ctx, if (m.type == "image") imageUrl(m.content) else m.content, m.type) } }) else null,
         onPin = if (canPin) ({ togglePin(m.id, pins.none { it.id == m.id }) }) else null,
         onForward = if (m.type in FORWARDABLE) ({ forwardIds = listOf(m.id) }) else null,
         onReport = if (m.senderId != myUserId) ({ reportId = m.id }) else null,
@@ -767,19 +781,65 @@ fun ChatRoomScreen(
             sendMsg("location", buildJsonObject { put("name", JsonPrimitive(name)); put("lat", JsonPrimitive(lat)); put("lng", JsonPrimitive(lng)) }.toString())
         }
     }
-    // 「+」弹框选的图 / 拍的照：按顺序逐张上传发送，说明文字最后单独发一条
-    fun sendImages(uris: List<Uri>, caption: String) = scope.launch {
-        var failed = 0
-        for (uri in uris) {
-            runCatching {
-                val b = ctx.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
-                val url = Api.upload("image", b, "img.jpg", "image/jpeg")
-                sendMsg("image", url)
-            }.onFailure { failed++ }
+    // ---------- 发图：选好立刻显示（本地预览 + 进度圈），后台最多同时传 3 张，按选择顺序发出；多张合成相册 ----------
+    val uploads = remember { mutableStateMapOf<String, UploadState>() }
+    val upUris = remember { mutableMapOf<String, Uri>() }
+
+    suspend fun uploadOne(key: String): String? {
+        val uri = upUris[key] ?: return null
+        uploads[key] = UploadState(0f)
+        return runCatching {
+            val (bytes, mime) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { compressImage(ctx, uri) }
+            Api.upload("image", bytes, if (mime == "image/gif") "img.gif" else "img.jpg", mime) { p ->
+                if (uploads[key]?.failed == false) uploads[key] = UploadState(p)
+            }
+        }.onSuccess { uploads.remove(key) }
+            .onFailure { uploads[key] = UploadState(failed = true) }
+            .getOrNull()
+    }
+
+    /** 传完的图发出去：本地那条换成 tempId，等 ack；正在回复的引用挂在第一张上 */
+    fun sendUploaded(key: String, url: String): String? {
+        val m = messages.firstOrNull { it.upKey == key } ?: return null
+        val meta = parseImage(m.content)
+        val content = imageContent(url, meta.g, meta.w, meta.h)
+        val tempId = WsClient.send(convType, targetId, "image", content, m.replyTo?.id)
+        messages = messages.map { if (it.upKey == key) it.copy(id = tempId, content = content) else it }
+        upUris.remove(key)
+        return tempId
+    }
+
+    // 「+」弹框选的图 / 拍的照；说明文字等图都发出后单独发一条
+    fun sendImages(uris: List<Uri>, caption: String) {
+        if (uris.isEmpty()) return
+        val g = if (uris.size > 1) newAlbumId() else null
+        val r = replyTo
+        replyTo = null
+        val preview = r?.let { ReplyPreview(it.id, it.senderId, it.senderNickname, it.type, if (it.type == "text") it.content.take(100) else if (it.type == "image") imageUrl(it.content) else "") }
+        scope.launch {
+            val stamp = System.currentTimeMillis()
+            val items = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                uris.mapIndexed { i, uri -> Triple("l_${stamp}_${i}_${(1000..9999).random()}", uri, readImageSize(ctx, uri)) }
+            }
+            val now = java.time.Instant.now().toString()
+            items.forEach { (key, uri, _) -> upUris[key] = uri; uploads[key] = UploadState(0f) }
+            messages = messages + items.mapIndexed { i, (key, uri, wh) ->
+                MsgItem(
+                    key, convId, myUserId, myNickname, myAvatar, null, "image", imageContent("", g, wh.first, wh.second), now,
+                    replyTo = if (i == 0) preview else null, local = uri.toString(), upKey = key,
+                )
+            }
+            ChatUploadScope.launch {
+                uploadInOrder(items.map { it.first }, { uploadOne(it) }, { k, u -> sendUploaded(k, u)?.let { awaitAck(it) } })
+                val text = caption.trim()
+                if (text.isNotEmpty()) sendMsg("text", text)
+            }
         }
-        val text = caption.trim()
-        if (text.isNotEmpty()) sendMsg("text", text)
-        if (failed > 0) android.widget.Toast.makeText(ctx, t("chat.imagesFailed", "n" to failed), android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    fun retryUpload(m: MsgItem) {
+        val key = m.upKey ?: return
+        ChatUploadScope.launch { uploadOne(key)?.let { sendUploaded(key, it) } }
     }
 
     fun startRec() {
@@ -884,6 +944,11 @@ fun ChatRoomScreen(
             )
         }
         val botFresh = bot != null && loaded && messages.isEmpty()
+        // 一行一条消息，同一相册的连续图片合成一行；second 是这行第一条在 messages 里的下标
+        val chatRows = remember(messages) {
+            var start = 0
+            groupAlbums(messages).map { r -> (r to start).also { start += r.size } }
+        }
         LazyColumn(state = listState, modifier = Modifier.weight(1f).padding(horizontal = 12.dp).noRippleClick { showSticker = false; showCmds = false; focus.clearFocus(); keyboard?.hide() }) {
             if (botFresh) item(key = "bot_intro") {
                 val b = bot!!
@@ -903,34 +968,41 @@ fun ChatRoomScreen(
                     )
                 }
             }
-            itemsIndexed(messages, key = { _, m -> m.id }) { idx, m ->
+            items(chatRows, key = { chatRowKey(it.first) }) { (row, idx) ->
+                val m = row[0]
+                val album = if (row.size > 1) row else null
+                val rowIds = row.map { it.id }
                 // 微信式时间分隔条：与上一条间隔超 5 分钟显示
                 if (shouldShowTime(messages, idx)) {
                     Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
                         Text(fmtChatTime(m.createdAt), color = TextDim, fontSize = 11.sp)
                     }
                 }
+                val flashOn = flashId != null && flashId in rowIds
                 val flashBg by androidx.compose.animation.animateColorAsState(
-                    if (flashId == m.id) Accent.copy(alpha = 0.14f) else Color.Transparent,
-                    androidx.compose.animation.core.tween(if (flashId == m.id) 150 else 900), label = "flash",
+                    if (flashOn) Accent.copy(alpha = 0.14f) else Color.Transparent,
+                    androidx.compose.animation.core.tween(if (flashOn) 150 else 900), label = "flash",
                 )
                 val sel = selecting
+                val rowPending = row.any { it.pending }
+                val rowSelected = sel != null && rowIds.all { it in sel }
                 Box(
                     Modifier.fillMaxWidth()
-                        .dustOut(m.id in dying) { messages = messages.filterNot { it.id == m.id }; dying = dying - m.id }
+                        .dustOut(rowIds.all { it in dying }) { messages = messages.filterNot { it.id in rowIds }; dying = dying - rowIds.toSet() }
                         .clip(RoundedCornerShape(8.dp)).background(flashBg),
                 ) {
                     if (sel != null) {
+                        val toggle = { if (!rowPending) selecting = if (rowSelected) sel - rowIds.toSet() else sel + rowIds }
                         Row(
-                            Modifier.fillMaxWidth().noRippleClick { if (!m.pending) selecting = if (m.id in sel) sel - m.id else sel + m.id },
+                            Modifier.fillMaxWidth().noRippleClick(toggle),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            SelectCircle(m.id in sel)
+                            SelectCircle(rowSelected)
                             Spacer(Modifier.width(10.dp))
                             Box(Modifier.weight(1f)) {
-                                Bubble(m, m.senderId == myUserId, convType, myUserId, onImage = {}, onMenu = {}, onReact = {}, onJump = {})
+                                Bubble(m, m.senderId == myUserId, convType, myUserId, onImage = {}, onMenu = {}, onReact = {}, onJump = {}, album = album, uploads = uploads)
                                 // 多选时盖一层，点哪都是勾选
-                                Box(Modifier.matchParentSize().noRippleClick { if (!m.pending) selecting = if (m.id in sel) sel - m.id else sel + m.id })
+                                Box(Modifier.matchParentSize().noRippleClick(toggle))
                             }
                         }
                     } else {
@@ -941,6 +1013,11 @@ fun ChatRoomScreen(
                             onReact = { react(m.id, it) },
                             onJump = { jumpTo(it) },
                             onOpenWallet = onOpenWallet,
+                            album = album,
+                            uploads = uploads,
+                            onItemMenu = { it2 -> if (!it2.pending) { focus.clearFocus(); keyboard?.hide(); menuMsg = it2 } },
+                            onItemReact = { it2, e -> react(it2.id, e) },
+                            onRetry = { retryUpload(it) },
                         )
                     }
                 }
@@ -1084,12 +1161,14 @@ fun ChatRoomScreen(
             // 视频通话仅男方可发起（女方只能接听）
             canVideoCall = com.wh.peiwana.net.Session.gender == 1,
             canTransfer = convType == 1 && bot == null && onOpenWallet != null,
+            canVoice = convType == 2,
             onDismiss = { showAttach = false },
             onSend = { uris, caption -> sendImages(uris, caption) },
             onAction = { a ->
                 when (a) {
                     AttachAction.Gift -> { showGift = true }
                     AttachAction.Transfer -> startTransfer()
+                    AttachAction.Voice -> { voiceMode = true; showSticker = false }
                     AttachAction.Location -> locPerm.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
                     AttachAction.VoiceCall -> onCall(1)
                     AttachAction.VideoCall -> onCall(2)
@@ -1128,7 +1207,7 @@ fun ChatRoomScreen(
     }
     fullImage?.let { u ->
         androidx.compose.ui.window.Dialog(onDismissRequest = { fullImage = null }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
-            val imgs = messages.filter { it.type == "image" }.map { it.content }
+            val imgs = messages.filter { it.type == "image" }.map { it.local ?: imageUrl(it.content) }
             ImageViewer(imgs.ifEmpty { listOf(u) }, imgs.indexOf(u).coerceAtLeast(0), onScanQr = handleScan) { fullImage = null }
         }
     }
@@ -1140,6 +1219,13 @@ private fun Bubble(
     m: MsgItem, mine: Boolean, convType: Int, myId: String,
     onImage: (String) -> Unit, onMenu: () -> Unit, onReact: (String) -> Unit, onJump: (String) -> Unit,
     onOpenWallet: ((String) -> Unit)? = null,
+    /** 多图相册（第一张就是 m） */
+    album: List<MsgItem>? = null,
+    uploads: Map<String, UploadState> = emptyMap(),
+    /** 相册里长按 / 回应的是哪一张 */
+    onItemMenu: (MsgItem) -> Unit = {},
+    onItemReact: (MsgItem, String) -> Unit = { _, _ -> },
+    onRetry: (MsgItem) -> Unit = {},
 ) {
     val menu by rememberUpdatedState(onMenu)
     // 微信式：对方左侧灰气泡，自己右侧主题气泡，头像顶部对齐、贴边尾角
@@ -1162,11 +1248,31 @@ private fun Bubble(
             if (m.fwdFrom != null) Text(t("chat.forwardedFrom", "name" to m.fwdFrom), color = BotBlue, fontSize = 11.sp, modifier = Modifier.padding(bottom = 2.dp, start = 4.dp, end = 4.dp))
             m.replyTo?.let { r -> ReplyQuote(r) { onJump(r.id) } }
             when (m.type) {
-                "image" -> AsyncImage(
-                    model = Api.fullUrl(m.content), contentDescription = null, contentScale = ContentScale.FillWidth,
-                    modifier = Modifier.widthIn(max = 160.dp).clip(RoundedCornerShape(10.dp))
-                        .combinedClickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null, onLongClick = { menu() }) { onImage(m.content) },
-                )
+                "image" -> if (album != null) {
+                    ImageAlbum(
+                        cells = album.map { a ->
+                            val meta = parseImage(a.content)
+                            AlbumCell(a.upKey ?: a.id, imageModel(a.local, a.content), meta.w, meta.h, a.upKey?.let { uploads[it] }, a.pending)
+                        },
+                        width = 240.dp,
+                        onTap = { i -> val a = album[i]; if (a.upKey == null || uploads[a.upKey] == null) onImage(a.local ?: imageUrl(a.content)) },
+                        onLongPress = { i -> onItemMenu(album[i]) },
+                        onRetry = { i -> onRetry(album[i]) },
+                    )
+                } else {
+                    val meta = remember(m.content) { parseImage(m.content) }
+                    val size = singleImageSize(meta.w, meta.h, 200.dp, 260.dp)
+                    Box(Modifier.clip(RoundedCornerShape(10.dp))) {
+                        AsyncImage(
+                            model = imageModel(m.local, m.content), contentDescription = null,
+                            contentScale = if (size != null) ContentScale.Crop else ContentScale.FillWidth,
+                            modifier = (if (size != null) Modifier.size(size.first, size.second) else Modifier.widthIn(max = 160.dp))
+                                .background(Bg3)
+                                .combinedClickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null, onLongClick = { menu() }) { onImage(m.local ?: imageUrl(m.content)) },
+                        )
+                        UploadOverlay(m.upKey?.let { uploads[it] }, m.pending, { onRetry(m) }, Modifier.matchParentSize())
+                    }
+                }
                 "sticker" -> {
                     // 贴纸不画气泡底
                     val p = remember(m.content) { StickerStore.parse(m.content) }
@@ -1249,7 +1355,16 @@ private fun Bubble(
                 else -> Box(modifier = Modifier.clip(bubbleShape).background(bg).padding(horizontal = 14.dp, vertical = 10.dp)) { LinkText(m.content, color = fg, fontSize = 15.sp, lineHeight = 21.sp) }
             }
             InlineKeyboard(m.markup, m.id, Modifier.width(230.dp))
-            ReactionChips(m.reactions, myId, onReact)
+            if (album != null) {
+                // 相册几张图的回应合在一起显示；点的是自己回应过的那张就取消那张的，否则回应第一张
+                val merged = album.flatMap { it.reactions }.groupBy { it.emoji }
+                    .map { (e, rs) -> MsgReaction(e, rs.sumOf { it.count }, rs.flatMap { it.userIds }) }
+                ReactionChips(merged, myId) { e ->
+                    onItemReact(album.firstOrNull { a -> a.reactions.any { it.emoji == e && myId in it.userIds } } ?: album[0], e)
+                }
+            } else ReactionChips(m.reactions, myId, onReact)
+            val failed = (album ?: listOf(m)).any { a -> a.upKey?.let { uploads[it]?.failed } == true }
+            if (failed) Text(t("chat.upload.failed"), color = Danger, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp, start = 4.dp, end = 4.dp))
         }
         if (mine) { Spacer(Modifier.width(8.dp)); Avatar(m.senderAvatar, 38) }
     }
@@ -1345,11 +1460,57 @@ private fun Modifier.pointerInputRecord(onStart: () -> Unit, onStop: () -> Unit)
         })
     }
 
+/**
+ * 取当前位置后回调（地名 + 经纬度）。缓存的位置超过 10 分钟就现取一次（最多等 10 秒，取不到用旧的）；
+ * 一个都没有就提示、不回调（以前会把「位置获取失败」和 0,0 当消息发出去）。
+ */
 @SuppressLint("MissingPermission")
 internal fun sendLocation(ctx: Context, cb: (String, Double, Double) -> Unit) {
-    runCatching {
-        val lm = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        val loc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER) ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-        if (loc != null) cb("我的位置", loc.latitude, loc.longitude) else cb("位置获取失败", 0.0, 0.0)
-    }.onFailure { cb("位置获取失败", 0.0, 0.0) }
+    val lm = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+    val main = android.os.Handler(android.os.Looper.getMainLooper())
+    fun done(loc: android.location.Location?) {
+        if (loc == null) {
+            android.widget.Toast.makeText(ctx, t("msg.locFailed"), android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        // 地名：系统反查（部分国产机没有地理编码服务，就用「我的位置」）
+        Thread {
+            val name = runCatching {
+                if (!android.location.Geocoder.isPresent()) return@runCatching null
+                @Suppress("DEPRECATION")
+                val a = android.location.Geocoder(ctx, java.util.Locale.getDefault()).getFromLocation(loc.latitude, loc.longitude, 1)?.firstOrNull()
+                    ?: return@runCatching null
+                listOfNotNull(a.locality ?: a.adminArea, a.subLocality, a.thoroughfare).distinct().joinToString(" ").ifBlank { null }
+            }.getOrNull() ?: t("chat.myLocation")
+            main.post { cb(name, loc.latitude, loc.longitude) }
+        }.start()
+    }
+    val providers = listOf(LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER)
+        .filter { runCatching { lm.isProviderEnabled(it) }.getOrDefault(false) }
+    val last = (providers + LocationManager.PASSIVE_PROVIDER).mapNotNull { runCatching { lm.getLastKnownLocation(it) }.getOrNull() }.maxByOrNull { it.time }
+    if (providers.isEmpty() || (last != null && System.currentTimeMillis() - last.time < 10 * 60_000)) return done(last)
+    var finished = false
+    val listener = object : android.location.LocationListener {
+        override fun onLocationChanged(location: android.location.Location) {
+            if (finished) return
+            finished = true
+            runCatching { lm.removeUpdates(this) }
+            done(location)
+        }
+        // API 29 及以下这几个没有默认实现，不写会崩
+        @Deprecated("Deprecated in Java")
+        override fun onStatusChanged(provider: String?, status: Int, extras: android.os.Bundle?) {}
+        override fun onProviderEnabled(provider: String) {}
+        override fun onProviderDisabled(provider: String) {}
+    }
+    android.widget.Toast.makeText(ctx, t("chat.locating"), android.widget.Toast.LENGTH_SHORT).show()
+    runCatching { providers.forEach { lm.requestLocationUpdates(it, 0L, 0f, listener, android.os.Looper.getMainLooper()) } }
+        .onFailure { return done(last) }
+    main.postDelayed({
+        if (!finished) {
+            finished = true
+            runCatching { lm.removeUpdates(listener) }
+            done(last)
+        }
+    }, 10_000)
 }

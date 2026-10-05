@@ -5,8 +5,11 @@ import { api } from '../api';
 interface AppModule {
   id?: number;
   name: string;
+  /** 英文名 / 英文简介：App 和网页非中文界面显示，空则显示中文 */
+  nameEn: string;
   icon: string;
   desc: string;
+  descEn: string;
   cover: string;
   type: 'native' | 'h5' | 'game';
   entry: string;
@@ -64,7 +67,7 @@ async function saveTabs() {
 
 function startAdd(type: AppModule['type']) {
   const list = type === 'game' ? games.value : banners.value;
-  editing.value = { name: '', icon: '', desc: '', cover: '', type, entry: '', orientation: 'portrait', sort: list.length + 1, enabled: true, visibleGender: 0 };
+  editing.value = { name: '', nameEn: '', icon: '', desc: '', descEn: '', cover: '', type, entry: '', orientation: 'portrait', sort: list.length + 1, enabled: true, visibleGender: 0 };
 }
 
 async function save() {
@@ -161,7 +164,7 @@ function genderText(g: number) {
         <tbody>
           <tr v-for="m in banners" :key="m.id">
             <td>{{ m.id }}</td>
-            <td>{{ m.name }}</td>
+            <td>{{ m.name }}<div v-if="m.nameEn" class="muted" style="font-size: 12px">{{ m.nameEn }}</div></td>
             <td>{{ m.type }}</td>
             <td class="muted">{{ m.entry }}</td>
             <td>{{ genderText(m.visibleGender) }}</td>
@@ -199,8 +202,8 @@ function genderText(g: number) {
           <tr v-for="m in games" :key="m.id">
             <td>{{ m.id }}</td>
             <td><img v-if="m.icon" :src="m.icon" style="width: 40px; height: 40px; border-radius: 10px; object-fit: cover" /></td>
-            <td>{{ m.name }}</td>
-            <td class="muted" style="max-width: 220px">{{ m.desc }}</td>
+            <td>{{ m.name }}<div v-if="m.nameEn" class="muted" style="font-size: 12px">{{ m.nameEn }}</div></td>
+            <td class="muted" style="max-width: 220px">{{ m.desc }}<div v-if="m.descEn" style="font-size: 12px">{{ m.descEn }}</div></td>
             <td class="muted" style="max-width: 260px; word-break: break-all">{{ m.entry }}</td>
             <td>{{ m.orientation === 'landscape' ? '横屏' : '竖屏' }}</td>
             <td>{{ genderText(m.visibleGender) }}</td>
@@ -253,6 +256,10 @@ function genderText(g: number) {
         <div class="row" style="margin-top: 14px">
           <input v-model="editing.desc" placeholder="游戏说明（一句话，宫格下方展示）" style="width: 560px" maxlength="100" />
         </div>
+        <div class="row" style="flex-wrap: wrap; gap: 14px; margin-top: 14px">
+          <input v-model="editing.nameEn" placeholder="英文名称（英文界面显示，可不填）" style="width: 220px" maxlength="60" />
+          <input v-model="editing.descEn" placeholder="英文说明（英文界面显示，可不填）" style="width: 326px" maxlength="200" />
+        </div>
       </template>
 
       <!-- 横幅项目 -->
@@ -278,6 +285,10 @@ function genderText(g: number) {
             <option :value="2">仅女</option>
           </select>
           <input v-model.number="editing.sort" type="number" placeholder="排序" style="width: 90px" />
+        </div>
+        <div class="row" style="flex-wrap: wrap; gap: 14px; margin-top: 14px">
+          <input v-model="editing.nameEn" placeholder="英文名称（英文界面显示，可不填）" style="width: 220px" maxlength="60" />
+          <input v-model="editing.descEn" placeholder="英文简介（英文界面显示，可不填）" style="width: 326px" maxlength="200" />
         </div>
       </template>
 

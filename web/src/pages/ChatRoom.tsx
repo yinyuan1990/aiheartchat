@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { api, fmtPoints, uploadFile } from '../api';
+import { api, fmtPoints, uploadBlob, uploadFile } from '../api';
+import { groupAlbums, imageContent, imageUrl, newAlbumId, parseImage, readImageSize, shrinkImage, uploadInOrder } from '../album';
+import { AlbumGrid, KeyboardGlyph, UploadMask, UploadState, VoiceHoldButton } from '../components/ChatMedia';
 import { useApp } from '../store';
 import { wsManager, MessagePayload, Reaction, ReplyPreview } from '../ws';
 import { nearestCity } from '../cities';
@@ -22,7 +24,7 @@ import { ScanFlow } from './ChatList';
 import { t } from '../i18n';
 
 /** 消息气泡那一行（不含上面的时间分隔），删除时化成灰 */
-const msgEl = (id: string) => document.getElementById(`msg-${id}`)?.querySelector('.bubble-row');
+const msgEl = (id: string) => document.getElementById(`cell-${id}`) ?? document.getElementById(`msg-${id}`)?.querySelector('.bubble-row');
 
 interface MsgItem {
   id: string;
@@ -40,6 +42,33 @@ interface MsgItem {
   replyTo?: ReplyPreview | null;
   fwdFrom?: string | null;
   reactions?: Reaction[];
+  /** 本地刚选的图：上传期间和发出后都用本地预览显示 */
+  local?: string;
+  /** 本地上传任务的 key（进度、失败重试按它找） */
+  upKey?: string;
+}
+
+/** 图片显示地址：本地预览优先 */
+const imgSrc = (m: MsgItem) => m.local || imageUrl(m.content);
+
+/** 相册几张图的表情回应合在一起显示 */
+function mergeReactions(list: MsgItem[]): Reaction[] {
+  const map = new Map<string, Reaction>();
+  for (const m of list) {
+    for (const r of m.reactions ?? []) {
+      const cur = map.get(r.emoji);
+      if (cur) map.set(r.emoji, { emoji: r.emoji, count: cur.count + r.count, userIds: [...cur.userIds, ...r.userIds] });
+      else map.set(r.emoji, { ...r, userIds: [...r.userIds] });
+    }
+  }
+  return [...map.values()];
+}
+
+/** 单张图按宽高预留尺寸（加载前不跳动） */
+function singleSize(w?: number, h?: number): { width: number; height: number } | undefined {
+  if (!w || !h) return undefined;
+  const s = Math.min(220 / w, 280 / h, 1);
+  return { width: Math.max(60, Math.round(w * s)), height: Math.max(60, Math.round(h * s)) };
 }
 
 /** Web 端点语音/视频弹下载引导 */
@@ -408,21 +437,58 @@ export function AudioBubble({ a }: { a: any }) {
 /** 点这些元素走它们自己的逻辑（看大图、播放、点链接等），不弹消息菜单 */
 const NO_MENU = 'a,img,video,audio,.no-menu,.bot-kb,.react-chips,.reply-quote';
 
-function MsgBubble({ m, mine, convType, myId, onImage, onMenu, onReact, onJump }: {
-  m: MsgItem; mine: boolean; convType: number; myId?: string;
+function MsgBubble({ m, album, mine, convType, myId, uploads, onImage, onMenu, onReact, onJump, onRetry }: {
+  m: MsgItem;
+  /** 多图相册（第一张就是 m） */
+  album?: MsgItem[];
+  mine: boolean; convType: number; myId?: string;
+  uploads?: Record<string, UploadState>;
   onImage: (url: string) => void;
-  onMenu: (x: number, y: number) => void;
-  onReact: (emoji: string) => void;
+  /** target：相册里长按的那一张 */
+  onMenu: (x: number, y: number, target?: MsgItem) => void;
+  onReact: (emoji: string, target?: MsgItem) => void;
   onJump: (id: string) => void;
+  onRetry?: (m: MsgItem) => void;
 }) {
   const press = useRef<ReturnType<typeof setTimeout>>();
   const pressed = useRef(false);
   const isMedia = m.type === 'image' || m.type === 'video' || m.type === 'sticker' || m.type === 'transfer' || m.type === 'callout' || m.type === 'payreq' || m.type === 'perp';
+  const all = album ?? [m];
+  const targetOf = (el: EventTarget | null) => {
+    const i = Number((el as Element | null)?.closest?.('[data-album-i]')?.getAttribute('data-album-i'));
+    return album && Number.isInteger(i) ? album[i] : undefined;
+  };
   let body: JSX.Element;
   switch (m.type) {
-    case 'image':
-      body = <img src={m.content} alt="" style={{ cursor: 'pointer' }} onClick={() => onImage(m.content)} />;
+    case 'image': {
+      if (album) {
+        body = (
+          <AlbumGrid
+            width={240}
+            cells={album.map((a, i) => {
+              const meta = parseImage(a.content);
+              return {
+                key: a.upKey ?? a.tempId ?? a.id, src: imgSrc(a), w: meta.w, h: meta.h,
+                state: a.upKey ? uploads?.[a.upKey] : undefined, sending: a.pending,
+                domId: `cell-${a.id}`,
+              };
+            })}
+            onTap={(i) => !album[i].upKey || !uploads?.[album[i].upKey!] ? onImage(imgSrc(album[i])) : undefined}
+            onRetry={(i) => onRetry?.(album[i])}
+          />
+        );
+      } else {
+        const meta = parseImage(m.content);
+        const size = singleSize(meta.w, meta.h);
+        body = (
+          <span className="img-wrap">
+            <img src={imgSrc(m)} alt="" style={{ cursor: 'pointer', ...(size ? { ...size, objectFit: 'cover' } : {}) }} onClick={() => onImage(imgSrc(m))} />
+            <UploadMask state={m.upKey ? uploads?.[m.upKey] : undefined} sending={m.pending} onRetry={() => onRetry?.(m)} />
+          </span>
+        );
+      }
       break;
+    }
     case 'sticker': {
       const p = parseSticker(m.content);
       // GIF 比贴纸大一号、带圆角；贴纸不画气泡底
@@ -507,29 +573,40 @@ function MsgBubble({ m, mine, convType, myId, onImage, onMenu, onReact, onJump }
         onClick={(e) => {
           if (pressed.current) { pressed.current = false; return; }
           if ((e.target as Element).closest(NO_MENU)) return;
-          onMenu(e.clientX, e.clientY);
+          onMenu(e.clientX, e.clientY, targetOf(e.target));
         }}
-        onContextMenu={(e) => { e.preventDefault(); onMenu(e.clientX, e.clientY); }}
+        onContextMenu={(e) => { e.preventDefault(); onMenu(e.clientX, e.clientY, targetOf(e.target)); }}
         onTouchStart={(e) => {
           const touch = e.touches[0];
+          const target = targetOf(e.target);
           pressed.current = false;
-          press.current = setTimeout(() => { pressed.current = true; onMenu(touch.clientX, touch.clientY); }, 450);
+          press.current = setTimeout(() => { pressed.current = true; onMenu(touch.clientX, touch.clientY, target); }, 450);
         }}
         onTouchMove={() => clearTimeout(press.current)}
         onTouchEnd={() => clearTimeout(press.current)}
       >
         {/* 对齐 iOS：只显示对方昵称，自己的不显示 */}
         {!mine && <div className="small" style={{ marginBottom: 3 }}>{m.senderNickname}{m.senderIsBot && convType === 2 && <span className="bot-tag">{t('chat.bot')}</span>}</div>}
-        <div className={`bubble ${mine ? 'mine' : 'theirs'}${isMedia ? ' media' : ''}`} style={{ opacity: m.pending ? 0.6 : 1 }}>
+        <div className={`bubble ${mine ? 'mine' : 'theirs'}${isMedia ? ' media' : ''}`} style={{ opacity: m.pending && m.type !== 'image' ? 0.6 : 1 }}>
           {m.fwdFrom && <div className="fwd-from">{t('msg.fwdFrom', { name: m.fwdFrom })}</div>}
           {m.replyTo && <ReplyQuote r={m.replyTo} onClick={() => onJump(m.replyTo!.id)} />}
           {body}
         </div>
         {m.markup && <InlineKeyboard markup={m.markup} messageId={m.id} />}
-        <ReactionChips reactions={m.reactions} myId={myId} onToggle={onReact} />
+        <ReactionChips
+          reactions={album ? mergeReactions(album) : m.reactions}
+          myId={myId}
+          onToggle={(e) => onReact(e, album && myId ? album.find((a) => a.reactions?.some((r) => r.emoji === e && r.userIds.includes(myId))) : undefined)}
+        />
         <div className="msg-meta" style={{ justifyContent: mine ? 'flex-end' : 'flex-start' }}>
-          {m.pending && <span>{t('msg.sending')}</span>}
-          {mine && convType === 1 && !m.pending && <span className={m.isRead ? '' : 'accent'}>{m.isRead ? t('msg.read') : t('msg.unread')}</span>}
+          {all.some((a) => a.pending) && (
+            all.some((a) => a.upKey && uploads?.[a.upKey]?.failed)
+              ? <span style={{ color: 'var(--danger)' }}>{t('chat.upload.failed')}</span>
+              : <span>{all.some((a) => a.upKey && uploads?.[a.upKey]) ? t('chat.upload.uploading') : t('msg.sending')}</span>
+          )}
+          {mine && convType === 1 && !all.some((a) => a.pending) && (
+            <span className={all.every((a) => a.isRead) ? '' : 'accent'}>{all.every((a) => a.isRead) ? t('msg.read') : t('msg.unread')}</span>
+          )}
         </div>
       </div>
       {mine && avatar}
@@ -545,6 +622,8 @@ export function ChatRoomPage() {
   const state = (location.state ?? {}) as { title?: string; convType?: number; targetId?: string; focusMsgId?: string; isBot?: boolean };
 
   const [messages, setMessages] = useState<MsgItem[]>([]);
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
   const [loaded, setLoaded] = useState(false);
   const [bot, setBot] = useState<BotPublic | null>(null);
   // 合约喊单卡片：告诉服务端这个聊天里在看哪些卡片，它每 3 秒推实时状态（PerpCard 收 perpTick）
@@ -561,6 +640,10 @@ export function ChatRoomPage() {
   const [navMenu, setNavMenu] = useState(false);
   const [showAttach, setShowAttach] = useState(false);
   const [showSticker, setShowSticker] = useState(false);
+  const [voiceMode, setVoiceMode] = useState(false);
+  /** 本地图片上传任务：进度 / 失败；原文件留着给失败重试 */
+  const [uploads, setUploads] = useState<Record<string, UploadState>>({});
+  const upFiles = useRef<Record<string, File>>({});
   const inputRef = useRef<HTMLInputElement>(null);
   const [fullImage, setFullImage] = useState<string | null>(null);
   /** 大图里认出的二维码，交给 ScanFlow 统一处理 */
@@ -600,7 +683,7 @@ export function ChatRoomPage() {
   };
 
   const flash = (id: string) => {
-    const el = document.getElementById(`msg-${id}`);
+    const el = document.getElementById(`msg-${id}`) ?? document.getElementById(`cell-${id}`);
     if (!el) return false;
     el.scrollIntoView({ block: 'center' });
     setFlashId(id);
@@ -683,7 +766,7 @@ export function ChatRoomPage() {
         )));
       } else if (frame.op === 'error') {
         // 发送被后端拒绝（如积分不足）：提示并撤回乐观显示的消息
-        setMessages((prev) => prev.filter((m) => !(m.pending && (frame.tempId ? m.tempId === frame.tempId : true))));
+        setMessages((prev) => prev.filter((m) => !(m.pending && m.tempId && (frame.tempId ? m.tempId === frame.tempId : true))));
         showToast(frame.msg ?? t('msg.sendFailed'));
       } else if (frame.op === 'read' && frame.conversationId === conversationId) {
         // 对方已读：把我发出的、id 不大于回执 msgId 的消息标记为已读
@@ -720,11 +803,94 @@ export function ChatRoomPage() {
     setMessages((prev) => [...prev, {
       id: tempId, tempId, senderId: me.id, senderNickname: me.nickname, senderAvatar: me.avatar,
       type: msgType, content, createdAt: new Date().toISOString(), pending: true,
-      replyTo: r ? {
-        id: r.id, senderId: r.senderId, senderNickname: r.senderNickname, type: r.type,
-        content: r.type === 'text' ? r.content.slice(0, 100) : r.type === 'image' ? r.content : '',
-      } : null,
+      replyTo: r ? replyPreview(r) : null,
     }]);
+  };
+
+  const replyPreview = (r: MsgItem): ReplyPreview => ({
+    id: r.id, senderId: r.senderId, senderNickname: r.senderNickname, type: r.type,
+    content: r.type === 'text' ? r.content.slice(0, 100) : r.type === 'image' ? imageUrl(r.content) : '',
+  });
+
+  const setUpload = (key: string, s: UploadState | null) => setUploads((u) => {
+    const n = { ...u };
+    if (s) n[key] = s; else delete n[key];
+    return n;
+  });
+
+  /** 上传一张本地图；成功返回地址，失败标红等重试 */
+  const uploadOne = async (key: string): Promise<string | null> => {
+    const file = upFiles.current[key];
+    if (!file) return null;
+    setUpload(key, { progress: 0 });
+    try {
+      const blob = await shrinkImage(file);
+      let last = 0;
+      const url = await uploadBlob('image', blob, 'img.jpg', (p) => {
+        if (p - last < 0.02 && p < 1) return;
+        last = p;
+        setUpload(key, { progress: p });
+      });
+      setUpload(key, null);
+      return url;
+    } catch {
+      setUpload(key, { failed: true });
+      return null;
+    }
+  };
+
+  /** 传完的图发出去：本地那条换成 tempId，等 ack */
+  const sendUploaded = (key: string, url: string) => {
+    const m = messagesRef.current.find((x) => x.upKey === key);
+    if (!m || !state.targetId) return;
+    const content = imageContent(url, parseImage(m.content));
+    const tempId = wsManager.send((state.convType as 1 | 2) ?? 1, state.targetId, 'image', content, m.replyTo?.id);
+    setMessages((prev) => prev.map((x) => (x.upKey === key ? { ...x, id: tempId, tempId, content } : x)));
+    delete upFiles.current[key];
+    return wsManager.waitAck(tempId);
+  };
+
+  /** 选好的图立刻显示（本地预览 + 进度圈），后台最多同时传 3 张，按选择顺序发出；多张合成一个相册 */
+  const sendImages = async (files: File[]) => {
+    if (!me || !files.length) return;
+    const g = files.length > 1 ? newAlbumId() : undefined;
+    const r = replyRef.current;
+    replyRef.current = null;
+    if (r) setReplyTo(null);
+    const items = await Promise.all(files.map(async (file, i) => {
+      const local = URL.createObjectURL(file);
+      const { w, h } = await readImageSize(local);
+      const key = `l_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`;
+      upFiles.current[key] = file;
+      return { key, local, w, h };
+    }));
+    const now = new Date().toISOString();
+    setMessages((prev) => [...prev, ...items.map((it, i): MsgItem => ({
+      id: it.key, upKey: it.key, local: it.local, senderId: me.id, senderNickname: me.nickname, senderAvatar: me.avatar,
+      type: 'image', content: imageContent('', { g, w: it.w, h: it.h }), createdAt: now, pending: true,
+      replyTo: i === 0 && r ? replyPreview(r) : null,
+    }))]);
+    setUploads((u) => ({ ...u, ...Object.fromEntries(items.map((it) => [it.key, { progress: 0 }])) }));
+    await uploadInOrder(items.map((it) => it.key), uploadOne, sendUploaded);
+  };
+
+  const retryUpload = async (m: MsgItem) => {
+    if (!m.upKey) return;
+    const url = await uploadOne(m.upKey);
+    if (url) sendUploaded(m.upKey, url);
+  };
+
+  // 离开页面时释放本地预览
+  useEffect(() => () => messagesRef.current.forEach((m) => m.local && URL.revokeObjectURL(m.local)), []);
+
+  const sendVoice = async (blob: Blob, duration: number) => {
+    try {
+      const ext = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm';
+      const url = await uploadBlob('audio', blob, `voice.${ext}`);
+      sendRaw('audio', JSON.stringify({ url, duration }));
+    } catch (e: any) {
+      showToast(e.message || t('msg.sendFailed'));
+    }
   };
 
   // ---------- 长按菜单 ----------
@@ -760,7 +926,7 @@ export function ChatRoomPage() {
     onReact: (e) => react(m.id, e),
     onReply: () => { setReplyTo(m); setShowSticker(false); setTimeout(() => inputRef.current?.focus(), 0); },
     onCopy: m.type === 'text' ? () => copyText(m.content) : undefined,
-    onSave: m.type === 'image' || m.type === 'video' ? () => saveMedia(m.content, m.type) : undefined,
+    onSave: m.type === 'image' || m.type === 'video' ? () => saveMedia(m.type === 'image' ? imageUrl(m.content) : m.content, m.type) : undefined,
     onPin: canPin ? () => togglePin(m.id, !pins.some((p) => p.id === m.id)) : undefined,
     onForward: FORWARDABLE.has(m.type) ? () => setForwardIds([m.id]) : undefined,
     onReport: !isMine(m) ? () => setReportId(m.id) : undefined,
@@ -786,10 +952,11 @@ export function ChatRoomPage() {
   };
 
   const selected = selecting ? messages.filter((m) => selecting.has(m.id)) : [];
-  const toggleSelect = (id: string) => setSelecting((s) => {
+  /** on 不传 = 切换；相册整组勾选时传 on */
+  const toggleSelect = (id: string, on?: boolean) => setSelecting((s) => {
     if (!s) return s;
     const n = new Set(s);
-    n.has(id) ? n.delete(id) : n.add(id);
+    if (on ?? !n.has(id)) n.add(id); else n.delete(id);
     return n;
   });
   const copySelected = () => {
@@ -831,16 +998,18 @@ export function ChatRoomPage() {
 
   /** 「+」弹框选的图 / 视频：按顺序逐个上传发送，说明文字最后单独发一条 */
   const sendMedia = async (files: File[], caption: string) => {
+    const images = files.filter((f) => !f.type.startsWith('video'));
+    const videos = files.filter((f) => f.type.startsWith('video'));
+    const imagesDone = sendImages(images);
     let failed = 0;
-    for (const file of files) {
+    for (const file of videos) {
       try {
-        const isVideo = file.type.startsWith('video');
-        const url = await uploadFile(isVideo ? 'video' : 'image', file);
-        sendRaw(isVideo ? 'video' : 'image', url);
+        sendRaw('video', await uploadFile('video', file));
       } catch {
         failed++;
       }
     }
+    await imagesDone;
     if (caption.trim()) sendRaw('text', caption.trim());
     if (failed) showToast(t('msg.filesFailed', { n: failed }));
   };
@@ -848,6 +1017,7 @@ export function ChatRoomPage() {
   const handleAttach = (a: AttachAction) => {
     if (a === 'gift') setShowGift(true);
     else if (a === 'location') sendLocation();
+    else if (a === 'voice') { setVoiceMode(true); setShowSticker(false); }
     else setShowDownload(true);
   };
 
@@ -917,38 +1087,53 @@ export function ChatRoomPage() {
             <div style={{ fontSize: 14, marginTop: 12, whiteSpace: 'pre-wrap', lineHeight: 1.6, textAlign: 'left' }}>{bot.description || t('chat.botIntro')}</div>
           </div>
         )}
-        {messages.map((m, i) => {
-          // 微信式时间分隔条：与上一条间隔超 5 分钟显示
-          const prev = i > 0 ? new Date(messages[i - 1].createdAt).getTime() : 0;
-          const cur = new Date(m.createdAt).getTime();
-          const showTime = !!m.createdAt && !Number.isNaN(cur) && (i === 0 || cur - prev > 5 * 60 * 1000);
-          return (
-            <div key={m.tempId ?? m.id} id={`msg-${m.id}`} className={flashId === m.id ? 'msg-flash' : undefined}>
-              {showTime && (
-                <div style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-3)', padding: '8px 0' }}>
-                  {formatTime(m.createdAt)}
-                </div>
-              )}
-              {selecting ? (
-                <div className="sel-row" onClick={() => !m.pending && toggleSelect(m.id)}>
-                  <span className={`sel-circle${selecting.has(m.id) ? ' on' : ''}`}>{selecting.has(m.id) ? '✓' : ''}</span>
-                  <MsgBubble m={m} mine={isMine(m)} convType={state.convType ?? 1} myId={me?.id} onImage={() => {}} onMenu={() => {}} onReact={() => {}} onJump={() => {}} />
-                </div>
-              ) : (
-                <MsgBubble
-                  m={m}
-                  mine={isMine(m)}
-                  convType={state.convType ?? 1}
-                  myId={me?.id}
-                  onImage={setFullImage}
-                  onMenu={(x, y) => !m.pending && setMenu({ m, x, y })}
-                  onReact={(e) => react(m.id, e)}
-                  onJump={jumpTo}
-                />
-              )}
-            </div>
-          );
-        })}
+        {(() => {
+          let idx = 0;
+          return groupAlbums(messages).map((row) => {
+            const m = row[0];
+            const i = idx;
+            idx += row.length;
+            const album = row.length > 1 ? row : undefined;
+            // 微信式时间分隔条：与上一条间隔超 5 分钟显示
+            const prev = i > 0 ? new Date(messages[i - 1].createdAt).getTime() : 0;
+            const cur = new Date(m.createdAt).getTime();
+            const showTime = !!m.createdAt && !Number.isNaN(cur) && (i === 0 || cur - prev > 5 * 60 * 1000);
+            const g = album ? parseImage(m.content).g : undefined;
+            const allSel = !!selecting && row.every((x) => selecting.has(x.id));
+            return (
+              <div key={g ? `g_${g}` : m.tempId ?? m.upKey ?? m.id} id={`msg-${m.id}`} className={flashId && row.some((x) => x.id === flashId) ? 'msg-flash' : undefined}>
+                {showTime && (
+                  <div style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-3)', padding: '8px 0' }}>
+                    {formatTime(m.createdAt)}
+                  </div>
+                )}
+                {selecting ? (
+                  <div className="sel-row" onClick={() => !row.some((x) => x.pending) && row.forEach((x) => toggleSelect(x.id, !allSel))}>
+                    <span className={`sel-circle${allSel ? ' on' : ''}`}>{allSel ? '✓' : ''}</span>
+                    <MsgBubble m={m} album={album} mine={isMine(m)} convType={state.convType ?? 1} myId={me?.id} uploads={uploads} onImage={() => {}} onMenu={() => {}} onReact={() => {}} onJump={() => {}} />
+                  </div>
+                ) : (
+                  <MsgBubble
+                    m={m}
+                    album={album}
+                    mine={isMine(m)}
+                    convType={state.convType ?? 1}
+                    myId={me?.id}
+                    uploads={uploads}
+                    onImage={setFullImage}
+                    onMenu={(x, y, target) => {
+                      const tm = target ?? m;
+                      if (!tm.pending) setMenu({ m: tm, x, y });
+                    }}
+                    onReact={(e, target) => react((target ?? m).id, e)}
+                    onJump={jumpTo}
+                    onRetry={retryUpload}
+                  />
+                )}
+              </div>
+            );
+          });
+        })()}
         <div ref={bottomRef} />
       </div>
 
@@ -981,25 +1166,36 @@ export function ChatRoomPage() {
               onClick={() => { setShowCmds((v) => !v); setShowSticker(false); }}
             >/</span>
           )}
-          <input
-            ref={inputRef}
-            className="input grow"
-            style={{ marginBottom: 0, borderRadius: 20, height: 40 }}
-            value={input}
-            placeholder={t('chat.inputPlaceholder')}
-            onChange={(e) => setInput(e.target.value)}
-            onFocus={() => setShowSticker(false)}
-            onKeyDown={(e) => e.key === 'Enter' && send()}
-          />
+          <span
+            title={voiceMode ? t('chat.voice.keyboard') : t('msg.voice')}
+            style={{ width: 40, height: 40, borderRadius: 20, flexShrink: 0, background: 'var(--bg-input)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-2)' }}
+            onClick={() => { setVoiceMode((v) => !v); setShowSticker(false); if (voiceMode) setTimeout(() => inputRef.current?.focus(), 0); }}
+          >
+            {voiceMode ? <KeyboardGlyph /> : <span className="voice-bars"><span /><span /><span /></span>}
+          </span>
+          {voiceMode ? (
+            <VoiceHoldButton onSend={sendVoice} onError={showToast} />
+          ) : (
+            <input
+              ref={inputRef}
+              className="input grow"
+              style={{ marginBottom: 0, borderRadius: 20, height: 40 }}
+              value={input}
+              placeholder={t('chat.inputPlaceholder')}
+              onChange={(e) => setInput(e.target.value)}
+              onFocus={() => setShowSticker(false)}
+              onKeyDown={(e) => e.key === 'Enter' && send()}
+            />
+          )}
           <span
             style={{ width: 40, height: 40, borderRadius: 20, flexShrink: 0, background: showSticker ? '#ffe1e7' : 'var(--bg-input)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: showSticker ? 'var(--accent)' : 'var(--text-2)', fontSize: 22 }}
-            onClick={() => setShowSticker((v) => !v)}
+            onClick={() => { setShowSticker((v) => !v); setVoiceMode(false); }}
           >☺</span>
           <span
             style={{ width: 40, height: 40, borderRadius: 20, flexShrink: 0, background: 'var(--bg-input)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-2)', fontSize: 20 }}
             onClick={() => { setShowAttach(true); setShowSticker(false); }}
           >+</span>
-          {input.trim() && (
+          {input.trim() && !voiceMode && (
             <button className="btn-sm" style={{ height: 40, borderRadius: 20, flexShrink: 0 }} onClick={send}>{t('common.send')}</button>
           )}
         </div>
@@ -1017,6 +1213,7 @@ export function ChatRoomPage() {
       {showAttach && (
         <AttachSheet
           isSingle={state.convType === 1 && !bot}
+          canVoice={state.convType === 2}
           canVideoCall={me?.gender === 1}
           onClose={() => setShowAttach(false)}
           onSend={sendMedia}

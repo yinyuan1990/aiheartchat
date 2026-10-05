@@ -389,7 +389,7 @@ export class AdminController {
 
   @Put('gallery/settings')
   @UseGuards(AdminGuard)
-  gallerySaveSettings(@Body() body: { titleM?: string; titleF?: string; daysM?: number; daysF?: number; hideTextM?: boolean; hideTextF?: boolean }) {
+  gallerySaveSettings(@Body() body: { titleM?: string; titleF?: string; titleEnM?: string; titleEnF?: string; daysM?: number; daysF?: number; hideTextM?: boolean; hideTextF?: boolean }) {
     return this.gallery.saveSettings(body ?? {});
   }
 
@@ -915,7 +915,7 @@ export class AdminController {
   @UseGuards(AdminGuard)
   upsertModule(
     @Body() body: {
-      id?: number; name: string; icon?: string; desc?: string; cover?: string; type: string; entry: string;
+      id?: number; name: string; nameEn?: string; icon?: string; desc?: string; descEn?: string; cover?: string; type: string; entry: string;
       orientation?: string; sort?: number; enabled?: boolean; visibleGender?: number;
     },
   ) {

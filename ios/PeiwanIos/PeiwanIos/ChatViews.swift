@@ -58,6 +58,8 @@ struct MsgItem: Codable, Identifiable {
     var replyTo: ReplyPreview? = nil
     var fwdFrom: String? = nil
     var reactions: [MsgReaction]? = nil
+    /// 本地刚选的图：上传任务的 key（预览图、进度、失败重试按它找）
+    var upKey: String? = nil
 
     var pending: Bool { id.hasPrefix("t_") || id.hasPrefix("local_") }
 }
@@ -463,7 +465,7 @@ final class VoiceRecorder {
 }
 
 /// 录音中悬浮提示：实时音量波形 + 计时（微信式），避免看起来像卡死
-private struct RecordingOverlay: View {
+struct RecordingOverlay: View {
     let recorder: VoiceRecorder
     @State private var levels: [CGFloat] = Array(repeating: 0, count: 24)
     @State private var seconds = 0
@@ -552,8 +554,18 @@ struct ChatRoomView: View {
     @State private var transferAddr: ChainAddr?
     @State private var transferPick: String?
     @State private var scannedQr: String?
+    // 发图：本地预览、上传进度 / 失败、待传的原图（按 upKey）
+    @State private var localImages: [String: UIImage] = [:]
+    @State private var uploads: [String: UploadState] = [:]
+    @State private var upSources: [String: UploadSource] = [:]
 
     private var myId: String { state.user?.id ?? "" }
+    private var rows: [ChatRow] { groupAlbums(messages) }
+
+    /// 滚动定位用的行 id（相册按第一张）
+    private func anchorId(_ id: String) -> String {
+        rows.first(where: { r in r.items.contains(where: { $0.id == id }) })?.first.id ?? id
+    }
     private var isGroupAdmin: Bool { convType == 2 && (myRole == "owner" || myRole == "admin") }
     private var canPin: Bool { convType == 1 || isGroupAdmin }
     private var perpIds: [String] { messages.filter { $0.type == "perp" && !$0.pending }.map { $0.id } }
@@ -655,19 +667,8 @@ struct ChatRoomView: View {
     private var messageStack: some View {
         LazyVStack(spacing: 0) {
             if botFresh, let b = bot { botIntro(b) }
-            ForEach(Array(messages.enumerated()), id: \.element.id) { idx, m in
-                // 微信式时间分隔条：与上一条间隔超 5 分钟显示
-                if shouldShowTime(idx) {
-                    Text(fmtTime(m.createdAt))
-                        .font(.system(size: 11)).foregroundStyle(Theme.textDim)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                }
-                DustOut(dying: dying.contains(m.id), onGone: { msgGone(m.id) }) {
-                    messageRow(m)
-                }
-                .background(RoundedRectangle(cornerRadius: 8).fill(flashId == m.id ? Theme.accent.opacity(0.14) : Color.clear))
-                .id(m.id)
+            ForEach(rows) { row in
+                rowView(row)
             }
             Color.clear.frame(height: 1).id(Self.bottomId)
         }
@@ -675,6 +676,27 @@ struct ChatRoomView: View {
     }
 
     private static let bottomId = "chat-bottom"
+
+    /// 一行：时间分隔条（与上一条间隔超 5 分钟）+ 气泡（相册一行多张）
+    private func rowView(_ row: ChatRow) -> some View {
+        let m = row.first
+        let ids = row.items.map(\.id)
+        let flashOn = flashId.map { ids.contains($0) } ?? false
+        let allDying = ids.allSatisfy { dying.contains($0) }
+        return VStack(spacing: 0) {
+            if shouldShowTime(row.start) {
+                Text(fmtTime(m.createdAt))
+                    .font(.system(size: 11)).foregroundStyle(Theme.textDim)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+            }
+            DustOut(dying: allDying, onGone: { for id in ids { msgGone(id) } }) {
+                messageRow(row)
+            }
+            .background(RoundedRectangle(cornerRadius: 8).fill(flashOn ? Theme.accent.opacity(0.14) : Color.clear))
+        }
+        .id(m.id)
+    }
 
     /// 滚到底。LazyVStack 里没量过的行只是估算高度，图片 / 卡片随后才撑开，滚一次常常停在半路：
     /// 刚进聊天时隔几下再滚，直到布局稳定
@@ -692,7 +714,8 @@ struct ChatRoomView: View {
         .onChange(of: jumpReq) { id in
             guard let id else { return }
             jumpReq = nil
-            DispatchQueue.main.async { withAnimation { proxy.scrollTo(id, anchor: .center) } }
+            let anchor = anchorId(id)
+            DispatchQueue.main.async { withAnimation { proxy.scrollTo(anchor, anchor: .center) } }
             withAnimation(.easeOut(duration: 0.15)) { flashId = id }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
                 withAnimation(.easeOut(duration: 0.9)) { if flashId == id { flashId = nil } }
@@ -708,7 +731,8 @@ struct ChatRoomView: View {
                 focusPending = false
                 first = true
                 if let fid = focusMsgId, messages.contains(where: { $0.id == fid }) {
-                    DispatchQueue.main.async { proxy.scrollTo(fid, anchor: .center) }
+                    let anchor = anchorId(fid)
+                    DispatchQueue.main.async { proxy.scrollTo(anchor, anchor: .center) }
                     withAnimation(.easeOut(duration: 0.15)) { flashId = fid }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
                         withAnimation(.easeOut(duration: 0.9)) { flashId = nil }
@@ -827,6 +851,7 @@ struct ChatRoomView: View {
                 isSingle: convType == 1 && bot == nil,
                 canVideoCall: state.user?.gender == 1,
                 canTransfer: convType == 1 && bot == nil && walletOk,
+                canVoice: convType == 2,
                 onClose: { showAttach = false },
                 onSendAssets: sendAttachAssets,
                 onSendDatas: sendAttachDatas,
@@ -844,7 +869,7 @@ struct ChatRoomView: View {
                 .compatDetents(height: 440)
         }
         .fullScreenCover(item: $fullImage) { img in
-            let imgs = messages.filter { $0.type == "image" }.map(\.content)
+            let imgs = messages.filter { $0.type == "image" }.map { imageUrlOf($0.content) }.filter { !$0.isEmpty }
             ImageViewerView(images: imgs.isEmpty ? [img] : imgs, initial: max(0, imgs.firstIndex(of: img) ?? 0), onScanQr: onImageQr) {
                 fullImage = nil
             }
@@ -899,7 +924,7 @@ struct ChatRoomView: View {
             // 发送被后端拒绝（如积分不足）：提示并撤回乐观显示的消息
             toastMsg = frame["msg"] as? String ?? t("chat.sendFailed")
             let tid = frame["tempId"] as? String
-            let idx = tid != nil ? messages.firstIndex(where: { $0.id == tid }) : messages.lastIndex(where: { $0.pending })
+            let idx = tid != nil ? messages.firstIndex(where: { $0.id == tid }) : messages.lastIndex(where: { $0.id.hasPrefix("t_") })
             if let idx {
                 messages.remove(at: idx)
             }
@@ -1138,6 +1163,7 @@ struct ChatRoomView: View {
             switch action {
             case .gift: showGift = true
             case .transfer: startTransfer()
+            case .voice: voiceMode = true; showSticker = false
             case .location: sendLocation()
             case .voiceCall: startCallWithPermissions(calleeId: targetId, type: 1, name: title, avatar: peerAvatar)
             // 视频通话仅男方可发起（女方只能接听），弹框里已按性别隐藏入口
@@ -1146,36 +1172,113 @@ struct ChatRoomView: View {
         }
     }
 
-    /// 相册多选：按选择顺序逐张上传发送，说明文字最后单独发一条
+    // MARK: - 发图：选好立刻显示（本地预览 + 进度圈），后台最多同时传 3 张，按选择顺序发出；多张合成相册
+
     private func sendAttachAssets(_ assets: [PHAsset], caption: String) {
         showAttach = false
-        Task {
-            var datas: [Data] = []
-            for a in assets {
-                if let d = await AttachMedia.jpegData(a) { datas.append(d) }
+        let items: [(String, UploadSource, Int, Int)] = assets.map { a in
+            (newUploadKey(), UploadSource.asset(a), a.pixelWidth, a.pixelHeight)
+        }
+        startImageSend(items, caption: caption)
+        for (i, a) in assets.enumerated() {
+            let key = items[i].0
+            Task { @MainActor in
+                if localImages[key] == nil, let img = await AttachMedia.preview(a) { localImages[key] = img }
             }
-            await uploadAndSend(datas, caption: caption, expected: assets.count)
         }
     }
 
     private func sendAttachDatas(_ datas: [Data], caption: String) {
         showAttach = false
-        Task { await uploadAndSend(datas, caption: caption, expected: datas.count) }
+        var items: [(String, UploadSource, Int, Int)] = []
+        for d in datas {
+            let key = newUploadKey()
+            let img = UIImage(data: d)
+            if let img { localImages[key] = img }
+            items.append((key, UploadSource.data(d), Int(img?.size.width ?? 0), Int(img?.size.height ?? 0)))
+        }
+        startImageSend(items, caption: caption)
+    }
+
+    private func newUploadKey() -> String {
+        "local_\(UUID().uuidString.prefix(12))"
+    }
+
+    /// items：(upKey, 原图, 宽, 高)
+    private func startImageSend(_ items: [(String, UploadSource, Int, Int)], caption: String) {
+        guard !items.isEmpty else { return }
+        let g: String? = items.count > 1 ? newAlbumId() : nil
+        let r = replyTo
+        replyTo = nil
+        let preview = r.map {
+            ReplyPreview(id: $0.id, senderId: $0.senderId, senderNickname: $0.senderNickname, type: $0.type,
+                         content: $0.type == "text" ? String($0.content.prefix(100)) : ($0.type == "image" ? imageUrlOf($0.content) : ""))
+        }
+        let now = ISO8601DateFormatter().string(from: Date())
+        for (i, it) in items.enumerated() {
+            upSources[it.0] = it.1
+            uploads[it.0] = UploadState()
+            messages.append(MsgItem(
+                id: it.0, conversationId: convId, senderId: myId,
+                senderNickname: state.user?.nickname ?? "", senderAvatar: state.user?.avatar ?? "",
+                receiverId: nil, type: "image", content: imageContent("", g: g, w: it.2, h: it.3),
+                createdAt: now, replyTo: i == 0 ? preview : nil, upKey: it.0
+            ))
+        }
+        let keys = items.map { $0.0 }
+        let text = caption.trimmingCharacters(in: .whitespacesAndNewlines)
+        Task { @MainActor in
+            await uploadInOrder(keys, upload: { k in await uploadOne(k) }, send: { k, url in
+                if let tid = sendUploaded(k, url) { _ = await awaitAck(tid) }
+            })
+            if !text.isEmpty { sendMsg("text", text) }
+        }
     }
 
     @MainActor
-    private func uploadAndSend(_ datas: [Data], caption: String, expected: Int) async {
-        var failed = expected - datas.count
-        for data in datas {
-            if let url = try? await Api.upload("image", data: data, filename: "img.jpg", mime: "image/jpeg") {
-                sendMsg("image", url)
-            } else {
-                failed += 1
-            }
+    private func uploadOne(_ key: String) async -> String? {
+        guard let src = upSources[key] else { return nil }
+        uploads[key] = UploadState()
+        var data: Data?
+        switch src {
+        case .data(let d): data = d
+        case .asset(let a): data = await AttachMedia.jpegData(a)
         }
-        let text = caption.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !text.isEmpty { sendMsg("text", text) }
-        if failed > 0 { toastMsg = t("chat.imagesFailed", ["n": failed]) }
+        guard let data else {
+            uploads[key] = UploadState(progress: 0, failed: true)
+            return nil
+        }
+        if localImages[key] == nil, let img = UIImage(data: data) { localImages[key] = img }
+        do {
+            let url = try await Api.upload("image", data: data, filename: "img.jpg", mime: "image/jpeg", progress: { p in
+                if let s = uploads[key], !s.failed { uploads[key] = UploadState(progress: p, failed: false) }
+            })
+            uploads[key] = nil
+            return url
+        } catch {
+            uploads[key] = UploadState(progress: 0, failed: true)
+            return nil
+        }
+    }
+
+    /// 传完的图发出去：本地那条换成 tempId，等 ack；回复引用挂在第一张上
+    @MainActor @discardableResult
+    private func sendUploaded(_ key: String, _ url: String) -> String? {
+        guard let idx = messages.firstIndex(where: { $0.upKey == key }) else { return nil }
+        let meta = parseImage(messages[idx].content)
+        let content = imageContent(url, g: meta.g, w: meta.w, h: meta.h)
+        let tempId = WsClient.shared.send(convType: convType, targetId: targetId, msgType: "image", content: content, replyToId: messages[idx].replyTo?.id)
+        messages[idx].id = tempId
+        messages[idx].content = content
+        upSources[key] = nil
+        return tempId
+    }
+
+    private func retryUpload(_ m: MsgItem) {
+        guard let key = m.upKey else { return }
+        Task { @MainActor in
+            if let url = await uploadOne(key) { sendUploaded(key, url) }
+        }
     }
 
     private func shouldShowTime(_ idx: Int) -> Bool {
@@ -1218,10 +1321,10 @@ struct ChatRoomView: View {
 
     // MARK: - 长按菜单
 
-    @ViewBuilder
-    private func messageRow(_ m: MsgItem) -> some View {
+    private func makeBubble(_ row: ChatRow) -> MsgBubble {
+        let m = row.first
         let mine = m.senderId == myId
-        let bubble = MsgBubble(
+        return MsgBubble(
             m: m, mine: mine, convType: convType,
             fallbackAvatar: mine ? (state.user?.avatar ?? "") : peerAvatarGuess,
             myId: myId,
@@ -1229,24 +1332,45 @@ struct ChatRoomView: View {
             onReact: { react(m.id, $0) },
             onJump: { jumpTo($0) },
             onOpenWallet: walletOk ? { walletRoute = .chainWalletPath($0) } : nil,
-            onImage: { fullImage = $0 }
+            onImage: { url in if !url.isEmpty { fullImage = url } },
+            album: row.isAlbum ? row.items : nil,
+            uploads: uploads,
+            localImages: localImages,
+            onItemMenu: { item in
+                guard !item.pending else { return }
+                inputFocused = false; showSticker = false; menuMsg = item
+            },
+            onItemReact: { item, e in react(item.id, e) },
+            onRetry: { item in retryUpload(item) }
         )
+    }
+
+    @ViewBuilder
+    private func messageRow(_ row: ChatRow) -> some View {
         if let sel = selecting {
-            HStack(spacing: 6) {
-                Image(systemName: sel.contains(m.id) ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 20))
-                    .foregroundStyle(sel.contains(m.id) ? botBlue : Theme.textDim)
-                bubble.allowsHitTesting(false)
-            }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                guard !m.pending else { return }
-                var s = sel
-                if s.contains(m.id) { s.remove(m.id) } else { s.insert(m.id) }
-                selecting = s
-            }
+            selectableRow(row, sel)
         } else {
-            bubble
+            makeBubble(row)
+        }
+    }
+
+    /// 多选模式：相册整组一起勾选
+    private func selectableRow(_ row: ChatRow, _ sel: Set<String>) -> some View {
+        let ids = row.items.map(\.id)
+        let on = ids.allSatisfy { sel.contains($0) }
+        let pending = row.items.contains { $0.pending }
+        return HStack(spacing: 6) {
+            Image(systemName: on ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 20))
+                .foregroundStyle(on ? botBlue : Theme.textDim)
+            makeBubble(row).allowsHitTesting(false)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard !pending else { return }
+            var s = sel
+            if on { s.subtract(ids) } else { s.formUnion(ids) }
+            selecting = s
         }
     }
 
@@ -1295,7 +1419,8 @@ struct ChatRoomView: View {
             a.onCopy = { UIPasteboard.general.string = m.content; toastMsg = t("common.copied") }
         }
         if m.type == "image" || m.type == "video" {
-            a.onSave = { Task { @MainActor in toastMsg = await saveMediaToPhotos(type: m.type, url: m.content) } }
+            let url = m.type == "image" ? imageUrlOf(m.content) : m.content
+            a.onSave = { Task { @MainActor in toastMsg = await saveMediaToPhotos(type: m.type, url: url) } }
         }
         if canPin { a.onPin = { togglePin(m.id, pin: !pinned) } }
         if FORWARDABLE.contains(m.type) { a.onForward = { forwardIds = IdList(ids: [m.id]) } }
@@ -1389,7 +1514,17 @@ struct ChatRoomView: View {
 
     /// 播完灰飞烟灭再从列表移掉；不在屏幕上的（LazyVStack 没渲染）2 秒后兜底移除
     private func removeMsgs(_ ids: Set<String>) {
-        let todo = ids.subtracting(dying)
+        var todo = ids.subtracting(dying)
+        guard !todo.isEmpty else { return }
+        // 相册只删其中几张：不播动画，直接移掉，剩下的重新拼版
+        for row in rows where row.isAlbum {
+            let rowIds = Set(row.items.map(\.id))
+            let hit = rowIds.intersection(todo)
+            if !hit.isEmpty && hit.count < rowIds.count {
+                messages.removeAll { hit.contains($0.id) }
+                todo.subtract(hit)
+            }
+        }
         guard !todo.isEmpty else { return }
         dying.formUnion(todo)
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
@@ -1443,12 +1578,16 @@ struct ChatRoomView: View {
     }
 
     private func sendLocation() {
+        toastMsg = t("chat.locating")
         CityLocator.shared.currentLocation { loc, addr in
             DispatchQueue.main.async {
-                let name = addr ?? "我的位置"
-                let lat = loc?.coordinate.latitude ?? 0
-                let lng = loc?.coordinate.longitude ?? 0
-                sendMsg("location", "{\"name\":\"\(name)\",\"lat\":\(lat),\"lng\":\(lng)}")
+                // 没拿到位置就提示，不发 0,0
+                guard let loc else { toastMsg = t("msg.locFailed"); return }
+                let name = (addr?.isEmpty == false) ? addr! : t("chat.myLocation")
+                let dict: [String: Any] = ["name": name, "lat": loc.coordinate.latitude, "lng": loc.coordinate.longitude]
+                if let d = try? JSONSerialization.data(withJSONObject: dict), let s = String(data: d, encoding: .utf8) {
+                    sendMsg("location", s)
+                }
             }
         }
     }
@@ -1503,6 +1642,15 @@ struct MsgBubble: View {
     /// 打开链上钱包某一页（没有钱包入口为 nil：喊单卡片去网页看）
     var onOpenWallet: ((String) -> Void)? = nil
     var onImage: (String) -> Void
+    /// 多图相册（第一张就是 m）
+    var album: [MsgItem]? = nil
+    /// 本地刚选的图：上传状态、预览图（按 upKey）
+    var uploads: [String: UploadState] = [:]
+    var localImages: [String: UIImage] = [:]
+    /// 相册里长按 / 回应的是哪一张
+    var onItemMenu: ((MsgItem) -> Void)? = nil
+    var onItemReact: ((MsgItem, String) -> Void)? = nil
+    var onRetry: ((MsgItem) -> Void)? = nil
 
     @State private var voicePlaying = false
     @State private var voiceStopTask: Task<Void, Never>?
@@ -1539,12 +1687,20 @@ struct MsgBubble: View {
                 if let r = m.replyTo {
                     ReplyQuote(r: r) { onJump?(r.id) }
                 }
-                content
-                    .simultaneousGesture(LongPressGesture(minimumDuration: 0.35).onEnded { _ in
-                        if !m.pending { onMenu?() }
-                    })
-                if let rs = m.reactions, !rs.isEmpty {
-                    ReactionChips(reactions: rs, myId: myId) { onReact?($0) }
+                if let album {
+                    albumView(album)
+                    albumReactionChips(album)
+                } else {
+                    content
+                        .simultaneousGesture(LongPressGesture(minimumDuration: 0.35).onEnded { _ in
+                            if !m.pending { onMenu?() }
+                        })
+                    if let rs = m.reactions, !rs.isEmpty {
+                        ReactionChips(reactions: rs, myId: myId) { onReact?($0) }
+                    }
+                }
+                if uploadFailed {
+                    Text(t("chat.upload.failed")).font(.system(size: 11)).foregroundStyle(Color.red).padding(.horizontal, 4)
                 }
                 if !(m.markup?.inlineKeyboard ?? []).isEmpty {
                     InlineKeyboardView(markup: m.markup, messageId: m.id).frame(width: 230)
@@ -1564,14 +1720,91 @@ struct MsgBubble: View {
             : CompatUnevenRounded(topLeadingRadius: 4, bottomLeadingRadius: 16, bottomTrailingRadius: 16, topTrailingRadius: 16)
     }
 
+    // MARK: 图片 / 相册
+
+    private func uploadOf(_ item: MsgItem) -> UploadState? {
+        guard let k = item.upKey else { return nil }
+        return uploads[k]
+    }
+
+    private func localOf(_ item: MsgItem) -> UIImage? {
+        guard let k = item.upKey else { return nil }
+        return localImages[k]
+    }
+
+    private var uploadFailed: Bool {
+        let list = album ?? [m]
+        return list.contains { uploadOf($0)?.failed == true }
+    }
+
+    /// 单张图：有宽高按比例显示（最宽 200、最高 260），没有就 160 见方
+    private var singleImage: some View {
+        let meta = parseImage(m.content)
+        let size = singleImageSize(w: meta.w, h: meta.h, maxW: 200, maxH: 260) ?? CGSize(width: 160, height: 160)
+        let up = uploadOf(m)
+        return ChatImageView(url: meta.url, local: localOf(m))
+            .frame(width: size.width, height: size.height)
+            .clipped()
+            .overlay(UploadOverlay(state: up, sending: m.pending, onRetry: { onRetry?(m) }))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .contentShape(Rectangle())
+            .onTapGesture { if up == nil { onImage(meta.url) } }
+    }
+
+    private func albumView(_ list: [MsgItem]) -> some View {
+        let cells: [AlbumCell] = list.map { a in
+            let meta = parseImage(a.content)
+            return AlbumCell(id: a.upKey ?? a.id, url: meta.url, local: localOf(a), w: meta.w, h: meta.h, state: uploadOf(a), sending: a.pending)
+        }
+        return ImageAlbumView(
+            cells: cells, width: 240,
+            onTap: { i in
+                if uploadOf(list[i]) == nil { onImage(imageUrlOf(list[i].content)) }
+            },
+            onLongPress: { i in onItemMenu?(list[i]) },
+            onRetry: { i in onRetry?(list[i]) }
+        )
+    }
+
+    /// 相册几张图的回应合在一起显示
+    private func mergedReactions(_ list: [MsgItem]) -> [MsgReaction] {
+        var order: [String] = []
+        var map: [String: MsgReaction] = [:]
+        for item in list {
+            for r in item.reactions ?? [] {
+                if var cur = map[r.emoji] {
+                    cur.count += r.count
+                    cur.userIds += r.userIds
+                    map[r.emoji] = cur
+                } else {
+                    map[r.emoji] = r
+                    order.append(r.emoji)
+                }
+            }
+        }
+        return order.compactMap { map[$0] }
+    }
+
+    /// 点合并后的回应：自己回应过这个表情的那张就取消那张的，否则回应第一张
+    private func reactTarget(_ list: [MsgItem], _ emoji: String) -> MsgItem {
+        let hit = list.first { item in
+            (item.reactions ?? []).contains { $0.emoji == emoji && $0.userIds.contains(myId) }
+        }
+        return hit ?? list[0]
+    }
+
+    @ViewBuilder
+    private func albumReactionChips(_ list: [MsgItem]) -> some View {
+        if !mergedReactions(list).isEmpty {
+            ReactionChips(reactions: mergedReactions(list), myId: myId) { e in onItemReact?(reactTarget(list, e), e) }
+        }
+    }
+
     @ViewBuilder
     private var content: some View {
         switch m.type {
         case "image":
-            RemoteImage(url: m.content)
-                .frame(width: 160, height: 160)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .onTapGesture { onImage(m.content) }
+            singleImage
         case "sticker":
             // 贴纸不画气泡底
             if let p = StickerPayload.parse(m.content) {

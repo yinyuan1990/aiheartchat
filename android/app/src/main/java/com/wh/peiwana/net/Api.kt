@@ -193,7 +193,7 @@ object Api {
 
     /** 相对资源路径转完整 URL */
     fun fullUrl(path: String): String =
-        if (path.startsWith("http") || path.isEmpty()) path else BASE_URL + path
+        if (path.startsWith("http") || path.isEmpty() || path.startsWith("content:") || path.startsWith("file:")) path else BASE_URL + path
 
     suspend fun request(path: String, method: String = "GET", body: JsonObject? = null): JsonElement? =
         withContext(Dispatchers.IO) {

@@ -1,6 +1,7 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Headers, Param, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/current-user.decorator';
+import { langOf } from '../i18n/translate';
 import { Throttle } from '../common/rate-limit.guard';
 import { GalleryService } from './gallery.service';
 
@@ -12,14 +13,14 @@ export class GalleryController {
 
   /** tab 名称 / 保留天数（大厅渲染 tab 标签用，声明在 @Get() 之前无所谓，路径不同） */
   @Get('settings')
-  settings(@CurrentUser() userId: bigint) {
-    return this.gallery.userSettings(userId);
+  settings(@CurrentUser() userId: bigint, @Headers('accept-language') acceptLang?: string) {
+    return this.gallery.userSettings(userId, !!langOf(acceptLang));
   }
 
   /** {title, days, source, list:[{id,text,media[],viewCount,postedAt}]}，beforeId 翻页，每页 20 */
   @Get()
-  list(@CurrentUser() userId: bigint, @Query('beforeId') beforeId?: string) {
-    return this.gallery.list(userId, beforeId ? BigInt(beforeId) : undefined);
+  list(@CurrentUser() userId: bigint, @Query('beforeId') beforeId?: string, @Headers('accept-language') acceptLang?: string) {
+    return this.gallery.list(userId, beforeId ? BigInt(beforeId) : undefined, !!langOf(acceptLang));
   }
 }
 
