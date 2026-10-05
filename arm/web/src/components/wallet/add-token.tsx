@@ -12,7 +12,7 @@ import { isTronAddress, trc20Meta } from "@/lib/wallet/tron";
 import { isTonAddress, tonJettonMeta } from "@/lib/wallet/ton";
 import { forgetToken, isMarketChain, rememberToken, useHeldTokens, useMarketList, type MarketChainKey } from "@/lib/wallet/market";
 import { lookupToken } from "@/lib/wallet/swap";
-import { absUrl, iconUrl } from "@/lib/wallet/assets";
+import { absUrl, tokenIcon } from "@/lib/wallet/assets";
 import { COMMON_TOKENS } from "@/lib/wallet/common-tokens";
 import { BottomSheet, ChainGlyph } from "./ui";
 
@@ -96,7 +96,7 @@ export function AddTokenSheet({ chain, open, onClose, known = [] }: { chain: Wal
             {found.isFetching ? (
               <div className="h-14 animate-pulse rounded-2xl bg-muted" />
             ) : t ? (
-              <Row c={{ address: t.address, symbol: t.symbol, name: `${t.name} · 精度 ${t.decimals}` }} added={have.has(t.address.toLowerCase())} busy={busy === t.address} onAdd={() => void add(t, false)} />
+              <Row c={{ address: t.address, symbol: t.symbol, name: `${t.name} · 精度 ${t.decimals}` }} chain={chain.key} added={have.has(t.address.toLowerCase())} busy={busy === t.address} onAdd={() => void add(t, false)} />
             ) : (
               <p className="px-1 py-2 text-[12px] text-down">{chain.name} 上这个地址不是代币合约</p>
             )}
@@ -107,7 +107,7 @@ export function AddTokenSheet({ chain, open, onClose, known = [] }: { chain: Wal
             {common.length > 0 && (
               <Section title="常用">
                 {common.map((c) => (
-                  <Row key={c.address} c={c} added={have.has(c.address.toLowerCase())} busy={busy === c.address} onAdd={() => void add(c, true)} />
+                  <Row key={c.address} c={c} chain={chain.key} added={have.has(c.address.toLowerCase())} busy={busy === c.address} onAdd={() => void add(c, true)} />
                 ))}
               </Section>
             )}
@@ -120,7 +120,7 @@ export function AddTokenSheet({ chain, open, onClose, known = [] }: { chain: Wal
           <Section title="手动添加的代币">
             {mine.map((m) => (
               <li key={m.address} className="flex items-center gap-3 py-2.5">
-                <TokenAvatar symbol={m.symbol} seed={m.address} logo={iconUrl(m.image)} size={32} className="rounded-full" />
+                <TokenAvatar symbol={m.symbol} seed={m.address} logo={tokenIcon(chain.key, m.address, m.image)} size={32} className="rounded-full" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[14px] font-semibold">{m.symbol}</span>
                   <span className="block font-mono text-[11px] text-muted-foreground">{shortAddr(m.address, 6, 4)}</span>
@@ -146,10 +146,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Row({ c, added, busy, onAdd }: { c: Candidate; added: boolean; busy: boolean; onAdd: () => void }) {
+function Row({ c, chain = "", added, busy, onAdd }: { c: Candidate; chain?: string; added: boolean; busy: boolean; onAdd: () => void }) {
   return (
     <li className="flex items-center gap-3 py-2.5">
-      <TokenAvatar symbol={c.symbol} seed={c.address} logo={iconUrl(c.image)} size={36} className="rounded-full" />
+      <TokenAvatar symbol={c.symbol} seed={c.address} logo={tokenIcon(chain, c.address, c.image)} size={36} className="rounded-full" />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[14px] font-semibold">{c.symbol}</span>
         <span className="block truncate text-[11px] text-muted-foreground">{c.name}</span>
@@ -179,7 +179,7 @@ function HotTokens({ chain, ...p }: ListProps & { chain: MarketChainKey }) {
   return (
     <Section title={p.q ? "搜索结果" : "热门"}>
       {rows.map((m) => (
-        <Row key={m.address} c={{ address: m.address, symbol: m.symbol, name: m.name, image: m.image }} added={p.have.has(m.address.toLowerCase())} busy={p.busy === m.address} onAdd={() => p.onAdd({ address: m.address, symbol: m.symbol, name: m.name, image: m.image })} />
+        <Row key={m.address} c={{ address: m.address, symbol: m.symbol, name: m.name, image: m.image }} chain={chain} added={p.have.has(m.address.toLowerCase())} busy={p.busy === m.address} onAdd={() => p.onAdd({ address: m.address, symbol: m.symbol, name: m.name, image: m.image })} />
       ))}
     </Section>
   );

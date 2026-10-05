@@ -81,10 +81,11 @@ export function hueOf(seed: string): number {
 
 /** Token avatar: on-chain logo URL if it loads, otherwise a gradient tile with the symbol's first letters. */
 export function TokenAvatar({ logo, symbol, seed, size = 40, fontScale, className }: { logo?: string; symbol: string; seed: string; size?: number; /** fallback glyph size as a fraction of `size` (default 0.36, emoji 0.5) */ fontScale?: number; className?: string }) {
-  const [broken, setBroken] = useState(false);
+  // the URL that failed, so a later, different logo (e.g. the market's own image arriving) is tried again
+  const [broken, setBroken] = useState<string | null>(null);
   const hue = hueOf(seed);
   // absolute URLs, or our host-relative paths (/api/uploads/x, /brand/x — served by whichever domain the user is on)
-  const showImg = !!logo && /^(https?:\/\/|\/)/.test(logo) && !broken;
+  const showImg = !!logo && /^(https?:\/\/|\/)/.test(logo) && broken !== logo;
   // "emoji:🚀" is the no-upload path used by the create form.
   const emoji = logo?.startsWith("emoji:") ? logo.slice(6) : null;
   return (
@@ -101,7 +102,7 @@ export function TokenAvatar({ logo, symbol, seed, size = 40, fontScale, classNam
     >
       {showImg ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={logo} alt={symbol} width={size} height={size} className="size-full object-cover" onError={() => setBroken(true)} />
+        <img src={logo} alt={symbol} width={size} height={size} className="size-full object-cover" onError={() => setBroken(logo ?? null)} />
       ) : (
         emoji ?? symbol.slice(0, 2).toUpperCase()
       )}

@@ -689,6 +689,8 @@ app.get("/api/pump/coin/:mint/holders", async (c) => {
 // through here. Known image hosts only; small ones stay in memory for a day.
 const IMG_HOSTS = /(^|\.)(coingecko\.com|geckoterminal\.com|dexscreener\.com|pump\.fun|ipfs\.io|cf-ipfs\.com|dweb\.link|nftstorage\.link|mypinata\.cloud|pinata\.cloud|arweave\.net|irys\.xyz|axiom-cdn\.io|j7tracker\.io|githubusercontent\.com|defined\.fi|jup\.ag|tonapi\.io)$/i;
 const imgCache = new Map<string, { at: number; type: string; body: ArrayBuffer }>();
+/** upstream 404s (e.g. a token Trust Wallet's repo does not have) are not re-fetched for an hour */
+const imgMiss = new Map<string, number>();
 app.get("/api/img", async (c) => {
   let u: URL;
   try {
@@ -701,9 +703,15 @@ app.get("/api/img", async (c) => {
   const send = (e: { type: string; body: ArrayBuffer }) => new Response(e.body, { headers: { "content-type": e.type, "cache-control": "public, max-age=86400" } });
   const hit = imgCache.get(key);
   if (hit && Date.now() - hit.at < 86_400_000) return send(hit);
+  if (Date.now() - (imgMiss.get(key) ?? 0) < 3_600_000) return c.json({ error: "upstream 404" }, 404);
   try {
     const r = await fetch(key, { signal: AbortSignal.timeout(10_000), headers: { accept: "image/*" } });
     const type = r.headers.get("content-type") ?? "";
+    if (r.status === 404) {
+      imgMiss.set(key, Date.now());
+      if (imgMiss.size > 5000) imgMiss.delete(imgMiss.keys().next().value!);
+      return c.json({ error: "upstream 404" }, 404);
+    }
     if (!r.ok || !/^image\//.test(type)) return c.json({ error: `upstream ${r.status}` }, 502);
     const body = await r.arrayBuffer();
     if (body.byteLength > 3_000_000) return c.json({ error: "too large" }, 502);

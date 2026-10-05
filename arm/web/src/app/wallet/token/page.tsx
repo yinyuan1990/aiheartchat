@@ -17,7 +17,7 @@ import { useBoatInfo } from "@/lib/boat";
 import { chainByKey, explorerAddr, explorerTx, publicClientFor } from "@/lib/wallet/chains";
 import { executeTrade, quote, sellableOf, shapeQuote, type Side, type TradeStep } from "@/lib/wallet/arm-trade";
 import { shareText } from "@/lib/wallet/native";
-import { USDC_LOGO, absUrl, iconUrl } from "@/lib/wallet/assets";
+import { USDC_LOGO, absUrl, iconUrl, tokenIcon } from "@/lib/wallet/assets";
 import { isSolAddress } from "@/lib/wallet/sol";
 import { changeOver, usePumpList, type PumpTab } from "@/lib/wallet/pump";
 import { useVault } from "@/components/wallet/wallet-context";
@@ -163,7 +163,7 @@ function EvmList({ chain }: { chain: MarketChainKey }) {
         {rows.map((t) => (
           <li key={t.address}>
             <Link href={`/wallet/market?chain=${chain}&address=${t.address}`} className="-mx-2 flex items-center gap-3 rounded-2xl px-2 py-3 transition active:bg-muted">
-              <TokenAvatar symbol={t.symbol} seed={t.address} logo={iconUrl(t.image)} size={42} className="rounded-full" />
+              <TokenAvatar symbol={t.symbol} seed={t.address} logo={tokenIcon(chain, t.address, t.image)} size={42} className="rounded-full" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
                   <span className="truncate text-[15px] font-semibold">{t.symbol}</span>

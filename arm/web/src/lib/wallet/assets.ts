@@ -144,6 +144,28 @@ export function iconUrl(u?: string | null): string | undefined {
   }
 }
 
+/** wallet chain key → Trust Wallet assets repo folder */
+const TRUST: Record<string, string> = { eth: "ethereum", bsc: "smartchain", base: "base", arb: "arbitrum", polygon: "polygon", trx: "tron" };
+/**
+ * A token's icon: the market's own image, else Trust Wallet's public asset repo by chain + contract (DexScreener has
+ * no image for tokens whose team never filed a profile, many old majors included). TokenAvatar shows letters on a 404.
+ */
+export function tokenIcon(chain: string, address: string, image?: string | null): string | undefined {
+  const own = iconUrl(image);
+  if (own) return own;
+  const net = TRUST[chain];
+  if (!net || !address) return undefined;
+  let a = address;
+  if (a.startsWith("0x")) {
+    try {
+      a = getAddress(a);
+    } catch {
+      return undefined;
+    }
+  }
+  return iconUrl(`https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/${net}/assets/${a}/logo.png`);
+}
+
 const COINGECKO: Record<string, string> = { eth: "ethereum", base: "ethereum", arb: "ethereum", bsc: "binancecoin", polygon: "polygon-ecosystem-token", trx: "tron" };
 
 function useNativePrices() {
@@ -254,7 +276,7 @@ function useEvmAssets(chain: WalletChain, address?: Address, enabled = true) {
     chain.stables.forEach((s, i) => {
       const raw = q.data!.stables[i];
       const amount = Number(formatUnits(raw, s.decimals));
-      assets.push({ id: s.address, symbol: s.symbol, name: s.symbol, logo: s.symbol === "USDC" ? USDC_LOGO : undefined, seed: s.address, decimals: s.decimals, raw, amount, priceUsd: 1, valueUsd: amount, change24h: 0, token: s.address });
+      assets.push({ id: s.address, symbol: s.symbol, name: s.symbol, logo: s.symbol === "USDC" ? USDC_LOGO : /^USDT/.test(s.symbol) ? USDT_LOGO : undefined, seed: s.address, decimals: s.decimals, raw, amount, priceUsd: 1, valueUsd: amount, change24h: 0, token: s.address });
     });
     held.forEach((t, i) => {
       const raw = q.data!.tokens[i] ?? 0n;
@@ -262,7 +284,7 @@ function useEvmAssets(chain: WalletChain, address?: Address, enabled = true) {
       const amount = Number(formatUnits(raw, t.decimals));
       const p = mp.data?.[t.address.toLowerCase()];
       const price = p?.priceUsd ?? null;
-      assets.push({ id: t.address, symbol: t.symbol, name: t.name, logo: iconUrl(p?.image ?? t.image), seed: t.address, decimals: t.decimals, raw, amount, priceUsd: price, valueUsd: price != null ? amount * price : null, change24h: p?.change24h ?? null, token: getAddress(t.address), market: true });
+      assets.push({ id: t.address, symbol: t.symbol, name: t.name, logo: tokenIcon(chain.key, t.address, p?.image ?? t.image), seed: t.address, decimals: t.decimals, raw, amount, priceUsd: price, valueUsd: price != null ? amount * price : null, change24h: p?.change24h ?? null, token: getAddress(t.address), market: true });
     });
   }
   return { assets, loading: q.isLoading, error: q.isError };
@@ -298,7 +320,7 @@ function useTronAssets(owner?: string, enabled = true): { assets: Asset[]; loadi
       const usdt = t.address === USDT_TRC20;
       const m = usdt ? null : addedPx.data?.[t.address];
       const usd = usdt ? 1 : (m?.priceUsd ?? null);
-      assets.push({ id: t.address, symbol: t.symbol, name: t.name, logo: t.image ?? (m?.image ? iconUrl(m.image) : undefined), seed: t.address, decimals: t.decimals, raw, amount, priceUsd: usd, valueUsd: usd != null ? amount * usd : null, change24h: usdt ? 0 : (m?.change24h ?? null), trc20: t.address });
+      assets.push({ id: t.address, symbol: t.symbol, name: t.name, logo: t.image ?? tokenIcon(TRON_CHAIN.key, t.address, m?.image), seed: t.address, decimals: t.decimals, raw, amount, priceUsd: usd, valueUsd: usd != null ? amount * usd : null, change24h: usdt ? 0 : (m?.change24h ?? null), trc20: t.address });
     }
   }
   return { assets, loading: q.isLoading, error: q.isError };

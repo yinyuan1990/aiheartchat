@@ -10,7 +10,7 @@ import { TokenAvatar } from "@/components/shared";
 import { useToken, useTokens } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { WALLET_CHAINS, explorerTx, isSolana, type WalletChain } from "@/lib/wallet/chains";
-import { USDC_LOGO, absUrl, iconUrl, useAssets } from "@/lib/wallet/assets";
+import { USDC_LOGO, absUrl, iconUrl, tokenIcon, useAssets } from "@/lib/wallet/assets";
 import { useMarketList, type MarketChainKey } from "@/lib/wallet/market";
 import { PUMP_DECIMALS, usePumpList } from "@/lib/wallet/pump";
 import { ENGINE_NAME, STEP_LABEL, decimalsOf, engineOf, executeSwap, gasReserve, gasToken, getSwapQuote, isArcUsdc, lookupToken, tokenOfArm, tokenOfAsset, type SwapStep, type SwapToken } from "@/lib/wallet/swap";
@@ -335,7 +335,7 @@ function TokenPicker({ chain, side, owned, from, onPick }: { chain: WalletChain;
 
 function KyberExtras({ chain, q, onRows }: { chain: MarketChainKey; q: string; onRows: (t: SwapToken[]) => void }) {
   const r = useMarketList(chain, "hot", q);
-  useEffect(() => onRows((r.data ?? []).map((m) => ({ address: m.address, symbol: m.symbol, name: m.name, logo: iconUrl(m.image), seed: m.address, decimals: -1, raw: 0n }))), [r.data, onRows]);
+  useEffect(() => onRows((r.data ?? []).map((m) => ({ address: m.address, symbol: m.symbol, name: m.name, logo: tokenIcon(chain, m.address, m.image), seed: m.address, decimals: -1, raw: 0n }))), [r.data, chain, onRows]);
   return null;
 }
 

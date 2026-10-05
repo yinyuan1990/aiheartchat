@@ -12,7 +12,7 @@ import { fmtNum, shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { chainByKey, explorerToken, explorerTx, nativeIcon, publicClientFor, type WalletChain } from "@/lib/wallet/chains";
 import { copyText, shareText } from "@/lib/wallet/native";
-import { iconUrl } from "@/lib/wallet/assets";
+import { tokenIcon } from "@/lib/wallet/assets";
 import { NATIVE, executeKyberSwap, isMarketChain, kyberDexes, kyberImpact, kyberQuote, MarketQuoteError, rememberToken, useMarketCandles, useMarketToken, useMarketTrades, type MarketStep, type MarketToken } from "@/lib/wallet/market";
 import { costBasis, logFill, useFills, useStar, useViewers } from "@/lib/wallet/positions";
 import { useVault } from "@/components/wallet/wallet-context";
@@ -119,11 +119,11 @@ function EvmCoin({ chainKey, address }: { chainKey: string; address: string }) {
         starred={starred}
         onStar={toggleStar}
         onShare={share}
-        callout={{ chain: chainKey, address: t.address, symbol: t.symbol, name: t.name, image: iconUrl(t.image) ?? null, priceUsd: t.priceUsd, mcapUsd: t.mcapUsd }}
+        callout={{ chain: chainKey, address: t.address, symbol: t.symbol, name: t.name, image: tokenIcon(chainKey, t.address, t.image) ?? null, priceUsd: t.priceUsd, mcapUsd: t.mcapUsd }}
         group={groupWorthy({ mcapUsd: t.mcapUsd ?? t.fdvUsd })}
       />
       <div className="flex-1 pb-28">
-        <CoinHeader image={t.image} seed={address} symbol={t.symbol} name={t.name} chain={chain} address={address} twitter={t.socials.twitter} priceUsd={price} change={t.changes.h24} holders={t.holders} extra={<span className="truncate text-[12px]">{t.dex}{t.dexLabel ? ` ${t.dexLabel}` : ""} · {t.symbol}/{t.quote.symbol}</span>} />
+        <CoinHeader image={tokenIcon(chainKey, t.address, t.image)} seed={address} symbol={t.symbol} name={t.name} chain={chain} address={address} twitter={t.socials.twitter} priceUsd={price} change={t.changes.h24} holders={t.holders} extra={<span className="truncate text-[12px]">{t.dex}{t.dexLabel ? ` ${t.dexLabel}` : ""} · {t.symbol}/{t.quote.symbol}</span>} />
         <CoinChartPanel alertKey={`${chainKey}:${address}`} candles={chart} loading={candles.isLoading} interval={iv} onInterval={setIv} priceUsd={price} avg={knownCost != null && amount > 0 ? knownCost / amount : null} markers={mk.markers} onMarker={mk.onMarker} />
         {me && amount > 0 && price != null && <PositionCard valueUsd={amount * price} costUsd={knownCost} amount={amount} symbol={t.symbol} supply={supply} avg={knownCost != null ? knownCost / amount : null} onShare={share} />}
         <StatsCard
@@ -311,7 +311,7 @@ function EvmTradeSheet({ chain, token, side, quick, onSide, native, tokRaw, deci
         <div className="mt-1 flex items-baseline gap-2">
           <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" className={cn("w-0 flex-1 bg-transparent font-mono text-[32px] font-semibold tracking-tight outline-none", insufficient && amountIn > 0n && "text-down")} />
           <span className="flex items-center gap-1.5 text-[15px] font-semibold">
-            <TokenAvatar symbol={buy ? nc.symbol : token.symbol} seed={buy ? `${chain.key}-native` : token.address} logo={buy ? nativeIcon(chain) : iconUrl(token.image)} size={22} className="rounded-full" />
+            <TokenAvatar symbol={buy ? nc.symbol : token.symbol} seed={buy ? `${chain.key}-native` : token.address} logo={buy ? nativeIcon(chain) : tokenIcon(chain.key, token.address, token.image)} size={22} className="rounded-full" />
             {buy ? nc.symbol : token.symbol}
           </span>
         </div>
