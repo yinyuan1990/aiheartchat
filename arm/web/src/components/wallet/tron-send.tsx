@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { TRON_CHAIN, explorerTx, rpcOf, useNodes } from "@/lib/wallet/chains";
 import { hasFeature, reportResult, returnsToApp, scanQr } from "@/lib/wallet/native";
 import { transferMessage } from "@/lib/wallet/payee";
+import { t } from "@/lib/wallet/i18n";
 import { isTronEntry, pushRecent, useAddressBook } from "@/lib/wallet/address-book";
 import { useAssets, type Asset } from "@/lib/wallet/assets";
 import { SUN, estimateTronFee, isTronAddress, sendTron, waitTron } from "@/lib/wallet/tron";
@@ -80,12 +81,12 @@ export function TronSend() {
   const trxCost = (fee ?? 0n) + (asset && !asset.trc20 ? (value ?? 0n) : 0n);
   const over = !!asset && value != null && (asset.trc20 ? value > asset.raw : false);
   const trxShort = !!asset && fee != null && trxCost > trxBal;
-  const blocker = over ? "余额不足" : trxShort ? (asset?.trc20 ? `TRX 不够付网络费（约 ${trxOf(fee!)} TRX）` : `TRX 不够（需要 ${trxOf(trxCost)} TRX，含网络费）`) : null;
+  const blocker = over ? t("transfer.insufficient") : trxShort ? (asset?.trc20 ? t("cw.send.trxShortFee", { n: trxOf(fee!) }) : t("cw.send.trxShort", { n: trxOf(trxCost) })) : null;
 
   const setMax = (p: number) => {
     if (!asset) return;
     if (asset.trc20) return setAmount(formatUnits((asset.raw * BigInt(Math.round(p * 100))) / 100n, asset.decimals));
-    if (fee == null) return void toast.info("网络费还在估算，稍等一下");
+    if (fee == null) return void toast.info(t("cw.send.feeEstimating"));
     const room = ((trxBal - fee) * BigInt(Math.round(p * 100))) / 100n;
     setAmount(formatUnits(room > 0n ? room : 0n, 6));
   };
@@ -99,14 +100,14 @@ export function TronSend() {
     }
     if (!text) return;
     const p = parseScannedTron(text);
-    if (!p) return void (switchToScanned(text) || toast.error("没认出波场收款地址，请换一个二维码或手动粘贴"));
+    if (!p) return void (switchToScanned(text) || toast.error(t("cw.send.scanUnknownTron")));
     setTo(p);
   };
   const paste = async () => {
     try {
       setTo((await navigator.clipboard.readText()).trim());
     } catch {
-      toast.error("无法读取剪贴板，请手动粘贴");
+      toast.error(t("cw.send.clipboardFail"));
     }
   };
 
@@ -134,18 +135,18 @@ export function TronSend() {
   if (!from) {
     return (
       <WalletFrame>
-        <TopBar title="转账" back="/wallet" right={<ChainPill chain={TRON_CHAIN} />} />
-        <p className="px-6 py-16 text-center text-[14px] leading-7 text-muted-foreground">请先解锁钱包。</p>
+        <TopBar title={t("cw.send.title")} back="/wallet" right={<ChainPill chain={TRON_CHAIN} />} />
+        <p className="px-6 py-16 text-center text-[14px] leading-7 text-muted-foreground">{t("cw.send.unlockFirst")}</p>
       </WalletFrame>
     );
   }
 
   return (
     <WalletFrame>
-      <TopBar title={link.name ? `转账给 ${link.name}` : "转账"} back="/wallet" right={<ChainPill chain={TRON_CHAIN} />} />
+      <TopBar title={link.name ? t("cw.send.toName", { name: link.name }) : t("cw.send.title")} back="/wallet" right={<ChainPill chain={TRON_CHAIN} />} />
 
       <div className="flex flex-1 flex-col gap-3 px-4 pb-4">
-        {link.notHeld && <p className="rounded-2xl bg-[#d48806]/10 px-3.5 py-2.5 text-[12px] leading-5 text-[#b07005]">你还没有持有对方要的那个币，先买一点或换个币转。</p>}
+        {link.notHeld && <p className="rounded-2xl bg-[#d48806]/10 px-3.5 py-2.5 text-[12px] leading-5 text-[#b07005]">{t("cw.send.notHeld")}</p>}
         <button type="button" onClick={() => setSheet("asset")} disabled={loading} className="flex items-center gap-3 rounded-[22px] bg-card p-4 text-left ring-1 ring-border/60 transition active:scale-[0.99]">
           {asset ? (
             <>
@@ -157,7 +158,7 @@ export function TronSend() {
               </div>
               <div className="flex-1">
                 <div className="text-[15px] font-semibold">{asset.symbol}</div>
-                <div className="mt-0.5 font-mono text-[12px] text-muted-foreground">余额 {fmt(asset.amount)}</div>
+                <div className="mt-0.5 font-mono text-[12px] text-muted-foreground">{t("cw.send.balance", { n: fmt(asset.amount) })}</div>
               </div>
             </>
           ) : (
@@ -168,21 +169,21 @@ export function TronSend() {
 
         <div className="rounded-[22px] bg-card p-4 ring-1 ring-border/60">
           <div className="flex items-center justify-between">
-            <span className="text-[13px] font-medium text-muted-foreground">收款地址</span>
+            <span className="text-[13px] font-medium text-muted-foreground">{t("cw.send.recipient")}</span>
             <span className="flex items-center gap-1.5">
               <button type="button" onClick={() => setSheet("book")} className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[12px] font-medium">
                 <AddressBook size={14} />
-                地址簿
+                {t("cw.send.book")}
               </button>
               {canScan && (
                 <button type="button" onClick={scan} className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[12px] font-medium">
                   <Scan size={14} />
-                  扫一扫
+                  {t("me.scan")}
                 </button>
               )}
               <button type="button" onClick={paste} className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[12px] font-medium">
                 <ClipboardText size={14} />
-                粘贴
+                {t("cw.send.paste")}
               </button>
             </span>
           </div>
@@ -192,22 +193,22 @@ export function TronSend() {
             rows={2}
             spellCheck={false}
             autoCapitalize="none"
-            placeholder="波场地址（T 开头）"
+            placeholder={t("cw.send.tronPlaceholder")}
             className="mt-1 min-h-[48px] w-full resize-none bg-transparent font-mono text-[15px] leading-6 break-all outline-none placeholder:font-sans placeholder:text-muted-foreground/70"
           />
-          {to.trim() && !toAddr && <div className="text-[12px] text-down">{to.trim().startsWith("0x") ? "这是 EVM 地址，波场上不能用" : "地址格式不对（波场地址 T 开头，34 位）"}</div>}
-          {selfSend && <div className="text-[12px] text-[#d48806]">这是你自己的地址</div>}
+          {to.trim() && !toAddr && <div className="text-[12px] text-down">{to.trim().startsWith("0x") ? t("cw.send.evmOnTron") : t("cw.send.badTronAddress")}</div>}
+          {selfSend && <div className="text-[12px] text-[#d48806]">{t("cw.send.selfAddress")}</div>}
           {contact ? (
             <div className="mt-1 flex items-center gap-1.5 rounded-xl bg-up/10 px-2.5 py-1.5 text-[12px] text-up">
               <AddressBook size={14} weight="fill" />
-              <span className="truncate">地址簿：{contact.name}</span>
+              <span className="truncate">{t("cw.send.bookName", { name: contact.name })}</span>
             </div>
           ) : (
             toAddr &&
             book.recent.includes(toAddr) && (
               <div className="mt-1 flex items-center gap-1.5 rounded-xl bg-up/10 px-2.5 py-1.5 text-[12px] text-up">
                 <ShieldCheck size={14} weight="fill" />
-                以前转过这个地址
+                {t("cw.send.sentBefore")}
               </div>
             )
           )}
@@ -228,7 +229,7 @@ export function TronSend() {
 
         <div className="rounded-[22px] bg-card p-4 ring-1 ring-border/60">
           <div className="flex items-center justify-between text-[13px] font-medium text-muted-foreground">
-            <span>数量</span>
+            <span>{t("cw.send.amount")}</span>
             {asset?.priceUsd != null && value != null && <span className="font-mono">≈ ${(Number(amount) * asset.priceUsd).toFixed(2)}</span>}
           </div>
           <div className="mt-2 flex items-baseline gap-2">
@@ -245,7 +246,7 @@ export function TronSend() {
           <div className="mt-3 grid grid-cols-4 gap-2">
             {[0.25, 0.5, 0.75, 1].map((p) => (
               <button key={p} type="button" onClick={() => setMax(p)} className="h-9 rounded-xl bg-muted text-[13px] font-medium transition active:scale-95">
-                {p === 1 ? "最大" : `${p * 100}%`}
+                {p === 1 ? t("cw.send.max") : `${p * 100}%`}
               </button>
             ))}
           </div>
@@ -254,35 +255,39 @@ export function TronSend() {
         <div className="rounded-[22px] bg-card p-4 ring-1 ring-border/60">
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1 text-[13px] font-medium text-muted-foreground">
-              网络费
+              {t("cw.send.fee")}
               <Info size={14} />
             </span>
-            {fees.data ? <span className="font-mono text-[14px] font-semibold">{fee === 0n ? "免费" : `约 ${trxOf(fee!)} TRX`}</span> : fees.isError ? <span className="text-[12px] text-down">估算失败</span> : <span className="h-3 w-16 animate-pulse rounded-full bg-border" />}
+            {fees.data ? <span className="font-mono text-[14px] font-semibold">{fee === 0n ? t("ai.free") : t("cw.send.approx", { amount: `${trxOf(fee!)} TRX` })}</span> : fees.isError ? <span className="text-[12px] text-down">{t("cw.send.estimateFailed")}</span> : <span className="h-3 w-16 animate-pulse rounded-full bg-border" />}
           </div>
           <p className="mt-3 text-[12px] leading-5 text-muted-foreground">
-            波场的网络费是燃烧 TRX 换带宽{asset?.trc20 ? "和能量" : ""}
-            {fees.data?.bandwidthFree ? "，这笔用每天的免费带宽" : ""}
-            {fees.data && fees.data.energy > 0 ? `；转 ${asset?.symbol} ${fees.data.worstCase ? "最多" : "约"}需 ${fees.data.energy.toLocaleString("en-US")} 能量${fees.data.worstCase ? "（按最贵的情况估）" : fees.data.energy > 100_000 ? "（对方还没有这个币，第一次转贵一倍）" : ""}` : ""}。
+            {asset?.trc20 ? t("cw.send.tronFeeEnergy") : t("cw.send.tronFeeBandwidth")}
+            {fees.data?.bandwidthFree ? t("cw.send.tronFreeBandwidth") : ""}
+            {fees.data && fees.data.energy > 0
+              ? t(fees.data.worstCase ? "cw.send.tronEnergyMax" : "cw.send.tronEnergy", { symbol: asset?.symbol ?? "", n: fees.data.energy.toLocaleString("en-US") }) +
+                (fees.data.worstCase ? t("cw.send.tronWorstCase") : fees.data.energy > 100_000 ? t("cw.send.tronFirstTime") : "")
+              : ""}
+            {t("cw.send.sentenceEnd")}
           </p>
           {fees.data?.newAccount && (
             <p className="mt-2 flex items-start gap-1.5 text-[12px] leading-5 text-[#d48806]">
               <Warning size={14} className="mt-0.5 shrink-0" />
-              对方是没激活过的新地址，这笔会多烧约 1.1 TRX 帮他激活（波场规则）。
+              {t("cw.send.tronNewAccount")}
             </p>
           )}
-          {asset?.trc20 && <p className="mt-2 text-[12px] text-muted-foreground">需要钱包里有 TRX 付网络费。</p>}
+          {asset?.trc20 && <p className="mt-2 text-[12px] text-muted-foreground">{t("cw.send.tronNeedTrx")}</p>}
         </div>
       </div>
 
       <div aria-hidden className="h-[calc(72px+max(16px,env(safe-area-inset-bottom)))] shrink-0 sm:hidden" />
       <div className="fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-[430px] bg-background/90 px-4 pt-2 pb-[max(16px,env(safe-area-inset-bottom))] backdrop-blur-xl sm:sticky">
         <PrimaryButton disabled={!toAddr || !value || !!blocker || fee == null} onClick={() => setSheet("confirm")}>
-          下一步
+          {t("common.next")}
         </PrimaryButton>
       </div>
 
       <BottomSheet open={sheet === "asset"} onClose={() => setSheet(null)}>
-        <div className="mb-3 text-center text-[17px] font-semibold">选择币种</div>
+        <div className="mb-3 text-center text-[17px] font-semibold">{t("cw.send.pickAsset")}</div>
         <ul className="space-y-1">
           {assets.map((a) => (
             <li key={a.id}>
@@ -325,7 +330,7 @@ export function TronSend() {
         {sent ? (
           <Result sent={sent} explorer={explorerTx(TRON_CHAIN, sent.hash)} to={toAddr} saved={!!contact} />
         ) : (
-          <TronConfirm asset={asset} amount={amount} fromName={active?.name} from={from} to={toAddr} toName={contact?.name} fee={fee != null ? (fee === 0n ? "免费" : `约 ${trxOf(fee)} TRX`) : "—"} onCancel={() => setSheet(null)} onSend={send} />
+          <TronConfirm asset={asset} amount={amount} fromName={active?.name} from={from} to={toAddr} toName={contact?.name} fee={fee != null ? (fee === 0n ? t("ai.free") : t("cw.send.approx", { amount: `${trxOf(fee)} TRX` })) : "—"} onCancel={() => setSheet(null)} onSend={send} />
         )}
       </BottomSheet>
     </WalletFrame>
@@ -336,7 +341,7 @@ function TronConfirm({ asset, amount, fromName, from, to, toName, fee, onCancel,
   const [busy, setBusy] = useState(false);
   return (
     <>
-      <div className="text-center text-[17px] font-semibold">确认转账</div>
+      <div className="text-center text-[17px] font-semibold">{t("cw.send.confirmTitle")}</div>
       <div className="mt-5 text-center">
         <div className="font-mono text-[34px] font-semibold tracking-tight">
           {amount} <span className="text-[18px] text-muted-foreground">{asset?.symbol}</span>
@@ -344,40 +349,40 @@ function TronConfirm({ asset, amount, fromName, from, to, toName, fee, onCancel,
         {asset?.priceUsd != null && <div className="mt-1 font-mono text-[13px] text-muted-foreground">≈ ${(Number(amount) * asset.priceUsd).toFixed(2)}</div>}
       </div>
       <dl className="mt-5 divide-y divide-border/60 rounded-[20px] bg-muted/60 px-4 text-[14px]">
-        <Row label="从">
+        <Row label={t("cw.send.from")}>
           <span className="flex items-center gap-1.5">
             <WalletDot address={from} size={16} />
             {fromName}
             <span className="font-mono text-muted-foreground">{shortAddr(from, 4, 4)}</span>
           </span>
         </Row>
-        <Row label="到">
+        <Row label={t("cw.send.to")}>
           <span className="flex max-w-[230px] flex-col items-end text-right">
             {toName && <span className="text-[14px] font-medium">{toName}</span>}
             <span className="font-mono text-[13px] break-all">{to}</span>
           </span>
         </Row>
-        <Row label="网络">
+        <Row label={t("cw.send.network")}>
           <span className="flex items-center gap-1.5">
             <ChainGlyph chain={TRON_CHAIN} size={16} />
             TRON
           </span>
         </Row>
         {asset?.trc20 && (
-          <Row label="代币合约">
+          <Row label={t("cw.send.tokenContract")}>
             <span className="font-mono text-[13px]">{shortAddr(asset.trc20, 6, 6)}</span>
           </Row>
         )}
-        <Row label="网络费">
+        <Row label={t("cw.send.fee")}>
           <span className="font-mono">{fee}</span>
         </Row>
       </dl>
       <p className="mt-3 flex items-start gap-1.5 text-[12px] leading-5 text-muted-foreground">
         <Warning size={14} className="mt-0.5 shrink-0" />
-        链上转账发出后无法撤回，请确认对方给的是波场（TRC20）地址。
+        {t("cw.send.irreversibleTron")}
       </p>
       <div className="mt-4 grid grid-cols-[1fr_2fr] gap-2">
-        <GhostButton onClick={onCancel}>取消</GhostButton>
+        <GhostButton onClick={onCancel}>{t("common.cancel")}</GhostButton>
         <PrimaryButton
           disabled={busy}
           onClick={async () => {
@@ -386,7 +391,7 @@ function TronConfirm({ asset, amount, fromName, from, to, toName, fee, onCancel,
             setBusy(false);
           }}
         >
-          {busy ? "签名发送中…" : "确认并转账"}
+          {busy ? t("cw.send.signing") : t("cw.send.confirmSend")}
         </PrimaryButton>
       </div>
     </>

@@ -3,6 +3,7 @@ import { getAddress, isHex, type Address, type Hex } from "viem";
 import { solAddressOf } from "./sol";
 import { tronAddressOf } from "./tron";
 import { tonAddressOf } from "./ton";
+import { t } from "./i18n";
 
 /**
  * Self-custody vault: every secret is encrypted together with one wallet password (PBKDF2-SHA256 → AES-GCM-256) and
@@ -78,7 +79,7 @@ export async function quickPassword(store = vaultStore()): Promise<string | null
 
 /** Turns 免密码使用 on (the verified password) or off (null). */
 export async function setQuick(u: Unlocked, wallets: WalletMeta[], active: string, password: string | null, store = vaultStore()): Promise<Unlocked> {
-  if (password && !quickSupported()) throw new Error("只有在心之音 App 里才能开启");
+  if (password && !quickSupported()) throw new Error(t("cw.vault.appOnly", { app: t("app.name") }));
   const next: Unlocked = { ...u, quick: password ?? undefined };
   await store.set(JSON.stringify(await seal(next, wallets, active)));
   return next;
@@ -113,7 +114,7 @@ export async function unlockVault(password: string, store = vaultStore()): Promi
 }
 
 export function passwordProblem(pw: string): string | null {
-  if (pw.length < MIN_PASSWORD) return `至少 ${MIN_PASSWORD} 位`;
+  if (pw.length < MIN_PASSWORD) return t("cw.vault.minLength", { n: MIN_PASSWORD });
   return null;
 }
 

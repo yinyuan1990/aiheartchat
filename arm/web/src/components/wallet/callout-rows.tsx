@@ -7,6 +7,7 @@ import { TokenAvatar } from "@/components/shared";
 import { timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { iconUrl } from "@/lib/wallet/assets";
+import { t } from "@/lib/wallet/i18n";
 import { callerName, fmtPeak, fmtX, type Caller, type Callout } from "@/lib/wallet/callouts";
 import { compactUsd } from "./coin";
 
@@ -29,7 +30,7 @@ export function CalloutRow({ c, showCaller = true }: { c: Callout; showCaller?: 
           >
             <TokenAvatar symbol={callerName(c.caller).slice(0, 2)} seed={c.caller.wallet} logo={iconUrl(c.caller.avatar)} size={18} className="rounded-full" />
             <span className="truncate font-medium text-foreground">{callerName(c.caller)}</span>
-            <span>喊了 · {timeAgo(new Date(c.at).getTime())}</span>
+            <span>{t("cw.callouts.calledAgo", { time: timeAgo(new Date(c.at).getTime()) })}</span>
           </span>
         )}
         <span className="flex items-center gap-3">
@@ -40,13 +41,13 @@ export function CalloutRow({ c, showCaller = true }: { c: Callout; showCaller?: 
               <span className="truncate text-[12px] text-muted-foreground">{c.name}</span>
             </span>
             <span className="mt-0.5 block text-[12px] text-muted-foreground">
-              喊单时市值 {c.mcapUsd != null ? compactUsd(c.mcapUsd) : "—"}
+              {t("cw.callouts.mcapAtCall", { v: c.mcapUsd != null ? compactUsd(c.mcapUsd) : "—" })}
               {!showCaller && ` · ${timeAgo(new Date(c.at).getTime())}`}
             </span>
           </span>
           <span className="flex shrink-0 flex-col items-end">
             <span className={cn("rounded-lg px-2 py-0.5 font-mono text-[14px] font-semibold", up ? "bg-up/12 text-up" : "bg-down/12 text-down")}>{fmtX(c.multiple)}</span>
-            <span className="mt-0.5 font-mono text-[11px] text-muted-foreground">最高 {fmtX(c.maxMultiple)}</span>
+            <span className="mt-0.5 font-mono text-[11px] text-muted-foreground">{t("cw.callouts.peak", { x: fmtX(c.maxMultiple) })}</span>
           </span>
         </span>
         {c.thesis && <span className="mt-2 line-clamp-2 block text-[13px] leading-5 text-foreground/85">{c.thesis}</span>}
@@ -66,15 +67,15 @@ export function CallerRow({ c, rank }: { c: Caller; rank: number | null }) {
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5">
             <span className="truncate text-[15px] font-semibold">{callerName(c)}</span>
-            {c.pinned && <span className="shrink-0 rounded bg-muted px-1 text-[10px] text-muted-foreground">精选</span>}
+            {c.pinned && <span className="shrink-0 rounded bg-muted px-1 text-[10px] text-muted-foreground">{t("cw.callouts.featured")}</span>}
           </span>
           <span className="mt-0.5 block truncate text-[12px] text-muted-foreground">
-            喊单 {c.total ?? "—"} · 中位 {fmtX(c.medianMultiple)} · 2 倍以上 {c.pct2x != null ? `${Math.round(c.pct2x * 100)}%` : "—"}
+            {t("cw.callouts.callerLine", { n: c.total ?? "—", m: fmtX(c.medianMultiple), p: c.pct2x != null ? `${Math.round(c.pct2x * 100)}%` : "—" })}
           </span>
         </span>
         <span className="flex shrink-0 flex-col items-end">
           <span className="font-mono text-[14px] font-semibold text-up">{fmtX(c.avgMultiple)}</span>
-          <span className="text-[11px] text-muted-foreground">平均</span>
+          <span className="text-[11px] text-muted-foreground">{t("cw.callouts.avg")}</span>
         </span>
       </Link>
     </li>
@@ -83,12 +84,12 @@ export function CallerRow({ c, rank }: { c: Caller; rank: number | null }) {
 
 export function CallerStats({ c }: { c: Caller }) {
   const items = [
-    { label: "喊单次数", value: c.total != null ? String(c.total) : "—" },
-    { label: "平均倍数", value: fmtX(c.avgMultiple) },
-    { label: "中位倍数", value: fmtX(c.medianMultiple) },
-    { label: "到 2 倍以上", value: c.pct2x != null ? `${Math.round(c.pct2x * 100)}%` : "—" },
-    { label: "平均见顶", value: fmtPeak(c.avgPeakMs) },
-    { label: "周榜 / 月榜", value: `${c.rankWeekly ?? "—"} / ${c.rankMonthly ?? "—"}` },
+    { label: t("cw.callouts.statTotal"), value: c.total != null ? String(c.total) : "—" },
+    { label: t("cw.callouts.statAvg"), value: fmtX(c.avgMultiple) },
+    { label: t("cw.callouts.statMedian"), value: fmtX(c.medianMultiple) },
+    { label: t("cw.callouts.stat2x"), value: c.pct2x != null ? `${Math.round(c.pct2x * 100)}%` : "—" },
+    { label: t("cw.callouts.statPeak"), value: fmtPeak(c.avgPeakMs) },
+    { label: t("cw.callouts.statRank"), value: `${c.rankWeekly ?? "—"} / ${c.rankMonthly ?? "—"}` },
   ];
   return (
     <div className="grid grid-cols-3 gap-2">
@@ -104,7 +105,7 @@ export function CallerStats({ c }: { c: Caller }) {
 
 export function ListState({ loading, error, empty }: { loading: boolean; error?: boolean; empty: boolean }) {
   if (loading) return <div className="flex justify-center py-10 text-muted-foreground"><CircleNotch size={22} className="animate-spin" /></div>;
-  if (error) return <div className="py-10 text-center text-[13px] text-muted-foreground">喊单数据暂时拿不到，稍后再试</div>;
-  if (empty) return <div className="py-10 text-center text-[13px] text-muted-foreground">还没有喊单</div>;
+  if (error) return <div className="py-10 text-center text-[13px] text-muted-foreground">{t("cw.callouts.unavailable")}</div>;
+  if (empty) return <div className="py-10 text-center text-[13px] text-muted-foreground">{t("cw.callouts.empty")}</div>;
   return null;
 }

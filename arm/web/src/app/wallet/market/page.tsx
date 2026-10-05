@@ -12,6 +12,7 @@ import { fmtNum, shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { chainByKey, explorerToken, explorerTx, nativeIcon, publicClientFor, type WalletChain } from "@/lib/wallet/chains";
 import { copyText, shareText } from "@/lib/wallet/native";
+import { t } from "@/lib/wallet/i18n";
 import { tokenIcon } from "@/lib/wallet/assets";
 import { NATIVE, executeKyberSwap, isMarketChain, kyberDexes, kyberImpact, kyberQuote, MarketQuoteError, rememberToken, useMarketCandles, useMarketToken, useMarketTrades, type MarketStep, type MarketToken } from "@/lib/wallet/market";
 import { costBasis, logFill, useFills, useStar, useViewers } from "@/lib/wallet/positions";
@@ -34,8 +35,8 @@ function MarketRouteInner() {
   if (!isMarketChain(chain) || !/^0x[0-9a-f]{40}$/.test(address)) {
     return (
       <CoinFrame>
-        <TopBar back="/wallet/token" title="代币" />
-        <div className="flex flex-1 items-center justify-center text-[14px] text-muted-foreground">链或代币地址不对</div>
+        <TopBar back="/wallet/token" title={t("cw.coin.title")} />
+        <div className="flex flex-1 items-center justify-center text-[14px] text-muted-foreground">{t("cw.market.badAddress")}</div>
       </CoinFrame>
     );
   }
@@ -53,12 +54,12 @@ function useBalances(chain: WalletChain, token: string, me?: string) {
     refetchInterval: 10_000,
     queryFn: async () => {
       const pc = publicClientFor(chain);
-      const t = token as Address;
+      const addr = token as Address;
       const [native, bal, decimals, supply] = await Promise.all([
         pc.getBalance({ address: me as Address }),
-        pc.readContract({ address: t, abi: erc20Abi, functionName: "balanceOf", args: [me as Address] }),
-        pc.readContract({ address: t, abi: erc20Abi, functionName: "decimals" }),
-        pc.readContract({ address: t, abi: erc20Abi, functionName: "totalSupply" }).catch(() => 0n),
+        pc.readContract({ address: addr, abi: erc20Abi, functionName: "balanceOf", args: [me as Address] }),
+        pc.readContract({ address: addr, abi: erc20Abi, functionName: "decimals" }),
+        pc.readContract({ address: addr, abi: erc20Abi, functionName: "totalSupply" }).catch(() => 0n),
       ]);
       return { native, bal, decimals, supply };
     },
@@ -70,11 +71,11 @@ function EvmCoin({ chainKey, address }: { chainKey: string; address: string }) {
   const { active } = useVault();
   const me = active?.address;
   const tq = useMarketToken(chainKey, address);
-  const t = tq.data;
+  const tk = tq.data;
   const [iv, setIv] = useState("15m");
-  const interval = iv === "all" ? allInterval(t?.pairCreatedAt) : iv;
-  const candles = useMarketCandles(chainKey, t?.pool, interval, address);
-  const trades = useMarketTrades(chainKey, t?.pool, address);
+  const interval = iv === "all" ? allInterval(tk?.pairCreatedAt) : iv;
+  const candles = useMarketCandles(chainKey, tk?.pool, interval, address);
+  const trades = useMarketTrades(chainKey, tk?.pool, address);
   const bal = useBalances(chain, address, me);
   const fills = useFills(chainKey, address, me);
   const viewers = useViewers(`${chainKey}:${address}`);
@@ -91,11 +92,11 @@ function EvmCoin({ chainKey, address }: { chainKey: string; address: string }) {
   }, [trades.data, fills, me, chain]);
   const mk = useMarkers(chart, markTrades);
 
-  if (!t) {
+  if (!tk) {
     return (
       <CoinFrame>
-        <TopBar back="/wallet/token" title="代币" />
-        <div className="flex flex-1 items-center justify-center px-8 text-center text-[14px] text-muted-foreground">{tq.isError ? (tq.error as Error).message || "加载失败" : <CircleNotch size={28} className="animate-spin" />}</div>
+        <TopBar back="/wallet/token" title={t("cw.coin.title")} />
+        <div className="flex flex-1 items-center justify-center px-8 text-center text-[14px] text-muted-foreground">{tq.isError ? (tq.error as Error).message || t("common.loadFailed") : <CircleNotch size={28} className="animate-spin" />}</div>
       </CoinFrame>
     );
   }
@@ -103,69 +104,69 @@ function EvmCoin({ chainKey, address }: { chainKey: string; address: string }) {
   const decimals = bal.data?.decimals ?? 18;
   const amount = bal.data ? Number(formatUnits(bal.data.bal, decimals)) : 0;
   const supply = bal.data?.supply ? Number(formatUnits(bal.data.supply, decimals)) : null;
-  const price = t.priceUsd ?? chart.at(-1)?.close ?? null;
+  const price = tk.priceUsd ?? chart.at(-1)?.close ?? null;
   const basis = costBasis(fills);
   // the log only knows trades made here; if the wallet holds more than that, the cost basis is incomplete
   const knownCost = basis.qty > 0 && amount <= basis.qty * 1.02 ? basis.cost * Math.min(1, amount / basis.qty) : null;
-  const share = () => void shareText(`${t.name} ($${t.symbol}) · ${chain.name} · https://dexscreener.com/${chainKey === "polygon" ? "polygon" : chainKey === "arb" ? "arbitrum" : chainKey === "eth" ? "ethereum" : chainKey}/${t.pool}`);
+  const share = () => void shareText(`${tk.name} ($${tk.symbol}) · ${chain.name} · https://dexscreener.com/${chainKey === "polygon" ? "polygon" : chainKey === "arb" ? "arbitrum" : chainKey === "eth" ? "ethereum" : chainKey}/${tk.pool}`);
 
   return (
     <CoinFrame>
       <CoinTopBar
         back="/wallet/token"
-        symbol={t.symbol}
-        createdAt={t.pairCreatedAt}
+        symbol={tk.symbol}
+        createdAt={tk.pairCreatedAt}
         viewers={viewers}
         starred={starred}
         onStar={toggleStar}
         onShare={share}
-        callout={{ chain: chainKey, address: t.address, symbol: t.symbol, name: t.name, image: tokenIcon(chainKey, t.address, t.image) ?? null, priceUsd: t.priceUsd, mcapUsd: t.mcapUsd }}
-        group={groupWorthy({ mcapUsd: t.mcapUsd ?? t.fdvUsd })}
+        callout={{ chain: chainKey, address: tk.address, symbol: tk.symbol, name: tk.name, image: tokenIcon(chainKey, tk.address, tk.image) ?? null, priceUsd: tk.priceUsd, mcapUsd: tk.mcapUsd }}
+        group={groupWorthy({ mcapUsd: tk.mcapUsd ?? tk.fdvUsd })}
       />
       <div className="flex-1 pb-28">
-        <CoinHeader image={tokenIcon(chainKey, t.address, t.image)} seed={address} symbol={t.symbol} name={t.name} chain={chain} address={address} twitter={t.socials.twitter} priceUsd={price} change={t.changes.h24} holders={t.holders} extra={<span className="truncate text-[12px]">{t.dex}{t.dexLabel ? ` ${t.dexLabel}` : ""} · {t.symbol}/{t.quote.symbol}</span>} />
+        <CoinHeader image={tokenIcon(chainKey, tk.address, tk.image)} seed={address} symbol={tk.symbol} name={tk.name} chain={chain} address={address} twitter={tk.socials.twitter} priceUsd={price} change={tk.changes.h24} holders={tk.holders} extra={<span className="truncate text-[12px]">{tk.dex}{tk.dexLabel ? ` ${tk.dexLabel}` : ""} · {tk.symbol}/{tk.quote.symbol}</span>} />
         <CoinChartPanel alertKey={`${chainKey}:${address}`} candles={chart} loading={candles.isLoading} interval={iv} onInterval={setIv} priceUsd={price} avg={knownCost != null && amount > 0 ? knownCost / amount : null} markers={mk.markers} onMarker={mk.onMarker} />
-        {me && amount > 0 && price != null && <PositionCard valueUsd={amount * price} costUsd={knownCost} amount={amount} symbol={t.symbol} supply={supply} avg={knownCost != null ? knownCost / amount : null} onShare={share} />}
+        {me && amount > 0 && price != null && <PositionCard valueUsd={amount * price} costUsd={knownCost} amount={amount} symbol={tk.symbol} supply={supply} avg={knownCost != null ? knownCost / amount : null} onShare={share} />}
         <StatsCard
           changes={[
-            { label: "5分钟", value: t.changes.m5 },
-            { label: "1小时", value: t.changes.h1 },
-            { label: "6小时", value: t.changes.h6 },
-            { label: "24小时", value: t.changes.h24 },
+            { label: t("cw.coin.change5m"), value: tk.changes.m5 },
+            { label: t("cw.coin.change1h"), value: tk.changes.h1 },
+            { label: t("cw.coin.change6h"), value: tk.changes.h6 },
+            { label: t("cw.coin.change24h"), value: tk.changes.h24 },
           ]}
           stats={[
-            ["市值", t.mcapUsd != null ? compactUsd(t.mcapUsd) : "—"],
-            ["流动性", t.liquidityUsd != null ? compactUsd(t.liquidityUsd) : "—"],
-            ["24h 成交", t.volume.h24 != null ? compactUsd(t.volume.h24) : "—"],
-            ["24h 买 / 卖", t.txns24h ? `${fmtNum(t.txns24h.buys)} / ${fmtNum(t.txns24h.sells)}` : "—"],
+            [t("cw.coin.mcap"), tk.mcapUsd != null ? compactUsd(tk.mcapUsd) : "—"],
+            [t("cw.market.liquidity"), tk.liquidityUsd != null ? compactUsd(tk.liquidityUsd) : "—"],
+            [t("cw.coin.vol24h"), tk.volume.h24 != null ? compactUsd(tk.volume.h24) : "—"],
+            [t("cw.market.txns24h"), tk.txns24h ? `${fmtNum(tk.txns24h.buys)} / ${fmtNum(tk.txns24h.sells)}` : "—"],
           ]}
         />
         <CoinTabs
           tabs={[
             {
               key: "trades",
-              label: "成交",
+              label: t("cw.coin.trades"),
               render: () => (
                 <TradeRows
                   loading={trades.isLoading}
-                  note={trades.isError ? "成交数据暂时拿不到" : undefined}
+                  note={trades.isError ? t("cw.market.tradesUnavailable") : undefined}
                   items={(trades.data ?? []).map((x) => ({ id: x.hash + x.at, side: x.side, who: x.trader, mine: x.trader.toLowerCase() === me?.toLowerCase(), amount: fmtNum(x.tokens, 1), value: compactUsd(x.usd), at: x.at, href: explorerTx(chain, x.hash) }))}
                 />
               ),
             },
             {
               key: "holders",
-              label: "持有者",
-              count: t.holders ?? undefined,
+              label: t("cw.coin.holders"),
+              count: tk.holders ?? undefined,
               render: () => (
                 <HolderRows
                   items={[]}
-                  summary={[t.holders != null ? `持有者 ${fmtNum(t.holders)}` : null, t.top10Pct != null ? `前十 ${t.top10Pct.toFixed(1)}%` : null].filter((s): s is string => !!s)}
+                  summary={[tk.holders != null ? t("cw.coin.holdersN", { n: fmtNum(tk.holders) }) : null, tk.top10Pct != null ? t("cw.coin.top10Pct", { p: tk.top10Pct.toFixed(1) }) : null].filter((s): s is string => !!s)}
                   empty={
                     <p className="py-6 text-center text-[13px] text-muted-foreground">
-                      {chain.name} 上的持有人明细暂时拿不到，
+                      {t("cw.market.holdersUnavailable", { chain: chain.name })}
                       <a href={`${explorerToken(chain, address)}#balances`} target="_blank" rel="noreferrer" className="text-foreground underline">
-                        去浏览器查看
+                        {t("cw.market.viewOnExplorer")}
                       </a>
                     </p>
                   }
@@ -174,24 +175,24 @@ function EvmCoin({ chainKey, address }: { chainKey: string; address: string }) {
             },
             {
               key: "about",
-              label: "简介",
+              label: t("bot.desc"),
               render: () => (
                 <AboutCard
                   flat
-                  description={t.description}
-                  socials={t.socials}
-                  createdAt={t.pairCreatedAt ?? undefined}
+                  description={tk.description}
+                  socials={tk.socials}
+                  createdAt={tk.pairCreatedAt ?? undefined}
                   rows={[
                     [
-                      "合约",
-                      <button key="ca" type="button" className="font-mono" onClick={async () => (await copyText(address)) && toast.success("合约地址已复制")}>
+                      t("cw.coin.contract"),
+                      <button key="ca" type="button" className="font-mono" onClick={async () => (await copyText(address)) && toast.success(t("cw.coin.caCopied"))}>
                         {shortAddr(address, 6, 6)}
                       </button>,
                     ],
-                    ["交易池", `${t.dex}${t.dexLabel ? ` ${t.dexLabel}` : ""} · ${t.symbol}/${t.quote.symbol}`],
-                    ["全部发行量", supply ? fmtNum(supply, 0) : "—"],
+                    [t("cw.market.pool"), `${tk.dex}${tk.dexLabel ? ` ${tk.dexLabel}` : ""} · ${tk.symbol}/${tk.quote.symbol}`],
+                    [t("cw.market.totalSupply"), supply ? fmtNum(supply, 0) : "—"],
                     [
-                      "浏览器",
+                      t("cw.coin.explorer"),
                       <a key="ex" href={explorerToken(chain, address)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5">
                         {chain.explorer.replace(/^https:\/\//, "")} <ArrowSquareOut size={12} />
                       </a>,
@@ -204,14 +205,14 @@ function EvmCoin({ chainKey, address }: { chainKey: string; address: string }) {
         />
       </div>
 
-      <TradeBar symbol={t.symbol} onBuy={() => setSheet({ side: "buy" })} onSell={() => setSheet({ side: "sell" })} onQuick={() => setSheet({ side: "buy", quick: true })} sellDisabled={!bal.data || bal.data.bal === 0n} extra={!me && <p className="mb-2 text-center text-[12px] text-muted-foreground">解锁钱包后才能买卖</p>} />
+      <TradeBar symbol={tk.symbol} onBuy={() => setSheet({ side: "buy" })} onSell={() => setSheet({ side: "sell" })} onQuick={() => setSheet({ side: "buy", quick: true })} sellDisabled={!bal.data || bal.data.bal === 0n} extra={!me && <p className="mb-2 text-center text-[12px] text-muted-foreground">{t("cw.market.unlockToTrade")}</p>} />
       <MarkerSheet trades={mk.open} onClose={mk.close} />
       <BottomSheet open={sheet !== null} onClose={() => setSheet(null)}>
         {sheet && me && (
           <EvmTradeSheet
             key={`${sheet.side}${sheet.quick ? "q" : ""}`}
             chain={chain}
-            token={t}
+            token={tk}
             side={sheet.side}
             quick={!!sheet.quick}
             onSide={(s) => setSheet({ side: s })}
@@ -227,7 +228,7 @@ function EvmCoin({ chainKey, address }: { chainKey: string; address: string }) {
 }
 
 const SLIPS = [1, 3, 5, 10] as const;
-const STEP_LABEL: Record<MarketStep, string> = { approving: "首次卖出，正在授权…", building: "生成交易…", swapping: "签名发送中…", confirming: "等待链上确认…" };
+const STEP_LABEL: Record<MarketStep, string> = { approving: "cw.market.stepApproveSell", building: "cw.coin.stepBuilding", swapping: "cw.coin.stepSwapping", confirming: "cw.coin.stepConfirming" };
 
 function EvmTradeSheet({ chain, token, side, quick, onSide, native, tokRaw, decimals, onDone }: { chain: WalletChain; token: MarketToken; side: "buy" | "sell"; quick: boolean; onSide: (s: "buy" | "sell") => void; native: bigint; tokRaw: bigint; decimals: number; onDone: () => void }) {
   const { account, active } = useVault();
@@ -281,12 +282,12 @@ function EvmTradeSheet({ chain, token, side, quick, onSide, native, tokRaw, deci
       const usdValue = Number(buy ? view.routeSummary.amountInUsd : view.routeSummary.amountOutUsd);
       logFill(chain.key, token.address, active.address, { side, tokens, usd: usdValue, at: Date.now(), hash });
       rememberToken(chain.key, { address: token.address, symbol: token.symbol, name: token.name, image: token.image, decimals });
-      toast.success(`${buy ? "买入" : "卖出"} ${token.symbol} 成功`, { action: { label: "查看", onClick: () => window.open(explorerTx(chain, hash), "_blank") } });
+      toast.success(buy ? t("cw.coin.bought", { sym: token.symbol }) : t("cw.coin.sold", { sym: token.symbol }), { action: { label: t("cw.coin.view"), onClick: () => window.open(explorerTx(chain, hash), "_blank") } });
       void qc.invalidateQueries({ queryKey: ["wallet"] });
       void qc.invalidateQueries({ queryKey: ["mkt", chain.key, "trades"] });
       onDone();
     } catch (e) {
-      setErr(((e as { shortMessage?: string }).shortMessage ?? (e as Error).message ?? "交易失败").split("\n")[0]);
+      setErr(((e as { shortMessage?: string }).shortMessage ?? (e as Error).message ?? t("cw.coin.tradeFailed")).split("\n")[0]);
     } finally {
       setStep(null);
     }
@@ -297,16 +298,16 @@ function EvmTradeSheet({ chain, token, side, quick, onSide, native, tokRaw, deci
       <div className="grid grid-cols-2 rounded-2xl bg-muted p-1">
         {(["buy", "sell"] as const).map((s) => (
           <button key={s} type="button" disabled={!!step} onClick={() => onSide(s)} className={cn("h-10 rounded-xl text-[15px] font-semibold transition", side === s ? (s === "buy" ? "bg-up text-black shadow" : "bg-down text-white shadow") : "text-muted-foreground")}>
-            {s === "buy" ? "买入" : "卖出"}
+            {s === "buy" ? t("cw.coin.buy") : t("cw.coin.sell")}
           </button>
         ))}
       </div>
-      {quick && buy && <p className="mt-2 text-center text-[12px] text-up">⚡ 快速买入：确认后直接成交，金额会记住作为下次的默认值</p>}
+      {quick && buy && <p className="mt-2 text-center text-[12px] text-up">⚡ {t("cw.market.quickHint")}</p>}
 
       <div className="mt-4 rounded-[20px] bg-muted/60 p-4">
         <div className="flex items-center justify-between text-[12px] text-muted-foreground">
-          <span>{buy ? "支付" : "卖出数量"}</span>
-          <span className="font-mono">余额 {buy ? `${Number(formatUnits(native, nc.decimals)).toFixed(4)} ${nc.symbol}` : `${fmtNum(Number(formatUnits(tokRaw, decimals)), 2)} ${token.symbol}`}</span>
+          <span>{buy ? t("cw.coin.pay") : t("cw.coin.sellAmount")}</span>
+          <span className="font-mono">{t("cw.coin.balanceValue", { v: buy ? `${Number(formatUnits(native, nc.decimals)).toFixed(4)} ${nc.symbol}` : `${fmtNum(Number(formatUnits(tokRaw, decimals)), 2)} ${token.symbol}` })}</span>
         </div>
         <div className="mt-1 flex items-baseline gap-2">
           <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" className={cn("w-0 flex-1 bg-transparent font-mono text-[32px] font-semibold tracking-tight outline-none", insufficient && amountIn > 0n && "text-down")} />
@@ -318,8 +319,8 @@ function EvmTradeSheet({ chain, token, side, quick, onSide, native, tokRaw, deci
         <div className="text-[12px] text-muted-foreground">{view ? `≈ ${usd(Number(view.routeSummary.amountInUsd))}` : " "}</div>
         <div className="mt-3 grid grid-cols-5 gap-2">
           {(buy
-            ? [...presets.map((v) => ({ v, l: v })), { v: formatUnits(maxBuy, nc.decimals), l: "最大" }]
-            : [10, 25, 50, 75, 100].map((p) => ({ v: formatUnits((tokRaw * BigInt(p)) / 100n, decimals), l: p === 100 ? "全部" : `${p}%` }))
+            ? [...presets.map((v) => ({ v, l: v })), { v: formatUnits(maxBuy, nc.decimals), l: t("cw.coin.max") }]
+            : [10, 25, 50, 75, 100].map((p) => ({ v: formatUnits((tokRaw * BigInt(p)) / 100n, decimals), l: p === 100 ? t("transfer.all") : `${p}%` }))
           ).map(({ v, l }) => (
             <button key={l} type="button" onClick={() => setAmount(v)} className={cn("h-9 rounded-xl text-[13px] font-semibold transition active:scale-95", amount === v ? "bg-foreground text-background" : "bg-card ring-1 ring-border")}>
               {l}
@@ -330,24 +331,24 @@ function EvmTradeSheet({ chain, token, side, quick, onSide, native, tokRaw, deci
 
       <dl className="mt-3 space-y-2 px-1 text-[13px]">
         <div className="flex justify-between">
-          <dt className="text-muted-foreground">预计得到</dt>
-          <dd className="font-mono font-semibold">{out != null ? `${fmtNum(Number(formatUnits(out, outDec)), buy ? 2 : 5)} ${outSym}` : q.isFetching ? "报价中…" : "—"}</dd>
+          <dt className="text-muted-foreground">{t("cw.coin.estOut")}</dt>
+          <dd className="font-mono font-semibold">{out != null ? `${fmtNum(Number(formatUnits(out, outDec)), buy ? 2 : 5)} ${outSym}` : q.isFetching ? t("cw.coin.quoting") : "—"}</dd>
         </div>
         <div className="flex justify-between">
-          <dt className="text-muted-foreground">最少得到</dt>
+          <dt className="text-muted-foreground">{t("cw.coin.minOut")}</dt>
           <dd className="font-mono">{minOut != null ? `${fmtNum(Number(formatUnits(minOut, outDec)), buy ? 2 : 5)} ${outSym}` : "—"}</dd>
         </div>
         <div className="flex justify-between">
-          <dt className="text-muted-foreground">价格影响（含池费）</dt>
+          <dt className="text-muted-foreground">{t("cw.market.impactWithFee")}</dt>
           <dd className={cn("font-mono", impact != null && impact > 5 ? "text-down" : "")}>{impact != null ? `${impact.toFixed(2)}%` : "—"}</dd>
         </div>
         <div className="flex justify-between">
-          <dt className="text-muted-foreground">路线</dt>
+          <dt className="text-muted-foreground">{t("cw.coin.route")}</dt>
           <dd className="truncate pl-4 text-right">{view ? kyberDexes(view) : "—"}</dd>
         </div>
         <div className="flex items-center justify-between">
           <dt className="flex items-center gap-1 text-muted-foreground">
-            滑点
+            {t("cw.coin.slippage")}
             <Info size={13} />
           </dt>
           <dd className="flex gap-1">
@@ -359,27 +360,27 @@ function EvmTradeSheet({ chain, token, side, quick, onSide, native, tokRaw, deci
           </dd>
         </div>
         <div className="flex justify-between">
-          <dt className="text-muted-foreground">网络费</dt>
-          <dd className="font-mono text-[12px] text-muted-foreground">{view?.routeSummary.gasUsd ? `≈ ${usd(Number(view.routeSummary.gasUsd))}` : "—"}{!buy ? " · 首次卖出要先授权" : ""}</dd>
+          <dt className="text-muted-foreground">{t("cw.coin.networkFee")}</dt>
+          <dd className="font-mono text-[12px] text-muted-foreground">{view?.routeSummary.gasUsd ? `≈ ${usd(Number(view.routeSummary.gasUsd))}` : "—"}{!buy ? ` · ${t("cw.market.sellNeedsApprove")}` : ""}</dd>
         </div>
       </dl>
 
-      {q.isError && <p className="mt-2 text-[12px] text-down">{q.error instanceof MarketQuoteError ? q.error.message : "报价失败，稍后再试"}</p>}
+      {q.isError && <p className="mt-2 text-[12px] text-down">{q.error instanceof MarketQuoteError ? q.error.message : t("cw.coin.quoteFailed")}</p>}
       {err && <p className="mt-2 text-[12px] break-words text-down">{err}</p>}
 
       {insufficient && amountIn > 0n ? (
         <Link href="/wallet/receive" className="mt-4 flex h-14 w-full items-center justify-center rounded-2xl bg-muted text-[16px] font-semibold">
-          {buy ? `${nc.symbol} 不够（要留网络费），去充值` : "余额不足"}
+          {buy ? t("cw.coin.lowNativeDeposit", { sym: nc.symbol }) : t("transfer.insufficient")}
         </Link>
       ) : (
         <PrimaryButton tone={buy ? "up" : "down"} className={cn("mt-4", buy && "text-black")} disabled={!view || !!step} onClick={go}>
           <span className="flex items-center justify-center gap-1.5">
             {step ? <CircleNotch size={18} className="animate-spin" /> : <Lightning size={18} weight="fill" />}
-            {step ? STEP_LABEL[step] : buy ? `买入 ${token.symbol}` : `卖出 ${token.symbol}`}
+            {step ? t(STEP_LABEL[step]) : buy ? t("cw.coin.buySym", { sym: token.symbol }) : t("cw.coin.sellSym", { sym: token.symbol })}
           </span>
         </PrimaryButton>
       )}
-      <p className="mt-2 text-center text-[11px] text-muted-foreground">经 KyberSwap 聚合路由，在你的钱包里签名，不经过平台托管，平台不收手续费</p>
+      <p className="mt-2 text-center text-[11px] text-muted-foreground">{t("cw.market.kyberNote")}</p>
     </>
   );
 }

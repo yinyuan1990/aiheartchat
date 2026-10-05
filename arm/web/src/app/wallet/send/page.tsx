@@ -14,6 +14,7 @@ import { isTronAddress } from "@/lib/wallet/tron";
 import { isTonAddress } from "@/lib/wallet/ton";
 import { hasFeature, reportResult, returnsToApp, scanQr } from "@/lib/wallet/native";
 import { transferMessage } from "@/lib/wallet/payee";
+import { t } from "@/lib/wallet/i18n";
 import { parsePayment, parseScanned, sendLinkOf } from "@/lib/wallet/scan";
 import { familyOf, pushRecent, useAddressBook } from "@/lib/wallet/address-book";
 import { useAssets, type Asset } from "@/lib/wallet/assets";
@@ -26,9 +27,9 @@ import { TonSend } from "@/components/wallet/ton-send";
 import { BottomSheet, ChainGlyph, ChainPill, GhostButton, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
 
 const SPEEDS = [
-  { key: "slow", label: "慢", mul: 0.9 },
-  { key: "normal", label: "推荐", mul: 1 },
-  { key: "fast", label: "快", mul: 1.5 },
+  { key: "slow", label: "cw.send.slow", mul: 0.9 },
+  { key: "normal", label: "cw.send.normal", mul: 1 },
+  { key: "fast", label: "cw.send.fast", mul: 1.5 },
 ] as const;
 type Speed = (typeof SPEEDS)[number]["key"] | "custom";
 /** Gwei strings as typed in the advanced sheet. */
@@ -73,8 +74,8 @@ function Keyed() {
   useEffect(() => {
     if (scanText == null) return;
     const p = parsePayment(scanText);
-    if (!p) toast.error("没认出收款地址，请换一个二维码或手动粘贴");
-    else if (p.unknownChainId) toast.warning(`二维码指定的链（ID ${p.unknownChainId}）钱包暂不支持，请选择网络`);
+    if (!p) toast.error(t("cw.send.scanUnknown"));
+    else if (p.unknownChainId) toast.warning(t("cw.send.qrChainUnsupportedPick", { id: p.unknownChainId }));
     router.replace(p ? sendLinkOf(p) : "/wallet/send");
   }, [scanText, router]);
   if (scanText != null) return null;
@@ -100,8 +101,8 @@ function LinkedSend() {
     const want = isTronAddress(wantedTo) ? "trx" : isTonAddress(wantedTo) ? "ton" : isSolAddress(wantedTo) ? "sol" : isAddress(wantedTo) ? "evm" : null;
     const have = isSolana(chain) ? "sol" : isTron(chain) ? "trx" : isTon(chain) ? "ton" : "evm";
     if (!want || want === have) return;
-    const t = setTimeout(() => setChain(want === "sol" ? SOL_CHAIN.key : want === "trx" ? TRON_CHAIN.key : want === "ton" ? TON_CHAIN.key : "arc"), 0);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setChain(want === "sol" ? SOL_CHAIN.key : want === "trx" ? TRON_CHAIN.key : want === "ton" ? TON_CHAIN.key : "arc"), 0);
+    return () => clearTimeout(timer);
   }, [wantedTo, wantedChain, chain, setChain]);
   return isSolana(chain) ? <SolSend /> : isTron(chain) ? <TronSend /> : isTon(chain) ? <TonSend /> : <EvmSend />;
 }
@@ -160,13 +161,13 @@ function EvmSend() {
   useEffect(() => {
     if (!scanned || scanned.chainId !== chain.chain.id || loading || assets.length === 0) return;
     const a = scanned.token ? assets.find((x) => x.token?.toLowerCase() === scanned.token) : assets.find((x) => x.id === (chain.nativeIsUsdc ? "usdc" : "native"));
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       setScanned(null);
-      if (!a) return void toast.warning("二维码里的代币不在当前钱包的币种列表里，请自己选择币种");
+      if (!a) return void toast.warning(t("cw.send.qrTokenMissing"));
       setAssetId(a.id);
       if (scanned.raw != null) setAmount(formatUnits(scanned.raw, scanned.token ? a.decimals : chain.chain.nativeCurrency.decimals));
     }, 0);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [scanned, chain, loading, assets]);
 
   const scan = async () => {
@@ -178,14 +179,14 @@ function EvmSend() {
     }
     if (!text) return;
     const p = parseScanned(text);
-    if (!p) return void (switchToScanned(text) || toast.error("没认出收款地址，请换一个二维码或手动粘贴"));
+    if (!p) return void (switchToScanned(text) || toast.error(t("cw.send.scanUnknown")));
     let target = chain;
     if (p.chainId && p.chainId !== chain.chain.id) {
       const c = chainById(p.chainId);
-      if (!c) return void toast.error(`二维码指定的链（ID ${p.chainId}）钱包暂不支持`);
+      if (!c) return void toast.error(t("cw.send.qrChainUnsupported", { id: p.chainId }));
       setChain(c.key);
       target = c;
-      toast.info(`二维码指定 ${c.name} 网络，已切换`);
+      toast.info(t("cw.send.qrSwitched", { chain: c.name }));
     }
     setTo(p.to);
     if (p.token || p.raw != null) setScanned({ chainId: target.chain.id, token: p.token?.toLowerCase(), raw: p.raw });
@@ -274,7 +275,7 @@ function EvmSend() {
     try {
       setTo((await navigator.clipboard.readText()).trim());
     } catch {
-      toast.error("无法读取剪贴板，请手动粘贴");
+      toast.error(t("cw.send.clipboardFail"));
     }
   };
 
@@ -287,10 +288,10 @@ function EvmSend() {
 
   return (
     <WalletFrame>
-      <TopBar title={link.name ? `转账给 ${link.name}` : "转账"} back="/wallet" right={<ChainPill chain={chain} onClick={() => setSheet("chain")} />} />
+      <TopBar title={link.name ? t("cw.send.toName", { name: link.name }) : t("cw.send.title")} back="/wallet" right={<ChainPill chain={chain} onClick={() => setSheet("chain")} />} />
       <BottomSheet open={sheet === "chain"} onClose={() => setSheet(null)}>
-        <div className="mb-1 text-center text-[17px] font-semibold">选择网络</div>
-        <p className="mb-3 text-center text-[12px] text-muted-foreground">0x 地址在这些链上通用，选对方要收的那条链</p>
+        <div className="mb-1 text-center text-[17px] font-semibold">{t("cw.ui.selectNetwork")}</div>
+        <p className="mb-3 text-center text-[12px] text-muted-foreground">{t("cw.send.evmPickHint")}</p>
         <ul className="space-y-1">
           {EVM_CHAINS.map((c) => (
             <li key={c.key}>
@@ -298,7 +299,7 @@ function EvmSend() {
                 <ChainGlyph chain={c} size={32} />
                 <span className="flex-1 text-left">
                   <span className="block text-[15px] font-semibold">{c.name}</span>
-                  <span className="block text-[12px] text-muted-foreground">默认转 {c.chain.nativeCurrency.symbol}，可再选别的币</span>
+                  <span className="block text-[12px] text-muted-foreground">{t("cw.send.evmChainSub", { symbol: c.chain.nativeCurrency.symbol })}</span>
                 </span>
               </button>
             </li>
@@ -318,7 +319,7 @@ function EvmSend() {
               </div>
               <div className="flex-1">
                 <div className="text-[15px] font-semibold">{asset.symbol}</div>
-                <div className="mt-0.5 font-mono text-[12px] text-muted-foreground">余额 {fmt(asset.amount)}</div>
+                <div className="mt-0.5 font-mono text-[12px] text-muted-foreground">{t("cw.send.balance", { n: fmt(asset.amount) })}</div>
               </div>
             </>
           ) : (
@@ -329,21 +330,21 @@ function EvmSend() {
 
         <div className="rounded-[22px] bg-card p-4 ring-1 ring-border/60">
           <div className="flex items-center justify-between">
-            <span className="text-[13px] font-medium text-muted-foreground">收款地址</span>
+            <span className="text-[13px] font-medium text-muted-foreground">{t("cw.send.recipient")}</span>
             <span className="flex items-center gap-1.5">
               <button type="button" onClick={() => setSheet("book")} className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[12px] font-medium">
                 <AddressBook size={14} />
-                地址簿
+                {t("cw.send.book")}
               </button>
               {canScan && (
                 <button type="button" onClick={scan} className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[12px] font-medium">
                   <Scan size={14} />
-                  扫一扫
+                  {t("me.scan")}
                 </button>
               )}
               <button type="button" onClick={paste} className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[12px] font-medium">
                 <ClipboardText size={14} />
-                粘贴
+                {t("cw.send.paste")}
               </button>
             </span>
           </div>
@@ -353,22 +354,22 @@ function EvmSend() {
             rows={2}
             spellCheck={false}
             autoCapitalize="none"
-            placeholder={`${chain.name} 上的 0x 地址`}
+            placeholder={t("cw.send.evmPlaceholder", { chain: chain.name })}
             className="mt-1 min-h-[48px] w-full resize-none bg-transparent font-mono text-[15px] leading-6 break-all outline-none placeholder:font-sans placeholder:text-muted-foreground/70"
           />
-          {to.trim() && !validTo && <div className="text-[12px] text-down">地址格式不对</div>}
-          {selfSend && <div className="text-[12px] text-[#d48806]">这是你自己的地址</div>}
+          {to.trim() && !validTo && <div className="text-[12px] text-down">{t("cw.send.badAddress")}</div>}
+          {selfSend && <div className="text-[12px] text-[#d48806]">{t("cw.send.selfAddress")}</div>}
           {contact ? (
             <div className="mt-1 flex items-center gap-1.5 rounded-xl bg-up/10 px-2.5 py-1.5 text-[12px] text-up">
               <AddressBook size={14} weight="fill" />
-              <span className="truncate">地址簿：{contact.name}</span>
+              <span className="truncate">{t("cw.send.bookName", { name: contact.name })}</span>
             </div>
           ) : (
             toAddr &&
             recent.includes(toAddr) && (
               <div className="mt-1 flex items-center gap-1.5 rounded-xl bg-up/10 px-2.5 py-1.5 text-[12px] text-up">
                 <ShieldCheck size={14} weight="fill" />
-                以前转过这个地址
+                {t("cw.send.sentBefore")}
               </div>
             )
           )}
@@ -389,7 +390,7 @@ function EvmSend() {
 
         <div className="rounded-[22px] bg-card p-4 ring-1 ring-border/60">
           <div className="flex items-center justify-between text-[13px] font-medium text-muted-foreground">
-            <span>数量</span>
+            <span>{t("cw.send.amount")}</span>
             {asset?.priceUsd != null && value != null && <span className="font-mono">≈ ${(Number(amount) * asset.priceUsd).toFixed(2)}</span>}
           </div>
           <div className="mt-2 flex items-baseline gap-2">
@@ -402,11 +403,11 @@ function EvmSend() {
             />
             <span className="text-[17px] font-semibold text-muted-foreground">{asset?.symbol}</span>
           </div>
-          {over && <div className="text-[12px] text-down">余额不足{feeFromSameBalance ? "（还要留出网络费）" : ""}</div>}
+          {over && <div className="text-[12px] text-down">{feeFromSameBalance ? t("cw.send.insufficientWithFee") : t("transfer.insufficient")}</div>}
           <div className="mt-3 grid grid-cols-4 gap-2">
             {[0.25, 0.5, 0.75, 1].map((p) => (
               <button key={p} type="button" onClick={() => setMax(p)} className="h-9 rounded-xl bg-muted text-[13px] font-medium transition active:scale-95">
-                {p === 1 ? "最大" : `${p * 100}%`}
+                {p === 1 ? t("cw.send.max") : `${p * 100}%`}
               </button>
             ))}
           </div>
@@ -415,10 +416,10 @@ function EvmSend() {
         <div className="rounded-[22px] bg-card p-4 ring-1 ring-border/60">
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1 text-[13px] font-medium text-muted-foreground">
-              网络费
+              {t("cw.send.fee")}
               <Info size={14} />
             </span>
-            <span className="text-[12px] text-muted-foreground">用 {nc.symbol} 支付</span>
+            <span className="text-[12px] text-muted-foreground">{t("cw.send.payWith", { symbol: nc.symbol })}</span>
           </div>
           <div className="mt-3 grid grid-cols-4 gap-1 rounded-2xl bg-muted p-1">
             {SPEEDS.map((s) => {
@@ -428,7 +429,7 @@ function EvmSend() {
                 <button key={s.key} type="button" onClick={() => setSpeed(s.key)} className={cn("flex min-w-0 flex-col items-center rounded-xl px-1 py-2 transition", on ? "bg-card shadow-sm" : "text-muted-foreground")}>
                   <span className={cn("flex items-center gap-0.5 text-[13px]", on ? "font-semibold" : "font-medium")}>
                     {s.key === "fast" && <Lightning size={12} weight="fill" className={on ? "text-amber-500" : undefined} />}
-                    {s.label}
+                    {t(s.label)}
                   </span>
                   {f ? (
                     <span className="mt-0.5 max-w-full truncate font-mono text-[11px]">{fmtFee(f.cost, true)}</span>
@@ -441,20 +442,20 @@ function EvmSend() {
             <button type="button" disabled={!fees.data} onClick={() => setSheet("gas")} className={cn("flex min-w-0 flex-col items-center rounded-xl px-1 py-2 transition", speed === "custom" ? "bg-card shadow-sm" : "text-muted-foreground")}>
               <span className={cn("flex items-center gap-0.5 text-[13px]", speed === "custom" ? "font-semibold" : "font-medium")}>
                 <SlidersHorizontal size={12} />
-                自定义
+                {t("cw.send.custom")}
               </span>
-              <span className="mt-0.5 max-w-full truncate font-mono text-[11px]">{speed === "custom" && chosen ? fmtFee(chosen.cost, true) : "设置"}</span>
+              <span className="mt-0.5 max-w-full truncate font-mono text-[11px]">{speed === "custom" && chosen ? fmtFee(chosen.cost, true) : t("cw.send.set")}</span>
             </button>
           </div>
           {speed === "custom" && chosen && (
             <button type="button" onClick={() => setSheet("gas")} className="mt-2 w-full rounded-xl bg-muted/60 px-3 py-2 text-left font-mono text-[11px] leading-5 text-muted-foreground">
-              {fees.data?.legacy ? `Gas 价格 ${gweiLabel(chosen.maxFee)} Gwei` : `最高 ${gweiLabel(chosen.maxFee)} Gwei · 小费 ${gweiLabel(chosen.tip)} Gwei`} · Gas 上限 {chosen.gas.toString()}
-              {fees.data && chosen.gas < fees.data.gas && <span className="mt-0.5 block font-sans text-[#d48806]">Gas 上限低于这笔转账的估算（{fees.data.gas.toString()}），很可能失败</span>}
+              {fees.data?.legacy ? t("cw.send.gasPriceLine", { n: gweiLabel(chosen.maxFee) }) : t("cw.send.maxTipLine", { max: gweiLabel(chosen.maxFee), tip: gweiLabel(chosen.tip) })} · {t("cw.send.gasLimitLine", { n: chosen.gas.toString() })}
+              {fees.data && chosen.gas < fees.data.gas && <span className="mt-0.5 block font-sans text-[#d48806]">{t("cw.send.gasLimitLowTx", { n: fees.data.gas.toString() })}</span>}
             </button>
           )}
           {!asset?.gas && asset && (
             <p className="mt-3 text-[12px] text-muted-foreground">
-              需要钱包里有少量 {nc.symbol} 付网络费。
+              {t("cw.send.needGas", { symbol: nc.symbol })}
             </p>
           )}
         </div>
@@ -463,12 +464,12 @@ function EvmSend() {
       <div aria-hidden className="h-[calc(72px+max(16px,env(safe-area-inset-bottom)))] shrink-0 sm:hidden" />
       <div className="fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-[430px] bg-background/90 px-4 pt-2 pb-[max(16px,env(safe-area-inset-bottom))] backdrop-blur-xl sm:sticky">
         <PrimaryButton disabled={!validTo || !value || over || !chosen} onClick={() => setSheet("confirm")}>
-          下一步
+          {t("common.next")}
         </PrimaryButton>
       </div>
 
       <BottomSheet open={sheet === "asset"} onClose={() => setSheet(null)}>
-        <div className="mb-3 text-center text-[17px] font-semibold">选择币种</div>
+        <div className="mb-3 text-center text-[17px] font-semibold">{t("cw.send.pickAsset")}</div>
         <ul className="space-y-1">
           {assets.map((a) => (
             <li key={a.id}>
@@ -536,7 +537,7 @@ function ConfirmBody({ asset, amount, fromName, from, to, toName, chain, fee, on
   const [busy, setBusy] = useState(false);
   return (
     <>
-      <div className="text-center text-[17px] font-semibold">确认转账</div>
+      <div className="text-center text-[17px] font-semibold">{t("cw.send.confirmTitle")}</div>
       <div className="mt-5 text-center">
         <div className="font-mono text-[34px] font-semibold tracking-tight">
           {amount} <span className="text-[18px] text-muted-foreground">{asset?.symbol}</span>
@@ -544,35 +545,35 @@ function ConfirmBody({ asset, amount, fromName, from, to, toName, chain, fee, on
         {asset?.priceUsd != null && <div className="mt-1 font-mono text-[13px] text-muted-foreground">≈ ${(Number(amount) * asset.priceUsd).toFixed(2)}</div>}
       </div>
       <dl className="mt-5 divide-y divide-border/60 rounded-[20px] bg-muted/60 px-4 text-[14px]">
-        <Row label="从">
+        <Row label={t("cw.send.from")}>
           <span className="flex items-center gap-1.5">
             {from && <WalletDot address={from} size={16} />}
             {fromName}
             <span className="font-mono text-muted-foreground">{from && shortAddr(from, 4, 4)}</span>
           </span>
         </Row>
-        <Row label="到">
+        <Row label={t("cw.send.to")}>
           <span className="flex max-w-[230px] flex-col items-end text-right">
             {toName && <span className="text-[14px] font-medium">{toName}</span>}
             <span className="font-mono text-[13px] break-all">{to}</span>
           </span>
         </Row>
-        <Row label="网络">
+        <Row label={t("cw.send.network")}>
           <span className="flex items-center gap-1.5">
             <ChainGlyph chain={chain} size={16} />
             {chain.name}
           </span>
         </Row>
-        <Row label="网络费（最多）">
+        <Row label={t("cw.send.feeMax")}>
           <span className="font-mono">{fee}</span>
         </Row>
       </dl>
       <p className="mt-3 flex items-start gap-1.5 text-[12px] leading-5 text-muted-foreground">
         <Warning size={14} className="mt-0.5 shrink-0" />
-        链上转账发出后无法撤回，请确认地址和网络都正确。
+        {t("cw.send.irreversibleEvm")}
       </p>
       <div className="mt-4 grid grid-cols-[1fr_2fr] gap-2">
-        <GhostButton onClick={onCancel}>取消</GhostButton>
+        <GhostButton onClick={onCancel}>{t("common.cancel")}</GhostButton>
         <PrimaryButton
           disabled={busy}
           onClick={async () => {
@@ -581,7 +582,7 @@ function ConfirmBody({ asset, amount, fromName, from, to, toName, chain, fee, on
             setBusy(false);
           }}
         >
-          {busy ? "签名发送中…" : "确认并转账"}
+          {busy ? t("cw.send.signing") : t("cw.send.confirmSend")}
         </PrimaryButton>
       </div>
     </>
@@ -597,9 +598,9 @@ function GasSheet({ legacy, estimate, network, initial, fmtFee, onSave }: { lega
     tipOver = !legacy && !!c.tip && !!c.maxFee && parseUnits(c.tip, 9) > parseUnits(c.maxFee, 9);
   } catch {}
   const warnings: string[] = [];
-  if (f && f.gas < estimate) warnings.push(`Gas 上限低于估算（${estimate.toString()}），交易很可能失败，网络费照扣`);
-  if (f && f.maxFee < network / 2n) warnings.push("费用比推荐值低很多，可能很久都不确认");
-  if (f && f.maxFee > network * 5n) warnings.push("费用比推荐值高很多，会多付网络费");
+  if (f && f.gas < estimate) warnings.push(t("cw.send.gasLimitLow", { n: estimate.toString() }));
+  if (f && f.maxFee < network / 2n) warnings.push(t("cw.send.feeLow"));
+  if (f && f.maxFee > network * 5n) warnings.push(t("cw.send.feeHigh"));
 
   const field = (label: string, k: keyof CustomGas, unit: string, hint: string, int = false) => (
     <div className="rounded-[18px] bg-muted/60 px-4 py-3">
@@ -616,19 +617,19 @@ function GasSheet({ legacy, estimate, network, initial, fmtFee, onSave }: { lega
 
   return (
     <>
-      <div className="mb-4 text-center text-[17px] font-semibold">自定义网络费</div>
+      <div className="mb-4 text-center text-[17px] font-semibold">{t("cw.send.customFee")}</div>
       <div className="space-y-2">
         {legacy ? (
-          field("Gas 价格", "maxFee", "Gwei", `推荐 ${gweiLabel(network)}`)
+          field(t("cw.send.gasPrice"), "maxFee", "Gwei", t("cw.send.suggested", { n: gweiLabel(network) }))
         ) : (
           <>
-            {field("最高费用", "maxFee", "Gwei", `推荐 ${gweiLabel(network)}`)}
-            {field("优先小费", "tip", "Gwei", "给出块者，越高越快")}
+            {field(t("cw.send.maxFee"), "maxFee", "Gwei", t("cw.send.suggested", { n: gweiLabel(network) }))}
+            {field(t("cw.send.priorityFee"), "tip", "Gwei", t("cw.send.tipHint"))}
           </>
         )}
-        {field("Gas 上限", "gas", "", `估算 ${estimate.toString()}`, true)}
+        {field(t("cw.send.gasLimit"), "gas", "", t("cw.send.estimated", { n: estimate.toString() }), true)}
       </div>
-      {tipOver && <p className="mt-2 text-[12px] text-down">小费不能高于最高费用</p>}
+      {tipOver && <p className="mt-2 text-[12px] text-down">{t("cw.send.tipOverMax")}</p>}
       {warnings.map((w) => (
         <p key={w} className="mt-2 flex items-start gap-1.5 text-[12px] leading-5 text-[#d48806]">
           <Warning size={14} className="mt-0.5 shrink-0" />
@@ -636,11 +637,11 @@ function GasSheet({ legacy, estimate, network, initial, fmtFee, onSave }: { lega
         </p>
       ))}
       <div className="mt-4 flex items-center justify-between rounded-[18px] bg-muted/60 px-4 py-3 text-[14px]">
-        <span className="text-muted-foreground">最多花费</span>
+        <span className="text-muted-foreground">{t("cw.send.maxCost")}</span>
         <span className="font-mono font-semibold">{f ? fmtFee(f.cost) : "—"}</span>
       </div>
       <PrimaryButton className="mt-4" disabled={!f} onClick={() => onSave(legacy ? { ...c, tip: "" } : c)}>
-        使用这个设置
+        {t("cw.send.useSettings")}
       </PrimaryButton>
     </>
   );

@@ -1,6 +1,7 @@
 import { formatUnits } from "viem";
 import { fetchSolTokens } from "./assets";
 import type { Line, Risk } from "./dapp-decode";
+import { t } from "./i18n";
 import {
   ATA_PROGRAM,
   COMPUTE_BUDGET_PROGRAM,
@@ -127,7 +128,7 @@ export const signerSlot = (tx: SolWireTx, address: string) => {
 
 export function signWire(tx: SolWireTx, kp: SolKeypair): { bytes: Uint8Array; signature: Uint8Array } {
   const slot = signerSlot(tx, kp.address);
-  if (slot < 0) throw new Error("这笔交易不需要当前钱包签名");
+  if (slot < 0) throw new Error(t("cw.sol.notSigner"));
   const signature = signBytes(tx.bytes.subarray(tx.messageStart), kp);
   const out = tx.bytes.slice();
   out.set(signature, tx.sigStart + slot * 64);
@@ -136,12 +137,13 @@ export function signWire(tx: SolWireTx, kp: SolKeypair): { bytes: Uint8Array; si
 
 // ---------- plain-language summary ----------
 
+/** Values starting with "cw." are i18n keys, the rest are brand names. */
 const PROGRAMS: Record<string, string> = {
-  [SYSTEM_PROGRAM]: "系统程序",
-  [TOKEN_PROGRAM]: "代币程序",
-  [TOKEN_2022_PROGRAM]: "代币程序 2022",
-  [ATA_PROGRAM]: "代币账户",
-  [COMPUTE_BUDGET_PROGRAM]: "网络费设置",
+  [SYSTEM_PROGRAM]: "cw.sol.pSystem",
+  [TOKEN_PROGRAM]: "cw.sol.pToken",
+  [TOKEN_2022_PROGRAM]: "cw.sol.pToken2022",
+  [ATA_PROGRAM]: "cw.sol.pAta",
+  [COMPUTE_BUDGET_PROGRAM]: "cw.sol.pComputeBudget",
   JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4: "Jupiter",
   "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P": "pump.fun",
   pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA: "PumpSwap",
@@ -151,12 +153,15 @@ const PROGRAMS: Record<string, string> = {
   LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj: "Raydium LaunchLab",
   whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc: "Orca",
   LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo: "Meteora",
-  MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr: "备注",
-  Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo: "备注",
+  MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr: "cw.sol.pMemo",
+  Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo: "cw.sol.pMemo",
   metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s: "Metaplex",
 };
 const short = (a: string) => `${a.slice(0, 4)}…${a.slice(-4)}`;
-export const programName = (p: string) => PROGRAMS[p] ?? short(p);
+export const programName = (p: string) => {
+  const n = PROGRAMS[p];
+  return n ? (n.startsWith("cw.") ? t(n) : n) : short(p);
+};
 const fmtSol = (lamports: number) => {
   const n = lamports / LAMPORTS;
   return `${n !== 0 && Math.abs(n) < 0.000001 ? n.toExponential(2) : n.toLocaleString("en-US", { maximumFractionDigits: 6 })} SOL`;
@@ -199,10 +204,10 @@ export function describeSolTx(tx: SolWireTx, me: string): SolTxView {
         outs.set(to, (outs.get(to) ?? 0) + Number(u64At(d, 4) ?? 0n));
       } else if (op === 1 && acc(0) === me) {
         bump("danger");
-        notes.push("这笔交易会把你的钱包账户交给别的程序管理，签了以后账户里的 SOL 可能被转走。正常的 DApp 不会这样做。");
+        notes.push(t("cw.sol.assignNote"));
       } else if (op === 4 && n === 0) {
         bump("warn");
-        notes.push("这笔交易用的是长期有效的 nonce：签名后对方可以在任何时候再把它发出去，不会过期。");
+        notes.push(t("cw.sol.durableNonceNote"));
       }
       continue;
     }
@@ -212,26 +217,26 @@ export function describeSolTx(tx: SolWireTx, me: string): SolTxView {
         const amount = u64At(d, 1);
         const delegate = acc(op === 4 ? 1 : 2) ?? "?";
         bump(amount === U64_MAX ? "danger" : "warn");
-        notes.push(`授权 ${short(delegate)} 动用你的代币${amount === U64_MAX ? "（数量不限）" : ""}。只在你信任这个网站时确认。`);
+        notes.push(amount === U64_MAX ? t("cw.sol.approveUnlimitedNote", { addr: short(delegate) }) : t("cw.sol.approveNote", { addr: short(delegate) }));
       } else if (op === 6 && acc(1) === me) {
         bump("danger");
-        notes.push("这笔交易会把你的代币账户（或代币）的控制权交给别人。这是常见的盗币手法。");
+        notes.push(t("cw.sol.setAuthorityNote"));
       } else if (op === 9 && acc(2) === me && acc(1) !== me) {
         bump("warn");
-        notes.push(`关闭你的一个代币账户，里面的租金退到 ${short(acc(1) ?? "?")}，不是退给你。`);
+        notes.push(t("cw.sol.closeAccountNote", { addr: short(acc(1) ?? "?") }));
       }
     }
   }
 
-  for (const [to, lamports] of outs) lines.push({ label: "转出 SOL", value: `${fmtSol(lamports)} → ${short(to)}`, mono: true, tone: "down" });
+  for (const [to, lamports] of outs) lines.push({ label: t("cw.sol.sendSol"), value: `${fmtSol(lamports)} → ${short(to)}`, mono: true, tone: "down" });
   const programs = [...new Set(msg.ixs.map((i) => i.program).filter((p) => p !== COMPUTE_BUDGET_PROGRAM))];
-  lines.push({ label: "调用程序", value: programs.map(programName).join("、") || "—" });
+  lines.push({ label: t("cw.sol.programs"), value: programs.map(programName).join(t("cw.sol.sep")) || "—" });
   const unknown = programs.filter((p) => !PROGRAMS[p]);
   if (unknown.length) {
     bump("warn");
-    notes.push(`调用了不认识的程序 ${unknown.map(short).join("、")}，看不出具体做什么，请以下面的余额变化为准。`);
+    notes.push(t("cw.sol.unknownProgramsNote", { list: unknown.map(short).join(t("cw.sol.sep")) }));
   }
-  if (msg.keys[0] !== me) notes.push("网络费由对方支付。");
+  if (msg.keys[0] !== me) notes.push(t("cw.sol.feeByOther"));
 
   const limit = cuLimit >= 0 ? cuLimit : Math.min(1_400_000, 200_000 * Math.max(1, work));
   const feeLamports = msg.header[0] * SIGNATURE_FEE + Math.ceil((limit * Number(cuPrice)) / 1_000_000);
@@ -311,7 +316,7 @@ export async function broadcast(url: string, bytes: Uint8Array, signature: Uint8
     { encoding: "base64", skipPreflight: !!opts.skipPreflight, preflightCommitment: opts.preflightCommitment ?? "confirmed", maxRetries: 0 },
   ]).catch((e: Error & { logs?: string[] }) => {
     const why = explainSolError(e.message, e.logs ?? []);
-    throw new Error(why === e.message ? `发送前检查没通过：${e.message.replace(/^Transaction simulation failed:?\s*/, "") || "交易会失败"}` : why);
+    throw new Error(why === e.message ? t("cw.sol.preflightFailed", { msg: e.message.replace(/^Transaction simulation failed:?\s*/, "") || t("cw.sol.wouldFail") }) : why);
   });
   const confirmed = sendAndConfirm(url, bytes, sig);
   if (wait) await confirmed;

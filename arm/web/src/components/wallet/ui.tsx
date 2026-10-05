@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
 import { ArrowLeft, CaretDown, Compass, ChartLineUp, UserCircle, Wallet as WalletIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/wallet/i18n";
 type ChainInfo = { name: string; color: string; glyph: string; icon?: string };
 
 const noSubscribe = () => () => {};
@@ -30,11 +31,11 @@ export function TopBar({ title, back, onBack, right }: { title?: React.ReactNode
   return (
     <header className="sticky top-0 z-20 flex h-14 items-center gap-2 bg-background/85 px-3 backdrop-blur-xl">
       {onBack ? (
-        <button type="button" aria-label="返回" onClick={onBack} className={cls}>
+        <button type="button" aria-label={t("common.back")} onClick={onBack} className={cls}>
           <ArrowLeft size={20} weight="bold" />
         </button>
       ) : back ? (
-        <Link href={back} aria-label="返回" className={cls}>
+        <Link href={back} aria-label={t("common.back")} className={cls}>
           <ArrowLeft size={20} weight="bold" />
         </Link>
       ) : (
@@ -101,10 +102,10 @@ export function Pct({ value, className }: { value: number; className?: string })
 }
 
 const NAV = [
-  { href: "/wallet", label: "资产", icon: WalletIcon },
-  { href: "/wallet/token", label: "交易", icon: ChartLineUp },
-  { href: "/wallet/dapp", label: "DApp", icon: Compass },
-  { href: "/wallet/me", label: "我的", icon: UserCircle },
+  { href: "/wallet", label: "cw.ui.navAssets", icon: WalletIcon },
+  { href: "/wallet/token", label: "cw.ui.navTrade", icon: ChartLineUp },
+  { href: "/wallet/dapp", label: "cw.ui.navDapp", icon: Compass },
+  { href: "/wallet/me", label: "tab.me", icon: UserCircle },
 ];
 
 /** Pinned to the viewport on phones (sticky drifts away inside the App WebViews); the spacer keeps content clear of it. */
@@ -121,7 +122,7 @@ export function BottomNav() {
             return (
               <Link key={n.href} href={n.href} className={cn("flex w-16 flex-col items-center gap-0.5 text-[11px] transition active:scale-90", active ? "text-foreground" : "text-muted-foreground")}>
                 <Icon size={24} weight={active ? "fill" : "regular"} />
-                {n.label}
+                {t(n.label)}
               </Link>
             );
           })}
@@ -135,7 +136,7 @@ export function BottomNav() {
 export function BottomSheet({ open, onClose, children, className }: { open: boolean; onClose: () => void; children: React.ReactNode; className?: string }) {
   return (
     <div aria-hidden={!open} className={cn("fixed inset-0 z-40 sm:absolute", !open && "pointer-events-none")}>
-      <button type="button" aria-label="关闭" onClick={onClose} className={cn("absolute inset-0 bg-black/40 backdrop-blur-[2px] transition-opacity duration-200", open ? "opacity-100" : "opacity-0")} />
+      <button type="button" aria-label={t("common.close")} onClick={onClose} className={cn("absolute inset-0 bg-black/40 backdrop-blur-[2px] transition-opacity duration-200", open ? "opacity-100" : "opacity-0")} />
       <div
         className={cn(
           "absolute inset-x-0 bottom-0 max-h-[88%] overflow-y-auto rounded-t-[28px] bg-card px-5 pt-2 pb-[max(20px,env(safe-area-inset-bottom))] transition-transform duration-200 ease-out",

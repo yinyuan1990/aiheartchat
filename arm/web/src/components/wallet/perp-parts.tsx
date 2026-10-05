@@ -8,7 +8,8 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { chainByKey, explorerTx, publicClientFor, rpcOf } from "@/lib/wallet/chains";
 import { ARB_USDC, HL_BRIDGE, MIN_DEPOSIT, WITHDRAW_FEE, withdraw, type HlAsset } from "@/lib/wallet/hl";
-import { AI_PROVIDERS, DEFAULT_RISK, providerOf, testAi, type AiConfig, type AiResult } from "@/lib/wallet/ai-trade";
+import { AI_PROVIDERS, DEFAULT_RISK, providerName, providerOf, testAi, type AiConfig, type AiResult } from "@/lib/wallet/ai-trade";
+import { t } from "@/lib/wallet/i18n";
 import { GhostButton, PrimaryButton } from "./ui";
 
 /** Inline gradient: Tailwind 4 gradient utilities don't render in Chromium 99. */
@@ -18,8 +19,9 @@ export const usd = (n: number, d = 2) => `$${n.toLocaleString("en-US", { minimum
 export const sUsd = (n: number, d = 2) => `${n >= 0 ? "+" : "-"}${usd(Math.abs(n), d)}`;
 export const px = (n: number) => (n >= 1000 ? n.toLocaleString("en-US", { maximumFractionDigits: 1 }) : n >= 1 ? n.toLocaleString("en-US", { maximumFractionDigits: 4 }) : n.toPrecision(4));
 
-/** Hyperliquid fill `dir` → 中文 */
-export const DIR: Record<string, string> = { "Open Long": "开多", "Close Long": "平多", "Open Short": "开空", "Close Short": "平空", "Long > Short": "多转空", "Short > Long": "空转多", Settlement: "结算" };
+/** Hyperliquid fill `dir` → i18n key */
+const DIR: Record<string, string> = { "Open Long": "cw.perp.dirOpenLong", "Close Long": "cw.perp.dirCloseLong", "Open Short": "cw.perp.dirOpenShort", "Close Short": "cw.perp.dirCloseShort", "Long > Short": "cw.perp.dirLongToShort", "Short > Long": "cw.perp.dirShortToLong", Settlement: "cw.perp.dirSettlement" };
+export const dirText = (dir: string) => (DIR[dir] ? t(DIR[dir]) : dir);
 
 export function RiskGate({ onAccept }: { onAccept: () => void }) {
   const [ok, setOk] = useState(false);
@@ -27,20 +29,20 @@ export function RiskGate({ onAccept }: { onAccept: () => void }) {
     <>
       <div className="flex items-center justify-center gap-1.5 text-[17px] font-semibold text-down">
         <ShieldWarning size={20} weight="fill" />
-        合约交易风险很高
+        {t("cw.perp.riskTitle")}
       </div>
       <ul className="mt-4 space-y-2 text-[13px] leading-6 text-muted-foreground">
-        <li>· 合约带杠杆，行情反向波动时可能在几分钟内亏光保证金（强平）。</li>
-        <li>· 交易在 Hyperliquid（链上永续合约交易所）进行，资金存在你自己的 Hyperliquid 账户里，心之音和 Arm 不保管、不能动你的钱。</li>
-        <li>· AI 只给建议，可能出错；每一笔都要你自己确认才会下单。AI 的费用用你自己的大模型账户支付。</li>
-        <li>· 只用你亏得起的钱。不构成投资建议。</li>
+        <li>· {t("cw.perp.risk1")}</li>
+        <li>· {t("cw.perp.risk2", { app: t("app.name") })}</li>
+        <li>· {t("cw.perp.risk3")}</li>
+        <li>· {t("cw.perp.risk4")}</li>
       </ul>
       <label className="mt-4 flex items-center gap-2 text-[14px]">
         <input type="checkbox" checked={ok} onChange={(e) => setOk(e.target.checked)} className="size-4" />
-        我已了解风险，自愿使用
+        {t("cw.perp.riskAccept")}
       </label>
       <PrimaryButton className="mt-4" disabled={!ok} onClick={onAccept}>
-        继续
+        {t("cw.perp.continue")}
       </PrimaryButton>
     </>
   );
@@ -66,17 +68,17 @@ export function DepositSheet({ main, onDone }: { main: LocalAccount; onDone: () 
   } catch {}
   const usdc = bal.data?.usdc ?? 0n;
   const noGas = bal.data && bal.data.eth === 0n;
-  const problem = raw == null ? null : raw < BigInt(MIN_DEPOSIT * 1e6) ? `最少 ${MIN_DEPOSIT} USDC（少于这个数到不了账，会丢失）` : raw > usdc ? "Arbitrum 上的 USDC 不够" : noGas ? "Arbitrum 上没有 ETH 付网络费" : null;
+  const problem = raw == null ? null : raw < BigInt(MIN_DEPOSIT * 1e6) ? t("cw.perp.depMin", { n: MIN_DEPOSIT }) : raw > usdc ? t("cw.perp.depNoUsdc") : noGas ? t("cw.perp.depNoGas") : null;
   const send = async () => {
     if (!raw || problem) return;
     setBusy(true);
     try {
       const wc = createWalletClient({ account: main, chain: arb.chain, transport: http(rpcOf(arb)) });
       const hash = await wc.writeContract({ address: ARB_USDC, abi: erc20Abi, functionName: "transfer", args: [HL_BRIDGE, raw] });
-      toast.info("已发出，等 Arbitrum 确认…");
+      toast.info(t("cw.perp.depSent"));
       const rc = await publicClientFor(arb).waitForTransactionReceipt({ hash, timeout: 120_000 });
-      if (rc.status !== "success") throw new Error("交易失败了");
-      toast.success("充值已到 Hyperliquid 跨链合约，约 1 分钟后到账", { action: { label: "查看", onClick: () => window.open(explorerTx(arb, hash), "_blank") } });
+      if (rc.status !== "success") throw new Error(t("cw.perp.txFailed"));
+      toast.success(t("cw.perp.depDone"), { action: { label: t("cw.perp.view"), onClick: () => window.open(explorerTx(arb, hash), "_blank") } });
       onDone();
     } catch (e) {
       toast.error((e as Error).message.split("\n")[0]);
@@ -86,25 +88,25 @@ export function DepositSheet({ main, onDone }: { main: LocalAccount; onDone: () 
   };
   return (
     <>
-      <div className="text-center text-[17px] font-semibold">充值到合约账户</div>
-      <p className="mt-2 text-center text-[12px] leading-5 text-muted-foreground">从你钱包在 Arbitrum 上的 USDC 转入 Hyperliquid，到账后就能交易</p>
+      <div className="text-center text-[17px] font-semibold">{t("cw.perp.depTitle")}</div>
+      <p className="mt-2 text-center text-[12px] leading-5 text-muted-foreground">{t("cw.perp.depSub")}</p>
       <div className="mt-4 rounded-2xl bg-muted/70 p-4">
         <div className="flex justify-between text-[13px] text-muted-foreground">
           <span>Arbitrum USDC</span>
           <button type="button" className="font-mono text-foreground" onClick={() => setAmount(formatUnits(usdc, 6))}>
-            {bal.data ? formatUnits(usdc, 6) : "…"} 全部
+            {bal.data ? formatUnits(usdc, 6) : "…"} {t("transfer.all")}
           </button>
         </div>
         <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" className="mt-2 w-full bg-transparent font-mono text-[30px] font-semibold outline-none" />
         {problem && <div className="text-[12px] text-down">{problem}</div>}
       </div>
       <ul className="mt-3 space-y-1 text-[12px] leading-5 text-muted-foreground">
-        <li>· 只能用 Arbitrum 上的原生 USDC，最少 {MIN_DEPOSIT} USDC，约 1 分钟到账。</li>
-        <li>· 需要一点 Arbitrum 上的 ETH 付网络费（几美分）{bal.data ? `，你有 ${Number(formatUnits(bal.data.eth, 18)).toFixed(5)} ETH` : ""}。</li>
-        <li>· 钱包里没有 Arbitrum USDC？先在「收款」页选 Arbitrum，从交易所提现过来。</li>
+        <li>· {t("cw.perp.depNote1", { n: MIN_DEPOSIT })}</li>
+        <li>· {bal.data ? t("cw.perp.depNote2Have", { eth: Number(formatUnits(bal.data.eth, 18)).toFixed(5) }) : t("cw.perp.depNote2")}</li>
+        <li>· {t("cw.perp.depNote3")}</li>
       </ul>
       <PrimaryButton className="mt-4" disabled={!raw || !!problem || busy} onClick={() => void send()}>
-        {busy ? "充值中…" : "确认充值"}
+        {busy ? t("cw.perp.depositing") : t("cw.perp.confirmDeposit")}
       </PrimaryButton>
     </>
   );
@@ -114,13 +116,13 @@ export function WithdrawSheet({ main, available, onDone }: { main: LocalAccount;
   const [amount, setAmount] = useState("");
   const [busy, setBusy] = useState(false);
   const v = Number(amount);
-  const problem = !amount ? null : !(v > WITHDRAW_FEE) ? `要大于手续费 ${WITHDRAW_FEE} USDC` : v > available ? "可提余额不够" : null;
+  const problem = !amount ? null : !(v > WITHDRAW_FEE) ? t("cw.perp.wdMinFee", { n: WITHDRAW_FEE }) : v > available ? t("cw.perp.wdNoBalance") : null;
   const go = async () => {
     if (problem || !(v > 0)) return;
     setBusy(true);
     try {
       await withdraw(main, v);
-      toast.success(`已提交提现，约 3～5 分钟到你钱包的 Arbitrum 地址（扣 ${WITHDRAW_FEE} USDC 手续费）`);
+      toast.success(t("cw.perp.wdDone", { n: WITHDRAW_FEE }));
       onDone();
     } catch (e) {
       toast.error((e as Error).message);
@@ -130,20 +132,20 @@ export function WithdrawSheet({ main, available, onDone }: { main: LocalAccount;
   };
   return (
     <>
-      <div className="text-center text-[17px] font-semibold">提现到钱包</div>
+      <div className="text-center text-[17px] font-semibold">{t("cw.perp.wdTitle")}</div>
       <div className="mt-4 rounded-2xl bg-muted/70 p-4">
         <div className="flex justify-between text-[13px] text-muted-foreground">
-          <span>可提</span>
+          <span>{t("cw.perp.wdAvailable")}</span>
           <button type="button" className="font-mono text-foreground" onClick={() => setAmount(String(Math.floor(available * 100) / 100))}>
-            {usd(available)} 全部
+            {usd(available)} {t("transfer.all")}
           </button>
         </div>
         <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" className="mt-2 w-full bg-transparent font-mono text-[30px] font-semibold outline-none" />
         {problem && <div className="text-[12px] text-down">{problem}</div>}
       </div>
-      <p className="mt-3 text-[12px] leading-5 text-muted-foreground">提到你这个钱包在 Arbitrum 上的地址（USDC），Hyperliquid 收 {WITHDRAW_FEE} USDC 手续费。用主钱包签名确认，代理钥匙不能提现。</p>
+      <p className="mt-3 text-[12px] leading-5 text-muted-foreground">{t("cw.perp.wdNote", { n: WITHDRAW_FEE })}</p>
       <PrimaryButton className="mt-4" disabled={!!problem || !(v > 0) || busy} onClick={() => void go()}>
-        {busy ? "提交中…" : "确认提现"}
+        {busy ? t("realname.submitting") : t("cw.perp.confirmWithdraw")}
       </PrimaryButton>
     </>
   );
@@ -166,7 +168,7 @@ export function AiSettingsSheet({ cfg, onSave, onClear }: { cfg: AiConfig | null
     setBusy("test");
     try {
       const r = await testAi(draft);
-      toast.success(`连通了（模型 ${r.model}）`);
+      toast.success(t("cw.perp.aiConnected", { model: r.model }));
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -177,40 +179,40 @@ export function AiSettingsSheet({ cfg, onSave, onClear }: { cfg: AiConfig | null
     <>
       <div className="flex items-center justify-center gap-1.5 text-[17px] font-semibold">
         <Robot size={20} />
-        AI 设置
+        {t("cw.perp.aiSettings")}
       </div>
-      <p className="mt-2 text-center text-[12px] leading-5 text-muted-foreground">用你自己的大模型账户，费用由服务商直接向你收。key 用钱包密码加密存在这台手机上。</p>
-      <div className="mt-4 text-[13px] font-medium text-muted-foreground">服务商</div>
+      <p className="mt-2 text-center text-[12px] leading-5 text-muted-foreground">{t("cw.perp.aiSettingsSub")}</p>
+      <div className="mt-4 text-[13px] font-medium text-muted-foreground">{t("cw.perp.aiProvider")}</div>
       <div className="mt-2 flex flex-wrap gap-2">
         {AI_PROVIDERS.map((x) => (
           <button key={x.id} type="button" onClick={() => setProvider(x.id)} className={cn("h-9 rounded-full px-3 text-[13px] font-medium ring-1", provider === x.id ? "bg-foreground text-background ring-foreground" : "bg-card ring-border")}>
-            {x.name}
+            {providerName(x)}
           </button>
         ))}
       </div>
-      {p.note && <p className="mt-2 text-[12px] text-muted-foreground">{p.note}</p>}
+      {p.note && <p className="mt-2 text-[12px] text-muted-foreground">{t(p.note)}</p>}
       {provider === "custom" && (
-        <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="接口地址，例如 https://api.example.com/v1" autoCapitalize="none" spellCheck={false} className="mt-3 h-11 w-full rounded-xl bg-muted px-3 font-mono text-[13px] outline-none" />
+        <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder={t("cw.perp.aiBaseUrlPh")} autoCapitalize="none" spellCheck={false} className="mt-3 h-11 w-full rounded-xl bg-muted px-3 font-mono text-[13px] outline-none" />
       )}
-      <input value={model} onChange={(e) => setModel(e.target.value)} placeholder={p.model ? `模型（默认 ${p.model}）` : "模型名"} autoCapitalize="none" spellCheck={false} className="mt-3 h-11 w-full rounded-xl bg-muted px-3 font-mono text-[13px] outline-none" />
+      <input value={model} onChange={(e) => setModel(e.target.value)} placeholder={p.model ? t("cw.perp.aiModelDefault", { model: p.model }) : t("cw.perp.aiModelName")} autoCapitalize="none" spellCheck={false} className="mt-3 h-11 w-full rounded-xl bg-muted px-3 font-mono text-[13px] outline-none" />
       <div className="mt-3 flex h-11 items-center rounded-xl bg-muted px-3">
         <input value={key} onChange={(e) => setKey(e.target.value)} type={show ? "text" : "password"} placeholder="API key" autoCapitalize="none" spellCheck={false} className="min-w-0 flex-1 bg-transparent font-mono text-[13px] outline-none" />
-        <button type="button" aria-label="显示" onClick={() => setShow((v) => !v)} className="text-muted-foreground">
+        <button type="button" aria-label={t("cw.perp.showKey")} onClick={() => setShow((v) => !v)} className="text-muted-foreground">
           {show ? <EyeSlash size={18} /> : <Eye size={18} />}
         </button>
       </div>
       {p.keyUrl && (
         <a href={p.keyUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[12px] text-muted-foreground underline underline-offset-4">
-          去 {p.name} 申请 key
+          {t("cw.perp.aiGetKey", { name: providerName(p) })}
         </a>
       )}
-      <div className="mt-4 text-[13px] font-medium text-muted-foreground">风控（AI 的建议会被限制在这些范围内）</div>
-      <Slider label="最大杠杆" value={maxLeverage} min={1} max={20} unit="倍" onChange={setMaxLeverage} />
-      <Slider label="单笔最多用可用余额的" value={maxPct} min={5} max={100} step={5} unit="%" onChange={setMaxPct} />
-      <Slider label="信心低于多少只提示观望" value={minConfidence} min={30} max={90} step={5} unit="" onChange={setMinConfidence} />
+      <div className="mt-4 text-[13px] font-medium text-muted-foreground">{t("cw.perp.aiRisk")}</div>
+      <Slider label={t("cw.perp.aiMaxLev")} value={maxLeverage} min={1} max={20} unit={t("cw.perp.xUnit")} onChange={setMaxLeverage} />
+      <Slider label={t("cw.perp.aiMaxPct")} value={maxPct} min={5} max={100} step={5} unit="%" onChange={setMaxPct} />
+      <Slider label={t("cw.perp.aiMinConf")} value={minConfidence} min={30} max={90} step={5} unit="" onChange={setMinConfidence} />
       <div className="mt-4 grid grid-cols-2 gap-2">
         <GhostButton disabled={!ready || !!busy} onClick={() => void test()}>
-          {busy === "test" ? "测试中…" : "测试连接"}
+          {busy === "test" ? t("cw.perp.testing") : t("cw.perp.testConn")}
         </GhostButton>
         <PrimaryButton
           disabled={!ready || !!busy}
@@ -223,12 +225,12 @@ export function AiSettingsSheet({ cfg, onSave, onClear }: { cfg: AiConfig | null
             }
           }}
         >
-          保存
+          {t("common.save")}
         </PrimaryButton>
       </div>
       {cfg && (
         <button type="button" onClick={() => void onClear()} className="mt-3 w-full text-center text-[13px] text-down">
-          删除 key
+          {t("cw.perp.deleteKey")}
         </button>
       )}
     </>
@@ -255,10 +257,10 @@ export function CoinPicker({ list, current, onPick }: { list: HlAsset[]; current
   const rows = useMemo(() => [...list].sort((a, b) => b.volume - a.volume).filter((a) => !q || a.name.toLowerCase().includes(q.trim().toLowerCase())).slice(0, 80), [list, q]);
   return (
     <>
-      <div className="mb-3 text-center text-[17px] font-semibold">选择币种</div>
+      <div className="mb-3 text-center text-[17px] font-semibold">{t("cw.perp.pickCoin")}</div>
       <label className="flex h-11 items-center gap-2 rounded-2xl bg-muted px-3.5">
         <MagnifyingGlass size={16} className="text-muted-foreground" />
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索，如 BTC / SOL / HYPE" autoCapitalize="characters" className="min-w-0 flex-1 bg-transparent text-[14px] outline-none" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("cw.perp.searchPh")} autoCapitalize="characters" className="min-w-0 flex-1 bg-transparent text-[14px] outline-none" />
       </label>
       <ul className="mt-2 max-h-[55vh] divide-y divide-border/50 overflow-y-auto">
         {rows.map((a) => {
@@ -267,7 +269,7 @@ export function CoinPicker({ list, current, onPick }: { list: HlAsset[]; current
             <li key={a.name}>
               <button type="button" onClick={() => onPick(a.name)} className={cn("flex w-full items-center gap-3 px-1 py-3 text-left", a.name === current && "font-semibold")}>
                 <span className="w-20 text-[15px] font-semibold">{a.name}</span>
-                <span className="flex-1 text-[11px] text-muted-foreground">最高 {a.maxLeverage}x · 量 {usd(a.volume / 1e6, 1)}M</span>
+                <span className="flex-1 text-[11px] text-muted-foreground">{t("cw.perp.pickerRow", { n: a.maxLeverage, vol: `${usd(a.volume / 1e6, 1)}M` })}</span>
                 <span className="text-right font-mono text-[13px]">
                   {px(a.mark)}
                   <span className={cn("ml-2", ch >= 0 ? "text-up" : "text-down")}>
@@ -285,26 +287,26 @@ export function CoinPicker({ list, current, onPick }: { list: HlAsset[]; current
 }
 
 const ACTION_TEXT: Record<string, { text: string; tone: string }> = {
-  long: { text: "建议开多", tone: "bg-up/12 text-up" },
-  short: { text: "建议开空", tone: "bg-down/12 text-down" },
-  close: { text: "建议平仓", tone: "bg-[#d48806]/12 text-[#b07005]" },
-  hold: { text: "继续持有", tone: "bg-muted text-foreground" },
-  wait: { text: "建议观望", tone: "bg-muted text-foreground" },
+  long: { text: "cw.perp.aiLong", tone: "bg-up/12 text-up" },
+  short: { text: "cw.perp.aiShort", tone: "bg-down/12 text-down" },
+  close: { text: "cw.perp.aiClose", tone: "bg-[#d48806]/12 text-[#b07005]" },
+  hold: { text: "cw.perp.aiHold", tone: "bg-muted text-foreground" },
+  wait: { text: "cw.perp.aiWait", tone: "bg-muted text-foreground" },
 };
 
 export function AiCard({ r, onApply, onClose }: { r: AiResult; onApply?: () => void; onClose?: () => void }) {
   const d = r.decision;
   const a = ACTION_TEXT[d.action];
-  const [ago, setAgo] = useState("刚刚");
+  const [ago, setAgo] = useState(() => t("time.justNow"));
   useEffect(() => {
-    const tick = () => setAgo(`${Math.max(0, Math.round((Date.now() - r.at) / 60_000))} 分钟前`);
+    const tick = () => setAgo(t("time.minutesAgo", { n: Math.max(0, Math.round((Date.now() - r.at) / 60_000)) }));
     const id = setInterval(tick, 30_000);
     return () => clearInterval(id);
   }, [r.at]);
   return (
     <div className="rounded-[22px] bg-card p-4 ring-1 ring-border/60">
       <div className="flex items-center gap-2">
-        <span className={cn("rounded-full px-3 py-1 text-[13px] font-semibold", a.tone)}>{a.text}</span>
+        <span className={cn("rounded-full px-3 py-1 text-[13px] font-semibold", a.tone)}>{t(a.text)}</span>
         <span className="text-[13px] font-semibold">{r.coin}</span>
         <span className="ml-auto text-[11px] text-muted-foreground">
           {ago} · {r.model}
@@ -312,7 +314,7 @@ export function AiCard({ r, onApply, onClose }: { r: AiResult; onApply?: () => v
       </div>
       <div className="mt-3 text-[15px] leading-6 font-medium">{d.summary}</div>
       <div className="mt-3 flex items-center gap-2 text-[12px] text-muted-foreground">
-        信心
+        {t("cw.perp.confidence")}
         <span className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
           <span className={cn("block h-full rounded-full", d.confidence >= 70 ? "bg-up" : d.confidence >= 50 ? "bg-[#d48806]" : "bg-down")} style={{ width: `${d.confidence}%` }} />
         </span>
@@ -320,12 +322,12 @@ export function AiCard({ r, onApply, onClose }: { r: AiResult; onApply?: () => v
       </div>
       {(d.action === "long" || d.action === "short") && (
         <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[12px]">
-          <Cell k="入场" v={d.entry ? px(d.entry) : "市价"} />
-          <Cell k="止损" v={d.stopLoss ? px(d.stopLoss) : "—"} tone="text-down" />
-          <Cell k="止盈" v={d.takeProfit ? px(d.takeProfit) : "—"} tone="text-up" />
-          <Cell k="杠杆" v={`${d.leverage}x`} />
-          <Cell k="仓位" v={`余额 ${d.sizePct}%`} />
-          <Cell k="周期" v={d.horizon || "—"} />
+          <Cell k={t("cw.perp.aiEntry")} v={d.entry ? px(d.entry) : t("cw.perp.market")} />
+          <Cell k={t("card.perp.sl")} v={d.stopLoss ? px(d.stopLoss) : "—"} tone="text-down" />
+          <Cell k={t("card.perp.tp")} v={d.takeProfit ? px(d.takeProfit) : "—"} tone="text-up" />
+          <Cell k={t("cw.perp.leverage")} v={`${d.leverage}x`} />
+          <Cell k={t("cw.perp.aiSize")} v={t("cw.perp.aiSizeV", { n: d.sizePct })} />
+          <Cell k={t("cw.perp.aiHorizon")} v={d.horizon || "—"} />
         </div>
       )}
       {d.reasons.length > 0 && (
@@ -356,12 +358,12 @@ export function AiCard({ r, onApply, onClose }: { r: AiResult; onApply?: () => v
         </div>
       )}
       <div className="mt-3 text-[11px] text-muted-foreground">
-        本次用了 {r.usage.total.toLocaleString()} 个 token（输入 {r.usage.prompt.toLocaleString()} / 输出 {r.usage.completion.toLocaleString()}），费用以你的服务商账单为准。AI 建议不构成投资建议。
+        {t("cw.perp.aiUsage", { total: r.usage.total.toLocaleString(), prompt: r.usage.prompt.toLocaleString(), completion: r.usage.completion.toLocaleString() })}
       </div>
       {(onApply || onClose) && (
         <div className="mt-3 grid grid-cols-2 gap-2">
-          {onClose && <GhostButton onClick={onClose}>不采纳</GhostButton>}
-          {onApply && <PrimaryButton onClick={onApply}>{d.action === "close" ? "去平仓" : "按建议填好下单"}</PrimaryButton>}
+          {onClose && <GhostButton onClick={onClose}>{t("cw.perp.aiDismiss")}</GhostButton>}
+          {onApply && <PrimaryButton onClick={onApply}>{d.action === "close" ? t("cw.perp.aiGoClose") : t("cw.perp.aiApply")}</PrimaryButton>}
         </div>
       )}
     </div>

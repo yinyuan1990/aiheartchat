@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CaretDown, CaretUp, Eye, EyeSlash, Globe, Info, SealCheck, Warning } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/wallet/i18n";
 import type { RpcError } from "@/lib/wallet/native";
 import { hostOf, isTrusted } from "@/lib/wallet/dapp-store";
 import { isListed } from "@/lib/wallet/dapp-catalog";
@@ -43,7 +44,17 @@ export function Origin({ origin, connected }: { origin: string; connected: boole
         {trusted && <SealCheck size={16} weight="fill" className="shrink-0 text-up" />}
       </div>
       <div className={cn("text-[12px]", trusted ? "text-muted-foreground" : "text-[#d48806]")}>
-        {trusted ? `Arm 官方${connected ? " · 已连接" : ""}` : insecure ? "不安全的连接（http）" : connected ? "第三方网站 · 已连接" : isListed(origin) ? "第三方网站 · 推荐列表" : "第三方网站 · 不在推荐列表里"}
+        {trusted
+          ? connected
+            ? t("cw.dapp.originArmConnected")
+            : t("cw.dapp.originArm")
+          : insecure
+            ? t("cw.dapp.originInsecure")
+            : connected
+              ? t("cw.dapp.originThirdConnected")
+              : isListed(origin)
+                ? t("cw.dapp.originThirdListed")
+                : t("cw.dapp.originThirdUnlisted")}
       </div>
     </div>
   );
@@ -69,10 +80,10 @@ export function MessageBox({ text, mono }: { text: string; mono?: boolean }) {
   return (
     <div className="rounded-2xl bg-muted/60 px-3.5 py-3">
       <div className="flex items-center justify-between text-[12px] text-muted-foreground">
-        签名内容
+        {t("cw.dapp.messageContent")}
         {long && (
           <button type="button" onClick={() => setFull((v) => !v)} className="flex items-center gap-0.5">
-            {full ? "收起" : "展开"}
+            {full ? t("cw.dapp.collapse") : t("cw.dapp.expand")}
             {full ? <CaretUp size={12} /> : <CaretDown size={12} />}
           </button>
         )}
@@ -115,7 +126,7 @@ export function RiskAck({ ack, onChange }: { ack: boolean; onChange: (v: boolean
   return (
     <label className="mt-3 flex items-center gap-2 px-1 text-[13px]">
       <input type="checkbox" checked={ack} onChange={(e) => onChange(e.target.checked)} className="size-4 accent-[var(--down)]" />
-      我知道风险，仍要继续
+      {t("cw.dapp.riskAck")}
     </label>
   );
 }
@@ -131,10 +142,10 @@ export function UnlockField({ pw, err, onChange }: { pw: string; err: string; on
           value={pw}
           autoComplete="current-password"
           onChange={(e) => onChange(e.target.value)}
-          placeholder="输入钱包密码"
+          placeholder={t("cw.dapp.passwordPlaceholder")}
           className="flex-1 bg-transparent text-[15px] outline-none"
         />
-        <button type="button" aria-label={show ? "隐藏密码" : "显示密码"} onClick={() => setShow((v) => !v)} className="text-muted-foreground">
+        <button type="button" aria-label={show ? t("cw.dapp.hidePassword") : t("cw.dapp.showPassword")} onClick={() => setShow((v) => !v)} className="text-muted-foreground">
           {show ? <EyeSlash size={18} /> : <Eye size={18} />}
         </button>
       </div>

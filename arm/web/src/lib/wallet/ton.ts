@@ -3,6 +3,7 @@ import { bytesToHex } from "@noble/hashes/utils";
 import { base64 } from "@scure/base";
 import { API_BASE } from "@/lib/api";
 import { TON_CHAIN, rpcOf } from "./chains";
+import { t } from "./i18n";
 import type { Secret } from "./vault";
 import {
   MODE_ALL,
@@ -57,7 +58,7 @@ async function api<T>(method: string, query?: Record<string, string>, body?: unk
   const url = `${rpcOf(TON_CHAIN)}/${method}${query ? `?${new URLSearchParams(query)}` : ""}`;
   const r = await fetch(url, body === undefined ? undefined : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const j = (await r.json().catch(() => ({}))) as { ok?: boolean; result?: T; error?: string };
-  if (!r.ok || j.ok === false) throw new Error(j.error ?? (r.status === 429 ? "TON 节点限流，请稍后再试" : `TON 节点 HTTP ${r.status}`));
+  if (!r.ok || j.ok === false) throw new Error(j.error ?? (r.status === 429 ? t("cw.ton.rateLimited") : t("cw.ton.nodeHttp", { n: r.status })));
   return j.result as T;
 }
 
@@ -94,7 +95,7 @@ const jwCache = new Map<string, TonAddress>();
 /** The owner's jetton wallet for `master` (a getter on the master; never changes, so cached) */
 export async function jettonWalletOf(owner: string, master: string): Promise<TonAddress> {
   const o = parseTonAddress(owner);
-  if (!o) throw new Error("地址格式不对");
+  if (!o) throw new Error(t("cw.ton.badAddress"));
   const key = `${owner}|${master}`;
   const hit = jwCache.get(key);
   if (hit) return hit;
@@ -102,7 +103,7 @@ export async function jettonWalletOf(owner: string, master: string): Promise<Ton
   const r = await runGet(master, "get_wallet_address", [["tvm.Slice", arg]]);
   const c = r.exit === 0 ? cellOf(r.stack[0]) : null;
   const a = c?.beginParse().address();
-  if (!a) throw new Error("查不到这个代币的钱包地址，可能不是 jetton");
+  if (!a) throw new Error(t("cw.ton.noJettonWallet"));
   jwCache.set(key, a);
   return a;
 }
@@ -113,7 +114,7 @@ export async function jettonBalance(owner: string, master: string): Promise<bigi
   // -13 (no code) is normal for a jetton wallet that never received this token; a lagging node says it about live
   // ones too, so make sure before showing 0
   if ((await tonState(jw)).state !== "active") return 0n;
-  throw new Error("TON 节点返回的数据不对，请稍后再试");
+  throw new Error(t("cw.ton.badNodeData"));
 }
 const rawOf = (a: TonAddress) => `${a.wc}:${bytesToHex(a.hash)}`;
 
@@ -148,9 +149,9 @@ const zeroSig = () => new Uint8Array(64);
 /** Builds the order the wallet will sign (same for the estimate, signed with a dummy signature, and the real send) */
 async function order(key: Pick<TonKey, "address" | "raw" | "publicKey">, to: string, amount: bigint, o: { jetton?: string; comment?: string; all?: boolean }) {
   const dest = parseTonAddress(to);
-  if (!dest) throw new Error("地址格式不对");
+  if (!dest) throw new Error(t("cw.ton.badAddress"));
   const [me, seqno, destInfo] = await Promise.all([tonState(key.address), seqnoOf(key.address), o.jetton ? Promise.resolve(null) : tonState(to).catch(() => null)]);
-  if (me.state === "frozen") throw new Error("这个 TON 钱包被冻结了（长期欠存储费），需要先往里转一点 TON 解冻");
+  if (me.state === "frozen") throw new Error(t("cw.ton.frozen"));
   const comment = o.comment ? commentCell(o.comment) : null;
   let msg: OutMsg;
   let bounce = false;
@@ -198,7 +199,7 @@ export async function sendTon(key: TonKey, to: string, amount: bigint, o: { jett
     await api("sendBoc", undefined, { boc });
   } catch (e) {
     const m = (e as Error).message;
-    throw new Error(/balance|not enough|insufficient/i.test(m) ? "余额不足（含网络费）" : `发送失败：${m}`);
+    throw new Error(/balance|not enough|insufficient/i.test(m) ? t("cw.rpc.insufficientWithFee") : t("cw.ton.sendFailed", { msg: m }));
   }
   return { boc, bodyHash: base64.encode(body.hash()), validUntil };
 }
@@ -216,11 +217,11 @@ export async function waitTon(address: string, sent: TonSent, timeoutMs = 120_00
     const txs = await api<V2Tx[]>("getTransactions", { address, limit: "10" }).catch(() => [] as V2Tx[]);
     const tx = txs.find((t) => !t.in_msg?.source && t.in_msg?.body_hash === sent.bodyHash);
     if (tx?.transaction_id?.hash) {
-      if (!tx.out_msgs?.length) throw new Error("交易上链了，但钱包没有转出（TON 不够付网络费），钱没有转走");
+      if (!tx.out_msgs?.length) throw new Error(t("cw.ton.noOutMsg"));
       return bytesToHex(base64.decode(tx.transaction_id.hash));
     }
-    if (Date.now() / 1000 > sent.validUntil + 15) throw new Error("交易过期了没有上链，钱没有扣，可以重新发");
-    if (Date.now() - t0 > timeoutMs) throw new Error("等了很久还没确认，可以稍后在 Tonviewer 里查这个钱包");
+    if (Date.now() / 1000 > sent.validUntil + 15) throw new Error(t("cw.ton.expired"));
+    if (Date.now() - t0 > timeoutMs) throw new Error(t("cw.ton.slowConfirm"));
     if (i % 3 === 0) void api("sendBoc", undefined, { boc: sent.boc }).catch(() => {});
   }
 }
@@ -240,7 +241,7 @@ export async function probeTonNode(url: string, timeoutMs = 6000): Promise<{ ms:
     const j = (await r.json()) as { result?: { last?: { seqno?: number }; init?: { root_hash?: string } } };
     return { ms: Math.round(performance.now() - t0), block: j.result?.last?.seqno, mainnet: j.result?.init?.root_hash === MAINNET_ZEROSTATE };
   } catch (e) {
-    return { ms: Math.round(performance.now() - t0), error: ac.signal.aborted ? "超时" : (e as Error).message || "连不上" };
+    return { ms: Math.round(performance.now() - t0), error: ac.signal.aborted ? t("cw.rpc.timeout") : (e as Error).message || t("cw.rpc.unreachable") };
   } finally {
     clearTimeout(timer);
   }

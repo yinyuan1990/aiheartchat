@@ -13,6 +13,8 @@ const TARGETS = [
   // iOS synchronized group: every file here is bundled; unique names in case they land flat in the bundle root
   { dir: "ios/PeiwanIos/PeiwanIos/i18n", name: (l) => `i18n_${l}.json` },
   { dir: "web/src/i18n/locales", name: (l) => `${l}.json` },
+  // Arm wallet (opened inside the App): imports zh / en explicitly in lib/wallet/i18n.ts — add new languages there too
+  { dir: "arm/web/src/lib/wallet/locales", name: (l) => `${l}.json` },
 ];
 
 const langs = readdirSync(here).filter((f) => /^[a-z]{2}(-[A-Za-z]+)?\.json$/.test(f)).map((f) => f.slice(0, -5));

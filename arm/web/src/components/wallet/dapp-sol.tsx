@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { WalletDot } from "@/components/shared";
 import { shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/wallet/i18n";
 import { SOL_CHAIN, rpcOf } from "@/lib/wallet/chains";
 import { WrongPasswordError, type WalletMeta } from "@/lib/wallet/vault";
 import type { DappRequest, RpcError } from "@/lib/wallet/native";
@@ -139,7 +140,7 @@ function SolConnect({ job, finish }: BodyProps) {
     <>
       <h2 className="mt-4 flex items-center justify-center gap-1.5 text-[18px] font-semibold">
         <LinkSimple size={18} weight="bold" />
-        连接钱包
+        {t("cw.dapp.connectTitle")}
       </h2>
       <div className="mt-4 space-y-1.5">
         {list.map((w) => (
@@ -156,20 +157,20 @@ function SolConnect({ job, finish }: BodyProps) {
         ))}
       </div>
       <div className="mt-2 flex items-center justify-between px-1 text-[12px] text-muted-foreground">
-        <span>网络</span>
+        <span>{t("cw.dapp.network")}</span>
         <span className="flex items-center gap-1">
           <ChainGlyph chain={SOL_CHAIN} size={14} />
           Solana
         </span>
       </div>
       <p className="mt-3 rounded-2xl bg-muted/60 px-3.5 py-2.5 text-[12px] leading-5 text-muted-foreground">
-        网站会看到你的 Solana 地址和余额。连接不会授权它动你的资产，之后每次签名、交易都要你确认。可以在「DApp → 已连接的网站」里断开。
-        {list.length < wallets.length && " 私钥导入的钱包没有 Solana 账户，不在列表里。"}
+        {t("cw.dapp.connectSolNote")}
+        {list.length < wallets.length && ` ${t("cw.dapp.connectSolNoKeyWallets")}`}
       </p>
       <div className="mt-4 grid grid-cols-2 gap-2">
-        <GhostButton onClick={() => finish(job, null, E.rejected)}>拒绝</GhostButton>
+        <GhostButton onClick={() => finish(job, null, E.rejected)}>{t("cw.dapp.reject")}</GhostButton>
         <PrimaryButton disabled={!pick} onClick={connect}>
-          连接
+          {t("cw.dapp.connect")}
         </PrimaryButton>
       </div>
     </>
@@ -200,7 +201,7 @@ function SolSign({ job, finish }: BodyProps) {
   const me = getSolPerm(origin)?.address;
   const wallet = vault.wallets.find((w) => w.sol === me);
   const { txs = [], send = false, options = {}, messages = [] } = job.sol;
-  const [views] = useState<SolTxView[]>(() => (me ? txs.map((t) => describeSolTx(t, me)) : []));
+  const [views] = useState<SolTxView[]>(() => (me ? txs.map((tx) => describeSolTx(tx, me)) : []));
   const [sims, setSims] = useState<SimState[]>(() => txs.map(() => "loading"));
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
@@ -214,8 +215,8 @@ function SolSign({ job, finish }: BodyProps) {
     }
     let alive = true;
     const url = rpcOf(SOL_CHAIN);
-    txs.forEach((t, i) =>
-      simulateChanges(url, t, me).then(
+    txs.forEach((tx, i) =>
+      simulateChanges(url, tx, me).then(
         (s) => alive && setSims((ss) => ss.map((x, j) => (j === i ? s : x))),
         () => alive && setSims((ss) => ss.map((x, j) => (j === i ? "unavailable" : x))),
       ),
@@ -230,8 +231,8 @@ function SolSign({ job, finish }: BodyProps) {
   const texts = messages.map(messageText);
   const trusted = isTrusted(origin);
   const host = hostOf(origin);
-  const wrongDomain = texts.some((t) => {
-    const d = siwsDomain(t.text);
+  const wrongDomain = texts.some((m) => {
+    const d = siwsDomain(m.text);
     return d != null && d !== host;
   });
   const simFailed = sims.some((s) => typeof s === "object" && !!s.error);
@@ -250,7 +251,7 @@ function SolSign({ job, finish }: BodyProps) {
         try {
           await vault.unlock(pw);
         } catch (e) {
-          setErr(e instanceof WrongPasswordError ? "密码不对" : "解锁失败，请重试");
+          setErr(e instanceof WrongPasswordError ? t("cw.dapp.wrongPassword") : t("cw.dapp.unlockFailed"));
           setBusy(false);
           return;
         }
@@ -262,7 +263,7 @@ function SolSign({ job, finish }: BodyProps) {
         finish(job, messages.map((m) => b64.encode(signBytes(m, kp))));
         return;
       }
-      const signed = txs.map((t) => signWire(t, kp));
+      const signed = txs.map((tx) => signWire(tx, kp));
       if (!send) {
         finish(job, signed.map((s) => b64.encode(s.bytes)));
         return;
@@ -271,7 +272,7 @@ function SolSign({ job, finish }: BodyProps) {
       const serial = options.mode === "serial";
       for (let i = 0; i < signed.length; i++) await broadcast(url, signed[i].bytes, signed[i].signature, options, serial && i < signed.length - 1);
       finish(job, signed.map((s) => b64.encode(s.signature)));
-      toast.success(many ? `${signed.length} 笔交易已发出` : "交易已发出", { description: shortAddr(b58.encode(signed[0].signature), 8, 8) });
+      toast.success(many ? t("cw.dapp.txsSent", { n: signed.length }) : t("cw.dapp.txSent"), { description: shortAddr(b58.encode(signed[0].signature), 8, 8) });
     } catch (e) {
       const r = rpcErrorOf(e);
       toast.error(r.message);
@@ -279,8 +280,17 @@ function SolSign({ job, finish }: BodyProps) {
     }
   };
 
-  const title = job.kind === "solMsg" ? "签名请求" : send ? (many ? `确认 ${txs.length} 笔交易` : "确认交易") : many ? `签名 ${txs.length} 笔交易` : "签名交易";
-  const action = job.kind === "solTx" && send ? "确认" : "签名";
+  const title =
+    job.kind === "solMsg"
+      ? t("cw.dapp.signTitle")
+      : send
+        ? many
+          ? t("cw.dapp.confirmTxs", { n: txs.length })
+          : t("cw.dapp.confirmTx")
+        : many
+          ? t("cw.dapp.signTxs", { n: txs.length })
+          : t("cw.dapp.signTx");
+  const confirming = job.kind === "solTx" && send;
 
   return (
     <>
@@ -293,22 +303,22 @@ function SolSign({ job, finish }: BodyProps) {
         {me && <SolAccountRow address={me} name={wallet?.name} />}
         {job.kind === "solMsg" ? (
           <>
-            {texts.map((t, i) => (
-              <MessageBox key={i} text={t.text} mono={t.hex} />
+            {texts.map((m, i) => (
+              <MessageBox key={i} text={m.text} mono={m.hex} />
             ))}
             <Notes
               risk={risk}
               notes={[
                 wrongDomain
-                  ? `签名内容里写的网站和当前网站（${host}）不一致，可能是钓鱼网站在冒充别的网站。`
-                  : texts.some((t) => looksLikeLogin(t.text) || siwsDomain(t.text))
-                    ? "这是登录签名：不花钱，也不会授权任何人动你的资产。"
-                    : "签名不花钱，但只给你信任的网站签。",
+                  ? t("cw.dapp.siwsWrongDomain", { host })
+                  : texts.some((m) => looksLikeLogin(m.text) || siwsDomain(m.text))
+                    ? t("cw.dapp.loginNote")
+                    : t("cw.dapp.signFreeNote"),
               ]}
             />
           </>
         ) : (
-          txs.map((t, i) => <TxCard key={i} index={many ? i + 1 : 0} tx={t} view={views[i]} sim={sims[i]} danger={danger} send={send} />)
+          txs.map((tx, i) => <TxCard key={i} index={many ? i + 1 : 0} tx={tx} view={views[i]} sim={sims[i]} danger={danger} send={send} />)
         )}
       </div>
 
@@ -325,9 +335,19 @@ function SolSign({ job, finish }: BodyProps) {
       )}
 
       <div className="mt-4 grid grid-cols-2 gap-2">
-        <GhostButton onClick={() => finish(job, null, E.rejected)}>拒绝</GhostButton>
+        <GhostButton onClick={() => finish(job, null, E.rejected)}>{t("cw.dapp.reject")}</GhostButton>
         <PrimaryButton tone={danger ? "danger" : "default"} disabled={busy || (danger && !ack) || (locked && !pw)} onClick={() => void confirm()}>
-          {busy ? (send ? "发送中…" : "签名中…") : locked ? `解锁并${action}` : action}
+          {busy
+            ? send
+              ? t("cw.dapp.sending")
+              : t("cw.dapp.signing")
+            : locked
+              ? confirming
+                ? t("cw.dapp.unlockConfirm")
+                : t("cw.dapp.unlockSign")
+              : confirming
+                ? t("common.confirm")
+                : t("cw.dapp.sign")}
         </PrimaryButton>
       </div>
     </>
@@ -340,30 +360,30 @@ function TxCard({ index, tx, view, sim, danger, send }: { index: number; tx: Sol
     typeof sim === "object" && !sim.error
       ? sim.changes.length
         ? sim.changes.map((c) => ({ label: c.symbol, value: fmtDelta(c.delta), mono: true, tone: c.delta > 0 ? "up" : "down" }))
-        : [{ label: "余额变化", value: "无" }]
+        : [{ label: t("cw.dapp.balanceChange"), value: t("cw.dapp.none") }]
       : [];
   const notes = [
     ...view.notes,
-    ...(sim === "unavailable" ? ["暂时没法模拟这笔交易，看不到余额变化。"] : []),
-    ...(typeof sim === "object" && sim.error ? [`模拟执行失败：${sim.error}。${index > 1 ? "如果它依赖前一笔交易，这是正常的；" : ""}这笔交易很可能会失败。`] : []),
-    ...(!send && index <= 1 ? ["签名后由网站自己把交易发出去。"] : []),
+    ...(sim === "unavailable" ? [t("cw.dapp.simUnavailable")] : []),
+    ...(typeof sim === "object" && sim.error ? [index > 1 ? t("cw.dapp.solSimFailedChained", { err: sim.error }) : t("cw.dapp.solSimFailed", { err: sim.error })] : []),
+    ...(!send && index <= 1 ? [t("cw.dapp.siteSends")] : []),
   ];
   return (
     <div className="space-y-2">
-      {index > 0 && <div className="px-1 pt-1 text-[12px] font-medium text-muted-foreground">第 {index} 笔</div>}
+      {index > 0 && <div className="px-1 pt-1 text-[12px] font-medium text-muted-foreground">{t("cw.dapp.txIndex", { n: index })}</div>}
       {sim === "loading" ? (
-        <div className="flex h-11 items-center rounded-2xl bg-muted/60 px-3.5 text-[13px] text-muted-foreground">正在模拟余额变化…</div>
+        <div className="flex h-11 items-center rounded-2xl bg-muted/60 px-3.5 text-[13px] text-muted-foreground">{t("cw.dapp.simulating")}</div>
       ) : (
         changes.length > 0 && (
           <div>
-            <div className="px-1 pb-1 text-[12px] text-muted-foreground">预计余额变化（模拟结果，仅供参考）</div>
+            <div className="px-1 pb-1 text-[12px] text-muted-foreground">{t("cw.dapp.estChanges")}</div>
             <Lines lines={changes} />
           </div>
         )
       )}
-      <Lines lines={[...view.lines, ...(view.feeLamports ? [{ label: "网络费（预估）", value: fmtSol(view.feeLamports), mono: true }] : [])]} danger={danger} />
+      <Lines lines={[...view.lines, ...(view.feeLamports ? [{ label: t("cw.dapp.feeEst"), value: fmtSol(view.feeLamports), mono: true }] : [])]} danger={danger} />
       <Notes risk={view.risk === "none" && typeof sim === "object" && sim.error ? "warn" : view.risk} notes={notes} />
-      <Raw label="原始数据" text={b64.encode(tx.bytes)} />
+      <Raw label={t("cw.dapp.rawData")} text={b64.encode(tx.bytes)} />
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { hmac } from "@noble/hashes/hmac";
 import { sha256, sha512 } from "@noble/hashes/sha2";
 import { base58, base64 } from "@scure/base";
 import { mnemonicToSeedSync } from "@scure/bip39";
+import { t } from "./i18n";
 import type { Secret } from "./vault";
 
 /**
@@ -230,7 +231,7 @@ export function parseTx(tx: Uint8Array): ParsedTx {
 export function signSerialized(tx: Uint8Array, kp: SolKeypair): { tx: Uint8Array; signature: string } {
   const p = parseTx(tx);
   const slot = p.signers.indexOf(kp.address);
-  if (slot < 0 || slot >= p.sigCount) throw new Error("这笔交易不需要当前钱包签名");
+  if (slot < 0 || slot >= p.sigCount) throw new Error(t("cw.sol.notSigner"));
   const sig = ed25519.sign(tx.slice(p.messageStart), kp.seed);
   const out = tx.slice();
   out.set(sig, p.sigStart + slot * 64);
@@ -251,9 +252,9 @@ export class SolRpcError extends Error {
 
 export async function solRpc<T>(url: string, method: string, params: unknown[] = [], signal?: AbortSignal): Promise<T> {
   const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }), signal });
-  if (!r.ok) throw new SolRpcError(r.status === 429 ? "节点限流，请稍后再试或换个节点" : `节点 HTTP ${r.status}`);
+  if (!r.ok) throw new SolRpcError(r.status === 429 ? t("cw.sol.rateLimited") : t("cw.sol.nodeHttp", { n: r.status }));
   const j = (await r.json()) as { result?: T; error?: { message?: string; data?: { logs?: string[] } } };
-  if (j.error) throw new SolRpcError(j.error.message ?? "节点出错", j.error.data?.logs);
+  if (j.error) throw new SolRpcError(j.error.message ?? t("cw.sol.nodeError"), j.error.data?.logs);
   return j.result as T;
 }
 
@@ -302,13 +303,13 @@ export async function simulate(url: string, tx: Uint8Array): Promise<{ units: nu
 export function explainSolError(err: unknown, logs: string[] = []): string {
   const s = JSON.stringify(err ?? "");
   const log = logs.join("\n");
-  if (/insufficient lamports|InsufficientFundsForRent|"Custom":1\b/.test(s + log)) return "SOL 不够（转账金额 + 网络费 + 可能的开户租金）";
-  if (/InsufficientFunds|insufficient funds/i.test(s + log)) return "余额不足";
-  if (/BlockhashNotFound/.test(s)) return "交易过期了，请重试";
-  if (/SlippageToleranceExceeded|0x1771|Slippage/i.test(s + log)) return "价格变动超过滑点，请调大滑点或重试";
-  if (/AccountNotFound|no record of a prior credit/.test(s + log)) return "钱包里还没有 SOL，先转入一点 SOL 付网络费";
+  if (/insufficient lamports|InsufficientFundsForRent|"Custom":1\b/.test(s + log)) return t("cw.sol.notEnoughSol");
+  if (/InsufficientFunds|insufficient funds/i.test(s + log)) return t("transfer.insufficient");
+  if (/BlockhashNotFound/.test(s)) return t("cw.sol.expired");
+  if (/SlippageToleranceExceeded|0x1771|Slippage/i.test(s + log)) return t("cw.sol.slippage");
+  if (/AccountNotFound|no record of a prior credit/.test(s + log)) return t("cw.sol.noSol");
   const ie = (err as { InstructionError?: [number, unknown] } | null)?.InstructionError;
-  if (Array.isArray(ie)) return `第 ${ie[0] + 1} 步执行出错（${typeof ie[1] === "string" ? ie[1] : JSON.stringify(ie[1])}）`;
+  if (Array.isArray(ie)) return t("cw.sol.stepFailed", { n: ie[0] + 1, err: typeof ie[1] === "string" ? ie[1] : JSON.stringify(ie[1]) });
   return typeof err === "string" ? err : s.slice(0, 160);
 }
 
@@ -328,10 +329,10 @@ export async function sendAndConfirm(url: string, tx: Uint8Array, signature: str
     const s = st?.value[0];
     if (s?.err) throw new SolRpcError(explainSolError(s.err));
     if (s && (s.confirmationStatus === "confirmed" || s.confirmationStatus === "finalized")) return signature;
-    if (Date.now() - t0 > timeoutMs) throw new SolRpcError("等了很久还没确认，可能网络拥堵；可以稍后在浏览器里查这笔交易");
+    if (Date.now() - t0 > timeoutMs) throw new SolRpcError(t("cw.sol.slowConfirm"));
     if (lastValidBlockHeight && !s) {
       const h = await solRpc<number>(url, "getBlockHeight", [{ commitment: "confirmed" }]).catch(() => 0);
-      if (h > lastValidBlockHeight) throw new SolRpcError("交易过期没有上链（网络拥堵），钱没有扣，请重试");
+      if (h > lastValidBlockHeight) throw new SolRpcError(t("cw.sol.expiredNotLanded"));
     }
     if (Date.now() - lastSend > 2000) {
       lastSend = Date.now();
@@ -350,7 +351,7 @@ export async function probeSolNode(url: string, timeoutMs = 6000): Promise<{ ms:
     const genesis = await solRpc<string>(url, "getGenesisHash", [], ac.signal);
     return { ms, slot, mainnet: genesis === MAINNET_GENESIS };
   } catch (e) {
-    return { ms: Math.round(performance.now() - t0), error: ac.signal.aborted ? "超时" : (e as Error).message || "连不上" };
+    return { ms: Math.round(performance.now() - t0), error: ac.signal.aborted ? t("cw.rpc.timeout") : (e as Error).message || t("cw.rpc.unreachable") };
   } finally {
     clearTimeout(timer);
   }

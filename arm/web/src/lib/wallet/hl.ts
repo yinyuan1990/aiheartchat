@@ -2,6 +2,7 @@ import { keccak_256 } from "@noble/hashes/sha3";
 import { bytesToHex, type Address, type Hex, type LocalAccount } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { API_BASE } from "@/lib/api";
+import { t } from "./i18n";
 
 /**
  * Hyperliquid perps for 「AI 合约」 (wallet plan §5.8), without its SDK:
@@ -118,7 +119,7 @@ export async function signUser(signer: LocalAccount, kind: keyof typeof USER_TYP
 export async function info<T>(body: Record<string, unknown>): Promise<T> {
   const r = await fetch(`${HL_API}/info`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const j = await r.json().catch(() => null);
-  if (!r.ok) throw new Error((j as { error?: string } | null)?.error ?? (r.status === 429 ? "请求太频繁，稍后再试" : `Hyperliquid HTTP ${r.status}`));
+  if (!r.ok) throw new Error((j as { error?: string } | null)?.error ?? (r.status === 429 ? t("cw.hl.rateLimited") : `Hyperliquid HTTP ${r.status}`));
   return j as T;
 }
 
@@ -129,7 +130,7 @@ export async function exchange(action: unknown, nonce: number, signature: Sig): 
   const j = (await r.json().catch(() => null)) as ExchangeReply | { error?: string } | null;
   if (!r.ok || !j) throw new Error((j as { error?: string } | null)?.error ?? `Hyperliquid HTTP ${r.status}`);
   const reply = j as ExchangeReply;
-  if (reply.status !== "ok") throw new Error(explain(String(reply.response ?? "失败")));
+  if (reply.status !== "ok") throw new Error(explain(String(reply.response ?? t("common.fail"))));
   const statuses = (reply.response as { data?: { statuses?: ({ error?: string } | string)[] } } | undefined)?.data?.statuses;
   const bad = statuses?.find((s) => typeof s === "object" && s && "error" in s) as { error: string } | undefined;
   if (bad) throw new Error(explain(bad.error));
@@ -137,14 +138,14 @@ export async function exchange(action: unknown, nonce: number, signature: Sig): 
 }
 
 function explain(m: string): string {
-  if (/does not exist/i.test(m)) return "交易授权失效了（代理钥匙未授权或已过期），请重新开通交易";
-  if (/insufficient margin|perpMarginRejected/i.test(m)) return "保证金不够：Hyperliquid 要多留一点给开仓手续费和价格变动，把保证金调小一点再试";
-  if (/minimum value of \$?10/i.test(m)) return "下单金额太小，Hyperliquid 每笔至少 10 美元";
-  if (/Builder fee has not been approved/i.test(m)) return "还没授权手续费，请先在合约页完成授权";
-  if (/could not immediately match/i.test(m)) return "没有成交（价格变动太快），可以再试一次";
-  if (/reduce only/i.test(m)) return "只减仓订单方向或数量不对";
-  if (/Must deposit/i.test(m)) return "这个地址还没在 Hyperliquid 充值过，先充值再开通";
-  if (/Multi-sig required/i.test(m)) return "这个地址在 Hyperliquid 上开了多签，钱包暂不支持多签账户";
+  if (/does not exist/i.test(m)) return t("cw.hl.errAgent");
+  if (/insufficient margin|perpMarginRejected/i.test(m)) return t("cw.hl.errMargin");
+  if (/minimum value of \$?10/i.test(m)) return t("cw.hl.errMinValue");
+  if (/Builder fee has not been approved/i.test(m)) return t("cw.hl.errBuilder");
+  if (/could not immediately match/i.test(m)) return t("cw.hl.errNoMatch");
+  if (/reduce only/i.test(m)) return t("cw.hl.errReduceOnly");
+  if (/Must deposit/i.test(m)) return t("cw.hl.errMustDeposit");
+  if (/Multi-sig required/i.test(m)) return t("cw.hl.errMultisig");
   return m;
 }
 
@@ -281,7 +282,7 @@ export const builderApproved = async (user: Address) => (HL_BUILDER ? (await inf
 const trimZeros = (s: string) => (s.includes(".") ? s.replace(/\.?0+$/, "") : s);
 /** at most 5 significant figures and (6 − szDecimals) decimals; whole numbers are always fine */
 export function formatPx(px: number, szDecimals: number): string {
-  if (!(px > 0)) throw new Error("价格不对");
+  if (!(px > 0)) throw new Error(t("cw.hl.badPrice"));
   if (px >= 100_000) return String(Math.round(px));
   const dec = Math.max(6 - szDecimals, 0);
   return trimZeros(Number(px.toPrecision(5)).toFixed(dec));
@@ -290,7 +291,7 @@ export function formatPx(px: number, szDecimals: number): string {
 export function formatSz(sz: number, szDecimals: number): string {
   const f = 10 ** szDecimals;
   const v = Math.floor(sz * f + 1e-9) / f;
-  if (!(v > 0)) throw new Error("数量太小");
+  if (!(v > 0)) throw new Error(t("cw.hl.sizeTooSmall"));
   return trimZeros(v.toFixed(szDecimals));
 }
 

@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { getAddress, isAddress } from "viem";
 import { storeRead, storeWrite } from "./native";
+import { t } from "./i18n";
 import { isSolAddress } from "./sol";
 import { isTronAddress } from "./tron";
 import { isTonAddress } from "./ton-cell";
@@ -110,10 +111,10 @@ export function pushRecent(a: string) {
 export function saveContact(address: string, name: string) {
   const n = name.trim().slice(0, MAX_NAME);
   const a = normalizeAddr(address);
-  if (!a) throw new Error("地址格式不对");
-  if (!n) throw new Error("请填一个名称");
+  if (!a) throw new Error(t("cw.send.badAddress"));
+  if (!n) throw new Error(t("cw.book.nameRequired"));
   const rest = state.contacts.filter((c) => c.address !== a);
-  if (rest.length >= MAX_CONTACTS) throw new Error(`地址簿最多 ${MAX_CONTACTS} 个`);
+  if (rest.length >= MAX_CONTACTS) throw new Error(t("cw.book.full", { n: MAX_CONTACTS }));
   const prev = state.contacts.find((c) => c.address === a);
   update("contacts", [{ address: a, name: n, at: prev?.at ?? Date.now() }, ...rest]);
 }

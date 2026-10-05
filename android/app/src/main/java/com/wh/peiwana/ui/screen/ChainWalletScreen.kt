@@ -151,6 +151,7 @@ private val BRIDGE_JS = """
   }
   window.ArmWalletNative = {
     platform: 'android',
+    lang: '__APP_LANG__',
     features: ['dapp', 'store', 'scan', 'bio', 'result', 'chat', 'payreq', 'perpcall'],
     walletResult: function(r){ call('walletResult', r); },
     walletClose: function(){ call('walletClose'); },
@@ -541,7 +542,8 @@ fun ChainWalletScreen(
                             WebViewCompat.addWebMessageListener(this, "ArmWalletBridge", rules) { view, message, _, isMainFrame, reply ->
                                 if (isMainFrame) shell.handle(view, message, reply)
                             }
-                            WebViewCompat.addDocumentStartJavaScript(this, BRIDGE_JS, rules)
+                            // 钱包页跟 App 的语言走
+                            WebViewCompat.addDocumentStartJavaScript(this, BRIDGE_JS.replace("__APP_LANG__", com.wh.peiwana.i18n.I18n.lang), rules)
                         } else {
                             // 厂商 WebView（华为 / 荣耀等）常不支持上面两个 androidx.webkit 特性：退回同步 JS 接口，每次调用都核对当前页面的源
                             addJavascriptInterface(SyncBridge(c, activity, this, origin, pageOrigin, hub, onOpenDapp = { openDapp(it) }, onScan = { startScan(it) }, onResult = { resultCb(it) }, onClose = { closeCb() }, onShareCard = { shareCard = it }, onCoinGroup = { openCoinGroupChat(it) }, onPerpCalled = { openGroupChat(it) }, scope = bridgeScope), "ArmWalletNative")
@@ -752,7 +754,7 @@ private class SyncBridge(
     }
 
     @android.webkit.JavascriptInterface
-    fun bridgeInfo(): String = if (ok()) """{"platform":"android","features":["dapp","store","scan","bio","result","chat","payreq","perpcall"]}""" else "{}"
+    fun bridgeInfo(): String = if (ok()) """{"platform":"android","lang":"${com.wh.peiwana.i18n.I18n.lang}","features":["dapp","store","scan","bio","result","chat","payreq","perpcall"]}""" else "{}"
 
     @android.webkit.JavascriptInterface
     fun perpCall(cb: String?, json: String?) {

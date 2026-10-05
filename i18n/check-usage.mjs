@@ -10,6 +10,9 @@ const SOURCES = [
   { dir: "android/app/src/main/java", ext: /\.kt$/, re: /\bt\(\s*"([\w.]+)"/g },
   { dir: "ios/PeiwanIos/PeiwanIos", ext: /\.swift$/, re: /\bt\(\s*"([\w.]+)"/g },
   { dir: "web/src", ext: /\.tsx?$/, re: /\bt\(\s*['"]([\w.]+)['"]/g },
+  { dir: "arm/web/src/app/wallet", ext: /\.tsx?$/, re: /\bt\(\s*['"]([\w.]+)['"]/g },
+  { dir: "arm/web/src/components/wallet", ext: /\.tsx?$/, re: /\bt\(\s*['"]([\w.]+)['"]/g },
+  { dir: "arm/web/src/lib/wallet", ext: /\.tsx?$/, re: /\bt\(\s*['"]([\w.]+)['"]/g },
 ];
 const known = new Set(Object.keys(JSON.parse(readFileSync(join(here, "zh.json"), "utf8"))));
 const parts = join(here, "_parts");

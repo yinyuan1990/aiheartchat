@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { WALLET_CHAINS, explorerAddr, explorerTx, isEvm, isSolana, isTon, probeChainNode, probeNode, publicClientFor, rpcOf, useNodes, type WalletChain } from "@/lib/wallet/chains";
 import { absUrl, useAssets, type Asset } from "@/lib/wallet/assets";
 import { copyText, hasFeature, scanQr } from "@/lib/wallet/native";
+import { t } from "@/lib/wallet/i18n";
 import { parsePayment, sendLinkOf } from "@/lib/wallet/scan";
 import { addressOn, useVault } from "@/components/wallet/wallet-context";
 import { AddTokenSheet } from "@/components/wallet/add-token";
@@ -43,7 +44,7 @@ export default function WalletHome() {
   const pct = total > change ? (change / (total - change)) * 100 : 0;
 
   const copy = async () => {
-    if (address && (await copyText(address))) toast.success("地址已复制");
+    if (address && (await copyText(address))) toast.success(t("card.addressCopied"));
   };
   const router = useRouter();
   const canScan = useSyncExternalStore(noSubscribe, () => hasFeature("scan"), () => false);
@@ -53,7 +54,7 @@ export default function WalletHome() {
       const text = await scanQr();
       if (!text) return;
       const p = parsePayment(text);
-      if (!p) return void toast.error("没认出收款地址，请换一个二维码");
+      if (!p) return void toast.error(t("cw.home.scanUnknown"));
       router.push(sendLinkOf(p));
     } catch (e) {
       toast.error((e as Error).message);
@@ -71,7 +72,7 @@ export default function WalletHome() {
         <div className="ml-auto flex items-center gap-1">
           <ChainPill chain={chain} onClick={() => setSheet("chain")} />
           {canScan && (
-            <IconButton label="扫一扫" onClick={scan}>
+            <IconButton label={t("me.scan")} onClick={scan}>
               <Scan size={21} />
             </IconButton>
           )}
@@ -83,8 +84,8 @@ export default function WalletHome() {
           <div className="pointer-events-none absolute -top-24 -right-16 size-64 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.22),transparent_65%)]" />
           <div className="pointer-events-none absolute -bottom-28 -left-10 size-64 rounded-full bg-[radial-gradient(circle,rgba(120,160,255,0.18),transparent_65%)]" />
           <div className="relative flex items-center gap-2 text-[13px] text-white/60">
-            {chain.name} 资产
-            <button type="button" aria-label={hidden ? "显示金额" : "隐藏金额"} onClick={() => setHidden((v) => !v)} className="transition active:scale-90">
+            {t("cw.home.assetsOn", { chain: chain.name })}
+            <button type="button" aria-label={hidden ? t("cw.home.showAmount") : t("cw.home.hideAmount")} onClick={() => setHidden((v) => !v)} className="transition active:scale-90">
               {hidden ? <EyeSlash size={16} /> : <Eye size={16} />}
             </button>
             <NetStatus chain={chain} />
@@ -109,7 +110,7 @@ export default function WalletHome() {
                   {usd(Math.abs(change))} · {pct >= 0 ? "+" : "−"}
                   {Math.abs(pct).toFixed(2)}%
                 </span>
-                <span className="text-white/45">24 小时</span>
+                <span className="text-white/45">{t("cw.home.h24")}</span>
               </>
             )}
           </div>
@@ -122,10 +123,10 @@ export default function WalletHome() {
 
       <section className="grid grid-cols-4 gap-2 px-4 pt-4">
         {[
-          { href: "/wallet/receive", label: "收款", icon: ArrowDown },
-          { href: "/wallet/send", label: "转账", icon: ArrowUp },
-          { href: "/wallet/swap", label: "兑换", icon: ArrowsLeftRight },
-          { href: "/wallet/receive?deposit=1", label: "充值", icon: Plus },
+          { href: "/wallet/receive", label: t("cw.home.receive"), icon: ArrowDown },
+          { href: "/wallet/send", label: t("cw.send.title"), icon: ArrowUp },
+          { href: "/wallet/swap", label: t("cw.home.swap"), icon: ArrowsLeftRight },
+          { href: "/wallet/receive?deposit=1", label: t("cw.home.deposit"), icon: Plus },
         ].map((a) => (
           <Link key={a.label} href={a.href} className="flex flex-col items-center gap-1.5 rounded-2xl py-2 transition active:scale-95">
             <span className="flex size-[52px] items-center justify-center rounded-[18px] bg-card shadow-[0_1px_0_rgba(0,0,0,0.04),0_6px_16px_-8px_rgba(0,0,0,0.18)] ring-1 ring-border/70">
@@ -140,7 +141,7 @@ export default function WalletHome() {
         <div className="flex items-center gap-5">
           {(["tokens", "activity"] as const).map((k) => (
             <button key={k} type="button" onClick={() => setTab(k)} className={cn("relative pb-2 text-[16px] font-semibold transition", tab === k ? "text-foreground" : "text-muted-foreground")}>
-              {k === "tokens" ? "代币" : "动态"}
+              {k === "tokens" ? t("cw.home.tabTokens") : t("cw.home.tabActivity")}
               <span className={cn("absolute inset-x-1 bottom-0 h-[3px] rounded-full bg-foreground transition-opacity", tab === k ? "opacity-100" : "opacity-0")} />
             </button>
           ))}
@@ -148,9 +149,9 @@ export default function WalletHome() {
 
         {noSol ? (
           <div className="py-8 text-center text-[13px] leading-6 text-muted-foreground">
-            「{active?.name}」是用私钥导入的，只有 EVM / 波场地址，没有 {chain.name} 账户。
+            {t("cw.home.keyNoChain", { name: active?.name ?? "", chain: chain.name })}
             <br />
-            用助记词新建或导入的钱包会自动带上 {chain.name} 地址。
+            {t("cw.home.mnemonicHasChain", { chain: chain.name })}
           </div>
         ) : tab === "tokens" ? (
           loading ? (
@@ -169,20 +170,20 @@ export default function WalletHome() {
               ))}
               {assets.every((a) => a.raw === 0n) && (
                 <li className="py-8 text-center text-[13px] leading-6 text-muted-foreground">
-                  这个钱包在 {chain.name} 上还没有资产
+                  {t("cw.home.empty", { chain: chain.name })}
                   <br />
                   <Link href="/wallet/receive" className="font-medium text-foreground underline underline-offset-4">
-                    去收款 / 充值
+                    {t("cw.home.goReceive")}
                   </Link>
                 </li>
               )}
               <li className="py-3 text-center">
                 {isSolana(chain) ? (
-                  <span className="text-[12px] text-muted-foreground">Solana 上持有的代币会自动显示</span>
+                  <span className="text-[12px] text-muted-foreground">{t("cw.home.solAuto")}</span>
                 ) : (
                   <button type="button" onClick={() => setSheet("add")} className="inline-flex items-center gap-1 rounded-full bg-muted px-3.5 py-1.5 text-[13px] font-medium transition active:scale-95">
                     <Plus size={14} weight="bold" />
-                    添加代币
+                    {t("cw.home.addToken")}
                   </button>
                 )}
               </li>
@@ -199,7 +200,7 @@ export default function WalletHome() {
       </div>
 
       <BottomSheet open={sheet === "chain"} onClose={() => setSheet(null)}>
-        <div className="mb-3 text-center text-[17px] font-semibold">选择网络</div>
+        <div className="mb-3 text-center text-[17px] font-semibold">{t("cw.ui.selectNetwork")}</div>
         <ul className="space-y-1">
           {WALLET_CHAINS.map((c) => (
             <li key={c.key}>
@@ -214,7 +215,7 @@ export default function WalletHome() {
                 <ChainGlyph chain={c} size={32} />
                 <span className="flex-1 text-left">
                   <span className="block text-[15px] font-semibold">{c.name}</span>
-                  <span className="block text-[12px] text-muted-foreground">网络费用 {c.chain.nativeCurrency.symbol} 支付</span>
+                  <span className="block text-[12px] text-muted-foreground">{t("cw.home.feePaidIn", { symbol: c.chain.nativeCurrency.symbol })}</span>
                 </span>
                 {c.key === chain.key && <CheckCircle size={22} weight="fill" />}
               </button>
@@ -224,7 +225,7 @@ export default function WalletHome() {
       </BottomSheet>
 
       <BottomSheet open={sheet === "wallet"} onClose={() => setSheet(null)}>
-        <div className="mb-3 text-center text-[17px] font-semibold">我的钱包</div>
+        <div className="mb-3 text-center text-[17px] font-semibold">{t("cw.home.myWallets")}</div>
         <ul className="space-y-1">
           {wallets.map((w) => (
             <li key={w.id} className={cn("flex items-center rounded-2xl pr-1", w.id === active?.id ? "bg-muted" : "hover:bg-muted/60")}>
@@ -245,19 +246,19 @@ export default function WalletHome() {
                   <span className="block font-mono text-[12px] text-muted-foreground">
                     {(() => {
                       const a = addressOn(w, chain);
-                      return a ? shortAddr(a, 6, 4) : (isSolana(chain) || isTon(chain)) && w.kind === "key" ? `无 ${chain.name} 账户` : "解锁后显示";
+                      return a ? shortAddr(a, 6, 4) : (isSolana(chain) || isTon(chain)) && w.kind === "key" ? t("cw.home.noAccount", { chain: chain.name }) : t("cw.home.showAfterUnlock");
                     })()}{" "}
-                    · {w.kind === "mnemonic" ? "助记词" : "私钥"}
+                    · {w.kind === "mnemonic" ? t("cw.ui.mnemonic") : t("cw.ui.privateKey")}
                   </span>
                 </span>
               </button>
-              <button type="button" aria-label={`改名 ${w.name}`} onClick={() => openManage({ kind: "rename", wallet: w })} className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-card">
+              <button type="button" aria-label={t("cw.home.renameX", { name: w.name })} onClick={() => openManage({ kind: "rename", wallet: w })} className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-card">
                 <PencilSimple size={18} />
               </button>
-              <button type="button" aria-label={`导出 ${w.name}`} onClick={() => openManage({ kind: "export", wallet: w })} className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-card">
+              <button type="button" aria-label={t("cw.home.exportX", { name: w.name })} onClick={() => openManage({ kind: "export", wallet: w })} className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-card">
                 <Key size={18} />
               </button>
-              <button type="button" aria-label={`删除 ${w.name}`} onClick={() => openManage({ kind: "delete", wallet: w })} className="flex size-9 shrink-0 items-center justify-center rounded-full text-down hover:bg-down/10">
+              <button type="button" aria-label={t("cw.home.deleteX", { name: w.name })} onClick={() => openManage({ kind: "delete", wallet: w })} className="flex size-9 shrink-0 items-center justify-center rounded-full text-down hover:bg-down/10">
                 <Trash size={18} />
               </button>
             </li>
@@ -266,11 +267,11 @@ export default function WalletHome() {
         <div className="mt-3 grid grid-cols-2 gap-2">
           <Link href="/wallet/create" className="flex h-12 items-center justify-center gap-1.5 rounded-2xl bg-muted text-[14px] font-semibold">
             <Plus size={16} weight="bold" />
-            新建
+            {t("cw.home.create")}
           </Link>
           <Link href="/wallet/import" className="flex h-12 items-center justify-center gap-1.5 rounded-2xl bg-muted text-[14px] font-semibold">
             <WalletIcon size={16} weight="bold" />
-            导入
+            {t("cw.home.import")}
           </Link>
         </div>
       </BottomSheet>
@@ -310,10 +311,10 @@ function NetStatus({ chain }: { chain: WalletChain }) {
   const ms = q.data?.ms;
   const dot = ms == null ? (q.data ? "bg-[#ff8a80]" : "bg-white/30") : ms < 300 ? "bg-[#4fd1c5]" : ms < 1000 ? "bg-[#f5c26b]" : "bg-[#ff8a80]";
   return (
-    <Link href="/wallet/nodes" aria-label="节点和网络费" className="ml-auto flex items-center gap-2 rounded-full bg-white/10 px-2.5 py-1 font-mono text-[11px] text-white/70 transition active:scale-95">
+    <Link href="/wallet/nodes" aria-label={t("cw.home.nodesAndFees")} className="ml-auto flex items-center gap-2 rounded-full bg-white/10 px-2.5 py-1 font-mono text-[11px] text-white/70 transition active:scale-95">
       <span className="flex items-center gap-1">
         <span className={cn("size-1.5 rounded-full", dot)} />
-        {q.data ? (ms != null ? `${ms}ms` : "连不上") : "…"}
+        {q.data ? (ms != null ? `${ms}ms` : t("cw.home.unreachable")) : "…"}
       </span>
       {q.data?.gas != null && (
         <span className="flex items-center gap-0.5">
@@ -339,7 +340,7 @@ function AssetRow({ a, chain, hidden }: { a: Asset; chain: (typeof WALLET_CHAINS
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <span className="truncate text-[15px] font-semibold">{a.symbol}</span>
-            {a.gas && <span className="rounded-md bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">网络费</span>}
+            {a.gas && <span className="rounded-md bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">{t("cw.home.gasBadge")}</span>}
           </div>
           <div className="mt-0.5 flex items-center gap-2 text-[12px] text-muted-foreground">
             {a.priceUsd != null ? <Num value={price(a.priceUsd)} /> : <span>—</span>}
@@ -361,11 +362,11 @@ function ActivityList({ chainKey, address }: { chainKey: string; address?: strin
   if (chainKey !== "arc") {
     return (
       <div className="py-8 text-center text-[13px] text-muted-foreground">
-        {chain.name} 的交易记录请到区块浏览器查看
+        {t("cw.home.historyOnExplorer", { chain: chain.name })}
         <br />
         {address && (
           <a href={explorerAddr(chain, address)} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 font-medium text-foreground underline underline-offset-4">
-            打开 {chain.explorer.replace("https://", "")}
+            {t("cw.home.openSite", { site: chain.explorer.replace("https://", "") })}
             <ArrowSquareOut size={14} />
           </a>
         )}
@@ -373,28 +374,28 @@ function ActivityList({ chainKey, address }: { chainKey: string; address?: strin
     );
   }
   const trades = w.data?.trades ?? [];
-  if (w.isLoading) return <div className="py-8 text-center text-[13px] text-muted-foreground">加载中…</div>;
-  if (trades.length === 0) return <div className="py-8 text-center text-[13px] text-muted-foreground">还没有 Arm 交易记录</div>;
+  if (w.isLoading) return <div className="py-8 text-center text-[13px] text-muted-foreground">{t("common.loading")}</div>;
+  if (trades.length === 0) return <div className="py-8 text-center text-[13px] text-muted-foreground">{t("cw.home.noArmTrades")}</div>;
   return (
     <ul className="mt-1 divide-y divide-border/50">
-      {trades.slice(0, 50).map((t) => (
-        <li key={t.hash + t.token}>
-          <a href={explorerTx(chain, t.hash)} target="_blank" rel="noreferrer" className="flex items-center gap-3 py-3">
-            <TokenAvatar symbol={t.symbol} seed={t.token} logo={absUrl(t.logo)} size={42} className="rounded-full" />
+      {trades.slice(0, 50).map((tr) => (
+        <li key={tr.hash + tr.token}>
+          <a href={explorerTx(chain, tr.hash)} target="_blank" rel="noreferrer" className="flex items-center gap-3 py-3">
+            <TokenAvatar symbol={tr.symbol} seed={tr.token} logo={absUrl(tr.logo)} size={42} className="rounded-full" />
             <div className="min-w-0 flex-1">
               <div className="text-[15px] font-semibold">
-                {t.side === "buy" ? "买入" : "卖出"} {t.symbol}
+                {tr.side === "buy" ? t("cw.home.bought", { symbol: tr.symbol }) : t("cw.home.sold", { symbol: tr.symbol })}
               </div>
-              <div className="mt-0.5 text-[12px] text-muted-foreground">Arm · {timeAgo(new Date(t.time).getTime())}</div>
+              <div className="mt-0.5 text-[12px] text-muted-foreground">Arm · {timeAgo(new Date(tr.time).getTime())}</div>
             </div>
             <div className="text-right font-mono">
-              <div className={cn("text-[14px]", t.side === "buy" ? "text-up" : "")}>
-                {t.side === "buy" ? "+" : "−"}
-                {amt(Number(t.tokens) / 1e18)}
+              <div className={cn("text-[14px]", tr.side === "buy" ? "text-up" : "")}>
+                {tr.side === "buy" ? "+" : "−"}
+                {amt(Number(tr.tokens) / 1e18)}
               </div>
               <div className="mt-0.5 text-[12px] text-muted-foreground">
-                {t.side === "buy" ? "−" : "+"}
-                {(Number(t.usdc) / 1e6).toFixed(2)} USDC
+                {tr.side === "buy" ? "−" : "+"}
+                {(Number(tr.usdc) / 1e6).toFixed(2)} USDC
               </div>
             </div>
           </a>

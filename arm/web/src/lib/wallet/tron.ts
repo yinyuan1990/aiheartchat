@@ -6,6 +6,7 @@ import { base58 } from "@scure/base";
 import { encodeFunctionData, erc20Abi, type LocalAccount } from "viem";
 import { mnemonicToAccount, privateKeyToAccount } from "viem/accounts";
 import { TRON_CHAIN, rpcOf } from "./chains";
+import { t } from "./i18n";
 import type { Secret } from "./vault";
 
 /**
@@ -72,7 +73,7 @@ export const tronAddressOf = (secret: Secret) => tronKeyOf(secret).address;
 export async function trx<T>(path: string, body?: unknown): Promise<T> {
   const r = await fetch(`${rpcOf(TRON_CHAIN)}/${path}`, body === undefined ? undefined : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const j = (await r.json().catch(() => ({}))) as T & { Error?: string; error?: string };
-  if (!r.ok) throw new Error(j.error ?? j.Error ?? (r.status === 429 ? "波场节点限流，请稍后再试" : `波场节点 HTTP ${r.status}`));
+  if (!r.ok) throw new Error(j.error ?? j.Error ?? (r.status === 429 ? t("cw.tron.rateLimited") : t("cw.tron.nodeHttp", { n: r.status })));
   return j;
 }
 
@@ -224,7 +225,7 @@ export async function sendTron(key: TronKey, to: string, sun: bigint, token?: { 
   const r = await trx<{ result?: boolean; code?: string; message?: string }>("wallet/broadcasthex", { transaction: bytesToHex(tx) });
   if (!r.result) {
     const m = r.message ? (/^[0-9a-f]+$/i.test(r.message) ? new TextDecoder().decode(hexToBytes(r.message)) : r.message) : r.code;
-    throw new Error(/balance is not sufficient|insufficient/i.test(m ?? "") ? "余额不足（含网络费）" : `广播失败：${m ?? "未知原因"}`);
+    throw new Error(/balance is not sufficient|insufficient/i.test(m ?? "") ? t("cw.rpc.insufficientWithFee") : t("cw.tron.broadcastFailed", { msg: m ?? t("cw.tron.unknownReason") }));
   }
   return txid;
 }
@@ -237,10 +238,10 @@ export async function waitTron(txid: string, timeoutMs = 90_000): Promise<void> 
     const info = await trx<{ id?: string; receipt?: { result?: string }; result?: string; resMessage?: string }>("wallet/gettransactioninfobyid", { value: txid }).catch(() => ({}) as { id?: string });
     if (info.id) {
       const res = (info as { receipt?: { result?: string } }).receipt?.result;
-      if ((info as { result?: string }).result === "FAILED" || (res && res !== "SUCCESS")) throw new Error(res === "OUT_OF_ENERGY" ? "能量不够，交易失败（网络费已扣）" : "交易在链上失败了");
+      if ((info as { result?: string }).result === "FAILED" || (res && res !== "SUCCESS")) throw new Error(res === "OUT_OF_ENERGY" ? t("cw.tron.outOfEnergy") : t("cw.tron.failedOnChain"));
       return;
     }
-    if (Date.now() - t0 > timeoutMs) throw new Error("等了很久还没确认，可以稍后在波场浏览器里查这笔交易");
+    if (Date.now() - t0 > timeoutMs) throw new Error(t("cw.tron.slowConfirm"));
   }
 }
 
@@ -253,7 +254,7 @@ export async function probeTronNode(url: string, timeoutMs = 6000): Promise<{ ms
     const j = (await r.json()) as { block_header?: { raw_data?: { number?: number } } };
     return { ms: Math.round(performance.now() - t0), block: j.block_header?.raw_data?.number };
   } catch (e) {
-    return { ms: Math.round(performance.now() - t0), error: ac.signal.aborted ? "超时" : (e as Error).message || "连不上" };
+    return { ms: Math.round(performance.now() - t0), error: ac.signal.aborted ? t("cw.rpc.timeout") : (e as Error).message || t("cw.rpc.unreachable") };
   } finally {
     clearTimeout(timer);
   }

@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { API_BASE } from "@/lib/api";
+import { t } from "./i18n";
 
 /** pump.fun callouts (喊单) as collected by the indexer (indexer/src/callouts.ts, /api/pump/callouts | callers). */
 
@@ -37,7 +38,7 @@ export type Caller = CallerRef & {
 
 async function get<T>(path: string): Promise<T> {
   const r = await fetch(`${API_BASE}${path}`);
-  if (!r.ok) throw Object.assign(new Error(r.status === 404 ? "没找到" : "喊单数据暂时拿不到"), { status: r.status });
+  if (!r.ok) throw Object.assign(new Error(r.status === 404 ? t("cw.callouts.notFound") : t("cw.callouts.unavailableShort")), { status: r.status });
   return r.json();
 }
 
@@ -57,5 +58,5 @@ export const fmtX = (m: number | null) => (m == null ? "—" : m >= 100 ? `${Mat
 export const fmtPeak = (ms: number | null) => {
   if (ms == null) return "—";
   const m = Math.round(ms / 60_000);
-  return m < 60 ? `${m} 分钟` : m < 48 * 60 ? `${(m / 60).toFixed(1)} 小时` : `${Math.round(m / 1440)} 天`;
+  return m < 60 ? t("cw.coin.ageMin", { n: m }) : m < 48 * 60 ? t("cw.coin.ageHour", { n: (m / 60).toFixed(1) }) : t("cw.coin.ageDay", { n: Math.round(m / 1440) });
 };

@@ -24,6 +24,7 @@ import { sameTonAddress, tonAddressOf, tonKeyOf, type TonKey } from "@/lib/walle
 /** The wallet's address on that chain (undefined: none, e.g. Solana / TON of a private-key wallet) */
 export const addressOn = (w: WalletMeta, c: WalletChain) => (isSolana(c) ? w.sol : isTron(c) ? w.trx : isTon(c) ? w.ton : w.address);
 import { loadPayee, payeeSupported, publishPayee } from "@/lib/wallet/payee";
+import { t } from "@/lib/wallet/i18n";
 import { toast } from "sonner";
 
 type Status = "loading" | "empty" | "locked" | "unlocked";
@@ -148,7 +149,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const same = p.evm?.toLowerCase() === w.address.toLowerCase() && (p.sol ?? null) === (w.sol ?? null) && (!w.trx || p.trx === w.trx) && (!w.ton || p.ton === undefined || sameTonAddress(p.ton, w.ton));
         if (same) return;
         await publishPayee(p.userId, secret);
-        toast.success(`好友转账的收款地址已换成「${w.name}」`);
+        toast.success(t("cw.ctx.payeeSwitched", { name: w.name }));
       } catch {
         payeeSynced.current = "";
       }
@@ -234,7 +235,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const s = active && unlocked.current?.plain.secrets[active.id];
         if (!s) throw new Error("locked");
         const kp = solKeypairOf(s);
-        if (!kp) throw new Error("私钥导入的钱包没有 Solana 账户，请用助记词钱包");
+        if (!kp) throw new Error(t("cw.ctx.keyNoSol"));
         return kp;
       },
       tronKey: () => {
@@ -246,7 +247,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const s = active && unlocked.current?.plain.secrets[active.id];
         if (!s) throw new Error("locked");
         const k = tonKeyOf(s);
-        if (!k) throw new Error("私钥导入的钱包没有 TON 账户，请用助记词钱包");
+        if (!k) throw new Error(t("cw.ctx.keyNoTon"));
         return k;
       },
       secretOf: (id) => unlocked.current?.plain.secrets[id] ?? null,

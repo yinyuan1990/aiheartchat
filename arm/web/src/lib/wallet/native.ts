@@ -1,3 +1,5 @@
+import { t } from "./i18n";
+
 /** Optional hooks the 心之音 App shell exposes on `window.ArmWalletNative`; every call is a no-op in a plain browser. */
 type MaybePromise<T> = T | Promise<T>;
 
@@ -19,6 +21,8 @@ export type NativePush =
 
 type Bridge = {
   platform?: string;
+  /** the App's UI language ("zh" / "en" …), so the wallet follows it */
+  lang?: string;
   features?: string[];
   setSecureScreen?: (on: boolean) => void;
   share?: (text: string) => void;
@@ -80,7 +84,7 @@ let replyListener = false;
 
 function wrapSync(raw: SyncBridge): Bridge {
   if (wrapped?.raw === raw) return wrapped.bridge;
-  let info: { platform?: string; features?: string[] } = {};
+  let info: { platform?: string; lang?: string; features?: string[] } = {};
   try {
     info = JSON.parse(raw.bridgeInfo());
   } catch {}
@@ -112,6 +116,7 @@ function wrapSync(raw: SyncBridge): Bridge {
     });
   const bridge: Bridge = {
     platform: info.platform,
+    lang: info.lang,
     features: info.features ?? [],
     setSecureScreen: (on) => void call("setSecureScreen", !!on),
     share: (t) => void call("share", String(t)),
@@ -211,10 +216,10 @@ export async function bioStatus(): Promise<BioStatus | null> {
     return null;
   }
 }
-export const bioName = (s?: BioStatus | null) => (s?.kind === "face" ? "Face ID" : s?.kind === "fingerprint" ? "指纹" : "生物识别");
+export const bioName = (s?: BioStatus | null) => (s?.kind === "face" ? "Face ID" : s?.kind === "fingerprint" ? t("cw.native.fingerprint") : t("cw.native.biometric"));
 export async function bioEnable(password: string): Promise<boolean> {
   const b = nativeBridge();
-  if (!b?.bioEnable) throw new Error("当前 App 版本不支持");
+  if (!b?.bioEnable) throw new Error(t("cw.native.unsupported"));
   return (await b.bioEnable(password)) === true;
 }
 export async function bioUnlock(): Promise<string | null> {

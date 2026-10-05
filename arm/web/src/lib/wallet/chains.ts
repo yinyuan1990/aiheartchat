@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { createPublicClient, defineChain, http, type Address, type Chain, type PublicClient } from "viem";
 import { storeRead, storeWrite } from "./native";
+import { t } from "./i18n";
 import { arbitrum, base, bsc, mainnet, polygon } from "viem/chains";
 import { arcMainnet } from "@/lib/web3";
 import { API_BASE } from "@/lib/api";
@@ -171,7 +172,7 @@ export const TON_CHAIN = WALLET_CHAINS.find(isTon)!;
 export const chainByKey = (key?: string | null) => WALLET_CHAINS.find((c) => c.key === key) ?? WALLET_CHAINS[0];
 export const chainById = (id?: number | null) => EVM_CHAINS.find((c) => c.chain.id === id);
 /** Built-in relay URLs are host-relative; show them by name. */
-export const nodeLabel = (url: string) => (url === `${API_BASE}/sol/rpc` || url === `${API_BASE}/trx` || url === `${API_BASE}/ton` ? "心之音加速节点" : url.replace(/^https?:\/\//, ""));
+export const nodeLabel = (url: string) => (url === `${API_BASE}/sol/rpc` || url === `${API_BASE}/trx` || url === `${API_BASE}/ton` ? t("cw.chains.appNode", { app: t("app.name") }) : url.replace(/^https?:\/\//, ""));
 
 // ---------- RPC nodes: built-in list + user-added, one selected per chain (kept in the shell's native store) ----------
 type NodeState = { selected: Record<string, string>; custom: Record<string, string[]> };
@@ -249,7 +250,7 @@ export async function probeNode(url: string, timeoutMs = 6000): Promise<NodeProb
     const chainId = Number(BigInt(await rpcCall(url, "eth_chainId", ac.signal)));
     return { ms, block, chainId };
   } catch (e) {
-    return { ms: Math.round(performance.now() - t0), error: ac.signal.aborted ? "超时" : (e as Error).message || "连不上" };
+    return { ms: Math.round(performance.now() - t0), error: ac.signal.aborted ? t("cw.chains.timeout") : (e as Error).message || t("cw.chains.unreachable") };
   } finally {
     clearTimeout(timer);
   }
@@ -258,12 +259,12 @@ export async function probeNode(url: string, timeoutMs = 6000): Promise<NodeProb
 /** Same as probeNode for the chain's own RPC dialect; `chainId` is the chain's id when a Solana node is on mainnet. */
 export async function probeChainNode(c: WalletChain, url: string, timeoutMs = 6000): Promise<NodeProbe> {
   if (isTron(c)) {
-    const t = await probeTronNode(url, timeoutMs);
-    return { ms: t.ms, block: t.block != null ? BigInt(t.block) : undefined, chainId: t.block != null ? c.chain.id : undefined, error: t.error ?? (t.block == null ? "不是波场节点" : undefined) };
+    const r = await probeTronNode(url, timeoutMs);
+    return { ms: r.ms, block: r.block != null ? BigInt(r.block) : undefined, chainId: r.block != null ? c.chain.id : undefined, error: r.error ?? (r.block == null ? t("cw.chains.notTron") : undefined) };
   }
   if (isTon(c)) {
-    const t = await probeTonNode(url, timeoutMs);
-    return { ms: t.ms, block: t.block != null ? BigInt(t.block) : undefined, chainId: t.mainnet ? c.chain.id : t.block != null ? -1 : undefined, error: t.error ?? (t.block == null ? "不是 TON 节点（要 toncenter v2 格式）" : undefined) };
+    const r = await probeTonNode(url, timeoutMs);
+    return { ms: r.ms, block: r.block != null ? BigInt(r.block) : undefined, chainId: r.mainnet ? c.chain.id : r.block != null ? -1 : undefined, error: r.error ?? (r.block == null ? t("cw.chains.notTon") : undefined) };
   }
   if (!isSolana(c)) return probeNode(url, timeoutMs);
   const p = await probeSolNode(url, timeoutMs);

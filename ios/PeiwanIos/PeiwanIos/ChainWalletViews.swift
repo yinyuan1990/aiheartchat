@@ -485,7 +485,8 @@ final class ChainWalletModel: NSObject, ObservableObject {
         config.applicationNameForUserAgent = "PeiwanApp/iOS ArmWallet/1"
         config.userContentController.add(WeakMessageHandler(self), name: "armWallet")
         config.userContentController.addUserScript(WKUserScript(
-            source: walletBridgeJS.replacingOccurrences(of: "__WALLET_ORIGIN__", with: origin),
+            // 钱包页跟 App 的语言走
+            source: walletBridgeJS.replacingOccurrences(of: "__WALLET_ORIGIN__", with: origin).replacingOccurrences(of: "__APP_LANG__", with: I18nStore.shared.lang),
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         ))
@@ -923,6 +924,7 @@ private let walletBridgeJS = #"""
   }
   window.ArmWalletNative = {
     platform: 'ios',
+    lang: '__APP_LANG__',
     features: ['dapp', 'store', 'scan', 'bio', 'result', 'chat', 'payreq', 'perpcall'],
     walletResult: function(r){ call('walletResult', r); },
     walletClose: function(){ call('walletClose'); },

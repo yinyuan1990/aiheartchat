@@ -2,6 +2,7 @@ import { decodeFunctionData, erc20Abi as viemErc20Abi, formatUnits, getAddress, 
 import { ADDR, STOCK, factoryAbi, lockerAbi, routerAbi, stockFactoryAbi } from "@/lib/web3";
 import { vaultAbi } from "@/lib/boat";
 import { publicClientFor, type WalletChain } from "./chains";
+import { t } from "./i18n";
 
 /**
  * Turns DApp requests into something a person can judge. Only well-known calls get a summary; anything else is shown
@@ -26,24 +27,25 @@ const ABIS: Abi[] = [viemErc20Abi, extraAbi, routerAbi, factoryAbi, stockFactory
 function knownContracts(chainId: number): Record<string, string> {
   if (chainId !== ARC_ID) return {};
   const m: Record<string, string | undefined> = {
-    [ADDR.factory]: "Arm 发币工厂",
-    [ADDR.locker]: "Arm 手续费金库",
-    [ADDR.router]: "Arm 交易路由（Uniswap V3）",
-    [ADDR.quoter]: "Uniswap V3 报价",
-    [ADDR.positionManager]: "Uniswap V3 仓位",
-    [ADDR.treasury]: "Arm 国库",
-    [BOAT.vault]: "$BOAT 金库",
-    [BOAT.token]: "$BOAT 代币",
+    [ADDR.factory]: t("cw.dapp.cArmFactory"),
+    [ADDR.locker]: t("cw.dapp.cArmLocker"),
+    [ADDR.router]: t("cw.dapp.cArmRouter"),
+    [ADDR.quoter]: t("cw.dapp.cUniQuoter"),
+    [ADDR.positionManager]: t("cw.dapp.cUniPositions"),
+    [ADDR.treasury]: t("cw.dapp.cArmTreasury"),
+    [BOAT.vault]: t("cw.dapp.cBoatVault"),
+    [BOAT.token]: t("cw.dapp.cBoatToken"),
     [ADDR.usdc]: "USDC",
   };
-  if (ADDR.referralHub) m[ADDR.referralHub] = "Arm 推广中心";
+  if (ADDR.referralHub) m[ADDR.referralHub] = t("cw.dapp.cArmReferral");
   if (STOCK) {
-    m[STOCK.factory] = "Arm 发币工厂（股票币）";
-    m[STOCK.locker] = "Arm 手续费金库（股票币）";
+    m[STOCK.factory] = t("cw.dapp.cArmFactoryStock");
+    m[STOCK.locker] = t("cw.dapp.cArmLockerStock");
   }
   return Object.fromEntries(Object.entries(m).filter(([, v]) => v).map(([k, v]) => [k.toLowerCase(), v!]));
 }
 export const contractName = (chainId: number, a?: string | null) => (a ? knownContracts(chainId)[a.toLowerCase()] : undefined);
+const isAt = (chainId: number, a: string, ...addrs: (string | undefined)[]) => chainId === ARC_ID && addrs.some((x) => x && x.toLowerCase() === a.toLowerCase());
 
 type TokenMeta = { symbol: string; decimals: number };
 const tokenCache = new Map<string, TokenMeta | null>();
@@ -76,7 +78,7 @@ const fmtNum = (s: string) => {
 };
 async function amountOf(chain: WalletChain, token: Address, raw: bigint) {
   const m = await tokenMeta(chain, token);
-  return m ? `${fmtNum(formatUnits(raw, m.decimals))} ${m.symbol}` : `${raw.toString()}（原始数量，${short(token)}）`;
+  return m ? `${fmtNum(formatUnits(raw, m.decimals))} ${m.symbol}` : t("cw.dapp.rawAmount", { n: raw.toString(), token: short(token) });
 }
 export const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 const nameOr = (chainId: number, a: string) => contractName(chainId, a) ?? short(a);
@@ -91,13 +93,13 @@ export async function describeTx(chain: WalletChain, tx: TxRequest, trustedSite:
   const notes: string[] = [];
   const to = tx.to ? getAddress(tx.to) : undefined;
   const cname = contractName(id, to);
-  if (value > 0n) lines.push({ label: "支付", value: `${fmtNum(formatUnits(value, nc.decimals))} ${nc.symbol}`, mono: true, tone: "down" });
+  if (value > 0n) lines.push({ label: t("cw.dapp.pay"), value: `${fmtNum(formatUnits(value, nc.decimals))} ${nc.symbol}`, mono: true, tone: "down" });
 
-  if (!to) return { title: "部署合约", lines, risk: "warn", notes: ["这笔交易会部署一个新合约。不清楚用途就拒绝。"], known: false };
+  if (!to) return { title: t("cw.dapp.deployTitle"), lines, risk: "warn", notes: [t("cw.dapp.deployNote")], known: false };
 
   if (!tx.data || tx.data === "0x") {
-    lines.push({ label: "收款地址", value: to, mono: true });
-    return { title: `转出 ${nc.symbol}`, lines, risk: "none", notes, contract: cname, known: true };
+    lines.push({ label: t("cw.dapp.recipient"), value: to, mono: true });
+    return { title: t("cw.dapp.sendTitle", { sym: nc.symbol }), lines, risk: "none", notes, contract: cname, known: true };
   }
 
   type Decoded = { functionName: string; args?: readonly unknown[] };
@@ -111,10 +113,10 @@ export async function describeTx(chain: WalletChain, tx: TxRequest, trustedSite:
 
   const base = { contract: cname, fn: decoded?.functionName };
   if (!decoded) {
-    lines.push({ label: "合约", value: cname ?? to, mono: !cname });
-    lines.push({ label: "方法", value: tx.data.slice(0, 10), mono: true });
-    notes.push(cname ? "没能解析这次调用的具体内容，请确认是你自己发起的操作。" : "未知合约的调用，无法解析内容。不认识这个网站就拒绝。");
-    return { title: "合约调用", lines, risk: cname || trustedSite ? "warn" : "danger", notes, known: false, ...base };
+    lines.push({ label: t("cw.dapp.contract"), value: cname ?? to, mono: !cname });
+    lines.push({ label: t("cw.dapp.method"), value: tx.data.slice(0, 10), mono: true });
+    notes.push(cname ? t("cw.dapp.unparsedKnown") : t("cw.dapp.unparsedUnknown"));
+    return { title: t("cw.dapp.callTitle"), lines, risk: cname || trustedSite ? "warn" : "danger", notes, known: false, ...base };
   }
 
   const a = (decoded.args ?? []) as unknown[];
@@ -128,45 +130,45 @@ export async function describeTx(chain: WalletChain, tx: TxRequest, trustedSite:
     const sym = meta?.symbol ?? short(to);
     const sname = contractName(id, spender);
     const unlimited = amt >= MAX_HALF;
-    lines.push({ label: "代币", value: sym });
-    lines.push({ label: "授权给", value: sname ?? spender, mono: !sname });
-    lines.push({ label: "数量", value: amt === 0n ? "0（取消授权）" : unlimited ? "无限" : await amountOf(chain, to, amt), tone: unlimited ? "down" : undefined });
-    if (amt === 0n) return { title: `取消 ${sym} 授权`, lines, risk: "none", notes, known: true, ...base };
+    lines.push({ label: t("cw.dapp.token"), value: sym });
+    lines.push({ label: t("cw.dapp.spender"), value: sname ?? spender, mono: !sname });
+    lines.push({ label: t("cw.dapp.amount"), value: amt === 0n ? t("cw.dapp.revokeAmount") : unlimited ? t("cw.dapp.unlimited") : await amountOf(chain, to, amt), tone: unlimited ? "down" : undefined });
+    if (amt === 0n) return { title: t("cw.dapp.revokeTitle", { sym }), lines, risk: "none", notes, known: true, ...base };
     let risk: Risk = "none";
     if (!sname) {
       risk = unlimited || !trustedSite ? "danger" : "warn";
-      notes.push(`授权后对方合约可以随时转走你${unlimited ? "全部" : "这个数量以内"}的 ${sym}。不认识这个合约就拒绝。`);
-    } else if (unlimited) notes.push(`这是 Arm 自己的合约，网站交易前都要先授权一次。`);
-    return { title: unlimited ? `无限授权 ${sym}` : `授权 ${sym}`, lines, risk, notes, known: true, ...base };
+      notes.push(unlimited ? t("cw.dapp.approveAllNote", { sym }) : t("cw.dapp.approveSomeNote", { sym }));
+    } else if (unlimited) notes.push(t("cw.dapp.armApproveNote"));
+    return { title: unlimited ? t("cw.dapp.approveUnlimitedTitle", { sym }) : t("cw.dapp.approveTitle", { sym }), lines, risk, notes, known: true, ...base };
   }
 
   if (f === "transfer" || f === "transferFrom") {
     const [src, dst, amt] = f === "transfer" ? [tx.from, a[0] as Address, a[1] as bigint] : [a[0] as Address, a[1] as Address, a[2] as bigint];
-    lines.push({ label: "数量", value: await amountOf(chain, to, amt), mono: true, tone: "down" });
-    if (f === "transferFrom" && src && src.toLowerCase() !== self) lines.push({ label: "从", value: src, mono: true });
-    lines.push({ label: "收款地址", value: dst, mono: true });
+    lines.push({ label: t("cw.dapp.amount"), value: await amountOf(chain, to, amt), mono: true, tone: "down" });
+    if (f === "transferFrom" && src && src.toLowerCase() !== self) lines.push({ label: t("cw.dapp.from"), value: src, mono: true });
+    lines.push({ label: t("cw.dapp.recipient"), value: dst, mono: true });
     const meta = await tokenMeta(chain, to);
-    if (!trustedSite) notes.push("网站请求你直接转出代币，确认收款地址是你要转的人。");
-    return { title: `转出 ${meta?.symbol ?? "代币"}`, lines, risk: trustedSite ? "none" : "warn", notes, known: true, ...base };
+    if (!trustedSite) notes.push(t("cw.dapp.directSendNote"));
+    return { title: meta?.symbol ? t("cw.dapp.sendTitle", { sym: meta.symbol }) : t("cw.dapp.sendTokenTitle"), lines, risk: trustedSite ? "none" : "warn", notes, known: true, ...base };
   }
 
   if (f === "setApprovalForAll") {
     const on = a[1] as boolean;
     const op = getAddress(a[0] as Address);
-    lines.push({ label: "合约", value: cname ?? to, mono: !cname });
-    lines.push({ label: "授权给", value: nameOr(id, op), mono: true });
-    if (!on) return { title: "取消 NFT 全部授权", lines, risk: "none", notes, known: true, ...base };
-    notes.push("授权后对方可以转走你在这个合约里的全部 NFT。钓鱼网站最常用这一招。");
-    return { title: "授权全部 NFT", lines, risk: "danger", notes, known: true, ...base };
+    lines.push({ label: t("cw.dapp.contract"), value: cname ?? to, mono: !cname });
+    lines.push({ label: t("cw.dapp.spender"), value: nameOr(id, op), mono: true });
+    if (!on) return { title: t("cw.dapp.revokeNftTitle"), lines, risk: "none", notes, known: true, ...base };
+    notes.push(t("cw.dapp.nftNote"));
+    return { title: t("cw.dapp.approveNftTitle"), lines, risk: "danger", notes, known: true, ...base };
   }
 
   if (f === "exactInputSingle") {
     const p = a[0] as { tokenIn: Address; tokenOut: Address; recipient: Address; amountIn: bigint; amountOutMinimum: bigint };
-    lines.push({ label: "支付", value: await amountOf(chain, p.tokenIn, p.amountIn), mono: true, tone: "down" });
-    lines.push({ label: "最少得到", value: await amountOf(chain, p.tokenOut, p.amountOutMinimum), mono: true, tone: "up" });
-    lines.push({ label: "合约", value: cname ?? to, mono: !cname });
-    if (self && p.recipient.toLowerCase() !== self) notes.push(`换到的币会打到 ${short(p.recipient)}，不是你的地址。`);
-    return { title: "兑换", lines, risk: self && p.recipient.toLowerCase() !== self ? "danger" : cname ? "none" : "warn", notes, known: true, ...base };
+    lines.push({ label: t("cw.dapp.pay"), value: await amountOf(chain, p.tokenIn, p.amountIn), mono: true, tone: "down" });
+    lines.push({ label: t("cw.dapp.minReceive"), value: await amountOf(chain, p.tokenOut, p.amountOutMinimum), mono: true, tone: "up" });
+    lines.push({ label: t("cw.dapp.contract"), value: cname ?? to, mono: !cname });
+    if (self && p.recipient.toLowerCase() !== self) notes.push(t("cw.dapp.otherRecipientNote", { addr: short(p.recipient) }));
+    return { title: t("cw.dapp.swapTitle"), lines, risk: self && p.recipient.toLowerCase() !== self ? "danger" : cname ? "none" : "warn", notes, known: true, ...base };
   }
 
   if (f === "exactInput") {
@@ -174,50 +176,52 @@ export async function describeTx(chain: WalletChain, tx: TxRequest, trustedSite:
     const hops = (p.path.length - 2) / 46; // 20-byte token + 3-byte fee per hop, hex chars
     const tokenIn = getAddress(`0x${p.path.slice(2, 42)}`);
     const tokenOut = getAddress(`0x${p.path.slice(-40)}`);
-    lines.push({ label: "支付", value: await amountOf(chain, tokenIn, p.amountIn), mono: true, tone: "down" });
-    lines.push({ label: "最少得到", value: await amountOf(chain, tokenOut, p.amountOutMinimum), mono: true, tone: "up" });
-    lines.push({ label: "路径", value: `${Math.round(hops)} 跳` });
-    if (self && p.recipient.toLowerCase() !== self) notes.push(`换到的币会打到 ${short(p.recipient)}，不是你的地址。`);
-    return { title: "兑换", lines, risk: self && p.recipient.toLowerCase() !== self ? "danger" : cname ? "none" : "warn", notes, known: true, ...base };
+    lines.push({ label: t("cw.dapp.pay"), value: await amountOf(chain, tokenIn, p.amountIn), mono: true, tone: "down" });
+    lines.push({ label: t("cw.dapp.minReceive"), value: await amountOf(chain, tokenOut, p.amountOutMinimum), mono: true, tone: "up" });
+    lines.push({ label: t("cw.dapp.route"), value: t("cw.dapp.hops", { n: Math.round(hops) }) });
+    if (self && p.recipient.toLowerCase() !== self) notes.push(t("cw.dapp.otherRecipientNote", { addr: short(p.recipient) }));
+    return { title: t("cw.dapp.swapTitle"), lines, risk: self && p.recipient.toLowerCase() !== self ? "danger" : cname ? "none" : "warn", notes, known: true, ...base };
   }
 
   if (f === "launch") {
     const p = a[0] as { name: string; symbol: string; initialBuyUsdc: bigint };
-    lines.push({ label: "代币", value: `${p.name}（$${p.symbol}）` });
-    if (p.initialBuyUsdc > 0n) lines.push({ label: "首购", value: `${fmtNum(formatUnits(p.initialBuyUsdc, 6))} USDC`, mono: true, tone: "down" });
-    lines.push({ label: "合约", value: cname ?? to, mono: !cname });
-    return { title: "发币", lines, risk: cname ? "none" : "danger", notes: cname ? notes : ["这不是 Arm 的发币合约。"], known: true, ...base };
+    lines.push({ label: t("cw.dapp.token"), value: t("cw.dapp.nameSymbol", { name: p.name, sym: p.symbol }) });
+    if (p.initialBuyUsdc > 0n) lines.push({ label: t("cw.dapp.initialBuy"), value: `${fmtNum(formatUnits(p.initialBuyUsdc, 6))} USDC`, mono: true, tone: "down" });
+    lines.push({ label: t("cw.dapp.contract"), value: cname ?? to, mono: !cname });
+    return { title: t("cw.dapp.launchTitle"), lines, risk: cname ? "none" : "danger", notes: cname ? notes : [t("cw.dapp.notArmFactory")], known: true, ...base };
   }
 
-  if (cname === "$BOAT 金库" && (f === "buy" || f === "sell")) {
+  const boatVault = isAt(id, to, BOAT.vault);
+  const feeLocker = isAt(id, to, ADDR.locker, STOCK?.locker);
+  if (boatVault && (f === "buy" || f === "sell")) {
     const [amt, min] = [a[0] as bigint, a[1] as bigint];
     const usdc = ADDR.usdc;
-    lines.push({ label: "支付", value: await amountOf(chain, f === "buy" ? usdc : BOAT.token, amt), mono: true, tone: "down" });
-    lines.push({ label: "最少得到", value: await amountOf(chain, f === "buy" ? BOAT.token : usdc, min), mono: true, tone: "up" });
-    return { title: f === "buy" ? "买入 $BOAT" : "卖出 $BOAT", lines, risk: "none", notes, known: true, ...base };
+    lines.push({ label: t("cw.dapp.pay"), value: await amountOf(chain, f === "buy" ? usdc : BOAT.token, amt), mono: true, tone: "down" });
+    lines.push({ label: t("cw.dapp.minReceive"), value: await amountOf(chain, f === "buy" ? BOAT.token : usdc, min), mono: true, tone: "up" });
+    return { title: f === "buy" ? t("cw.dapp.buyBoat") : t("cw.dapp.sellBoat"), lines, risk: "none", notes, known: true, ...base };
   }
-  if (cname === "$BOAT 金库" && f === "deposit") {
-    lines.push({ label: "数量", value: await amountOf(chain, BOAT.token, a[0] as bigint), mono: true, tone: "down" });
-    return { title: "把 $BOAT 存进游戏", lines, risk: "none", notes, known: true, ...base };
+  if (boatVault && f === "deposit") {
+    lines.push({ label: t("cw.dapp.amount"), value: await amountOf(chain, BOAT.token, a[0] as bigint), mono: true, tone: "down" });
+    return { title: t("cw.dapp.depositBoat"), lines, risk: "none", notes, known: true, ...base };
   }
-  if (cname === "$BOAT 金库" && f === "claim") return { title: "领取 $BOAT 奖励", lines, risk: "none", notes, known: true, ...base };
+  if (boatVault && f === "claim") return { title: t("cw.dapp.claimBoat"), lines, risk: "none", notes, known: true, ...base };
 
-  if (f === "claim" && cname?.startsWith("Arm 手续费金库")) {
+  if (f === "claim" && feeLocker) {
     const asset = a[0] as Address;
-    lines.push({ label: "领取", value: (await tokenMeta(chain, asset))?.symbol ?? short(asset) });
-    return { title: "领取手续费收益", lines, risk: "none", notes, known: true, ...base };
+    lines.push({ label: t("cw.dapp.claimAsset"), value: (await tokenMeta(chain, asset))?.symbol ?? short(asset) });
+    return { title: t("cw.dapp.claimFees"), lines, risk: "none", notes, known: true, ...base };
   }
-  if (f === "setPayout" && cname?.startsWith("Arm 手续费金库")) {
-    lines.push({ label: "代币", value: short(a[0] as string), mono: true });
-    lines.push({ label: "新收款地址", value: a[1] as string, mono: true });
-    notes.push("以后这个币的创作者收益会打到新地址。");
-    return { title: "修改收益地址", lines, risk: "warn", notes, known: true, ...base };
+  if (f === "setPayout" && feeLocker) {
+    lines.push({ label: t("cw.dapp.token"), value: short(a[0] as string), mono: true });
+    lines.push({ label: t("cw.dapp.newPayout"), value: a[1] as string, mono: true });
+    notes.push(t("cw.dapp.payoutNote"));
+    return { title: t("cw.dapp.payoutTitle"), lines, risk: "warn", notes, known: true, ...base };
   }
 
-  lines.push({ label: "合约", value: cname ?? to, mono: !cname });
-  lines.push({ label: "方法", value: f, mono: true });
-  if (!cname) notes.push("调用未知合约。不认识这个网站就拒绝。");
-  return { title: "合约调用", lines, risk: cname ? "none" : trustedSite ? "warn" : "danger", notes, known: false, ...base };
+  lines.push({ label: t("cw.dapp.contract"), value: cname ?? to, mono: !cname });
+  lines.push({ label: t("cw.dapp.method"), value: f, mono: true });
+  if (!cname) notes.push(t("cw.dapp.unknownCallNote"));
+  return { title: t("cw.dapp.callTitle"), lines, risk: cname ? "none" : trustedSite ? "warn" : "danger", notes, known: false, ...base };
 }
 
 /** personal_sign payload: hex → readable text when it is UTF-8, else keep hex. */
@@ -242,38 +246,38 @@ export function describeTyped(td: TypedData, chainId: number, trustedSite: boole
   const notes: string[] = [];
   const d = td.domain ?? {};
   const contract = typeof d.verifyingContract === "string" ? d.verifyingContract : undefined;
-  if (d.name) lines.push({ label: "应用", value: String(d.name) });
-  if (contract) lines.push({ label: "合约", value: contractName(chainId, contract) ?? contract, mono: !contractName(chainId, contract) });
-  lines.push({ label: "类型", value: td.primaryType, mono: true });
+  if (d.name) lines.push({ label: t("cw.dapp.app"), value: String(d.name) });
+  if (contract) lines.push({ label: t("cw.dapp.contract"), value: contractName(chainId, contract) ?? contract, mono: !contractName(chainId, contract) });
+  lines.push({ label: t("cw.dapp.type"), value: td.primaryType, mono: true });
   let risk: Risk = "none";
   const dc = d.chainId != null ? Number(d.chainId) : null;
   if (dc != null && dc !== chainId) {
     risk = "danger";
-    notes.push(`签名里写的链（${dc}）和当前网络不一致。`);
+    notes.push(t("cw.dapp.chainMismatch", { n: dc }));
   }
   if (PERMITS.includes(td.primaryType)) {
     const m = td.message as Record<string, unknown>;
     const details = (m.details ?? m.permitted) as Record<string, unknown> | undefined;
     const spender = String(m.spender ?? "");
-    if (spender && isAddress(spender)) lines.push({ label: "授权给", value: contractName(chainId, spender) ?? spender, mono: !contractName(chainId, spender) });
+    if (spender && isAddress(spender)) lines.push({ label: t("cw.dapp.spender"), value: contractName(chainId, spender) ?? spender, mono: !contractName(chainId, spender) });
     const amount = m.value ?? m.amount ?? details?.amount;
     if (amount != null) {
       let unlimited = false;
       try {
         unlimited = BigInt(String(amount)) >= 2n ** 159n; // Permit2 amounts are uint160
       } catch {}
-      lines.push({ label: "数量", value: unlimited ? "无限" : String(amount), mono: true });
+      lines.push({ label: t("cw.dapp.amount"), value: unlimited ? t("cw.dapp.unlimited") : String(amount), mono: true });
     }
     if (!contractName(chainId, spender)) {
       risk = "danger";
-      notes.push("这是代币授权签名（Permit）：签了之后对方不用你再确认就能转走代币。钓鱼网站常用这一招，不认识就拒绝。");
+      notes.push(t("cw.dapp.permitNote"));
     }
-    return { title: "代币授权签名", lines, risk, notes };
+    return { title: t("cw.dapp.permitTitle"), lines, risk, notes };
   }
   if (/order/i.test(td.primaryType)) {
     risk = trustedSite ? "warn" : "danger";
-    notes.push("这是挂单 / 订单签名，签了可能让别人按这个价格买走你的资产。");
+    notes.push(t("cw.dapp.orderNote"));
   }
   if (!trustedSite && risk === "none") risk = "warn";
-  return { title: "签名请求", lines, risk, notes };
+  return { title: t("cw.dapp.signTitle"), lines, risk, notes };
 }

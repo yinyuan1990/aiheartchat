@@ -1,4 +1,5 @@
 import { hasFeature, nativeBridge } from "./native";
+import { t } from "./i18n";
 import { accountOf, type Secret } from "./vault";
 import { b64, signBytes, solKeypairOf } from "./sol";
 import { tronKeyOf } from "./tron";
@@ -23,7 +24,7 @@ export const payeeSupported = () => hasFeature("chat") && !!nativeBridge()?.chai
 
 const parse = (r: unknown): Payee => {
   const o = (typeof r === "string" ? JSON.parse(r) : r) as Partial<Payee> & { message?: string; statusCode?: number };
-  if (!o || typeof o.userId !== "string") throw new Error(o?.message ?? "心之音账号没有响应，请重试");
+  if (!o || typeof o.userId !== "string") throw new Error(o?.message ?? t("cw.payee.noResponse", { app: t("app.name") }));
   return { userId: o.userId, evm: o.evm ?? null, sol: o.sol ?? null, trx: o.trx ?? null, ton: "ton" in o ? (o.ton ?? null) : undefined };
 };
 

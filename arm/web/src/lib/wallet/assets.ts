@@ -9,6 +9,7 @@ import { useHeldTokens, useMarketPrices } from "./market";
 import { LAMPORTS, WSOL_MINT, getTokenAccounts, solRpc } from "./sol";
 import { SUN, USDT_TRC20, tronAccount } from "./tron";
 import { NANO, USDT_TON, fetchTonJettons, sameTonAddress, tonAccount } from "./ton";
+import { t } from "./i18n";
 
 export type Asset = {
   id: string;
@@ -95,25 +96,25 @@ function useSolAssets(owner?: string, enabled = true): { assets: Asset[]; loadin
     const amount = Number(q.data.lamports) / LAMPORTS;
     assets.push({ id: "native", symbol: "SOL", name: "Solana", logo: SOL_LOGO, seed: "sol-native", decimals: 9, raw: q.data.lamports, amount, priceUsd: sol?.usdPrice ?? null, valueUsd: sol?.usdPrice != null ? amount * sol.usdPrice : null, change24h: sol?.change24h ?? null, gas: true });
     for (const [mint, h] of held) {
-      const t = info.data?.[mint];
+      const m = info.data?.[mint];
       const amount = Number(formatUnits(h.raw, h.decimals));
       assets.push({
         id: mint,
-        symbol: t?.symbol ?? `${mint.slice(0, 4)}…`,
-        name: t?.name ?? "未知代币",
-        logo: mint === USDC_SOL_MINT ? USDC_LOGO : iconUrl(t?.icon),
+        symbol: m?.symbol ?? `${mint.slice(0, 4)}…`,
+        name: m?.name ?? t("cw.assets.unknownToken"),
+        logo: mint === USDC_SOL_MINT ? USDC_LOGO : iconUrl(m?.icon),
         seed: mint,
         decimals: h.decimals,
         raw: h.raw,
         amount,
-        priceUsd: t?.usdPrice ?? null,
-        valueUsd: t?.usdPrice != null ? amount * t.usdPrice : null,
-        change24h: t?.change24h ?? null,
+        priceUsd: m?.usdPrice ?? null,
+        valueUsd: m?.usdPrice != null ? amount * m.usdPrice : null,
+        change24h: m?.change24h ?? null,
         mint,
         program: h.program,
         solAccount: h.best.pubkey,
         solAccountRaw: h.best.amount,
-        pump: isPumpMint(mint, t),
+        pump: isPumpMint(mint, m),
       });
     }
   }
@@ -351,7 +352,7 @@ function useTonAssets(owner?: string, enabled = true): { assets: Asset[]; loadin
   if (q.data) {
     const p = info.data?.ton;
     const amount = Number(q.data.ton) / NANO;
-    assets.push({ id: "native", symbol: "GRAM", name: "Gram（原 Toncoin）", logo: GRAM_LOGO, seed: "ton-native", decimals: 9, raw: q.data.ton, amount, priceUsd: p?.priceUsd ?? null, valueUsd: p?.priceUsd != null ? amount * p.priceUsd : null, change24h: p?.change24h ?? null, gas: true });
+    assets.push({ id: "native", symbol: "GRAM", name: t("cw.assets.gramName"), logo: GRAM_LOGO, seed: "ton-native", decimals: 9, raw: q.data.ton, amount, priceUsd: p?.priceUsd ?? null, valueUsd: p?.priceUsd != null ? amount * p.priceUsd : null, change24h: p?.change24h ?? null, gas: true });
     for (const t of tokens) {
       const raw = q.data.jettons[t.address] ?? 0n;
       const amount = Number(formatUnits(raw, t.decimals));

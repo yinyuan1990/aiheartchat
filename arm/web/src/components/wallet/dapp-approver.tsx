@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { WalletDot } from "@/components/shared";
 import { shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/wallet/i18n";
 import { chainById, publicClientFor, rpcOf, type WalletChain } from "@/lib/wallet/chains";
 import { accountOf, WrongPasswordError } from "@/lib/wallet/vault";
 import { hasFeature, nativeBridge, onNativePush, type DappRequest, type RpcError } from "@/lib/wallet/native";
@@ -70,9 +71,9 @@ export function DappApprover({ onOverlay }: { onOverlay: (on: boolean) => void }
   useEffect(() => {
     if (!ready || dappOk || !nativeBridge()) return;
     let n = 0;
-    const tick = () => (hasFeature("dapp") ? setDappOk(true) : ++n < 40 ? (t = setTimeout(tick, 250)) : undefined);
-    let t = setTimeout(tick, 0);
-    return () => clearTimeout(t);
+    const tick = () => (hasFeature("dapp") ? setDappOk(true) : ++n < 40 ? (timer = setTimeout(tick, 250)) : undefined);
+    let timer = setTimeout(tick, 0);
+    return () => clearTimeout(timer);
   }, [ready, dappOk]);
   const current = jobs[0];
   const showing = !!current;
@@ -180,7 +181,7 @@ export function DappApprover({ onOverlay }: { onOverlay: (on: boolean) => void }
         jobsRef.current = [];
         setJobs([]);
       } else if (m.push === "dappVisited") addRecent(m.url, m.title);
-      else if (m.push === "dappFavorite") nativeBridge()?.toast?.(toggleFav(m.url, m.title) ? "已收藏" : "已取消收藏");
+      else if (m.push === "dappFavorite") nativeBridge()?.toast?.(toggleFav(m.url, m.title) ? t("cw.dapp.favAdded") : t("cw.dapp.favRemoved"));
     });
     void loadDappStore().then(() => alive && nativeBridge()?.dappReady?.());
     return () => {
@@ -260,7 +261,7 @@ function ConnectBody({ job, chain, finish, emit }: BodyProps) {
     <>
       <h2 className="mt-4 flex items-center justify-center gap-1.5 text-[18px] font-semibold">
         <LinkSimple size={18} weight="bold" />
-        连接钱包
+        {t("cw.dapp.connectTitle")}
       </h2>
       <div className="mt-4 space-y-1.5">
         {wallets.map((w) => (
@@ -277,7 +278,7 @@ function ConnectBody({ job, chain, finish, emit }: BodyProps) {
         ))}
       </div>
       <div className="mt-2 flex items-center justify-between px-1 text-[12px] text-muted-foreground">
-        <span>网络</span>
+        <span>{t("cw.dapp.network")}</span>
         <span className="flex items-center gap-1">
           <ChainGlyph chain={chain} size={14} />
           {chain.name}
@@ -285,12 +286,12 @@ function ConnectBody({ job, chain, finish, emit }: BodyProps) {
       </div>
       <p className="mt-3 flex items-start gap-1.5 rounded-2xl bg-muted/60 px-3.5 py-2.5 text-[12px] leading-5 text-muted-foreground">
         <Info size={14} className="mt-0.5 shrink-0" />
-        网站会看到你的地址和余额。连接不会授权它动你的资产，之后每次签名、交易都要你确认。可以在「DApp → 已连接的网站」里断开。
+        {t("cw.dapp.connectNote")}
       </p>
       <div className="mt-4 grid grid-cols-2 gap-2">
-        <GhostButton onClick={() => finish(job, null, E.rejected)}>拒绝</GhostButton>
+        <GhostButton onClick={() => finish(job, null, E.rejected)}>{t("cw.dapp.reject")}</GhostButton>
         <PrimaryButton disabled={!pick} onClick={connect}>
-          连接
+          {t("cw.dapp.connect")}
         </PrimaryButton>
       </div>
     </>
@@ -427,7 +428,7 @@ function SignFlow({ job, chain, finish }: BodyProps) {
         try {
           await vault.unlock(pw);
         } catch (e) {
-          setErr(e instanceof WrongPasswordError ? "密码不对" : "解锁失败，请重试");
+          setErr(e instanceof WrongPasswordError ? t("cw.dapp.wrongPassword") : t("cw.dapp.unlockFailed"));
           setBusy(false);
           return;
         }
@@ -443,14 +444,14 @@ function SignFlow({ job, chain, finish }: BodyProps) {
         if (domain.chainId != null) domain.chainId = Number(domain.chainId);
         finish(job, await account.signTypedData({ domain, types: d.types, primaryType: d.primaryType, message: d.message } as never));
       } else {
-        if (!prep.fees) throw new Error("没拿到网络费，请稍后再试");
+        if (!prep.fees) throw new Error(t("cw.dapp.noFee"));
         const wc = createWalletClient({ account, chain: chain.chain, transport: http(rpcOf(chain)) });
         const base = { to: prep.to, data: prep.data, value: prep.value, gas: prep.fees.gas, nonce: prep.nonce };
         const hash = prep.fees.legacy
           ? await wc.sendTransaction({ ...base, gasPrice: prep.fees.maxFee } as never)
           : await wc.sendTransaction({ ...base, maxFeePerGas: prep.fees.maxFee, maxPriorityFeePerGas: prep.fees.tip } as never);
         finish(job, hash);
-        toast.success("交易已发出");
+        toast.success(t("cw.dapp.txSent"));
       }
     } catch (e) {
       const r = rpcErrorOf(e);
@@ -459,14 +460,14 @@ function SignFlow({ job, chain, finish }: BodyProps) {
     }
   };
 
-  const title = !prep ? "" : prep.kind === "sign" ? "签名请求" : prep.view.title;
+  const title = !prep ? "" : prep.kind === "sign" ? t("cw.dapp.signTitle") : prep.view.title;
   const danger = risk === "danger";
 
   return (
     <>
       <h2 className={cn("mt-4 flex items-center justify-center gap-1.5 text-[18px] font-semibold", danger && "text-down")}>
         {danger ? <ShieldWarning size={20} weight="fill" /> : job.kind === "tx" ? null : <PenNib size={18} weight="bold" />}
-        {prep ? title : job.kind === "tx" ? "确认交易" : "签名请求"}
+        {prep ? title : job.kind === "tx" ? t("cw.dapp.confirmTx") : t("cw.dapp.signTitle")}
       </h2>
 
       {!prep ? (
@@ -480,17 +481,17 @@ function SignFlow({ job, chain, finish }: BodyProps) {
           {prep.kind === "sign" && <MessageBox text={prep.text} mono={prep.isHex && prep.text.startsWith("0x")} />}
           {prep.kind !== "sign" && <Lines lines={prep.view.lines} danger={danger} />}
           {prep.kind === "tx" && (
-            <Lines lines={[{ label: "网络费（最多）", value: prep.feeText, mono: true }]} />
+            <Lines lines={[{ label: t("cw.dapp.feeMax"), value: prep.feeText, mono: true }]} />
           )}
-          {prep.kind === "typed" && <Raw label="签名原文" text={JSON.stringify(prep.data.message, null, 2)} />}
-          {prep.kind === "tx" && prep.data && prep.data !== "0x" && <Raw label="原始数据" text={`to ${prep.to}\n${prep.data}`} />}
+          {prep.kind === "typed" && <Raw label={t("cw.dapp.signedData")} text={JSON.stringify(prep.data.message, null, 2)} />}
+          {prep.kind === "tx" && prep.data && prep.data !== "0x" && <Raw label={t("cw.dapp.rawData")} text={`to ${prep.to}\n${prep.data}`} />}
           <Notes
             risk={risk}
             notes={[
               ...(prep.kind === "sign"
-                ? [looksLikeLogin(prep.text) ? "这是登录签名：不花钱，也不会授权任何人动你的资产。" : "签名不花钱，但只给你信任的网站签。"]
+                ? [looksLikeLogin(prep.text) ? t("cw.dapp.loginNote") : t("cw.dapp.signFreeNote")]
                 : prep.view.notes),
-              ...(prep.kind === "tx" && prep.simError ? [`模拟执行失败：${prep.simError}。这笔交易很可能会失败（失败也要付网络费）。`] : []),
+              ...(prep.kind === "tx" && prep.simError ? [t("cw.dapp.evmSimFailed", { err: prep.simError })] : []),
             ]}
           />
         </div>
@@ -510,9 +511,19 @@ function SignFlow({ job, chain, finish }: BodyProps) {
       )}
 
       <div className="mt-4 grid grid-cols-2 gap-2">
-        <GhostButton onClick={() => finish(job, null, E.rejected)}>拒绝</GhostButton>
+        <GhostButton onClick={() => finish(job, null, E.rejected)}>{t("cw.dapp.reject")}</GhostButton>
         <PrimaryButton tone={danger ? "danger" : "default"} disabled={!prep || busy || (danger && !ack) || (locked && !pw)} onClick={() => void confirm()}>
-          {busy ? (job.kind === "tx" ? "发送中…" : "签名中…") : locked ? (job.kind === "tx" ? "解锁并确认" : "解锁并签名") : job.kind === "tx" ? "确认" : "签名"}
+          {busy
+            ? job.kind === "tx"
+              ? t("cw.dapp.sending")
+              : t("cw.dapp.signing")
+            : locked
+              ? job.kind === "tx"
+                ? t("cw.dapp.unlockConfirm")
+                : t("cw.dapp.unlockSign")
+              : job.kind === "tx"
+                ? t("common.confirm")
+                : t("cw.dapp.sign")}
         </PrimaryButton>
       </div>
     </>

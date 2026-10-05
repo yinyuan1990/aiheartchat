@@ -7,6 +7,7 @@ import { WalletProvider, useVault } from "@/components/wallet/wallet-context";
 import { UnlockScreen } from "@/components/wallet/unlock";
 import { WalletFrame } from "@/components/wallet/ui";
 import { DappApprover } from "@/components/wallet/dapp-approver";
+import { t } from "@/lib/wallet/i18n";
 
 const ONBOARDING = ["/wallet/welcome", "/wallet/create", "/wallet/import"];
 
@@ -48,8 +49,8 @@ function OutsideApp() {
         <span className="flex size-16 items-center justify-center rounded-3xl bg-muted">
           <DeviceMobile size={32} weight="duotone" />
         </span>
-        <h1 className="mt-5 text-[20px] font-semibold">请在心之音 App 里打开</h1>
-        <p className="mt-2 text-[14px] leading-6 text-muted-foreground">钱包目前只在心之音 App 内提供。</p>
+        <h1 className="mt-5 text-[20px] font-semibold">{t("cw.shell.openInApp", { app: t("app.name") })}</h1>
+        <p className="mt-2 text-[14px] leading-6 text-muted-foreground">{t("cw.shell.appOnly", { app: t("app.name") })}</p>
       </div>
     </WalletFrame>
   );

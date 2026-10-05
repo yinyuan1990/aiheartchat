@@ -18,6 +18,7 @@ import { copyText, nativeBridge, shareText } from "@/lib/wallet/native";
 import { USDC_LOGO } from "@/lib/wallet/assets";
 import { useVault } from "@/components/wallet/wallet-context";
 import { BottomSheet, ChainGlyph, IconButton, Num, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
+import { t } from "@/lib/wallet/i18n";
 
 const GAME_URL = "https://arm.yyheart.com/games";
 const usd = (n: number) => (n >= 1 ? `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `$${fmtSmall(n)}`);
@@ -59,7 +60,7 @@ export default function BoatRoutePage() {
       <WalletFrame>
         <TopBar back="/wallet/token" title="BOAT" />
         <div className="flex flex-1 items-center justify-center text-[14px] text-muted-foreground">
-          {info.isError || (d && !r) ? "BOAT 交易暂未开放" : <CircleNotch size={28} className="animate-spin" />}
+          {info.isError || (d && !r) ? t("cw.boat.unavailable") : <CircleNotch size={28} className="animate-spin" />}
         </div>
       </WalletFrame>
     );
@@ -77,7 +78,7 @@ export default function BoatRoutePage() {
             <TokenAvatar symbol="BOAT" seed={r.boat} size={30} className="rounded-full" />
             <div className="min-w-0 leading-tight">
               <div className="truncate text-[15px] font-semibold">BOAT</div>
-              <button type="button" onClick={async () => (await copyText(r.boat)) && toast.success("合约地址已复制")} className="flex items-center gap-1 font-mono text-[11px] font-normal text-muted-foreground">
+              <button type="button" onClick={async () => (await copyText(r.boat)) && toast.success(t("cw.boat.addrCopied"))} className="flex items-center gap-1 font-mono text-[11px] font-normal text-muted-foreground">
                 {shortAddr(r.boat, 6, 4)}
                 <Copy size={11} />
               </button>
@@ -85,7 +86,7 @@ export default function BoatRoutePage() {
           </div>
         }
         right={
-          <IconButton label="分享" onClick={() => void shareText(`Speedboat ($BOAT) · ${GAME_URL}`)}>
+          <IconButton label={t("common.share")} onClick={() => void shareText(`Speedboat ($BOAT) · ${GAME_URL}`)}>
             <ShareNetwork size={20} />
           </IconButton>
         }
@@ -96,7 +97,7 @@ export default function BoatRoutePage() {
           <div className="flex items-end justify-between">
             <div>
               <Num value={price > 0 ? usd(price) : "—"} className="text-[34px] leading-none font-semibold tracking-tight" />
-              <div className="mt-2 text-[12px] text-muted-foreground">Speedboat 游戏代币 · Uniswap V4</div>
+              <div className="mt-2 text-[12px] text-muted-foreground">{t("cw.boat.subtitle")}</div>
             </div>
             <span className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[12px] font-medium">
               <ChainGlyph chain={arc} size={16} />
@@ -105,10 +106,10 @@ export default function BoatRoutePage() {
           </div>
           <div className="mt-4 grid grid-cols-2 gap-2">
             {[
-              ["市值", d.mcapUsdc != null ? `$${fmtNum(d.mcapUsdc, 1)}` : "—"],
-              ["游戏奖池", d.rewardPool != null ? `${fmtNum(d.rewardPool, 1)} BOAT` : "—"],
-              ["今日已发", d.paidToday != null ? fmtNum(d.paidToday, 1) : "—"],
-              ["累计发放", d.totalPaid != null ? fmtNum(d.totalPaid, 1) : "—"],
+              [t("cw.boat.mcap"), d.mcapUsdc != null ? `$${fmtNum(d.mcapUsdc, 1)}` : "—"],
+              [t("cw.boat.rewardPool"), d.rewardPool != null ? `${fmtNum(d.rewardPool, 1)} BOAT` : "—"],
+              [t("cw.boat.paidToday"), d.paidToday != null ? fmtNum(d.paidToday, 1) : "—"],
+              [t("cw.boat.totalPaid"), d.totalPaid != null ? fmtNum(d.totalPaid, 1) : "—"],
             ].map(([k, v]) => (
               <div key={k} className="rounded-2xl bg-card px-3 py-2 ring-1 ring-border/60">
                 <div className="text-[11px] text-muted-foreground">{k}</div>
@@ -120,38 +121,36 @@ export default function BoatRoutePage() {
 
         <section className="mx-4 mt-3 rounded-[22px] bg-card p-4 ring-1 ring-border/60">
           <div className="flex items-center justify-between">
-            <span className="text-[14px] font-semibold">我的持仓</span>
+            <span className="text-[14px] font-semibold">{t("cw.boat.myHolding")}</span>
             {bal.data && bal.data.boat > 0n && (
               <Link href={`/wallet/send?asset=${r.boat}`} className="text-[12px] font-medium text-muted-foreground underline underline-offset-4">
-                转账
+                {t("cw.boat.send")}
               </Link>
             )}
           </div>
           <div className="mt-3 grid grid-cols-2 gap-3">
-            <Stat label="数量" value={bal.data ? fmtNum(held, 2) : "—"} />
-            <Stat label="价值" value={bal.data && price > 0 ? `$${(held * price).toFixed(2)}` : "—"} />
+            <Stat label={t("cw.boat.amount")} value={bal.data ? fmtNum(held, 2) : "—"} />
+            <Stat label={t("cw.boat.value")} value={bal.data && price > 0 ? `$${(held * price).toFixed(2)}` : "—"} />
           </div>
         </section>
 
         <section className="mx-4 mt-3 rounded-[22px] bg-card p-4 ring-1 ring-border/60">
           <div className="flex items-center justify-between">
-            <span className="text-[14px] font-semibold">关于 BOAT</span>
+            <span className="text-[14px] font-semibold">{t("cw.boat.about")}</span>
             <span className="flex items-center gap-1 text-[12px] text-up">
               <SealCheck size={15} weight="fill" />
-              Arm 官方
+              {t("cw.boat.official")}
             </span>
           </div>
-          <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
-            快艇游戏的奖励币。买卖直接和金库合约成交，金库再去 Uniswap V4 池子换；买卖都收 1% 池费，归金库、补进游戏奖池。meme 币价格波动大，只用闲钱。
-          </p>
+          <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">{t("cw.boat.desc")}</p>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button type="button" onClick={openGame} className="flex h-10 items-center justify-center gap-1.5 rounded-xl bg-muted text-[13px] font-semibold transition active:scale-95">
               <GameController size={16} weight="fill" />
-              去玩快艇
+              {t("cw.boat.play")}
             </button>
             <a href={explorerAddr(arc, r.boat)} target="_blank" rel="noreferrer" className="flex h-10 items-center justify-center gap-1.5 rounded-xl bg-muted text-[13px] font-semibold transition active:scale-95">
               <ArrowSquareOut size={16} />
-              区块浏览器
+              {t("cw.boat.explorer")}
             </a>
           </div>
         </section>
@@ -159,10 +158,10 @@ export default function BoatRoutePage() {
 
       <div className="fixed inset-x-0 bottom-0 z-20 mx-auto grid max-w-[430px] grid-cols-2 gap-2 bg-background/90 px-4 pt-2 pb-[max(16px,env(safe-area-inset-bottom))] backdrop-blur-xl sm:absolute">
         <PrimaryButton tone="down" disabled={!bal.data || bal.data.boat === 0n} onClick={() => setSheet("sell")}>
-          卖出
+          {t("cw.boat.sell")}
         </PrimaryButton>
         <PrimaryButton tone="up" onClick={() => setSheet("buy")}>
-          买入
+          {t("cw.boat.buy")}
         </PrimaryButton>
       </div>
 
@@ -184,7 +183,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 const SLIPS = [1, 2, 5] as const;
 const QUICK_BUY = ["1", "5", "20", "50"];
-const STEP_LABEL: Record<TradeStep, string> = { approving: "首次交易，正在授权…", swapping: "签名发送中…", confirming: "等待链上确认…" };
+const STEP_LABEL: Record<TradeStep, string> = { approving: "cw.boat.stepApproving", swapping: "cw.boat.stepSwapping", confirming: "cw.boat.stepConfirming" };
 
 function BoatTradeSheet({ r, spot, side, onSide, usdc, boat, onDone }: { r: BoatRoute; spot: number; side: Side; onSide: (s: Side) => void; usdc: bigint; boat: bigint; onDone: () => void }) {
   const { account } = useVault();
@@ -224,7 +223,7 @@ function BoatTradeSheet({ r, spot, side, onSide, usdc, boat, onDone }: { r: Boat
     setErr("");
     try {
       const rc = await executeBoatTrade(account(), r, side, amountIn, minOut, setStep);
-      toast.success(`${buy ? "买入" : "卖出"} BOAT 成功`, { action: { label: "查看", onClick: () => window.open(explorerTx(chainByKey("arc"), rc.transactionHash), "_blank") } });
+      toast.success(t(buy ? "cw.boat.buyDone" : "cw.boat.sellDone"), { action: { label: t("cw.perp.view"), onClick: () => window.open(explorerTx(chainByKey("arc"), rc.transactionHash), "_blank") } });
       void qc.invalidateQueries({ queryKey: ["wallet"] });
       void qc.invalidateQueries({ queryKey: ["boat"] });
       onDone();
@@ -242,15 +241,15 @@ function BoatTradeSheet({ r, spot, side, onSide, usdc, boat, onDone }: { r: Boat
       <div className="grid grid-cols-2 rounded-2xl bg-muted p-1">
         {(["buy", "sell"] as const).map((s) => (
           <button key={s} type="button" disabled={!!step} onClick={() => onSide(s)} className={cn("h-10 rounded-xl text-[15px] font-semibold transition", side === s ? (s === "buy" ? "bg-up text-white shadow" : "bg-down text-white shadow") : "text-muted-foreground")}>
-            {s === "buy" ? "买入" : "卖出"}
+            {t(s === "buy" ? "cw.boat.buy" : "cw.boat.sell")}
           </button>
         ))}
       </div>
 
       <div className="mt-4 rounded-[20px] bg-muted/60 p-4">
         <div className="flex items-center justify-between text-[12px] text-muted-foreground">
-          <span>{buy ? "支付" : "卖出数量"}</span>
-          <span className="font-mono">余额 {buy ? `${Number(formatUnits(usdc, 6)).toFixed(2)} USDC` : `${fmtNum(Number(formatUnits(boat, 18)), 2)} BOAT`}</span>
+          <span>{t(buy ? "cw.boat.pay" : "cw.boat.sellAmount")}</span>
+          <span className="font-mono">{t("cw.boat.balanceN", { v: buy ? `${Number(formatUnits(usdc, 6)).toFixed(2)} USDC` : `${fmtNum(Number(formatUnits(boat, 18)), 2)} BOAT` })}</span>
         </div>
         <div className="mt-1 flex items-baseline gap-2">
           <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" className={cn("w-0 flex-1 bg-transparent font-mono text-[32px] font-semibold tracking-tight outline-none", insufficient && amountIn > 0n && "text-down")} />
@@ -262,7 +261,7 @@ function BoatTradeSheet({ r, spot, side, onSide, usdc, boat, onDone }: { r: Boat
         <div className="mt-3 grid grid-cols-4 gap-2">
           {(buy
             ? QUICK_BUY.map((v) => ({ v, l: `${v}U` }))
-            : [25, 50, 75, 100].map((p) => ({ v: formatUnits((boat * BigInt(p)) / 100n, 18), l: p === 100 ? "全部" : `${p}%` }))
+            : [25, 50, 75, 100].map((p) => ({ v: formatUnits((boat * BigInt(p)) / 100n, 18), l: p === 100 ? t("transfer.all") : `${p}%` }))
           ).map(({ v, l }) => (
             <button key={l} type="button" onClick={() => setAmount(v)} className={cn("h-9 rounded-xl text-[13px] font-semibold transition active:scale-95", amount === v ? "bg-foreground text-background" : "bg-card ring-1 ring-border")}>
               {l}
@@ -273,20 +272,20 @@ function BoatTradeSheet({ r, spot, side, onSide, usdc, boat, onDone }: { r: Boat
 
       <dl className="mt-3 space-y-2 px-1 text-[13px]">
         <div className="flex justify-between">
-          <dt className="text-muted-foreground">预计得到</dt>
-          <dd className="font-mono font-semibold">{out != null ? fmtOut(out) : q.isFetching ? "报价中…" : "—"}</dd>
+          <dt className="text-muted-foreground">{t("cw.boat.estOut")}</dt>
+          <dd className="font-mono font-semibold">{out != null ? fmtOut(out) : q.isFetching ? t("cw.boat.quoting") : "—"}</dd>
         </div>
         <div className="flex justify-between">
-          <dt className="text-muted-foreground">最少得到</dt>
+          <dt className="text-muted-foreground">{t("cw.boat.minOut")}</dt>
           <dd className="font-mono">{minOut != null ? fmtOut(minOut) : "—"}</dd>
         </div>
         <div className="flex justify-between">
-          <dt className="text-muted-foreground">价格影响</dt>
+          <dt className="text-muted-foreground">{t("cw.boat.impact")}</dt>
           <dd className={cn("font-mono", impact != null && impact > 5 ? "text-down" : "")}>{impact != null ? `${impact.toFixed(2)}%` : "—"}</dd>
         </div>
         <div className="flex items-center justify-between">
           <dt className="flex items-center gap-1 text-muted-foreground">
-            滑点
+            {t("cw.boat.slippage")}
             <Info size={13} />
           </dt>
           <dd className="flex gap-1">
@@ -298,27 +297,27 @@ function BoatTradeSheet({ r, spot, side, onSide, usdc, boat, onDone }: { r: Boat
           </dd>
         </div>
         <div className="flex justify-between">
-          <dt className="text-muted-foreground">手续费</dt>
-          <dd className="font-mono text-muted-foreground">池费 1% · 网络费 ≈0.001 USDC</dd>
+          <dt className="text-muted-foreground">{t("cw.boat.fees")}</dt>
+          <dd className="font-mono text-muted-foreground">{t("cw.boat.feeV")}</dd>
         </div>
       </dl>
 
-      {q.isError && <p className="mt-2 text-[12px] text-down">报价失败，稍后再试</p>}
+      {q.isError && <p className="mt-2 text-[12px] text-down">{t("cw.boat.quoteFailed")}</p>}
       {err && <p className="mt-2 text-[12px] break-words text-down">{err}</p>}
 
       {insufficient && amountIn > 0n ? (
         <Link href="/wallet/receive?deposit=1" className="mt-4 flex h-14 w-full items-center justify-center rounded-2xl bg-muted text-[16px] font-semibold">
-          余额不足，去充值
+          {t("cw.boat.lowBalance")}
         </Link>
       ) : (
         <PrimaryButton tone={buy ? "up" : "down"} className="mt-4" disabled={minOut == null || !!step} onClick={go}>
           <span className="flex items-center justify-center gap-1.5">
             {step ? <CircleNotch size={18} className="animate-spin" /> : <Lightning size={18} weight="fill" />}
-            {step ? STEP_LABEL[step] : buy ? "买入 BOAT" : "卖出 BOAT"}
+            {step ? t(STEP_LABEL[step]) : t(buy ? "cw.boat.buyBoat" : "cw.boat.sellBoat")}
           </span>
         </PrimaryButton>
       )}
-      <p className="mt-2 text-center text-[11px] text-muted-foreground">用你的钱包直接和 BoatVault 合约成交，不经过平台托管</p>
+      <p className="mt-2 text-center text-[11px] text-muted-foreground">{t("cw.boat.footer")}</p>
     </>
   );
 }

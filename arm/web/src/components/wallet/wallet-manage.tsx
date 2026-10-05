@@ -8,6 +8,7 @@ import { accountOf, verifyPassword, type Secret, type WalletMeta } from "@/lib/w
 import { exportSolKey, solKeypairOf } from "@/lib/wallet/sol";
 import { setSecureScreen } from "@/lib/wallet/native";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/wallet/i18n";
 import { useVault } from "@/components/wallet/wallet-context";
 import { Field } from "@/components/wallet/password-fields";
 import { GhostButton, PrimaryButton } from "@/components/wallet/ui";
@@ -26,8 +27,8 @@ function Rename({ wallet, onDone }: { wallet: WalletMeta; onDone: () => void }) 
   const [name, setName] = useState(wallet.name);
   return (
     <>
-      <div className="mb-4 text-center text-[17px] font-semibold">修改钱包名称</div>
-      <Field label="名称">
+      <div className="mb-4 text-center text-[17px] font-semibold">{t("cw.manage.renameTitle")}</div>
+      <Field label={t("bot.name")}>
         <input value={name} maxLength={20} autoFocus onChange={(e) => setName(e.target.value)} className="flex-1 bg-transparent text-[16px] outline-none" />
       </Field>
       <PrimaryButton
@@ -38,7 +39,7 @@ function Rename({ wallet, onDone }: { wallet: WalletMeta; onDone: () => void }) 
           onDone();
         }}
       >
-        保存
+        {t("common.save")}
       </PrimaryButton>
     </>
   );
@@ -51,7 +52,7 @@ export function PasswordGate({ title, onOk }: { title: string; onOk: (password: 
   return (
     <>
       <div className="mb-4 text-center text-[17px] font-semibold">{title}</div>
-      <Field label="输入钱包密码确认" error={err || null}>
+      <Field label={t("cw.manage.enterPassword")} error={err || null}>
         <input
           type="password"
           value={pw}
@@ -69,11 +70,11 @@ export function PasswordGate({ title, onOk }: { title: string; onOk: (password: 
         onClick={async () => {
           setBusy(true);
           if (await verifyPassword(pw)) onOk(pw);
-          else setErr("密码不对");
+          else setErr(t("cw.ui.wrongPassword"));
           setBusy(false);
         }}
       >
-        {busy ? "验证中…" : "确认"}
+        {busy ? t("cw.manage.verifying") : t("common.confirm")}
       </PrimaryButton>
     </>
   );
@@ -87,22 +88,22 @@ function Export({ wallet }: { wallet: WalletMeta }) {
     setSecureScreen(ok);
     return () => setSecureScreen(false);
   }, [ok]);
-  if (!ok) return <PasswordGate title={`导出「${wallet.name}」`} onOk={() => setOk(true)} />;
+  if (!ok) return <PasswordGate title={t("cw.manage.exportTitle", { name: wallet.name })} onOk={() => setOk(true)} />;
   const s = secretOf(wallet.id);
-  if (!s) return <div className="py-6 text-center text-[14px] text-muted-foreground">钱包已锁定</div>;
+  if (!s) return <div className="py-6 text-center text-[14px] text-muted-foreground">{t("cw.manage.locked")}</div>;
   return (
     <>
-      <div className="mb-3 text-center text-[17px] font-semibold">{mode === "mnemonic" ? "助记词" : "私钥"}</div>
+      <div className="mb-3 text-center text-[17px] font-semibold">{mode === "mnemonic" ? t("cw.ui.mnemonic") : t("cw.ui.privateKey")}</div>
       {s.kind === "mnemonic" && (
         <div className="mb-3 grid grid-cols-2 rounded-2xl bg-muted p-1">
           {(["mnemonic", "key"] as const).map((m) => (
             <button key={m} type="button" onClick={() => setMode(m)} className={cn("h-9 rounded-xl text-[14px] font-semibold", mode === m ? "bg-card shadow-sm" : "text-muted-foreground")}>
-              {m === "mnemonic" ? "助记词" : "私钥"}
+              {m === "mnemonic" ? t("cw.ui.mnemonic") : t("cw.ui.privateKey")}
             </button>
           ))}
         </div>
       )}
-      <div className="rounded-2xl border border-down/30 bg-down/8 p-3 text-[12px] leading-5 text-down">拿到这些内容的人可以直接转走全部资产。不要截图、不要发给任何人。</div>
+      <div className="rounded-2xl border border-down/30 bg-down/8 p-3 text-[12px] leading-5 text-down">{t("cw.manage.exportWarning")}</div>
       {mode === "mnemonic" && s.kind === "mnemonic" ? (
         <ol className="mt-3 grid grid-cols-3 gap-2">
           {s.phrase.split(" ").map((w, i) => (
@@ -124,11 +125,11 @@ function ExportKey({ secret }: { secret: Secret }) {
   const kp = solKeypairOf(secret);
   return (
     <>
-      <div className="mt-3 text-[12px] font-medium text-muted-foreground">EVM 私钥（Arc / 以太坊 / BNB 等通用）</div>
+      <div className="mt-3 text-[12px] font-medium text-muted-foreground">{t("cw.manage.evmKey")}</div>
       <div className="mt-1 rounded-2xl bg-muted/70 p-3 font-mono text-[13px] leading-6 break-all">{hex}</div>
       {kp && (
         <>
-          <div className="mt-3 text-[12px] font-medium text-muted-foreground">Solana 私钥（可导入 Phantom / Solflare）</div>
+          <div className="mt-3 text-[12px] font-medium text-muted-foreground">{t("cw.manage.solKey")}</div>
           <div className="mt-1 rounded-2xl bg-muted/70 p-3 font-mono text-[13px] leading-6 break-all">{exportSolKey(kp)}</div>
         </>
       )}
@@ -140,13 +141,13 @@ function Delete({ wallet, onDone }: { wallet: WalletMeta; onDone: () => void }) 
   const { remove } = useVault();
   const router = useRouter();
   const [ok, setOk] = useState(false);
-  if (!ok) return <PasswordGate title={`删除「${wallet.name}」`} onOk={() => setOk(true)} />;
+  if (!ok) return <PasswordGate title={t("cw.manage.deleteTitle", { name: wallet.name })} onOk={() => setOk(true)} />;
   return (
     <>
-      <div className="text-center text-[17px] font-semibold text-down">确定删除？</div>
-      <p className="mt-3 text-center text-[14px] leading-6 text-muted-foreground">只是从这台设备上移除，链上的资产还在。之后只能用助记词或私钥重新导入，请确认已经备份。</p>
+      <div className="text-center text-[17px] font-semibold text-down">{t("cw.manage.deleteConfirm")}</div>
+      <p className="mt-3 text-center text-[14px] leading-6 text-muted-foreground">{t("cw.manage.deleteDesc")}</p>
       <div className="mt-5 grid grid-cols-2 gap-2">
-        <GhostButton onClick={onDone}>取消</GhostButton>
+        <GhostButton onClick={onDone}>{t("common.cancel")}</GhostButton>
         <PrimaryButton
           tone="danger"
           onClick={async () => {
@@ -155,7 +156,7 @@ function Delete({ wallet, onDone }: { wallet: WalletMeta; onDone: () => void }) 
             router.replace("/wallet");
           }}
         >
-          删除
+          {t("common.delete")}
         </PrimaryButton>
       </div>
     </>

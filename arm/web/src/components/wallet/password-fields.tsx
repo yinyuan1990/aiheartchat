@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Eye, EyeSlash } from "@phosphor-icons/react";
 import { passwordProblem, passwordStrength } from "@/lib/wallet/vault";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/wallet/i18n";
 
 export function Field({ label, children, hint, error }: { label: string; children: React.ReactNode; hint?: React.ReactNode; error?: string | null }) {
   return (
@@ -20,7 +21,7 @@ function Secret({ value, onChange, placeholder, autoComplete }: { value: string;
   return (
     <>
       <input type={show ? "text" : "password"} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} autoComplete={autoComplete} className="min-w-0 flex-1 bg-transparent text-[16px] outline-none" />
-      <button type="button" aria-label={show ? "隐藏密码" : "显示密码"} onClick={() => setShow((v) => !v)} className="text-muted-foreground">
+      <button type="button" aria-label={show ? t("cw.pwd.hide") : t("cw.pwd.show")} onClick={() => setShow((v) => !v)} className="text-muted-foreground">
         {show ? <EyeSlash size={20} /> : <Eye size={20} />}
       </button>
     </>
@@ -28,9 +29,9 @@ function Secret({ value, onChange, placeholder, autoComplete }: { value: string;
 }
 
 const STRENGTH = [
-  { label: "弱", cls: "bg-down", n: 1 },
-  { label: "中", cls: "bg-[#f5a524]", n: 2 },
-  { label: "强", cls: "bg-up", n: 3 },
+  { label: "cw.pwd.weak", cls: "bg-down", n: 1 },
+  { label: "cw.pwd.medium", cls: "bg-[#f5a524]", n: 2 },
+  { label: "cw.pwd.strong", cls: "bg-up", n: 3 },
 ];
 
 /** Password + confirmation; reports a valid password through `onValid` (null while invalid). */
@@ -41,7 +42,7 @@ export function PasswordFields({ pw, setPw, pw2, setPw2 }: { pw: string; setPw: 
   return (
     <div className="space-y-4">
       <Field
-        label="钱包密码"
+        label={t("cw.pwd.label")}
         error={problem}
         hint={
           pw ? (
@@ -51,17 +52,17 @@ export function PasswordFields({ pw, setPw, pw2, setPw2 }: { pw: string; setPw: 
                   <span key={i} className={cn("h-1.5 w-6 rounded-full", i <= s.n ? s.cls : "bg-muted")} />
                 ))}
               </span>
-              强度：{s.label}
+              {t("cw.pwd.strength", { level: t(s.label) })}
             </span>
           ) : (
-            "只保存在这台设备上，用来加密助记词；忘了无法找回"
+            t("cw.pwd.hint")
           )
         }
       >
-        <Secret value={pw} onChange={setPw} placeholder="至少 8 位" autoComplete="new-password" />
+        <Secret value={pw} onChange={setPw} placeholder={t("cw.vault.minLength", { n: 8 })} autoComplete="new-password" />
       </Field>
-      <Field label="确认密码" error={mismatch ? "两次输入不一致" : null}>
-        <Secret value={pw2} onChange={setPw2} placeholder="再输入一次" autoComplete="new-password" />
+      <Field label={t("cw.pwd.confirm")} error={mismatch ? t("cw.pwd.mismatch") : null}>
+        <Secret value={pw2} onChange={setPw2} placeholder={t("cw.pwd.again")} autoComplete="new-password" />
       </Field>
     </div>
   );

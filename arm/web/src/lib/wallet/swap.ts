@@ -7,6 +7,7 @@ import { NATIVE, executeKyberSwap, isMarketChain, kyberDexes, kyberImpact, kyber
 import { executeSolSwap, jupQuote, routeLabel, type JupQuote } from "./pump";
 import { executeTrade, quote as armQuote, shapeQuote } from "./arm-trade";
 import { WSOL_MINT, isSolAddress, type SolKeypair } from "./sol";
+import { t } from "./i18n";
 
 /**
  * Quick swap on the wallet home: one form for every chain. Solana routes through Jupiter, the EVM market chains through
@@ -29,7 +30,7 @@ export type SwapToken = {
 
 export type SwapEngine = "jupiter" | "kyber" | "arm";
 export const engineOf = (chain: WalletChain): SwapEngine | null => (isSolana(chain) ? "jupiter" : isMarketChain(chain.key) ? "kyber" : chain.key === "arc" ? "arm" : null);
-export const ENGINE_NAME: Record<SwapEngine, string> = { jupiter: "Jupiter", kyber: "KyberSwap", arm: "Arm 路由" };
+export const engineName = (e: SwapEngine) => (e === "jupiter" ? "Jupiter" : e === "kyber" ? "KyberSwap" : t("cw.swap.armRouter"));
 
 const ARC_USDC = ADDR.usdc.toLowerCase();
 export const isArcUsdc = (t?: SwapToken | null) => t?.address.toLowerCase() === ARC_USDC;
@@ -110,17 +111,18 @@ export async function getSwapQuote(chain: WalletChain, from: SwapToken, to: Swap
     return { out, minOut: (out * BigInt(10_000 - bps)) / 10_000n, impact: kyberImpact(q), route: kyberDexes(q), raw: { kind: "kyber", q } };
   }
   if (engine === "arm") {
-    if (!arm) throw new Error("Arc 上只能在 USDC 和 Arm 代币之间兑换");
+    if (!arm) throw new Error(t("cw.swap.errArcOnly"));
     const side = isArcUsdc(from) ? "buy" : "sell";
     const out = await armQuote(arm, side, amountIn);
     const v = shapeQuote(arm, side, amountIn, out, slipPct);
     return { out: v.outNet, minOut: v.minOutNet, impact: v.impact, route: "Arm · Uniswap V3", raw: { kind: "arm", token: arm, side, poolMin: v.minOut } };
   }
-  throw new Error("这条链暂时不支持兑换");
+  throw new Error(t("cw.swap.errUnsupported"));
 }
 
 export type SwapStep = "approving" | "building" | "swapping" | "confirming";
-export const STEP_LABEL: Record<SwapStep, string> = { approving: "首次使用这个币，正在授权…", building: "生成交易…", swapping: "签名发送中…", confirming: "等待链上确认…" };
+/** i18n keys */
+export const STEP_LABEL: Record<SwapStep, string> = { approving: "cw.swap.stepApprove", building: "cw.coin.stepBuilding", swapping: "cw.coin.stepSwapping", confirming: "cw.coin.stepConfirming" };
 
 /** Signs and sends the quoted swap; resolves the transaction hash / signature. */
 export async function executeSwap(chain: WalletChain, q: SwapQuote, to: SwapToken, amountIn: bigint, slipPct: number, signer: { evm: () => LocalAccount; sol: () => SolKeypair }, onStep: (s: SwapStep) => void): Promise<string> {

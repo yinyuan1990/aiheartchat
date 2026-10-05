@@ -3,6 +3,7 @@ import { sha256 } from "@noble/hashes/sha2";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
 import { base64 } from "@scure/base";
 import { mnemonicToSeedSync } from "@scure/bip39";
+import { t } from "./i18n";
 import { slip10 } from "./sol";
 
 /**
@@ -370,7 +371,7 @@ export function externalMessage(to: TonAddress, init: Cell | null, body: Cell): 
 /** Text comment ("memo"): op 0 + UTF-8, kept within one cell */
 export function commentCell(text: string): Cell {
   const bytes = new TextEncoder().encode(text);
-  if (bytes.length > 123) throw new Error("备注太长");
+  if (bytes.length > 123) throw new Error(t("cw.ton.memoTooLong"));
   return beginCell().uint(0, 32).bytes(bytes).end();
 }
 

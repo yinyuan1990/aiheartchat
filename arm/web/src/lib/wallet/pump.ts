@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { API_BASE } from "@/lib/api";
 import { SolRpcError, b58, b64, explainSolError, sendAndConfirm, signBytes, signSerialized, type SolKeypair } from "./sol";
+import { t } from "./i18n";
 
 /**
  * pump.fun coins in the wallet: data comes from the indexer's /api/pump/* (pump's own feeds, cached server-side),
@@ -40,7 +41,7 @@ export const PUMP_DECIMALS = 6;
 
 async function get<T>(path: string): Promise<T> {
   const r = await fetch(`${API_BASE}${path}`);
-  if (!r.ok) throw Object.assign(new Error(r.status === 404 ? "没找到这个币" : "数据源暂时不可用"), { status: r.status });
+  if (!r.ok) throw Object.assign(new Error(r.status === 404 ? t("cw.coin.errCoinNotFound") : t("cw.coin.errSourceUnavailable")), { status: r.status });
   return r.json();
 }
 
@@ -71,7 +72,7 @@ export async function postSolComment(kp: SolKeypair, mint: string, text: string,
   const signature = b58.encode(signBytes(new TextEncoder().encode(commentMessage(mint, text, ts, replyTo)), kp));
   const r = await fetch(`${API_BASE}/sol/coins/${mint}/comments`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ author: kp.address, text, replyTo, ts, signature }) });
   const j = (await r.json().catch(() => ({}))) as { error?: string };
-  if (!r.ok) throw new Error(r.status === 429 ? "发得太快了，等几秒" : (j.error ?? `HTTP ${r.status}`));
+  if (!r.ok) throw new Error(r.status === 429 ? t("cw.coin.errTooFast") : (j.error ?? `HTTP ${r.status}`));
 }
 
 /** % change between the last close and the close `windowSec` ago (null when the coin is younger than that). */
@@ -111,9 +112,9 @@ export async function jupQuote(inputMint: string, outputMint: string, amount: bi
   const j = (await r.json().catch(() => ({}))) as JupQuote & { error?: string; errorCode?: string };
   if (!r.ok || j.error) {
     const code = j.errorCode ?? j.error ?? "";
-    if (/NOT_TRADABLE/i.test(code)) throw new QuoteError("聚合器还没收录这个币", "not_tradable");
-    if (/NO_ROUTES|COULD_NOT_FIND|ROUTE/i.test(code)) throw new QuoteError("没有可成交的路线（流动性不足）", "no_route");
-    throw new QuoteError(j.error ? String(j.error).slice(0, 120) : `报价失败 ${r.status}`, "other");
+    if (/NOT_TRADABLE/i.test(code)) throw new QuoteError(t("cw.coin.errNotIndexed"), "not_tradable");
+    if (/NO_ROUTES|COULD_NOT_FIND|ROUTE/i.test(code)) throw new QuoteError(t("cw.coin.errNoRoute"), "no_route");
+    throw new QuoteError(j.error ? String(j.error).slice(0, 120) : t("cw.coin.errQuote", { status: r.status }), "other");
   }
   return j;
 }
@@ -127,7 +128,7 @@ export async function executeSolSwap(kp: SolKeypair, quote: JupQuote, rpcUrl: st
   onStep("building");
   const r = await fetch(`${API_BASE}/sol/swap`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ quoteResponse: quote, userPublicKey: kp.address, priorityLevel: priority }) });
   const j = (await r.json().catch(() => ({}))) as { swapTransaction?: string; lastValidBlockHeight?: number; simulationError?: { error?: string; errorCode?: string } | null; error?: string };
-  if (!r.ok || !j.swapTransaction) throw new Error(j.error ? String(j.error).slice(0, 120) : `生成交易失败 ${r.status}`);
+  if (!r.ok || !j.swapTransaction) throw new Error(j.error ? String(j.error).slice(0, 120) : t("cw.coin.errBuild", { status: r.status }));
   if (j.simulationError) throw new SolRpcError(explainSolError(j.simulationError.error ?? j.simulationError.errorCode ?? j.simulationError));
   const { tx, signature } = signSerialized(b64.decode(j.swapTransaction), kp);
   onStep("confirming");

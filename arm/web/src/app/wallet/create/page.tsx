@@ -6,6 +6,7 @@ import { CheckCircle, Circle, EyeSlash, HandPalm, Prohibit, ShieldWarning, Spark
 import { toast } from "sonner";
 import { newMnemonic } from "@/lib/wallet/vault";
 import { setSecureScreen } from "@/lib/wallet/native";
+import { t } from "@/lib/wallet/i18n";
 import { cn } from "@/lib/utils";
 import { useVault } from "@/components/wallet/wallet-context";
 import { Field, PasswordFields, passwordsOk } from "@/components/wallet/password-fields";
@@ -14,18 +15,14 @@ import { PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
 type Step = "setup" | "pledge" | "show" | "verify" | "done";
 const STEPS: Step[] = ["setup", "pledge", "show", "verify", "done"];
 
-const PLEDGES = [
-  "助记词就是钱包本身：谁拿到它，谁就能转走全部资产",
-  "任何人（包括客服）向我要助记词都是骗子",
-  "助记词丢了，没有人能帮我找回",
-];
+const PLEDGES = ["cw.create.pledge1", "cw.create.pledge2", "cw.create.pledge3"];
 
 export default function CreateWalletPage() {
   const { status, wallets, addSecret } = useVault();
   const router = useRouter();
   const firstWallet = status === "empty";
   const [step, setStep] = useState<Step>("setup");
-  const [name, setName] = useState(firstWallet ? "我的钱包" : `钱包 ${wallets.length + 1}`);
+  const [name, setName] = useState(firstWallet ? t("cw.create.defaultName") : t("cw.create.nameN", { n: wallets.length + 1 }));
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
   const [phrase] = useState(newMnemonic);
@@ -41,7 +38,7 @@ export default function CreateWalletPage() {
   const finish = async () => {
     setBusy(true);
     try {
-      await addSecret(name.trim() || "我的钱包", { kind: "mnemonic", phrase }, firstWallet ? pw : undefined);
+      await addSecret(name.trim() || t("cw.create.defaultName"), { kind: "mnemonic", phrase }, firstWallet ? pw : undefined);
       setStep("done");
     } catch (e) {
       toast.error((e as Error).message);
@@ -52,7 +49,7 @@ export default function CreateWalletPage() {
 
   return (
     <WalletFrame>
-      <TopBar back={step === "setup" ? (firstWallet ? "/wallet/welcome" : "/wallet") : undefined} onBack={back} title={step === "done" ? "" : "创建钱包"} />
+      <TopBar back={step === "setup" ? (firstWallet ? "/wallet/welcome" : "/wallet") : undefined} onBack={back} title={step === "done" ? "" : t("cw.create.title")} />
       {step !== "done" && (
         <div className="flex gap-1.5 px-4">
           {STEPS.slice(0, 4).map((s, i) => (
@@ -64,17 +61,17 @@ export default function CreateWalletPage() {
       <div className="flex flex-1 flex-col px-4 pt-6">
         {step === "setup" && (
           <>
-            <h1 className="text-[24px] font-semibold">{firstWallet ? "设置钱包" : "新建一个钱包"}</h1>
-            <p className="mt-1 text-[14px] text-muted-foreground">{firstWallet ? "先起个名字、设一个密码。" : "沿用现在的钱包密码。"}</p>
+            <h1 className="text-[24px] font-semibold">{firstWallet ? t("cw.create.setupTitle") : t("cw.create.newTitle")}</h1>
+            <p className="mt-1 text-[14px] text-muted-foreground">{firstWallet ? t("cw.create.setupDesc") : t("cw.create.reusePw")}</p>
             <div className="mt-6 space-y-4">
-              <Field label="钱包名称">
+              <Field label={t("cw.create.nameLabel")}>
                 <input value={name} maxLength={20} onChange={(e) => setName(e.target.value)} className="flex-1 bg-transparent text-[16px] outline-none" />
               </Field>
               {firstWallet && <PasswordFields pw={pw} setPw={setPw} pw2={pw2} setPw2={setPw2} />}
             </div>
             <Footer>
               <PrimaryButton disabled={!name.trim() || (firstWallet && !passwordsOk(pw, pw2))} onClick={() => setStep("pledge")}>
-                下一步
+                {t("common.next")}
               </PrimaryButton>
             </Footer>
           </>
@@ -89,10 +86,10 @@ export default function CreateWalletPage() {
             <span className="flex size-24 animate-in items-center justify-center rounded-full bg-up/12 text-up duration-500 zoom-in-50">
               <CheckCircle size={56} weight="fill" />
             </span>
-            <h1 className="mt-6 text-[24px] font-semibold">钱包已就绪</h1>
-            <p className="mt-2 max-w-[280px] text-[14px] leading-6 text-muted-foreground">助记词已备份。往这个地址充值 USDC，就能在 Arc 上交易和付网络费。</p>
+            <h1 className="mt-6 text-[24px] font-semibold">{t("cw.create.ready")}</h1>
+            <p className="mt-2 max-w-[280px] text-[14px] leading-6 text-muted-foreground">{t("cw.create.readyDesc")}</p>
             <Footer>
-              <PrimaryButton onClick={() => router.replace("/wallet")}>进入钱包</PrimaryButton>
+              <PrimaryButton onClick={() => router.replace("/wallet")}>{t("cw.create.enter")}</PrimaryButton>
             </Footer>
           </div>
         )}
@@ -112,25 +109,25 @@ function Pledge({ onNext }: { onNext: () => void }) {
       <span className="flex size-14 items-center justify-center rounded-2xl bg-[#f5a524]/15 text-[#d48806]">
         <ShieldWarning size={30} weight="fill" />
       </span>
-      <h1 className="mt-4 text-[24px] font-semibold">下一步会显示助记词</h1>
-      <p className="mt-1 text-[14px] text-muted-foreground">12 个英文单词，请先确认以下三点：</p>
+      <h1 className="mt-4 text-[24px] font-semibold">{t("cw.create.pledgeTitle")}</h1>
+      <p className="mt-1 text-[14px] text-muted-foreground">{t("cw.create.pledgeDesc")}</p>
       <ul className="mt-6 space-y-2">
-        {PLEDGES.map((t, i) => (
-          <li key={t}>
+        {PLEDGES.map((p, i) => (
+          <li key={p}>
             <button
               type="button"
               onClick={() => setOk((v) => v.map((x, j) => (j === i ? !x : x)))}
               className={cn("flex w-full items-start gap-3 rounded-2xl p-4 text-left ring-1 transition active:scale-[0.99]", ok[i] ? "bg-up/8 ring-up/40" : "bg-card ring-border")}
             >
               {ok[i] ? <CheckCircle size={22} weight="fill" className="mt-0.5 shrink-0 text-up" /> : <Circle size={22} className="mt-0.5 shrink-0 text-muted-foreground" />}
-              <span className="text-[14px] leading-6">{t}</span>
+              <span className="text-[14px] leading-6">{t(p)}</span>
             </button>
           </li>
         ))}
       </ul>
       <Footer>
         <PrimaryButton disabled={!ok.every(Boolean)} onClick={onNext}>
-          我明白了，显示助记词
+          {t("cw.create.pledgeOk")}
         </PrimaryButton>
       </Footer>
     </>
@@ -142,8 +139,8 @@ function ShowPhrase({ phrase, onNext }: { phrase: string; onNext: () => void }) 
   const words = phrase.split(" ");
   return (
     <>
-      <h1 className="text-[24px] font-semibold">抄下你的助记词</h1>
-      <p className="mt-1 text-[14px] text-muted-foreground">按顺序写在纸上，放在安全的地方。</p>
+      <h1 className="text-[24px] font-semibold">{t("cw.create.showTitle")}</h1>
+      <p className="mt-1 text-[14px] text-muted-foreground">{t("cw.create.showDesc")}</p>
       <div className="relative mt-6">
         <ol className={cn("grid grid-cols-3 gap-2 transition", !revealed && "pointer-events-none blur-md select-none")}>
           {words.map((w, i) => (
@@ -156,18 +153,18 @@ function ShowPhrase({ phrase, onNext }: { phrase: string; onNext: () => void }) 
         {!revealed && (
           <button type="button" onClick={() => setRevealed(true)} className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-2xl bg-background/40 text-[14px] font-medium">
             <EyeSlash size={28} />
-            点击查看
-            <span className="text-[12px] font-normal text-muted-foreground">确认周围没有人、没有摄像头</span>
+            {t("cw.create.tapReveal")}
+            <span className="text-[12px] font-normal text-muted-foreground">{t("cw.create.revealHint")}</span>
           </button>
         )}
       </div>
       <ul className="mt-6 space-y-2 text-[13px] text-muted-foreground">
-        <li className="flex gap-2"><HandPalm size={16} className="mt-0.5 shrink-0" />推荐手写，不要截图、不要拍照</li>
-        <li className="flex gap-2"><Prohibit size={16} className="mt-0.5 shrink-0" />不要存进备忘录、网盘、聊天记录</li>
+        <li className="flex gap-2"><HandPalm size={16} className="mt-0.5 shrink-0" />{t("cw.create.tipHandwrite")}</li>
+        <li className="flex gap-2"><Prohibit size={16} className="mt-0.5 shrink-0" />{t("cw.create.tipNoCloud")}</li>
       </ul>
       <Footer>
         <PrimaryButton disabled={!revealed} onClick={onNext}>
-          我已抄好
+          {t("cw.create.written")}
         </PrimaryButton>
       </Footer>
     </>
@@ -187,12 +184,12 @@ function VerifyPhrase({ phrase, busy, onDone }: { phrase: string; busy: boolean;
 
   return (
     <>
-      <h1 className="text-[24px] font-semibold">确认一下备份</h1>
-      <p className="mt-1 text-[14px] text-muted-foreground">按你抄下的顺序，选出对应的单词。</p>
+      <h1 className="text-[24px] font-semibold">{t("cw.create.verifyTitle")}</h1>
+      <p className="mt-1 text-[14px] text-muted-foreground">{t("cw.create.verifyDesc")}</p>
       <div className="mt-6 space-y-5">
         {quiz.map((q, k) => (
           <div key={q.i}>
-            <div className="text-[13px] font-medium text-muted-foreground">第 {q.i + 1} 个单词</div>
+            <div className="text-[13px] font-medium text-muted-foreground">{t("cw.create.wordN", { n: q.i + 1 })}</div>
             <div className="mt-2 grid grid-cols-3 gap-2">
               {q.options.map((w) => {
                 const on = picked[k] === w;
@@ -218,12 +215,12 @@ function VerifyPhrase({ phrase, busy, onDone }: { phrase: string; busy: boolean;
           </div>
         ))}
       </div>
-      {wrong !== null && <p className="mt-3 text-[13px] text-down">不对，请对照你抄下的助记词再选一次。</p>}
+      {wrong !== null && <p className="mt-3 text-[13px] text-down">{t("cw.create.wrongWord")}</p>}
       <Footer>
         <PrimaryButton disabled={!allRight || busy} onClick={onDone}>
           <span className="flex items-center justify-center gap-1.5">
             <Sparkle size={18} weight="fill" />
-            {busy ? "正在加密保存…" : "完成"}
+            {busy ? t("cw.create.saving") : t("common.done")}
           </span>
         </PrimaryButton>
       </Footer>

@@ -1,6 +1,7 @@
 import type { LocalAccount } from "viem";
 import { nativeBridge } from "./native";
 import { loadPayee } from "./payee";
+import { t } from "./i18n";
 
 /**
  * 合约喊单 (houduan perp-call.service.ts): the card goes into the perp's group chat with the caller's Hyperliquid
@@ -14,7 +15,7 @@ export const perpCallMessage = (userId: string, coin: string, side: string, ts: 
 
 export async function postPerpCall(main: LocalAccount, card: PerpCallCard): Promise<void> {
   const payee = await loadPayee();
-  if (!payee) throw new Error("当前 App 版本不支持喊单");
+  if (!payee) throw new Error(t("cw.perp.callUnsupported"));
   const ts = Date.now();
   const sig = await main.signMessage!({ message: perpCallMessage(payee.userId, card.coin, card.side, ts) });
   await nativeBridge()!.perpCall!({ ...card, ts, sig });

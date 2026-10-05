@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { WALLET_CHAINS, addNode, chainByKey, isCustomNode, isEvm, isSolana, isTon, isTron, nodeLabel, nodesOf, probeChainNode, removeNode, rpcOf, selectNode, useNodes, type NodeProbe, type WalletChain } from "@/lib/wallet/chains";
 import { useVault } from "@/components/wallet/wallet-context";
+import { t } from "@/lib/wallet/i18n";
 import { BottomSheet, ChainGlyph, GhostButton, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
 
 /** How far behind the best node a node may be before it is flagged. */
@@ -39,7 +40,7 @@ export default function NodesPage() {
     await Promise.all(
       urls.map(async (u) => {
         const r = await probeChainNode(c, u);
-        setProbes((p) => ({ ...p, [u]: r.chainId != null && r.chainId !== c.chain.id ? { ...r, error: isSolana(c) ? "不是 Solana 主网" : `链 ID 不对（${r.chainId}）` } : r }));
+        setProbes((p) => ({ ...p, [u]: r.chainId != null && r.chainId !== c.chain.id ? { ...r, error: isSolana(c) ? t("cw.nodes.notSolMainnet") : t("cw.nodes.wrongChainId", { id: r.chainId }) } : r }));
       }),
     );
   }, []);
@@ -57,20 +58,20 @@ export default function NodesPage() {
 
   const pickFastest = () => {
     const ok = done.filter(([, p]) => !lagging(p)).sort((a, b) => a[1].ms - b[1].ms)[0];
-    if (!ok) return void toast.error("没有可用的节点，稍后再测");
+    if (!ok) return void toast.error(t("cw.nodes.noneAvailable"));
     selectNode(chain, ok[0]);
-    toast.success(`已切到 ${hostPath(ok[0])}（${ok[1].ms} ms）`);
+    toast.success(t("cw.nodes.switched", { host: hostPath(ok[0]), ms: ok[1].ms }));
   };
 
   const choose = (u: string) => {
     const p = probes[u];
     selectNode(chain, u);
-    if (p && p !== "busy" && p.error) toast.warning("这个节点刚才没测通，余额和转账可能出错");
+    if (p && p !== "busy" && p.error) toast.warning(t("cw.nodes.unreachableWarn"));
   };
 
   return (
     <WalletFrame>
-      <TopBar title="节点" back="/wallet/me" />
+      <TopBar title={t("cw.nodes.title")} back="/wallet/me" />
       <div className="flex-1 space-y-3 px-4 pb-6">
         <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
           {WALLET_CHAINS.map((c) => (
@@ -89,16 +90,16 @@ export default function NodesPage() {
         <section className="rounded-[22px] bg-card ring-1 ring-border/60">
           <div className="flex items-center justify-between px-4 pt-3.5 pb-1">
             <span className="text-[13px] font-medium text-muted-foreground">
-              {chain.name} · {isEvm(chain) ? `链 ID ${chain.chain.id}` : "主网"}
+              {chain.name} · {isEvm(chain) ? t("cw.nodes.chainId", { id: chain.chain.id }) : t("cw.nodes.mainnet")}
             </span>
             <span className="flex items-center gap-1">
               <button type="button" onClick={() => void probeAll(chain)} className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[12px] font-medium">
                 <ArrowsClockwise size={13} />
-                测速
+                {t("cw.nodes.test")}
               </button>
               <button type="button" onClick={pickFastest} className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[12px] font-medium">
                 <Lightning size={13} weight="fill" />
-                选最快的
+                {t("cw.nodes.pickFastest")}
               </button>
             </span>
           </div>
@@ -113,18 +114,18 @@ export default function NodesPage() {
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-1.5">
                         <span className="truncate font-mono text-[13px]">{hostPath(u)}</span>
-                        {isCustomNode(chain, u) && <span className="shrink-0 rounded bg-muted px-1 text-[10px] text-muted-foreground">自定义</span>}
+                        {isCustomNode(chain, u) && <span className="shrink-0 rounded bg-muted px-1 text-[10px] text-muted-foreground">{t("cw.send.custom")}</span>}
                       </span>
                       <span className="mt-0.5 block font-mono text-[11px] text-muted-foreground">
-                        {!p || p === "busy" ? "测速中…" : p.error ? p.error : `${isSolana(chain) ? "Slot" : "区块"} #${p.block?.toLocaleString("en-US")}${lagging(p) ? ` · 落后 ${(best - p.block!).toString()} 块` : ""}`}
+                        {!p || p === "busy" ? t("cw.nodes.testing") : p.error ? p.error : `${t(isSolana(chain) ? "cw.nodes.slotN" : "cw.nodes.blockN", { n: p.block?.toLocaleString("en-US") ?? "" })}${lagging(p) ? ` · ${t("cw.nodes.behind", { n: (best - p.block!).toString() })}` : ""}`}
                       </span>
                     </span>
                     <span className={cn("shrink-0 font-mono text-[13px] font-semibold", !p || p === "busy" ? "text-muted-foreground" : p.error ? "text-down" : lagging(p) ? "text-[#d48806]" : speedClass(p.ms))}>
-                      {!p || p === "busy" ? "…" : p.error ? "不可用" : `${p.ms} ms`}
+                      {!p || p === "busy" ? "…" : p.error ? t("cw.nodes.unavailable") : `${p.ms} ms`}
                     </span>
                   </button>
                   {isCustomNode(chain, u) && (
-                    <button type="button" aria-label="删除节点" onClick={() => removeNode(chain, u)} className="mr-2 flex size-9 shrink-0 items-center justify-center rounded-full text-down hover:bg-down/10">
+                    <button type="button" aria-label={t("cw.nodes.delete")} onClick={() => removeNode(chain, u)} className="mr-2 flex size-9 shrink-0 items-center justify-center rounded-full text-down hover:bg-down/10">
                       <Trash size={16} />
                     </button>
                   )}
@@ -134,13 +135,13 @@ export default function NodesPage() {
           </ul>
           <button type="button" onClick={() => setAdding(true)} className="flex w-full items-center justify-center gap-1.5 border-t border-border/60 py-3.5 text-[14px] font-semibold">
             <Plus size={15} weight="bold" />
-            添加自定义节点
+            {t("cw.nodes.addCustom")}
           </button>
         </section>
 
         <p className="flex gap-1.5 px-2 text-[12px] leading-5 text-muted-foreground">
           <ShieldWarning size={14} className="mt-0.5 shrink-0" />
-          节点只用来读链上数据和广播交易，私钥不会发给节点。来路不明的自定义节点可能显示假的余额或拖着不广播交易，只添加你信任的节点。
+          {t("cw.nodes.disclaimer")}
         </p>
       </div>
 
@@ -162,24 +163,24 @@ function AddNode({ chain, onDone, onAdded }: { chain: WalletChain; onDone: () =>
     try {
       parsed = new URL(u);
     } catch {
-      return setErr("网址格式不对");
+      return setErr(t("cw.nodes.badUrl"));
     }
-    if (parsed.protocol !== "https:") return setErr("只支持 https:// 开头的节点");
+    if (parsed.protocol !== "https:") return setErr(t("cw.nodes.httpsOnly"));
     setBusy(true);
     setErr(null);
     const r = await probeChainNode(chain, u, 8000);
     setBusy(false);
-    if (r.error) return setErr(`连不上：${r.error}`);
-    if (r.chainId !== chain.chain.id) return setErr(isSolana(chain) ? "这个节点不是 Solana 主网（genesis 不对）" : isTon(chain) ? "这个节点不是 TON 主网" : `这是链 ID ${r.chainId} 的节点，不是 ${chain.name}（${chain.chain.id}）`);
+    if (r.error) return setErr(t("cw.nodes.connectFailed", { error: r.error }));
+    if (r.chainId !== chain.chain.id) return setErr(isSolana(chain) ? t("cw.nodes.notSolGenesis") : isTon(chain) ? t("cw.nodes.notTon") : t("cw.nodes.otherChain", { id: r.chainId ?? "", chain: chain.name, expected: chain.chain.id }));
     addNode(chain, u);
-    toast.success(`已添加并切换到这个节点（${r.ms} ms）`);
+    toast.success(t("cw.nodes.added", { ms: r.ms }));
     onAdded();
     onDone();
   };
 
   return (
     <>
-      <div className="text-center text-[17px] font-semibold">添加 {chain.name} 节点</div>
+      <div className="text-center text-[17px] font-semibold">{t("cw.nodes.addTitle", { chain: chain.name })}</div>
       <input
         value={url}
         onChange={(e) => setUrl(e.target.value)}
@@ -190,11 +191,11 @@ function AddNode({ chain, onDone, onAdded }: { chain: WalletChain; onDone: () =>
         className="mt-5 h-12 w-full rounded-2xl bg-muted px-4 font-mono text-[14px] outline-none placeholder:text-muted-foreground/70"
       />
       {err && <div className="mt-2 text-[12px] text-down">{err}</div>}
-      <p className="mt-2 text-[12px] leading-5 text-muted-foreground">{isSolana(chain) ? "添加前会先连一次，核对是 Solana 主网。" : isTron(chain) ? "填 TronGrid 风格的 HTTP 地址（如 https://api.trongrid.io），添加前会先连一次。" : isTon(chain) ? "填 toncenter v2 格式的地址（如 https://toncenter.com/api/v2，不带 key 每秒只能查 1 次），添加前会先连一次，核对是 TON 主网。" : `添加前会先连一次，核对链 ID 是 ${chain.chain.id}。`}</p>
+      <p className="mt-2 text-[12px] leading-5 text-muted-foreground">{isSolana(chain) ? t("cw.nodes.hintSol") : isTron(chain) ? t("cw.nodes.hintTron") : isTon(chain) ? t("cw.nodes.hintTon") : t("cw.nodes.hintEvm", { id: chain.chain.id })}</p>
       <div className="mt-4 grid grid-cols-[1fr_2fr] gap-2">
-        <GhostButton onClick={onDone}>取消</GhostButton>
+        <GhostButton onClick={onDone}>{t("common.cancel")}</GhostButton>
         <PrimaryButton disabled={busy || !url.trim()} onClick={submit}>
-          {busy ? "连接中…" : "添加"}
+          {busy ? t("cw.nodes.connecting") : t("bot.add")}
         </PrimaryButton>
       </div>
     </>

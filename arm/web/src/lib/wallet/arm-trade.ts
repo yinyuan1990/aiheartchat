@@ -2,6 +2,7 @@ import { createWalletClient, encodePacked, http, maxUint256, type Address, type 
 import { afterBuyTax, maxSellable, sellTaxOn, type TokenView } from "@/lib/api";
 import { ADDR, POOL_FEE, addrsFor, erc20Abi, quoterAbi, routerAbi } from "@/lib/web3";
 import { chainByKey, publicClientFor, rpcOf } from "./chains";
+import { t } from "./i18n";
 
 /**
  * Arm token swaps signed by the wallet's own key (same routes as components/token/trade-panel.tsx, which goes through
@@ -91,7 +92,7 @@ export async function executeTrade(
     onStep?.("approving");
     const h = await wc.writeContract({ address: r.tokenIn, abi: erc20Abi, functionName: "approve", args: [r.A.router, maxUint256] });
     const rc = await pc.waitForTransactionReceipt({ hash: h });
-    if (rc.status !== "success") throw new Error("授权失败");
+    if (rc.status !== "success") throw new Error(t("cw.coin.errApprove"));
   }
 
   onStep?.("swapping");
@@ -106,6 +107,6 @@ export async function executeTrade(
       });
   onStep?.("confirming", hash);
   const rc = await pc.waitForTransactionReceipt({ hash, timeout: 120_000 });
-  if (rc.status !== "success") throw Object.assign(new Error("交易失败（链上回滚，可能是滑点不够）"), { hash });
+  if (rc.status !== "success") throw Object.assign(new Error(t("cw.coin.errReverted")), { hash });
   return rc;
 }

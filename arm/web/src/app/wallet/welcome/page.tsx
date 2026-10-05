@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { Lightning, ShieldCheck, Stack } from "@phosphor-icons/react";
 import { WalletFrame } from "@/components/wallet/ui";
+import { t } from "@/lib/wallet/i18n";
 
 const POINTS = [
-  { icon: ShieldCheck, title: "钱只在你手里", sub: "私钥加密保存在你的设备上，平台看不到也动不了" },
-  { icon: Stack, title: "Arc 和主流 EVM 链", sub: "Arc、Ethereum、BNB Chain、Base、Arbitrum、Polygon 共用一个地址" },
-  { icon: Lightning, title: "直接玩转 Arm", sub: "发币、买卖、快艇游戏，打开就能用" },
+  { icon: ShieldCheck, title: "cw.welcome.p1Title", sub: "cw.welcome.p1Sub" },
+  { icon: Stack, title: "cw.welcome.p2Title", sub: "cw.welcome.p2Sub" },
+  { icon: Lightning, title: "cw.welcome.p3Title", sub: "cw.welcome.p3Sub" },
 ];
 
 export default function WelcomePage() {
@@ -19,9 +20,9 @@ export default function WelcomePage() {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/icon.png" alt="" className="relative size-16 rounded-2xl shadow-lg" />
         <h1 className="relative mt-6 text-[30px] leading-tight font-semibold">
-          你的链上钱包
+          {t("cw.welcome.title")}
           <br />
-          <span className="text-white/55">安全、简单、自己掌控</span>
+          <span className="text-white/55">{t("cw.welcome.tagline")}</span>
         </h1>
       </div>
 
@@ -32,8 +33,8 @@ export default function WelcomePage() {
               <p.icon size={22} weight="duotone" />
             </span>
             <div>
-              <div className="text-[15px] font-semibold">{p.title}</div>
-              <div className="mt-0.5 text-[13px] leading-5 text-muted-foreground">{p.sub}</div>
+              <div className="text-[15px] font-semibold">{t(p.title)}</div>
+              <div className="mt-0.5 text-[13px] leading-5 text-muted-foreground">{t(p.sub)}</div>
             </div>
           </li>
         ))}
@@ -41,12 +42,12 @@ export default function WelcomePage() {
 
       <div className="mt-auto space-y-2 px-4 pt-8 pb-[max(20px,env(safe-area-inset-bottom))]">
         <Link href="/wallet/create" className="flex h-14 w-full items-center justify-center rounded-2xl bg-primary text-[16px] font-semibold text-primary-foreground transition active:scale-[0.98]">
-          创建新钱包
+          {t("cw.welcome.create")}
         </Link>
         <Link href="/wallet/import" className="flex h-14 w-full items-center justify-center rounded-2xl bg-muted text-[16px] font-semibold transition active:scale-[0.98]">
-          我已有钱包，导入
+          {t("cw.welcome.import")}
         </Link>
-        <p className="pt-2 text-center text-[11px] text-muted-foreground">继续即表示你已了解：助记词丢了，任何人都无法帮你找回资产</p>
+        <p className="pt-2 text-center text-[11px] text-muted-foreground">{t("cw.welcome.disclaimer")}</p>
       </div>
     </WalletFrame>
   );

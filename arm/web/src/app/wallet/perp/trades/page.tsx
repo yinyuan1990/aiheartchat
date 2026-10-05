@@ -7,19 +7,32 @@ import { CaretLeft, CaretRight } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { trades, type HlTrade } from "@/lib/wallet/hl";
 import { useVault } from "@/components/wallet/wallet-context";
-import { DIR, Spinner, px, sUsd, usd } from "@/components/wallet/perp-parts";
+import { Spinner, dirText, px, sUsd, usd } from "@/components/wallet/perp-parts";
 import { TopBar, WalletFrame } from "@/components/wallet/ui";
+import { t } from "@/lib/wallet/i18n";
 
 const PAGE = 20;
 const REASON: Record<HlTrade["reason"], { label: string; cls: string }> = {
-  tp: { label: "止盈触发", cls: "bg-up/15 text-up" },
-  sl: { label: "止损触发", cls: "bg-down/15 text-down" },
-  liq: { label: "强平", cls: "bg-down text-white" },
-  market: { label: "市价", cls: "bg-muted text-muted-foreground" },
-  limit: { label: "限价", cls: "bg-muted text-muted-foreground" },
+  tp: { label: "cw.perp.reasonTp", cls: "bg-up/15 text-up" },
+  sl: { label: "cw.perp.reasonSl", cls: "bg-down/15 text-down" },
+  liq: { label: "cw.perp.liq", cls: "bg-down text-white" },
+  market: { label: "cw.perp.market", cls: "bg-muted text-muted-foreground" },
+  limit: { label: "cw.perp.limit", cls: "bg-muted text-muted-foreground" },
 };
-const isClose = (t: HlTrade) => /^Close|>/.test(t.dir);
-const netOf = (t: HlTrade) => t.pnl - t.fee - t.openFee;
+const isClose = (tr: HlTrade) => /^Close|>/.test(tr.dir);
+const netOf = (tr: HlTrade) => tr.pnl - tr.fee - tr.openFee;
+/** fills a translated template's {placeholders} with bold values */
+const boldArgs = (s: string, args: Record<string, number>) =>
+  s.split(/(\{\w+\})/).map((part, i) => {
+    const k = part.match(/^\{(\w+)\}$/)?.[1];
+    return k && k in args ? (
+      <b key={i} className="font-mono text-foreground">
+        {args[k]}
+      </b>
+    ) : (
+      part
+    );
+  });
 
 /** 合约成交记录: every order's fills merged (hl.ts `trades`), filtered by coin, 20 a page. */
 export default function PerpTradesPage() {
@@ -30,14 +43,14 @@ export default function PerpTradesPage() {
   const [coin, setCoin] = useState("");
   const [page, setPage] = useState(0);
 
-  const coins = useMemo(() => [...new Set(rows.map((t) => t.coin))], [rows]);
-  const shown = coin ? rows.filter((t) => t.coin === coin) : rows;
+  const coins = useMemo(() => [...new Set(rows.map((tr) => tr.coin))], [rows]);
+  const shown = coin ? rows.filter((tr) => tr.coin === coin) : rows;
   const pages = Math.max(1, Math.ceil(shown.length / PAGE));
   const cur = Math.min(page, pages - 1);
   const closes = shown.filter(isClose);
-  const wins = closes.filter((t) => netOf(t) > 0).length;
-  const total = closes.reduce((s, t) => s + netOf(t), 0);
-  const fees = shown.reduce((s, t) => s + t.fee, 0);
+  const wins = closes.filter((tr) => netOf(tr) > 0).length;
+  const total = closes.reduce((s, tr) => s + netOf(tr), 0);
+  const fees = shown.reduce((s, tr) => s + tr.fee, 0);
 
   const go = (p: number) => {
     setPage(p);
@@ -50,13 +63,13 @@ export default function PerpTradesPage() {
 
   return (
     <WalletFrame>
-      <TopBar title="成交记录" back="/wallet/perp" />
+      <TopBar title={t("cw.perp.trades")} back="/wallet/perp" />
       <div className="flex-1 px-4 pb-6">
         {coins.length > 1 && (
           <div className="flex gap-1.5 overflow-x-auto pb-1">
             {["", ...coins].map((c) => (
               <button key={c || "all"} type="button" onClick={() => pick(c)} className={cn("h-8 shrink-0 whitespace-nowrap rounded-full px-3.5 text-[13px] font-medium ring-1", c === coin ? "bg-foreground text-background ring-foreground" : "ring-border text-muted-foreground")}>
-                {c || "全部"}
+                {c || t("transfer.all")}
               </button>
             ))}
           </div>
@@ -64,33 +77,31 @@ export default function PerpTradesPage() {
 
         {closes.length > 0 && (
           <section className="mt-3 rounded-2xl bg-muted/60 p-3 text-[11px] text-muted-foreground">
-            平仓净盈亏（扣手续费）
+            {t("cw.perp.netPnl")}
             <b className={cn("block truncate font-mono text-[20px]", total >= 0 ? "text-up" : "text-down")}>{sUsd(total)}</b>
             <div className="mt-1 flex flex-wrap gap-x-4">
+              <span>{boldArgs(t("cw.perp.closeStats"), { n: closes.length, wins })}</span>
               <span>
-                平仓 <b className="font-mono text-foreground">{closes.length}</b> 笔，盈利 <b className="font-mono text-foreground">{wins}</b> 笔
-              </span>
-              <span>
-                手续费 <b className="font-mono text-foreground">{usd(fees)}</b>
+                {t("cw.perp.fees")} <b className="font-mono text-foreground">{usd(fees)}</b>
               </span>
             </div>
           </section>
         )}
 
         {!user ? (
-          <p className="py-16 text-center text-[13px] text-muted-foreground">先解锁钱包</p>
+          <p className="py-16 text-center text-[13px] text-muted-foreground">{t("cw.perp.unlockFirst")}</p>
         ) : q.isLoading ? (
           <div className="flex justify-center py-16 text-muted-foreground">
             <Spinner />
           </div>
         ) : q.isError ? (
-          <p className="py-16 text-center text-[13px] text-muted-foreground">成交记录暂时拿不到，稍后再试</p>
+          <p className="py-16 text-center text-[13px] text-muted-foreground">{t("cw.perp.tradesError")}</p>
         ) : shown.length === 0 ? (
-          <p className="py-16 text-center text-[13px] text-muted-foreground">还没有成交</p>
+          <p className="py-16 text-center text-[13px] text-muted-foreground">{t("cw.perp.noTrades")}</p>
         ) : (
           <ul className="mt-2 divide-y divide-border/50">
-            {shown.slice(cur * PAGE, cur * PAGE + PAGE).map((t) => (
-              <TradeRow key={t.oid} t={t} />
+            {shown.slice(cur * PAGE, cur * PAGE + PAGE).map((tr) => (
+              <TradeRow key={tr.oid} tr={tr} />
             ))}
           </ul>
         )}
@@ -99,44 +110,44 @@ export default function PerpTradesPage() {
           <div className="mt-3 flex items-center justify-between">
             <button type="button" disabled={cur === 0} onClick={() => go(cur - 1)} className="flex h-9 items-center gap-1 rounded-xl bg-muted px-3 text-[13px] font-medium disabled:opacity-35">
               <CaretLeft size={14} weight="bold" />
-              上一页
+              {t("cw.perp.prevPage")}
             </button>
             <span className="font-mono text-[13px] text-muted-foreground">
               {cur + 1} / {pages}
             </span>
             <button type="button" disabled={cur >= pages - 1} onClick={() => go(cur + 1)} className="flex h-9 items-center gap-1 rounded-xl bg-muted px-3 text-[13px] font-medium disabled:opacity-35">
-              下一页
+              {t("cw.perp.nextPage")}
               <CaretRight size={14} weight="bold" />
             </button>
           </div>
         )}
-        {shown.length > 0 && <p className="mt-4 text-center text-[11px] leading-5 text-muted-foreground">共 {shown.length} 笔，Hyperliquid 只提供最近 2000 笔成交</p>}
+        {shown.length > 0 && <p className="mt-4 text-center text-[11px] leading-5 text-muted-foreground">{t("cw.perp.tradesFooter", { n: shown.length })}</p>}
       </div>
     </WalletFrame>
   );
 }
 
-function TradeRow({ t }: { t: HlTrade }) {
-  const closing = isClose(t);
-  const net = netOf(t);
-  const r = REASON[t.reason];
+function TradeRow({ tr }: { tr: HlTrade }) {
+  const closing = isClose(tr);
+  const net = netOf(tr);
+  const r = REASON[tr.reason];
   return (
     <li className="py-2.5 text-[12px]">
       <div className="flex items-center gap-2">
-        <span className="text-[13px] font-semibold">{t.coin}</span>
-        <span className={["Open Long", "Close Short", "Short > Long"].includes(t.dir) ? "text-up" : "text-down"}>{DIR[t.dir] ?? t.dir}</span>
-        <span className={cn("rounded px-1.5 py-0.5 text-[11px] font-semibold", r.cls)}>{r.label}</span>
+        <span className="text-[13px] font-semibold">{tr.coin}</span>
+        <span className={["Open Long", "Close Short", "Short > Long"].includes(tr.dir) ? "text-up" : "text-down"}>{dirText(tr.dir)}</span>
+        <span className={cn("rounded px-1.5 py-0.5 text-[11px] font-semibold", r.cls)}>{t(r.label)}</span>
         {closing && <span className={cn("ml-auto font-mono text-[13px] font-semibold", net >= 0 ? "text-up" : "text-down")}>{sUsd(net)}</span>}
       </div>
       <div className="mt-0.5 flex flex-wrap gap-x-3 font-mono text-muted-foreground">
-        <span>{new Date(t.time).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
-        <span>@ {px(t.px)}</span>
-        <span>{t.size}</span>
-        <span>手续费 {usd(t.fee, 3)}</span>
+        <span>{new Date(tr.time).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
+        <span>@ {px(tr.px)}</span>
+        <span>{tr.size}</span>
+        <span>{t("cw.perp.fees")} {usd(tr.fee, 3)}</span>
       </div>
       {closing && (
         <div className="mt-0.5 text-muted-foreground">
-          价差盈亏 {sUsd(t.pnl, 3)}，扣开平仓手续费 {usd(t.fee + t.openFee, 3)} 后 {sUsd(net, 3)}
+          {t("cw.perp.tradePnl", { pnl: sUsd(tr.pnl, 3), fees: usd(tr.fee + tr.openFee, 3), net: sUsd(net, 3) })}
         </div>
       )}
     </li>

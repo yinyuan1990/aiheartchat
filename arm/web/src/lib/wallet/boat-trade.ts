@@ -3,6 +3,7 @@ import { ADDR } from "@/lib/web3";
 import { V4, v4QuoterAbi, vaultAbi, type BoatInfo } from "@/lib/boat";
 import { chainByKey, publicClientFor, rpcOf } from "./chains";
 import type { Side, TradeStep } from "./arm-trade";
+import { t } from "./i18n";
 
 /**
  * $BOAT swaps signed by the wallet's own key: same path as the site's /games Trade card (BoatVault.buy / sell, which
@@ -47,13 +48,13 @@ export async function executeBoatTrade(account: LocalAccount, r: BoatRoute, side
     onStep?.("approving");
     const h = await wc.writeContract({ address: tokenIn, abi: erc20Abi, functionName: "approve", args: [r.vault, maxUint256] });
     const rc = await pc.waitForTransactionReceipt({ hash: h });
-    if (rc.status !== "success") throw new Error("授权失败");
+    if (rc.status !== "success") throw new Error(t("cw.boat.approveFailed"));
   }
 
   onStep?.("swapping");
   const hash = await wc.writeContract({ address: r.vault, abi: vaultAbi, functionName: side, args: [amountIn, minOut, me] });
   onStep?.("confirming");
   const rc = await pc.waitForTransactionReceipt({ hash, timeout: 120_000 });
-  if (rc.status !== "success") throw Object.assign(new Error("交易失败（链上回滚，可能是滑点不够）"), { hash });
+  if (rc.status !== "success") throw Object.assign(new Error(t("cw.boat.txReverted")), { hash });
   return rc;
 }

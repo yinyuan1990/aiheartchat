@@ -6,6 +6,7 @@ import { createWalletClient, erc20Abi, getAddress, http, type Address, type Hex,
 import { API_BASE } from "@/lib/api";
 import { publicClientFor, rpcOf, type WalletChain } from "./chains";
 import { storeRead, storeWrite } from "./native";
+import { t } from "./i18n";
 
 /**
  * EVM token markets in the wallet (Ethereum / BNB Chain / Base / Arbitrum / Polygon): data from the indexer's /api/mkt/*
@@ -50,7 +51,7 @@ export type MarketPrice = { priceUsd: number | null; change24h: number | null; s
 
 async function get<T>(path: string): Promise<T> {
   const r = await fetch(`${API_BASE}${path}`);
-  if (!r.ok) throw Object.assign(new Error(r.status === 404 ? "没找到这个币" : "行情数据暂时拿不到"), { status: r.status });
+  if (!r.ok) throw Object.assign(new Error(r.status === 404 ? t("cw.coin.errCoinNotFound") : t("cw.coin.errMarketUnavailable")), { status: r.status });
   return r.json();
 }
 
@@ -142,8 +143,8 @@ export async function kyberQuote(chain: string, tokenIn: string, tokenOut: strin
   const r = await fetch(`${API_BASE}/mkt/${chain}/quote?${p}`);
   const j = (await r.json().catch(() => ({}))) as { code?: number; message?: string; data?: KyberQuote; error?: string };
   if (!r.ok || j.code !== 0 || !j.data) {
-    if (j.code === 4008 || /route not found/i.test(j.message ?? "")) throw new MarketQuoteError("没有可成交的路线（流动性不足）", "no_route");
-    throw new MarketQuoteError((j.message ?? j.error ?? `报价失败 ${r.status}`).slice(0, 120), "other");
+    if (j.code === 4008 || /route not found/i.test(j.message ?? "")) throw new MarketQuoteError(t("cw.coin.errNoRoute"), "no_route");
+    throw new MarketQuoteError((j.message ?? j.error ?? t("cw.coin.errQuote", { status: r.status })).slice(0, 120), "other");
   }
   return j.data;
 }
@@ -169,7 +170,7 @@ export async function executeKyberSwap(account: LocalAccount, chain: WalletChain
   const me = account.address;
   const tokenIn = quote.routeSummary.tokenIn;
   const amountIn = BigInt(quote.routeSummary.amountIn);
-  if (getAddress(quote.routerAddress) !== KYBER_ROUTER) throw new Error("路由合约不对，已停止");
+  if (getAddress(quote.routerAddress) !== KYBER_ROUTER) throw new Error(t("cw.coin.errRouter"));
 
   if (tokenIn.toLowerCase() !== NATIVE.toLowerCase()) {
     const allowance = await pc.readContract({ address: tokenIn as Address, abi: erc20Abi, functionName: "allowance", args: [me, KYBER_ROUTER] });
@@ -177,20 +178,20 @@ export async function executeKyberSwap(account: LocalAccount, chain: WalletChain
       onStep("approving");
       const h = await wc.writeContract({ address: tokenIn as Address, abi: erc20Abi, functionName: "approve", args: [KYBER_ROUTER, amountIn] });
       const rc = await pc.waitForTransactionReceipt({ hash: h, timeout: 120_000 });
-      if (rc.status !== "success") throw new Error("授权失败");
+      if (rc.status !== "success") throw new Error(t("cw.coin.errApprove"));
     }
   }
 
   onStep("building");
   const r = await fetch(`${API_BASE}/mkt/${chain.key}/build`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ routeSummary: quote.routeSummary, sender: me, slippageBps }) });
   const j = (await r.json().catch(() => ({}))) as { code?: number; message?: string; data?: { data: Hex; routerAddress: string; transactionValue: string } };
-  if (!r.ok || j.code !== 0 || !j.data) throw new Error((j.message ?? `生成交易失败 ${r.status}`).slice(0, 120));
-  if (getAddress(j.data.routerAddress) !== KYBER_ROUTER) throw new Error("路由合约不对，已停止");
+  if (!r.ok || j.code !== 0 || !j.data) throw new Error((j.message ?? t("cw.coin.errBuild", { status: r.status })).slice(0, 120));
+  if (getAddress(j.data.routerAddress) !== KYBER_ROUTER) throw new Error(t("cw.coin.errRouter"));
 
   onStep("swapping");
   const hash = await wc.sendTransaction({ to: KYBER_ROUTER, data: j.data.data, value: BigInt(j.data.transactionValue || "0") });
   onStep("confirming");
   const rc = await pc.waitForTransactionReceipt({ hash, timeout: 180_000 });
-  if (rc.status !== "success") throw Object.assign(new Error("交易失败（链上回滚，可能是滑点不够）"), { hash });
+  if (rc.status !== "success") throw Object.assign(new Error(t("cw.coin.errReverted")), { hash });
   return hash;
 }

@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { API_BASE } from "@/lib/api";
+import { t } from "./i18n";
 import { storeRead, storeWrite } from "./native";
 
 /**
@@ -77,6 +78,49 @@ export const DEFAULT_CATALOG: DappCategory[] = [
   },
 ];
 
+/** Wallet-side translations of the defaults above (the admin panel edits the Chinese originals); applied while a text still equals its default. */
+const CATEGORY_KEYS: Record<string, string> = { dex: "cw.dapp.catDex", bridge: "cw.dapp.catBridge", earn: "cw.dapp.catEarn", tools: "cw.dapp.catTools" };
+const ITEM_KEYS: Record<string, { name?: string; desc: string }> = {
+  [`${ARM}/`]: { name: "cw.dapp.armHome", desc: "cw.dapp.armHomeDesc" },
+  [`${ARM}/create`]: { name: "cw.dapp.armCreate", desc: "cw.dapp.armCreateDesc" },
+  [`${ARM}/games`]: { name: "cw.dapp.armGames", desc: "cw.dapp.armGamesDesc" },
+  [`${ARM}/rank`]: { name: "cw.dapp.armRank", desc: "cw.dapp.armRankDesc" },
+  "https://app.uniswap.org/": { desc: "cw.dapp.uniswapDesc" },
+  "https://pancakeswap.finance/": { desc: "cw.dapp.pancakeDesc" },
+  "https://aerodrome.finance/": { desc: "cw.dapp.aerodromeDesc" },
+  "https://app.1inch.io/": { desc: "cw.dapp.oneinchDesc" },
+  "https://swap.cow.fi/": { desc: "cw.dapp.cowDesc" },
+  "https://quickswap.exchange/": { desc: "cw.dapp.quickswapDesc" },
+  "https://jumper.exchange/": { desc: "cw.dapp.jumperDesc" },
+  "https://app.across.to/": { desc: "cw.dapp.acrossDesc" },
+  "https://stargate.finance/": { desc: "cw.dapp.stargateDesc" },
+  "https://app.aave.com/": { desc: "cw.dapp.aaveDesc" },
+  "https://stake.lido.fi/": { desc: "cw.dapp.lidoDesc" },
+  "https://app.venus.io/": { desc: "cw.dapp.venusDesc" },
+  "https://app.morpho.org/": { desc: "cw.dapp.morphoDesc" },
+  "https://opensea.io/": { desc: "cw.dapp.openseaDesc" },
+  "https://magiceden.io/": { desc: "cw.dapp.magicEdenDesc" },
+  "https://revoke.cash/": { desc: "cw.dapp.revokeDesc" },
+  "https://debank.com/": { desc: "cw.dapp.debankDesc" },
+  "https://arc-scan.org/": { desc: "cw.dapp.arcscanDesc" },
+  "https://etherscan.io/": { desc: "cw.dapp.etherscanDesc" },
+  "https://bscscan.com/": { desc: "cw.dapp.bscscanDesc" },
+};
+const DEFAULT_ITEMS = new Map(DEFAULT_CATALOG.flatMap((c) => c.items.map((i) => [i.url, i] as const)));
+function localize(cats: DappCategory[]): DappCategory[] {
+  return cats.map((c) => {
+    const ck = CATEGORY_KEYS[c.id];
+    const name = ck && c.name === DEFAULT_CATALOG.find((d) => d.id === c.id)?.name ? t(ck) : c.name;
+    const items = c.items.map((i) => {
+      const k = ITEM_KEYS[i.url];
+      const d = DEFAULT_ITEMS.get(i.url);
+      if (!k || !d) return i;
+      return { ...i, name: k.name && i.name === d.name ? t(k.name) : i.name, desc: i.desc === d.desc ? t(k.desc) : i.desc };
+    });
+    return { ...c, name, items };
+  });
+}
+
 const https = (u: unknown) => {
   try {
     return typeof u === "string" && new URL(u).protocol === "https:";
@@ -94,11 +138,12 @@ function sanitize(v: unknown): DappCategory[] | null {
 }
 
 const CACHE_KEY = "dapp.catalog";
-let catalog: DappCategory[] = DEFAULT_CATALOG;
+let catalog: DappCategory[] | null = null;
 let started = false;
 const subs = new Set<() => void>();
+const current = () => (catalog ??= localize(DEFAULT_CATALOG));
 const set = (c: DappCategory[]) => {
-  catalog = c;
+  catalog = localize(c);
   subs.forEach((f) => f());
 };
 
@@ -130,7 +175,7 @@ export function useDappCatalog(): DappCategory[] {
       load();
       return () => subs.delete(f);
     },
-    () => catalog,
+    current,
     () => DEFAULT_CATALOG,
   );
 }
@@ -151,5 +196,5 @@ const originOf = (u: string) => {
 /** Whether a site is in the recommended list (any chain). */
 export function isListed(origin: string): boolean {
   load();
-  return catalog.some((c) => c.items.some((i) => originOf(i.url) === origin));
+  return current().some((c) => c.items.some((i) => originOf(i.url) === origin));
 }

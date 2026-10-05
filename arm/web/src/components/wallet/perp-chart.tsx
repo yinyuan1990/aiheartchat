@@ -7,6 +7,7 @@ import { useApp } from "@/components/providers";
 import { storeRead, storeWrite } from "@/lib/wallet/native";
 import { cn } from "@/lib/utils";
 import { CANDLE_MS, candles, mids, type Candle, type CandleInterval } from "@/lib/wallet/hl";
+import { t } from "@/lib/wallet/i18n";
 
 /**
  * Perp K-line for 「AI 合约」. Hyperliquid's finest candle is 1 minute; the last bar still moves every second from the
@@ -123,7 +124,7 @@ export function PerpChart({ coin, lines, onPrice, className }: { coin: string; l
     <div className={className}>
       <div className="relative h-[260px]">
         <div ref={ref} className="absolute inset-0" />
-        {state !== "ok" && <div className="absolute inset-0 flex items-center justify-center text-[13px] text-muted-foreground">{state === "loading" ? <CircleNotch size={22} className="animate-spin" /> : "K 线读取失败"}</div>}
+        {state !== "ok" && <div className="absolute inset-0 flex items-center justify-center text-[13px] text-muted-foreground">{state === "loading" ? <CircleNotch size={22} className="animate-spin" /> : t("cw.perp.chartError")}</div>}
       </div>
       <div className="mt-1 flex gap-0.5">
         {INTERVALS.map((k) => (

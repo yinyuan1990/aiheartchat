@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { WalletDot } from "@/components/shared";
 import { shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/wallet/i18n";
 import { SOL_CHAIN, WALLET_CHAINS, chainById, chainByKey, isSolana, isTon, isTron } from "@/lib/wallet/chains";
 import { hasFeature, nativeBridge } from "@/lib/wallet/native";
 import { ackOrigin, clearRecents, hostOf, isAcked, isTrusted, originOf, revokePerm, revokeSolPerm, setLaunchChain, useDappStore } from "@/lib/wallet/dapp-store";
@@ -49,14 +50,14 @@ export default function DappPage() {
   };
   const open = (url: string, chainId?: number) => {
     const origin = originOf(url);
-    if (!origin) return toast.error("网址格式不对");
+    if (!origin) return toast.error(t("cw.dapp.badUrl"));
     if (isTrusted(origin) || isAcked(origin) || isListed(origin)) return launch(url, chainId);
     setRemember(true);
     setRisky(url);
   };
   const submit = () => {
     const url = toUrl(input);
-    if (!url) return toast.error("请输入网址，例如 arm.yyheart.com");
+    if (!url) return toast.error(t("cw.dapp.enterUrl"));
     open(url);
   };
   const perms = [
@@ -83,10 +84,10 @@ export default function DappPage() {
             autoCapitalize="none"
             autoCorrect="off"
             spellCheck={false}
-            placeholder="输入 DApp 网址"
+            placeholder={t("cw.dapp.urlPlaceholder")}
             className="min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-muted-foreground/70"
           />
-          <button type="submit" aria-label="打开" disabled={!input.trim()} className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground transition active:scale-90 disabled:opacity-30">
+          <button type="submit" aria-label={t("cw.dapp.open")} disabled={!input.trim()} className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground transition active:scale-90 disabled:opacity-30">
             <ArrowRight size={18} weight="bold" />
           </button>
         </form>
@@ -94,12 +95,12 @@ export default function DappPage() {
         {!supported && (
           <p className="flex items-start gap-1.5 rounded-2xl bg-[#d48806]/10 px-3.5 py-2.5 text-[12px] leading-5 text-[#b07005]">
             <Warning size={14} className="mt-0.5 shrink-0" />
-            当前 App 版本还没有 DApp 浏览器，网页里连接钱包不会生效。请更新心之音 App。
+            {t("cw.dapp.noBrowser", { app: t("app.name") })}
           </p>
         )}
 
         {store.favs.length > 0 && (
-          <Section title="收藏" icon={<Star size={14} weight="fill" />}>
+          <Section title={t("cw.dapp.favorites")} icon={<Star size={14} weight="fill" />}>
             <SiteList items={store.favs} onOpen={open} />
           </Section>
         )}
@@ -108,11 +109,11 @@ export default function DappPage() {
 
         {store.recents.length > 0 && (
           <Section
-            title="最近浏览"
+            title={t("cw.dapp.recents")}
             icon={<ClockCounterClockwise size={14} />}
             right={
               <button type="button" onClick={clearRecents} className="text-[12px] text-muted-foreground">
-                清空
+                {t("cw.dapp.clear")}
               </button>
             }
           >
@@ -121,7 +122,7 @@ export default function DappPage() {
         )}
 
         {perms.length > 0 && (
-          <Section title="已连接的网站">
+          <Section title={t("cw.dapp.connectedSites")}>
             <ul className="divide-y divide-border/60 rounded-[22px] bg-card ring-1 ring-border/60">
               {perms.map((p) => {
                 const { origin, chain: c } = p;
@@ -146,12 +147,12 @@ export default function DappPage() {
                       type="button"
                       onClick={() => {
                         p.revoke();
-                        toast.success(`已断开 ${hostOf(origin)}`);
+                        toast.success(t("cw.dapp.disconnected", { host: hostOf(origin) }));
                       }}
                       className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[12px] font-medium transition active:scale-95"
                     >
                       <LinkBreak size={13} />
-                      断开
+                      {t("cw.dapp.disconnect")}
                     </button>
                   </li>
                 );
@@ -169,21 +170,21 @@ export default function DappPage() {
               <span className="flex size-14 items-center justify-center rounded-2xl bg-[#d48806]/12 text-[#d48806]">
                 <Warning size={28} weight="fill" />
               </span>
-              <div className="mt-3 text-[18px] font-semibold">即将打开第三方网站</div>
+              <div className="mt-3 text-[18px] font-semibold">{t("cw.dapp.riskyTitle")}</div>
               <div className="mt-1 max-w-full truncate font-mono text-[13px] text-muted-foreground">{hostOf(risky)}</div>
             </div>
             <ul className="mt-4 space-y-2 rounded-2xl bg-muted/60 px-4 py-3 text-[13px] leading-5">
-              <li>· 这个网站不在推荐列表里，心之音没有审核过它。</li>
-              <li>· 钓鱼网站常仿冒知名项目，骗你签名或「授权」后转走资产。</li>
-              <li>· 任何让你输入助记词、私钥的网页都是骗子。</li>
-              {risky.startsWith("http:") && <li className="text-down">· 这是不加密的 http 网址，内容可能被篡改。</li>}
+              <li>· {t("cw.dapp.riskyUnlisted", { app: t("app.name") })}</li>
+              <li>· {t("cw.dapp.riskyPhishing")}</li>
+              <li>· {t("cw.dapp.riskySeed")}</li>
+              {risky.startsWith("http:") && <li className="text-down">· {t("cw.dapp.riskyHttp")}</li>}
             </ul>
             <label className="mt-3 flex items-center gap-2 px-1 text-[13px] text-muted-foreground">
               <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="size-4" />
-              以后打开这个网站不再提示
+              {t("cw.dapp.dontAskAgain")}
             </label>
             <div className="mt-4 grid grid-cols-2 gap-2">
-              <GhostButton onClick={() => setRisky(null)}>取消</GhostButton>
+              <GhostButton onClick={() => setRisky(null)}>{t("common.cancel")}</GhostButton>
               <PrimaryButton
                 onClick={() => {
                   const origin = originOf(risky);
@@ -192,7 +193,7 @@ export default function DappPage() {
                   setRisky(null);
                 }}
               >
-                继续访问
+                {t("cw.dapp.continue")}
               </PrimaryButton>
             </div>
           </>
@@ -217,7 +218,7 @@ function Discover({ onOpen }: { onOpen: (url: string, chainId?: number) => void 
     <section className="space-y-2.5">
       <div className="flex items-center gap-1 px-1 text-[13px] font-medium text-muted-foreground">
         <Compass size={14} />
-        常用 DApp
+        {t("cw.dapp.popular")}
       </div>
       <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
         {WALLET_CHAINS.filter((c) => !isTron(c) && !isTon(c)).map((c) => (
@@ -233,7 +234,7 @@ function Discover({ onOpen }: { onOpen: (url: string, chainId?: number) => void 
         ))}
       </div>
       {cats.length === 0 ? (
-        <div className="rounded-[22px] bg-card px-4 py-8 text-center text-[13px] text-muted-foreground ring-1 ring-border/60">{target.name} 暂时没有推荐的 DApp，可以在上面输入网址打开</div>
+        <div className="rounded-[22px] bg-card px-4 py-8 text-center text-[13px] text-muted-foreground ring-1 ring-border/60">{t("cw.dapp.noneForChain", { chain: target.name })}</div>
       ) : (
         <div className="rounded-[22px] bg-card ring-1 ring-border/60">
           <div className="no-scrollbar flex gap-5 overflow-x-auto border-b border-border/60 px-4">

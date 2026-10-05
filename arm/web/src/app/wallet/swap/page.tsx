@@ -13,7 +13,8 @@ import { WALLET_CHAINS, explorerTx, isSolana, type WalletChain } from "@/lib/wal
 import { USDC_LOGO, absUrl, iconUrl, tokenIcon, useAssets } from "@/lib/wallet/assets";
 import { useMarketList, type MarketChainKey } from "@/lib/wallet/market";
 import { PUMP_DECIMALS, usePumpList } from "@/lib/wallet/pump";
-import { ENGINE_NAME, STEP_LABEL, decimalsOf, engineOf, executeSwap, gasReserve, gasToken, getSwapQuote, isArcUsdc, lookupToken, tokenOfArm, tokenOfAsset, type SwapStep, type SwapToken } from "@/lib/wallet/swap";
+import { t } from "@/lib/wallet/i18n";
+import { STEP_LABEL, decimalsOf, engineName, engineOf, executeSwap, gasReserve, gasToken, getSwapQuote, isArcUsdc, lookupToken, tokenOfArm, tokenOfAsset, type SwapStep, type SwapToken } from "@/lib/wallet/swap";
 import { useVault } from "@/components/wallet/wallet-context";
 import { BottomSheet, ChainGlyph, ChainPill, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
 
@@ -36,13 +37,13 @@ function Swap({ chain }: { chain: WalletChain }) {
   const qc = useQueryClient();
   const engine = engineOf(chain);
   const { assets } = useAssets(chain, address);
-  const owned = useMemo(() => assets.map((a) => tokenOfAsset(chain, a)).filter((t): t is SwapToken => !!t), [assets, chain]);
-  const fresh = (t: SwapToken | null) => (t ? (owned.find((o) => same(o.address, t.address)) ?? t) : null);
+  const owned = useMemo(() => assets.map((a) => tokenOfAsset(chain, a)).filter((x): x is SwapToken => !!x), [assets, chain]);
+  const fresh = (x: SwapToken | null) => (x ? (owned.find((o) => same(o.address, x.address)) ?? x) : null);
 
   const [fromSel, setFromSel] = useState<SwapToken | null>(null);
   const [toSel, setToSel] = useState<SwapToken | null>(null);
   const from = fresh(fromSel) ?? owned[0] ?? gasToken(chain);
-  const defaultTo = isSolana(chain) ? SOL_USDC : engine === "kyber" ? (owned.find((t) => !t.native && t.symbol.startsWith("USDC")) ?? null) : null;
+  const defaultTo = isSolana(chain) ? SOL_USDC : engine === "kyber" ? (owned.find((x) => !x.native && x.symbol.startsWith("USDC")) ?? null) : null;
   // on Arc one side is always USDC: selling an Arm token pins the other side to USDC
   const usdc = owned.find(isArcUsdc) ?? null;
   const to = engine === "arm" && from && !isArcUsdc(from) ? usdc : fresh(toSel) ?? (defaultTo && !same(defaultTo.address, from?.address) ? fresh(defaultTo) : null);
@@ -93,11 +94,11 @@ function Swap({ chain }: { chain: WalletChain }) {
     setErr("");
     try {
       const hash = await executeSwap(chain, view, to, amountIn, slip, { evm: account, sol: solKeypair }, setStep);
-      toast.success(`已兑换成 ${to.symbol}`, { action: { label: "查看", onClick: () => window.open(explorerTx(chain, hash), "_blank") } });
+      toast.success(t("cw.swap.swapped", { sym: to.symbol }), { action: { label: t("cw.coin.view"), onClick: () => window.open(explorerTx(chain, hash), "_blank") } });
       setAmount("");
       void qc.invalidateQueries({ queryKey: ["wallet"] });
     } catch (e) {
-      setErr(((e as { shortMessage?: string }).shortMessage ?? (e as Error).message ?? "兑换失败").split("\n")[0]);
+      setErr(((e as { shortMessage?: string }).shortMessage ?? (e as Error).message ?? t("cw.swap.failed")).split("\n")[0]);
     } finally {
       setStep(null);
     }
@@ -108,22 +109,22 @@ function Swap({ chain }: { chain: WalletChain }) {
 
   return (
     <WalletFrame>
-      <TopBar title="兑换" back="/wallet" right={<ChainPill chain={chain} onClick={() => setPicker("chain")} />} />
+      <TopBar title={t("cw.swap.title")} back="/wallet" right={<ChainPill chain={chain} onClick={() => setPicker("chain")} />} />
       {!engine ? (
         <p className="px-6 py-10 text-center text-[13px] leading-6 text-muted-foreground">
-          {chain.name} 上暂时不能在钱包里兑换，点右上角换个网络。
+          {t("cw.swap.noEngine", { chain: chain.name })}
           <br />
-          收到的 TRX / USDT 可以直接转账，或转到交易所兑换。
+          {t("cw.swap.noEngineTron")}
         </p>
       ) : noSol ? (
-        <p className="px-6 py-10 text-center text-[13px] leading-6 text-muted-foreground">私钥导入的钱包没有 Solana 账户，换到助记词钱包或别的网络再兑换。</p>
+        <p className="px-6 py-10 text-center text-[13px] leading-6 text-muted-foreground">{t("cw.swap.noSol")}</p>
       ) : (
         <div className="flex-1 px-4 pb-6">
           <div>
             <section className="rounded-[22px] bg-card p-4 ring-1 ring-border/60">
               <div className="flex items-center justify-between text-[12px] text-muted-foreground">
-                <span>支付</span>
-                <span className="font-mono">余额 {from ? `${fmt(from.raw, from.decimals)}` : "—"}</span>
+                <span>{t("cw.coin.pay")}</span>
+                <span className="font-mono">{t("cw.coin.balanceValue", { v: from ? `${fmt(from.raw, from.decimals)}` : "—" })}</span>
               </div>
               <div className="mt-2 flex items-center gap-2">
                 <input
@@ -140,7 +141,7 @@ function Swap({ chain }: { chain: WalletChain }) {
                   const v = from ? formatUnits((spendable * BigInt(p)) / 100n, from.decimals) : "";
                   return (
                     <button key={p} type="button" disabled={!from || spendable === 0n} onClick={() => setAmount(v)} className={cn("h-8 rounded-xl text-[12px] font-semibold transition active:scale-95 disabled:opacity-40", amount === v && v ? "bg-foreground text-background" : "bg-muted")}>
-                      {p === 100 ? "最大" : `${p}%`}
+                      {p === 100 ? t("cw.coin.max") : `${p}%`}
                     </button>
                   );
                 })}
@@ -148,32 +149,32 @@ function Swap({ chain }: { chain: WalletChain }) {
             </section>
 
             <div className="relative z-10 -my-3 flex justify-center">
-              <button type="button" aria-label="互换" onClick={flip} className="flex size-10 items-center justify-center rounded-2xl bg-card ring-4 ring-background transition active:scale-90">
+              <button type="button" aria-label={t("cw.swap.flip")} onClick={flip} className="flex size-10 items-center justify-center rounded-2xl bg-card ring-4 ring-background transition active:scale-90">
                 <ArrowsDownUp size={18} weight="bold" />
               </button>
             </div>
 
             <section className="rounded-[22px] bg-card p-4 ring-1 ring-border/60">
               <div className="flex items-center justify-between text-[12px] text-muted-foreground">
-                <span>获得</span>
-                <span className="font-mono">{to && to.raw > 0n ? `余额 ${fmt(to.raw, to.decimals)}` : " "}</span>
+                <span>{t("cw.swap.receive")}</span>
+                <span className="font-mono">{to && to.raw > 0n ? t("cw.coin.balanceValue", { v: fmt(to.raw, to.decimals) }) : " "}</span>
               </div>
               <div className="mt-2 flex items-center gap-2">
                 <span className={cn("w-0 flex-1 truncate font-mono text-[30px] font-semibold tracking-tight", !view && "text-muted-foreground/50")}>
                   {view && to ? fmt(view.out, to.decimals) : q.isFetching ? "…" : "0"}
                 </span>
-                <TokenButton token={to} placeholder="选择代币" onClick={engine === "arm" && from && !isArcUsdc(from) ? undefined : () => setPicker("to")} />
+                <TokenButton token={to} placeholder={t("cw.swap.selectToken")} onClick={engine === "arm" && from && !isArcUsdc(from) ? undefined : () => setPicker("to")} />
               </div>
             </section>
           </div>
 
           <dl className="mt-3 space-y-2 px-1 text-[13px]">
-            <Row label="汇率" value={rate != null && from && to ? `1 ${from.symbol} ≈ ${rate.toLocaleString("en-US", { maximumSignificantDigits: 6 })} ${to.symbol}` : "—"} />
-            <Row label="最少获得" value={view && to ? `${fmt(view.minOut, to.decimals)} ${to.symbol}` : "—"} />
-            <Row label="价格影响" value={view?.impact != null ? `${view.impact.toFixed(2)}%` : "—"} tone={view?.impact != null && view.impact > 5 ? "down" : undefined} />
-            <Row label="路线" value={view?.route ?? "—"} />
+            <Row label={t("cw.swap.rate")} value={rate != null && from && to ? `1 ${from.symbol} ≈ ${rate.toLocaleString("en-US", { maximumSignificantDigits: 6 })} ${to.symbol}` : "—"} />
+            <Row label={t("cw.swap.minOut")} value={view && to ? `${fmt(view.minOut, to.decimals)} ${to.symbol}` : "—"} />
+            <Row label={t("cw.coin.impact")} value={view?.impact != null ? `${view.impact.toFixed(2)}%` : "—"} tone={view?.impact != null && view.impact > 5 ? "down" : undefined} />
+            <Row label={t("cw.coin.route")} value={view?.route ?? "—"} />
             <div className="flex items-center justify-between">
-              <dt className="text-muted-foreground">滑点</dt>
+              <dt className="text-muted-foreground">{t("cw.coin.slippage")}</dt>
               <dd className="flex gap-1">
                 {SLIPS.map((s) => (
                   <button key={s} type="button" onClick={() => setSlip(s)} className={cn("h-7 rounded-lg px-2 font-mono text-[12px]", slip === s ? "bg-foreground text-background" : "bg-muted text-muted-foreground")}>
@@ -184,23 +185,23 @@ function Swap({ chain }: { chain: WalletChain }) {
             </div>
           </dl>
 
-          {q.isError && <p className="mt-2 text-[12px] text-down">{(q.error as Error).message || "报价失败，稍后再试"}</p>}
-          {engine === "arm" && from && isArcUsdc(from) && !to && <p className="mt-2 text-[12px] text-muted-foreground">Arc 上用 USDC 兑换 Arm 发射的代币，或把它们换回 USDC。</p>}
+          {q.isError && <p className="mt-2 text-[12px] text-down">{(q.error as Error).message || t("cw.coin.quoteFailed")}</p>}
+          {engine === "arm" && from && isArcUsdc(from) && !to && <p className="mt-2 text-[12px] text-muted-foreground">{t("cw.swap.arcHint")}</p>}
           {err && <p className="mt-2 text-[12px] break-words text-down">{err}</p>}
 
           {insufficient ? (
             <Link href="/wallet/receive" className="mt-4 flex h-14 w-full items-center justify-center rounded-2xl bg-muted text-[16px] font-semibold">
-              {from?.native ? `${from.symbol} 不够（要留网络费），去充值` : "余额不足"}
+              {from?.native ? t("cw.coin.lowNativeDeposit", { sym: from.symbol }) : t("transfer.insufficient")}
             </Link>
           ) : (
             <PrimaryButton className="mt-4" disabled={!view || !!step} onClick={go}>
               <span className="flex items-center justify-center gap-1.5">
                 {step && <CircleNotch size={18} className="animate-spin" />}
-                {step ? STEP_LABEL[step] : !to ? "选择要获得的代币" : amountIn === 0n ? "输入数量" : q.isFetching && !view ? "报价中…" : "兑换"}
+                {step ? t(STEP_LABEL[step]) : !to ? t("cw.swap.selectTo") : amountIn === 0n ? t("cw.swap.enterAmount") : q.isFetching && !view ? t("cw.coin.quoting") : t("cw.swap.title")}
               </span>
             </PrimaryButton>
           )}
-          {engine && <p className="mt-2 text-center text-[11px] text-muted-foreground">经 {ENGINE_NAME[engine]} 路由，在你的钱包里签名，平台不收手续费</p>}
+          {engine && <p className="mt-2 text-center text-[11px] text-muted-foreground">{t("cw.swap.routeNote", { engine: engineName(engine) })}</p>}
         </div>
       )}
 
@@ -211,14 +212,14 @@ function Swap({ chain }: { chain: WalletChain }) {
             side={picker}
             owned={owned}
             from={from}
-            onPick={async (t) => {
+            onPick={async (picked) => {
               setPicker(null);
-              let tok = t;
+              let tok = picked;
               if (tok.decimals < 0) {
                 try {
                   tok = { ...tok, decimals: await decimalsOf(chain, tok.address) };
                 } catch {
-                  return toast.error("读不到这个代币的精度");
+                  return toast.error(t("cw.swap.noDecimals"));
                 }
               }
               if (picker === "from") {
@@ -238,7 +239,7 @@ function Swap({ chain }: { chain: WalletChain }) {
       </BottomSheet>
 
       <BottomSheet open={picker === "chain"} onClose={() => setPicker(null)}>
-        <div className="mb-3 text-center text-[17px] font-semibold">选择网络</div>
+        <div className="mb-3 text-center text-[17px] font-semibold">{t("cw.swap.selectNetwork")}</div>
         <ul className="space-y-1">
           {WALLET_CHAINS.filter((c) => engineOf(c)).map((c) => (
             <li key={c.key}>
@@ -252,7 +253,7 @@ function Swap({ chain }: { chain: WalletChain }) {
               >
                 <ChainGlyph chain={c} size={30} />
                 <span className="flex-1 text-left text-[15px] font-semibold">{c.name}</span>
-                <span className="text-[12px] text-muted-foreground">{ENGINE_NAME[engineOf(c)!]}</span>
+                <span className="text-[12px] text-muted-foreground">{engineName(engineOf(c)!)}</span>
                 {c.key === chain.key && <CheckCircle size={20} weight="fill" />}
               </button>
             </li>
@@ -272,7 +273,7 @@ function Row({ label, value, tone }: { label: string; value: string; tone?: "dow
   );
 }
 
-function TokenButton({ token, placeholder = "选择", onClick }: { token: SwapToken | null; placeholder?: string; onClick?: () => void }) {
+function TokenButton({ token, placeholder = t("common.select"), onClick }: { token: SwapToken | null; placeholder?: string; onClick?: () => void }) {
   return (
     <button type="button" onClick={onClick} className={cn("flex h-10 shrink-0 items-center gap-1.5 rounded-full pr-2.5 pl-1 text-[15px] font-semibold transition active:scale-95", token ? "bg-muted" : "bg-foreground pl-3.5 text-background")}>
       {token && <TokenAvatar symbol={token.symbol} seed={token.seed} logo={token.logo} size={28} className="rounded-full" />}
@@ -306,10 +307,10 @@ function TokenPicker({ chain, side, owned, from, onPick }: { chain: WalletChain;
 
   return (
     <div className="flex h-[70vh] flex-col">
-      <div className="mb-3 text-center text-[17px] font-semibold">{side === "from" ? "选择支付的代币" : "选择要获得的代币"}</div>
+      <div className="mb-3 text-center text-[17px] font-semibold">{side === "from" ? t("cw.swap.selectFrom") : t("cw.swap.selectTo")}</div>
       <label className="flex h-11 shrink-0 items-center gap-2 rounded-2xl bg-muted px-3.5">
         <MagnifyingGlass size={16} className="text-muted-foreground" />
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={side === "to" ? "名称、符号或合约地址" : "搜索"} autoCapitalize="none" spellCheck={false} className="min-w-0 flex-1 bg-transparent text-[14px] outline-none" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={side === "to" ? t("cw.swap.searchPh") : t("common.search")} autoCapitalize="none" spellCheck={false} className="min-w-0 flex-1 bg-transparent text-[14px] outline-none" />
       </label>
       {side === "to" && engine === "kyber" && <KyberExtras chain={chain.key as MarketChainKey} q={dq} onRows={setExtra} />}
       {side === "to" && engine === "jupiter" && <PumpExtras q={dq} onRows={setExtra} />}
@@ -327,7 +328,7 @@ function TokenPicker({ chain, side, owned, from, onPick }: { chain: WalletChain;
             </button>
           </li>
         ))}
-        {list.length === 0 && <li className="py-10 text-center text-[13px] text-muted-foreground">{looked.isFetching ? "查找中…" : "没有找到，可以粘贴合约地址"}</li>}
+        {list.length === 0 && <li className="py-10 text-center text-[13px] text-muted-foreground">{looked.isFetching ? t("cw.swap.lookingUp") : t("cw.swap.notFoundPaste")}</li>}
       </ul>
     </div>
   );

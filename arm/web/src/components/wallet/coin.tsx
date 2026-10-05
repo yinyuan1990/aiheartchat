@@ -10,6 +10,7 @@ import { fmtNum, fmtSmall, shortAddr, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { canCoinGroup, canShareCard, copyText, openCoinGroup, shareCard } from "@/lib/wallet/native";
 import { iconUrl } from "@/lib/wallet/assets";
+import { t } from "@/lib/wallet/i18n";
 import { BottomSheet, ChainGlyph, Num, Pct, PrimaryButton, WalletFrame } from "./ui";
 
 /**
@@ -37,11 +38,11 @@ export function CoinFrame({ children }: { children: React.ReactNode }) {
 /** "3 小时" / "16 天" — how long the coin has existed */
 export function ageLabel(ts: number, now = Date.now()) {
   const m = Math.max(0, Math.floor((now - ts) / 60_000));
-  if (m < 60) return `${Math.max(1, m)} 分钟`;
+  if (m < 60) return t("cw.coin.ageMin", { n: Math.max(1, m) });
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h} 小时`;
+  if (h < 24) return t("cw.coin.ageHour", { n: h });
   const d = Math.floor(h / 24);
-  return d < 365 ? `${d} 天` : `${Math.floor(d / 365)} 年`;
+  return d < 365 ? t("cw.coin.ageDay", { n: d }) : t("cw.coin.ageYear", { n: Math.floor(d / 365) });
 }
 
 const noSubscribe = () => () => {};
@@ -81,7 +82,7 @@ export function CoinTopBar({
   return (
     <>
     <header className="sticky top-0 z-20 flex h-14 items-center gap-2 bg-background/90 px-3 backdrop-blur-xl">
-      <Link href={back} aria-label="返回" className="flex size-9 items-center justify-center rounded-full transition active:scale-90">
+      <Link href={back} aria-label={t("common.back")} className="flex size-9 items-center justify-center rounded-full transition active:scale-90">
         <ArrowLeft size={20} weight="bold" />
       </Link>
       <div className="flex min-w-0 flex-1 items-center gap-2 text-[15px]">
@@ -105,20 +106,20 @@ export function CoinTopBar({
           </>
         )}
       </div>
-      <button type="button" aria-label={starred ? "取消收藏" : "收藏"} onClick={onStar} className={squareBtn}>
+      <button type="button" aria-label={starred ? t("cw.coin.unstar") : t("cw.coin.star")} onClick={onStar} className={squareBtn}>
         <Star size={18} weight={starred ? "fill" : "regular"} className={starred ? "text-[#f5c542]" : ""} />
       </button>
       {canGroup && group && callout && (
-        <button type="button" aria-label="讨论群" onClick={() => openCoinGroup({ chain: callout.chain, address: callout.address, symbol: callout.symbol, name: callout.name, image: callout.image })} className={squareBtn}>
+        <button type="button" aria-label={t("cw.coin.group")} onClick={() => openCoinGroup({ chain: callout.chain, address: callout.address, symbol: callout.symbol, name: callout.name, image: callout.image })} className={squareBtn}>
           <ChatsCircle size={18} />
         </button>
       )}
       {canCall && callout && (
-        <button type="button" aria-label="喊单到聊天" onClick={() => setCalling(true)} className={squareBtn}>
+        <button type="button" aria-label={t("cw.coin.callToChat")} onClick={() => setCalling(true)} className={squareBtn}>
           <Megaphone size={18} />
         </button>
       )}
-      <button type="button" aria-label="分享" onClick={onShare} className={squareBtn}>
+      <button type="button" aria-label={t("common.share")} onClick={onShare} className={squareBtn}>
         <ShareNetwork size={18} />
       </button>
     </header>
@@ -142,7 +143,7 @@ function CalloutSheet({ card, onDone }: { card: CalloutCard; onDone: () => void 
     <>
       <div className="mb-3 flex items-center justify-center gap-1.5 text-[17px] font-semibold">
         <Megaphone size={18} weight="fill" />
-        喊单到聊天
+        {t("cw.coin.callToChat")}
       </div>
       <div className="flex items-center gap-3 rounded-2xl bg-muted/60 px-3.5 py-3">
         <TokenAvatar symbol={card.symbol} seed={card.address} logo={card.image ?? undefined} size={44} className="rounded-xl" />
@@ -152,7 +153,7 @@ function CalloutSheet({ card, onDone }: { card: CalloutCard; onDone: () => void 
         </span>
         <span className="text-right font-mono text-[12px]">
           {card.priceUsd != null && <span className="block">{usd(card.priceUsd)}</span>}
-          {card.mcapUsd != null && <span className="block text-muted-foreground">市值 {compactUsd(card.mcapUsd)}</span>}
+          {card.mcapUsd != null && <span className="block text-muted-foreground">{t("cw.coin.mcapValue", { v: compactUsd(card.mcapUsd) })}</span>}
         </span>
       </div>
       <textarea
@@ -160,12 +161,12 @@ function CalloutSheet({ card, onDone }: { card: CalloutCard; onDone: () => void 
         onChange={(e) => setNote(e.target.value)}
         maxLength={200}
         rows={3}
-        placeholder="说点什么（可选），比如为什么看好"
+        placeholder={t("cw.coin.callNotePh")}
         className="mt-3 w-full resize-none rounded-2xl bg-muted/60 px-3.5 py-3 text-[14px] outline-none placeholder:text-muted-foreground/70"
       />
-      <p className="mt-1 px-1 text-[11px] text-muted-foreground">卡片里的价格是现在的快照，好友点开能看实时行情、直接买。喊单不构成投资建议。</p>
+      <p className="mt-1 px-1 text-[11px] text-muted-foreground">{t("cw.coin.callCardNote")}</p>
       <PrimaryButton className="mt-3" onClick={send}>
-        选择聊天发送
+        {t("cw.coin.pickChat")}
       </PrimaryButton>
     </>
   );
@@ -210,7 +211,7 @@ export function CoinHeader({
         <div className="min-w-0 flex-1 pt-1">
           <div className="truncate text-[19px] leading-tight font-semibold">{name}</div>
           <div className="mt-1 flex items-center gap-2 text-[13px] text-muted-foreground">
-            <button type="button" onClick={async () => (await copyText(address)) && toast.success("合约地址已复制")} className="flex items-center gap-1 font-mono">
+            <button type="button" onClick={async () => (await copyText(address)) && toast.success(t("cw.coin.caCopied"))} className="flex items-center gap-1 font-mono">
               {shortAddr(address, 4, 4)}
               <Copy size={13} />
             </button>
@@ -223,14 +224,14 @@ export function CoinHeader({
         </div>
         <div className="shrink-0 pt-1 text-right">
           <div className="flex items-baseline justify-end gap-1.5">
-            <span className="text-[12px] text-muted-foreground">价格</span>
+            <span className="text-[12px] text-muted-foreground">{t("cw.coin.price")}</span>
             <Num value={priceUsd != null ? usd(priceUsd) : "—"} className="text-[17px] font-semibold" />
           </div>
           {change != null && <ChangeTag value={change} className="mt-1" />}
         </div>
       </div>
       <div className="mt-3 flex items-center justify-between gap-3 text-[13px] text-muted-foreground">
-        <span>{holders != null ? `${fmtNum(holders, 1)} 持有者` : "持有者数据暂缺"}</span>
+        <span>{holders != null ? t("cw.coin.holdersCount", { n: fmtNum(holders, 1) }) : t("cw.coin.holdersUnknown")}</span>
         {extra}
       </div>
     </section>
@@ -251,7 +252,7 @@ export const CHART_INTERVALS = [
   { key: "5m", label: "5m" },
   { key: "15m", label: "15m" },
   { key: "1h", label: "1h" },
-  { key: "all", label: "全部" },
+  { key: "all", label: "transfer.all" },
 ];
 /** "全部": the finest candle size whose 300 bars still cover the coin's whole life */
 export function allInterval(createdAt?: number | null): string {
@@ -287,7 +288,7 @@ function useAlert(alertKey: string, price: number | null) {
     prev.current = price;
     if (p == null) return;
     if ((p < target && price >= target) || (p > target && price <= target)) {
-      toast.success(`价格到了 ${chartPrice(target)}`, { duration: 10_000 });
+      toast.success(t("cw.coin.priceReached", { p: chartPrice(target) }), { duration: 10_000 });
       navigator.vibrate?.(200);
     }
   }, [price, target]);
@@ -337,24 +338,24 @@ export function CoinChartPanel({
       {candles.length > 1 ? (
         <PriceChart candles={candles} mode={prefs.mode} pumpStyle avg={prefs.avg ? avg : null} markers={prefs.markers ? markers : undefined} onMarker={onMarker} className="h-[320px]" />
       ) : (
-        <div className="flex h-[320px] items-center justify-center text-[13px] text-muted-foreground">{loading ? <CircleNotch size={24} className="animate-spin" /> : "暂无成交"}</div>
+        <div className="flex h-[320px] items-center justify-center text-[13px] text-muted-foreground">{loading ? <CircleNotch size={24} className="animate-spin" /> : t("cw.coin.noTradesChart")}</div>
       )}
       <div className="mt-1 flex items-center gap-0.5 px-2">
         {CHART_INTERVALS.map((r) => (
           <button key={r.key} type="button" onClick={() => onInterval(r.key)} className={cn("h-8 rounded-full px-2.5 text-[13px] font-medium transition", r.key === interval ? "bg-muted text-foreground" : "text-muted-foreground")}>
-            {r.label}
+            {r.key === "all" ? t(r.label) : r.label}
           </button>
         ))}
         <span className="mx-1 h-4 w-px bg-border" />
         <button type="button" onClick={() => setSheet("alert")} className={cn("flex h-8 items-center gap-1 rounded-full px-2 text-[13px]", alert ? "text-up" : "text-muted-foreground")}>
           <Bell size={15} weight={alert ? "fill" : "regular"} />
-          警报
+          {t("cw.coin.alert")}
         </button>
         <span className="flex-1" />
-        <button type="button" aria-label={prefs.mode === "area" ? "蜡烛图" : "折线图"} onClick={() => set({ mode: prefs.mode === "area" ? "candle" : "area" })} className="flex size-8 items-center justify-center rounded-full text-muted-foreground">
+        <button type="button" aria-label={prefs.mode === "area" ? t("cw.coin.candles") : t("cw.coin.lineChart")} onClick={() => set({ mode: prefs.mode === "area" ? "candle" : "area" })} className="flex size-8 items-center justify-center rounded-full text-muted-foreground">
           {prefs.mode === "area" ? <CandleIcon /> : <ChartLine size={18} />}
         </button>
-        <button type="button" aria-label="图表设置" onClick={() => setSheet("settings")} className="flex size-8 items-center justify-center rounded-full text-muted-foreground">
+        <button type="button" aria-label={t("cw.coin.chartSettings")} onClick={() => setSheet("settings")} className="flex size-8 items-center justify-center rounded-full text-muted-foreground">
           <SlidersHorizontal size={18} />
         </button>
       </div>
@@ -372,10 +373,10 @@ export function CoinChartPanel({
         )}
         {sheet === "settings" && (
           <>
-            <div className="mb-3 text-[16px] font-semibold">图表设置</div>
-            <Toggle label="显示买卖气泡" hint="我的、创建者和大单的买卖标在 K 线上" on={prefs.markers} onChange={(v) => set({ markers: v })} />
-            <Toggle label="显示我的均价线（Avg）" hint="按这个钱包的买入记录算" on={prefs.avg} onChange={(v) => set({ avg: v })} />
-            <Toggle label="蜡烛图" hint="关掉是平滑折线" on={prefs.mode === "candle"} onChange={(v) => set({ mode: v ? "candle" : "area" })} />
+            <div className="mb-3 text-[16px] font-semibold">{t("cw.coin.chartSettings")}</div>
+            <Toggle label={t("cw.coin.showBubbles")} hint={t("cw.coin.showBubblesHint")} on={prefs.markers} onChange={(v) => set({ markers: v })} />
+            <Toggle label={t("cw.coin.showAvg")} hint={t("cw.coin.showAvgHint")} on={prefs.avg} onChange={(v) => set({ avg: v })} />
+            <Toggle label={t("cw.coin.candles")} hint={t("cw.coin.candlesHint")} on={prefs.mode === "candle"} onChange={(v) => set({ mode: v ? "candle" : "area" })} />
           </>
         )}
       </BottomSheet>
@@ -413,8 +414,8 @@ function AlertForm({ price, target, onSave }: { price: number | null; target: nu
   const n = Number(v);
   return (
     <>
-      <div className="text-[16px] font-semibold">价格警报</div>
-      <p className="mt-1 text-[12px] text-muted-foreground">现价 {price != null ? chartPrice(price) : "—"}。只在这个页面开着时提醒（网页关掉后收不到）。</p>
+      <div className="text-[16px] font-semibold">{t("cw.coin.priceAlert")}</div>
+      <p className="mt-1 text-[12px] text-muted-foreground">{t("cw.coin.priceAlertNote", { p: price != null ? chartPrice(price) : "—" })}</p>
       <div className="mt-3 flex items-center gap-2 rounded-2xl bg-muted px-3">
         <span className="text-muted-foreground">$</span>
         <input value={v} onChange={(e) => setV(e.target.value.replace(/[^0-9.e-]/g, ""))} inputMode="decimal" className="h-12 flex-1 bg-transparent font-mono text-[18px] outline-none" />
@@ -431,10 +432,10 @@ function AlertForm({ price, target, onSave }: { price: number | null; target: nu
       )}
       <div className="mt-4 grid grid-cols-2 gap-2">
         <PrimaryButton tone="default" className="bg-muted text-foreground" onClick={() => onSave(null)}>
-          {target ? "删除警报" : "取消"}
+          {target ? t("cw.coin.deleteAlert") : t("common.cancel")}
         </PrimaryButton>
         <PrimaryButton tone="up" disabled={!(n > 0)} onClick={() => onSave(n)}>
-          保存
+          {t("common.save")}
         </PrimaryButton>
       </div>
     </>
@@ -451,12 +452,12 @@ export function PositionCard({ valueUsd, costUsd, amount, symbol, supply, avg, o
       <div className="flex items-center justify-between text-[13px]">
         <span className="flex items-center gap-1.5 font-medium">
           <span className="size-2 rounded-full bg-up" />
-          持仓中
+          {t("cw.coin.holding")}
         </span>
         {onShare && (
           <button type="button" onClick={onShare} className="flex items-center gap-1 text-muted-foreground">
             <ShareNetwork size={14} />
-            分享
+            {t("common.share")}
           </button>
         )}
       </div>
@@ -468,14 +469,14 @@ export function PositionCard({ valueUsd, costUsd, amount, symbol, supply, avg, o
         <button type="button" onClick={() => setAlt(!alt)} className="flex min-w-0 items-center gap-1">
           <span className="truncate">
             {alt
-              ? `均价 ${avg != null ? chartPrice(avg) : "—"} · 成本 ${costUsd != null ? usd(costUsd) : "—"}`
+              ? t("cw.coin.avgCost", { avg: avg != null ? chartPrice(avg) : "—", cost: costUsd != null ? usd(costUsd) : "—" })
               : `${fmtNum(amount, 2)} ${symbol}${supply ? ` · ${((amount / supply) * 100).toFixed(amount / supply < 0.001 ? 4 : 2)}%` : ""}`}
           </span>
           <ArrowsDownUp size={13} className="shrink-0" />
         </button>
         {pnlPct != null && <ChangeTag value={pnlPct} />}
       </div>
-      {costUsd == null && <p className="mt-2 text-[11px] text-muted-foreground">盈亏只算在这个钱包里成交的记录，之前从别处买的没有成本价</p>}
+      {costUsd == null && <p className="mt-2 text-[11px] text-muted-foreground">{t("cw.coin.pnlNote")}</p>}
     </section>
   );
 }
@@ -550,21 +551,21 @@ export function MarkerSheet({ trades, onClose }: { trades: MarkTrade[] | null; o
       {trades && (
         <>
           <div className="mb-2 text-[16px] font-semibold">
-            {trades[0].side === "buy" ? "买入" : "卖出"} · {trades.length} 笔
+            {trades[0].side === "buy" ? t("cw.coin.buyCount", { n: trades.length }) : t("cw.coin.sellCount", { n: trades.length })}
           </div>
           <ul className="divide-y divide-border/50">
-            {trades.map((t) => (
-              <li key={t.id}>
-                <a href={t.href} target="_blank" rel="noreferrer" className="flex items-center gap-2 py-2.5 text-[13px]">
-                  <TokenAvatar symbol={t.who.slice(0, 2)} seed={t.who} logo={t.image ?? undefined} size={28} className="rounded-full" />
+            {trades.map((m) => (
+              <li key={m.id}>
+                <a href={m.href} target="_blank" rel="noreferrer" className="flex items-center gap-2 py-2.5 text-[13px]">
+                  <TokenAvatar symbol={m.who.slice(0, 2)} seed={m.who} logo={m.image ?? undefined} size={28} className="rounded-full" />
                   <span className="min-w-0 flex-1">
-                    <span className={cn("block truncate font-mono", t.mine && "font-semibold text-up")}>{t.mine ? "我" : shortAddr(t.who, 4, 4)}</span>
-                    {t.tag && <span className="text-[11px] text-muted-foreground">{t.tag}</span>}
+                    <span className={cn("block truncate font-mono", m.mine && "font-semibold text-up")}>{m.mine ? t("voiceRoom.me") : shortAddr(m.who, 4, 4)}</span>
+                    {m.tag && <span className="text-[11px] text-muted-foreground">{m.tag}</span>}
                   </span>
                   <span className="text-right">
-                    <span className={cn("block font-mono font-semibold", t.side === "buy" ? "text-up" : "text-down")}>{compactUsd(t.usd)}</span>
+                    <span className={cn("block font-mono font-semibold", m.side === "buy" ? "text-up" : "text-down")}>{compactUsd(m.usd)}</span>
                     <span className="text-[11px] text-muted-foreground">
-                      {chartPrice(t.priceUsd)} · {timeAgo(t.at)}
+                      {chartPrice(m.priceUsd)} · {timeAgo(m.at)}
                     </span>
                   </span>
                 </a>
@@ -590,7 +591,7 @@ export function CurveCard({ progress, complete, venue, lines }: { progress: numb
   return (
     <section className="mx-4 mt-3 rounded-[22px] bg-card p-4 ring-1 ring-border">
       <div className="flex items-center justify-between">
-        <span className="text-[14px] font-semibold">{complete ? "已毕业" : "联合曲线进度"}</span>
+        <span className="text-[14px] font-semibold">{complete ? t("cw.coin.graduated") : t("cw.coin.curveProgress")}</span>
         <span className={cn("font-mono text-[14px] font-semibold", complete ? "text-up" : "")}>{complete ? venue : `${progress.toFixed(1)}%`}</span>
       </div>
       <div className="mt-2.5 h-2.5 overflow-hidden rounded-full bg-muted">
@@ -618,7 +619,7 @@ export type CoinTab = { key: string; label: string; count?: number; render: () =
 
 export function CoinTabs({ tabs }: { tabs: CoinTab[] }) {
   const [on, setOn] = useState(tabs[0]?.key);
-  const cur = tabs.find((t) => t.key === on) ?? tabs[0];
+  const cur = tabs.find((tb) => tb.key === on) ?? tabs[0];
   return (
     <section className="mt-4">
       <div className="grid border-b border-border px-4" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>
@@ -638,25 +639,25 @@ export type CoinTradeItem = { id: string; side: "buy" | "sell"; who: string; amo
 
 export function TradeRows({ items, loading, note }: { items: CoinTradeItem[]; loading?: boolean; note?: string }) {
   if (loading && items.length === 0) return <Spinner />;
-  if (items.length === 0) return <Empty text="还没有成交" />;
+  if (items.length === 0) return <Empty text={t("cw.coin.noTradesYet")} />;
   return (
     <>
       {note && <p className="pt-2 text-[11px] text-muted-foreground">{note}</p>}
       <ul className="divide-y divide-border/50">
-        {items.map((t) => {
+        {items.map((x) => {
           const row = (
             <>
-              <span className={cn("w-9 shrink-0 rounded-md py-0.5 text-center text-[11px] font-semibold", t.side === "buy" ? "bg-up/12 text-up" : "bg-down/12 text-down")}>{t.side === "buy" ? "买" : "卖"}</span>
-              <span className={cn("w-24 shrink-0 truncate font-mono text-muted-foreground", t.mine && "font-semibold text-up")}>{t.mine ? "我" : shortAddr(t.who, 4, 4)}</span>
-              <span className="min-w-0 flex-1 truncate text-right font-mono text-[12px] text-muted-foreground">{t.amount}</span>
-              <span className="w-16 shrink-0 text-right font-mono font-medium">{t.value}</span>
-              <span className="w-9 shrink-0 text-right text-[11px] text-muted-foreground">{timeAgo(t.at)}</span>
+              <span className={cn("w-9 shrink-0 rounded-md py-0.5 text-center text-[11px] font-semibold", x.side === "buy" ? "bg-up/12 text-up" : "bg-down/12 text-down")}>{x.side === "buy" ? t("cw.coin.buyShort") : t("cw.coin.sellShort")}</span>
+              <span className={cn("w-24 shrink-0 truncate font-mono text-muted-foreground", x.mine && "font-semibold text-up")}>{x.mine ? t("voiceRoom.me") : shortAddr(x.who, 4, 4)}</span>
+              <span className="min-w-0 flex-1 truncate text-right font-mono text-[12px] text-muted-foreground">{x.amount}</span>
+              <span className="w-16 shrink-0 text-right font-mono font-medium">{x.value}</span>
+              <span className="w-9 shrink-0 text-right text-[11px] text-muted-foreground">{timeAgo(x.at)}</span>
             </>
           );
           return (
-            <li key={t.id}>
-              {t.href ? (
-                <a href={t.href} target="_blank" rel="noreferrer" className="flex items-center gap-2 py-2.5 text-[13px]">
+            <li key={x.id}>
+              {x.href ? (
+                <a href={x.href} target="_blank" rel="noreferrer" className="flex items-center gap-2 py-2.5 text-[13px]">
                   {row}
                 </a>
               ) : (
@@ -686,7 +687,7 @@ export function HolderRows({ items, loading, summary, empty }: { items: CoinHold
         </div>
       )}
       {items.length === 0 ? (
-        (empty ?? <Empty text="暂无持有人数据" />)
+        (empty ?? <Empty text={t("cw.coin.noHolders")} />)
       ) : (
         <ol className="mt-1">
           {items.map((h, i) => (
@@ -695,9 +696,9 @@ export function HolderRows({ items, loading, summary, empty }: { items: CoinHold
                 <span className="absolute inset-y-1 left-0 rounded-md bg-up/8" style={{ width: `${Math.min(100, h.pct)}%` }} />
                 <span className="relative w-5 text-right font-mono text-[11px] text-muted-foreground">{i + 1}</span>
                 <span className={cn("relative font-mono", h.me && "font-semibold text-up")}>{shortAddr(h.address, 4, 4)}</span>
-                {h.tags.map((t) => (
-                  <span key={t} className="relative rounded bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">
-                    {t}
+                {h.tags.map((tag) => (
+                  <span key={tag} className="relative rounded bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">
+                    {tag}
                   </span>
                 ))}
                 <span className="relative ml-auto font-mono font-medium">{h.pct < 0.01 ? "<0.01" : h.pct.toFixed(2)}%</span>
@@ -726,7 +727,7 @@ export function CommentBox({ items, loading, me, onPost, note }: { items: CoinCo
       setText("");
       setReplyTo(null);
     } catch (e) {
-      toast.error((e as Error).message || "发送失败");
+      toast.error((e as Error).message || t("chat.sendFailed"));
     } finally {
       setBusy(false);
     }
@@ -736,15 +737,15 @@ export function CommentBox({ items, loading, me, onPost, note }: { items: CoinCo
       <div className="mt-2.5 rounded-2xl bg-muted/60 p-2">
         {replyTo != null && (
           <div className="mb-1 flex items-center justify-between px-1 text-[11px] text-muted-foreground">
-            <span>回复 #{replyTo}</span>
+            <span>{t("cw.coin.replyTo", { id: replyTo })}</span>
             <button type="button" onClick={() => setReplyTo(null)}>
-              取消
+              {t("common.cancel")}
             </button>
           </div>
         )}
         <div className="flex items-end gap-2">
-          <textarea value={text} onChange={(e) => setText(e.target.value.slice(0, 280))} rows={text.length > 40 ? 3 : 1} placeholder={me ? "说点什么…" : "解锁钱包后可以发言"} disabled={!me} className="min-h-9 flex-1 resize-none bg-transparent px-1 py-1.5 text-[14px] outline-none" />
-          <button type="button" aria-label="发送" disabled={!me || !text.trim() || busy} onClick={send} className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-foreground text-background transition active:scale-90 disabled:opacity-30">
+          <textarea value={text} onChange={(e) => setText(e.target.value.slice(0, 280))} rows={text.length > 40 ? 3 : 1} placeholder={me ? t("moments.saySomething") : t("cw.coin.unlockToPost")} disabled={!me} className="min-h-9 flex-1 resize-none bg-transparent px-1 py-1.5 text-[14px] outline-none" />
+          <button type="button" aria-label={t("common.send")} disabled={!me || !text.trim() || busy} onClick={send} className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-foreground text-background transition active:scale-90 disabled:opacity-30">
             {busy ? <CircleNotch size={16} className="animate-spin" /> : <PaperPlaneRight size={16} weight="fill" />}
           </button>
         </div>
@@ -753,7 +754,7 @@ export function CommentBox({ items, loading, me, onPost, note }: { items: CoinCo
       {loading && items.length === 0 ? (
         <Spinner />
       ) : items.length === 0 ? (
-        <Empty text="还没人发言，来抢沙发" />
+        <Empty text={t("cw.coin.noComments")} />
       ) : (
         <ul className="mt-2 divide-y divide-border/50">
           {items.map((c) => (
@@ -761,10 +762,10 @@ export function CommentBox({ items, loading, me, onPost, note }: { items: CoinCo
               <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                 <TokenAvatar symbol={c.author.slice(0, 2)} seed={c.author} size={18} className="rounded-full" />
                 <span className={cn("font-mono", c.author === me && "font-semibold text-up")}>{shortAddr(c.author, 4, 4)}</span>
-                {c.isCreator && <span className="rounded bg-up/12 px-1 text-[10px] font-semibold text-up">创建者</span>}
+                {c.isCreator && <span className="rounded bg-up/12 px-1 text-[10px] font-semibold text-up">{t("cw.coin.creator")}</span>}
                 <span>· {timeAgo(c.at)}</span>
                 <span>#{c.id}</span>
-                <button type="button" aria-label="回复" onClick={() => setReplyTo(c.id)} className="ml-auto p-1">
+                <button type="button" aria-label={t("chat.reply")} onClick={() => setReplyTo(c.id)} className="ml-auto p-1">
                   <ArrowBendUpLeft size={14} />
                 </button>
               </div>
@@ -784,12 +785,12 @@ export function AboutCard({ description, socials, creator, createdAt, rows, flat
   const links = [
     { url: socials?.twitter, icon: XLogo, label: "X" },
     { url: socials?.telegram, icon: TelegramLogo, label: "Telegram" },
-    { url: socials?.website, icon: Globe, label: "官网" },
+    { url: socials?.website, icon: Globe, label: t("cw.coin.website") },
   ].filter((l) => l.url && /^https?:\/\//.test(l.url));
   return (
     <section className={flat ? "pt-3" : "mx-4 mt-3 rounded-[22px] bg-card p-4 ring-1 ring-border"}>
-      {!flat && <div className="text-[14px] font-semibold">简介</div>}
-      {description ? <p className="mt-2 text-[13px] leading-relaxed break-words whitespace-pre-wrap text-foreground/85">{description}</p> : <p className="mt-2 text-[13px] text-muted-foreground">没有简介</p>}
+      {!flat && <div className="text-[14px] font-semibold">{t("bot.desc")}</div>}
+      {description ? <p className="mt-2 text-[13px] leading-relaxed break-words whitespace-pre-wrap text-foreground/85">{description}</p> : <p className="mt-2 text-[13px] text-muted-foreground">{t("cw.coin.noDescription")}</p>}
       {links.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
           {links.map((l) => (
@@ -803,7 +804,7 @@ export function AboutCard({ description, socials, creator, createdAt, rows, flat
       <dl className="mt-3 space-y-2 text-[13px]">
         {creator && (
           <div className="flex justify-between gap-3">
-            <dt className="text-muted-foreground">创建者</dt>
+            <dt className="text-muted-foreground">{t("cw.coin.creator")}</dt>
             <dd className="truncate font-mono">
               {creator.href ? (
                 <a href={creator.href} target="_blank" rel="noreferrer">
@@ -817,8 +818,8 @@ export function AboutCard({ description, socials, creator, createdAt, rows, flat
         )}
         {createdAt != null && (
           <div className="flex justify-between">
-            <dt className="text-muted-foreground">创建于</dt>
-            <dd>{timeAgo(createdAt)}前</dd>
+            <dt className="text-muted-foreground">{t("cw.coin.createdAt")}</dt>
+            <dd>{t("cw.coin.ago", { time: timeAgo(createdAt) })}</dd>
           </div>
         )}
         {rows?.map(([k, v]) => (
@@ -836,7 +837,7 @@ export function KingBadge() {
   return (
     <span className="flex shrink-0 items-center gap-1 rounded-full bg-[#f5a524]/15 px-2.5 py-1 text-[11px] font-semibold text-[#f5c26b]">
       <Crown size={13} weight="fill" />
-      山丘之王
+      {t("cw.coin.king")}
     </span>
   );
 }
@@ -856,7 +857,7 @@ export function TradeBar({ symbol, onBuy, onSell, onQuick, sellDisabled, extra }
           <span className="truncate">{symbol}</span>
         </button>
         {onQuick && (
-          <button type="button" aria-label="快速买入" onClick={onQuick} className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-card text-up ring-1 ring-border transition active:scale-95">
+          <button type="button" aria-label={t("cw.coin.quickBuy")} onClick={onQuick} className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-card text-up ring-1 ring-border transition active:scale-95">
             <Lightning size={24} weight="fill" />
           </button>
         )}

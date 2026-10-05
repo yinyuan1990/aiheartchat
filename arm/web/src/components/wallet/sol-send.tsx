@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { SOL_CHAIN, explorerTx, rpcOf, useNodes } from "@/lib/wallet/chains";
 import { hasFeature, reportResult, returnsToApp, scanQr } from "@/lib/wallet/native";
 import { transferMessage } from "@/lib/wallet/payee";
+import { t } from "@/lib/wallet/i18n";
 import { parseScannedSol } from "@/lib/wallet/scan";
 import { isSolEntry, pushRecent, useAddressBook } from "@/lib/wallet/address-book";
 import { useAssets, type Asset } from "@/lib/wallet/assets";
@@ -41,9 +42,9 @@ import { BookPicker, Result, Row, useScanSwitch, useSendLink, type Sent } from "
 import { BottomSheet, ChainGlyph, ChainPill, GhostButton, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
 
 const SPEEDS = [
-  { key: "low", label: "慢" },
-  { key: "mid", label: "推荐" },
-  { key: "high", label: "快" },
+  { key: "low", label: "cw.send.slow" },
+  { key: "mid", label: "cw.send.normal" },
+  { key: "high", label: "cw.send.fast" },
 ] as const;
 type Speed = (typeof SPEEDS)[number]["key"];
 
@@ -97,13 +98,13 @@ export function SolSend() {
   useEffect(() => {
     if (!scanned || loading || assets.length === 0) return;
     const a = scanned.mint ? assets.find((x) => x.mint === scanned.mint) : assets.find((x) => x.id === "native");
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       setScanned(null);
-      if (!a) return void toast.warning("二维码里的代币你还没有持有，请自己选择币种");
+      if (!a) return void toast.warning(t("cw.send.qrTokenNotHeld"));
       setAssetId(a.id);
       if (scanned.amount) setAmount(scanned.amount);
     }, 0);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [scanned, loading, assets]);
 
   const toAddr = isSolAddress(to) ? to.trim() : undefined;
@@ -155,13 +156,13 @@ export function SolSend() {
   const dust = !!asset && !asset.mint && value != null && value > 0n && leftover > 0n && leftover < BigInt(RENT_EXEMPT_MIN);
   const tooSmallForNew = !!asset && !asset.mint && !!toAddr && dest.data?.exists === false && value != null && value > 0n && value < BigInt(RENT_EXEMPT_MIN);
   const split = !!asset?.mint && !over && value != null && asset.solAccountRaw != null && value > asset.solAccountRaw;
-  const blocker = over ? "余额不足" : split ? `这个币分散在几个代币账户里，一次最多转 ${fmt(Number(formatUnits(asset!.solAccountRaw!, asset!.decimals)))}` : solShort ? `SOL 不够（需要 ${sol(solCost)} SOL，含网络费${rent ? "和开户租金" : ""}）` : dust ? `转完只剩 ${sol(leftover)} SOL，Solana 账户要么转空、要么至少留 0.00089 SOL` : tooSmallForNew ? "对方是新地址，第一笔至少要转 0.00089 SOL" : null;
+  const blocker = over ? t("transfer.insufficient") : split ? t("cw.send.solSplit", { n: fmt(Number(formatUnits(asset!.solAccountRaw!, asset!.decimals))) }) : solShort ? t(rent ? "cw.send.solShortRent" : "cw.send.solShort", { n: sol(solCost) }) : dust ? t("cw.send.solDust", { n: sol(leftover) }) : tooSmallForNew ? t("cw.send.solNewMin") : null;
 
   const setMax = (p: number) => {
     if (!asset) return;
     if (asset.mint) return setAmount(formatUnits((asset.raw * BigInt(Math.round(p * 100))) / 100n, asset.decimals));
     // SOL: "最大" empties the account (fee included); partial amounts keep at least the rent-exempt minimum
-    if (fee == null) return void toast.info("网络费还在估算，稍等一下");
+    if (fee == null) return void toast.info(t("cw.send.feeEstimating"));
     const room = p === 1 ? solBal - fee : ((solBal - fee - BigInt(RENT_EXEMPT_MIN)) * BigInt(Math.round(p * 100))) / 100n;
     setAmount(formatUnits(room > 0n ? room : 0n, 9));
   };
@@ -175,7 +176,7 @@ export function SolSend() {
     }
     if (!text) return;
     const p = parseScannedSol(text);
-    if (!p) return void (switchToScanned(text) || toast.error("没认出 Solana 收款地址，请换一个二维码或手动粘贴"));
+    if (!p) return void (switchToScanned(text) || toast.error(t("cw.send.scanUnknownSol")));
     setTo(p.to);
     if (p.mint || p.amount) setScanned({ mint: p.mint, amount: p.amount });
   };
@@ -183,7 +184,7 @@ export function SolSend() {
     try {
       setTo((await navigator.clipboard.readText()).trim());
     } catch {
-      toast.error("无法读取剪贴板，请手动粘贴");
+      toast.error(t("cw.send.clipboardFail"));
     }
   };
 
@@ -215,11 +216,11 @@ export function SolSend() {
   if (!from) {
     return (
       <WalletFrame>
-        <TopBar title="转账" back="/wallet" right={<ChainPill chain={SOL_CHAIN} />} />
+        <TopBar title={t("cw.send.title")} back="/wallet" right={<ChainPill chain={SOL_CHAIN} />} />
         <p className="px-6 py-16 text-center text-[14px] leading-7 text-muted-foreground">
-          「{active?.name}」是用私钥导入的，没有 Solana 账户。
+          {t("cw.send.solKeyNoAccount", { name: active?.name ?? "" })}
           <br />
-          请切换到助记词钱包。
+          {t("cw.send.switchToMnemonic")}
         </p>
       </WalletFrame>
     );
@@ -227,10 +228,10 @@ export function SolSend() {
 
   return (
     <WalletFrame>
-      <TopBar title={link.name ? `转账给 ${link.name}` : "转账"} back="/wallet" right={<ChainPill chain={SOL_CHAIN} />} />
+      <TopBar title={link.name ? t("cw.send.toName", { name: link.name }) : t("cw.send.title")} back="/wallet" right={<ChainPill chain={SOL_CHAIN} />} />
 
       <div className="flex flex-1 flex-col gap-3 px-4 pb-4">
-        {link.notHeld && <p className="rounded-2xl bg-[#d48806]/10 px-3.5 py-2.5 text-[12px] leading-5 text-[#b07005]">你还没有持有对方要的那个币，先买一点或换个币转。</p>}
+        {link.notHeld && <p className="rounded-2xl bg-[#d48806]/10 px-3.5 py-2.5 text-[12px] leading-5 text-[#b07005]">{t("cw.send.notHeld")}</p>}
         <button type="button" onClick={() => setSheet("asset")} disabled={loading} className="flex items-center gap-3 rounded-[22px] bg-card p-4 text-left ring-1 ring-border/60 transition active:scale-[0.99]">
           {asset ? (
             <>
@@ -242,7 +243,7 @@ export function SolSend() {
               </div>
               <div className="flex-1">
                 <div className="text-[15px] font-semibold">{asset.symbol}</div>
-                <div className="mt-0.5 font-mono text-[12px] text-muted-foreground">余额 {fmt(asset.amount)}</div>
+                <div className="mt-0.5 font-mono text-[12px] text-muted-foreground">{t("cw.send.balance", { n: fmt(asset.amount) })}</div>
               </div>
             </>
           ) : (
@@ -253,21 +254,21 @@ export function SolSend() {
 
         <div className="rounded-[22px] bg-card p-4 ring-1 ring-border/60">
           <div className="flex items-center justify-between">
-            <span className="text-[13px] font-medium text-muted-foreground">收款地址</span>
+            <span className="text-[13px] font-medium text-muted-foreground">{t("cw.send.recipient")}</span>
             <span className="flex items-center gap-1.5">
               <button type="button" onClick={() => setSheet("book")} className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[12px] font-medium">
                 <AddressBook size={14} />
-                地址簿
+                {t("cw.send.book")}
               </button>
               {canScan && (
                 <button type="button" onClick={scan} className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[12px] font-medium">
                   <Scan size={14} />
-                  扫一扫
+                  {t("me.scan")}
                 </button>
               )}
               <button type="button" onClick={paste} className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[12px] font-medium">
                 <ClipboardText size={14} />
-                粘贴
+                {t("cw.send.paste")}
               </button>
             </span>
           </div>
@@ -277,23 +278,23 @@ export function SolSend() {
             rows={2}
             spellCheck={false}
             autoCapitalize="none"
-            placeholder="Solana 地址"
+            placeholder={t("cw.send.solPlaceholder")}
             className="mt-1 min-h-[48px] w-full resize-none bg-transparent font-mono text-[15px] leading-6 break-all outline-none placeholder:font-sans placeholder:text-muted-foreground/70"
           />
-          {to.trim() && !toAddr && <div className="text-[12px] text-down">{to.trim().startsWith("0x") ? "这是 EVM 地址，Solana 上不能用" : "地址格式不对"}</div>}
-          {selfSend && <div className="text-[12px] text-[#d48806]">这是你自己的地址</div>}
-          {offCurve && <div className="text-[12px] text-[#d48806]">这是程序地址（PDA），不是普通钱包；转进去通常取不出来</div>}
+          {to.trim() && !toAddr && <div className="text-[12px] text-down">{to.trim().startsWith("0x") ? t("cw.send.evmOnSol") : t("cw.send.badAddress")}</div>}
+          {selfSend && <div className="text-[12px] text-[#d48806]">{t("cw.send.selfAddress")}</div>}
+          {offCurve && <div className="text-[12px] text-[#d48806]">{t("cw.send.solPda")}</div>}
           {contact ? (
             <div className="mt-1 flex items-center gap-1.5 rounded-xl bg-up/10 px-2.5 py-1.5 text-[12px] text-up">
               <AddressBook size={14} weight="fill" />
-              <span className="truncate">地址簿：{contact.name}</span>
+              <span className="truncate">{t("cw.send.bookName", { name: contact.name })}</span>
             </div>
           ) : (
             toAddr &&
             book.recent.includes(toAddr) && (
               <div className="mt-1 flex items-center gap-1.5 rounded-xl bg-up/10 px-2.5 py-1.5 text-[12px] text-up">
                 <ShieldCheck size={14} weight="fill" />
-                以前转过这个地址
+                {t("cw.send.sentBefore")}
               </div>
             )
           )}
@@ -314,7 +315,7 @@ export function SolSend() {
 
         <div className="rounded-[22px] bg-card p-4 ring-1 ring-border/60">
           <div className="flex items-center justify-between text-[13px] font-medium text-muted-foreground">
-            <span>数量</span>
+            <span>{t("cw.send.amount")}</span>
             {asset?.priceUsd != null && value != null && <span className="font-mono">≈ ${(Number(amount) * asset.priceUsd).toFixed(2)}</span>}
           </div>
           <div className="mt-2 flex items-baseline gap-2">
@@ -331,7 +332,7 @@ export function SolSend() {
           <div className="mt-3 grid grid-cols-4 gap-2">
             {[0.25, 0.5, 0.75, 1].map((p) => (
               <button key={p} type="button" onClick={() => setMax(p)} className="h-9 rounded-xl bg-muted text-[13px] font-medium transition active:scale-95">
-                {p === 1 ? "最大" : `${p * 100}%`}
+                {p === 1 ? t("cw.send.max") : `${p * 100}%`}
               </button>
             ))}
           </div>
@@ -340,10 +341,10 @@ export function SolSend() {
         <div className="rounded-[22px] bg-card p-4 ring-1 ring-border/60">
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1 text-[13px] font-medium text-muted-foreground">
-              网络费
+              {t("cw.send.fee")}
               <Info size={14} />
             </span>
-            <span className="text-[12px] text-muted-foreground">用 SOL 支付</span>
+            <span className="text-[12px] text-muted-foreground">{t("cw.send.payWith", { symbol: "SOL" })}</span>
           </div>
           <div className="mt-3 grid grid-cols-3 gap-1 rounded-2xl bg-muted p-1">
             {SPEEDS.map((s) => {
@@ -353,7 +354,7 @@ export function SolSend() {
                 <button key={s.key} type="button" onClick={() => setSpeed(s.key)} className={cn("flex min-w-0 flex-col items-center rounded-xl px-1 py-2 transition", on ? "bg-card shadow-sm" : "text-muted-foreground")}>
                   <span className={cn("flex items-center gap-0.5 text-[13px]", on ? "font-semibold" : "font-medium")}>
                     {s.key === "high" && <Lightning size={12} weight="fill" className={on ? "text-amber-500" : undefined} />}
-                    {s.label}
+                    {t(s.label)}
                   </span>
                   {f != null ? <span className="mt-0.5 max-w-full truncate font-mono text-[11px]">{sol(f)}</span> : <span className="mt-1.5 mb-0.5 h-2.5 w-10 animate-pulse rounded-full bg-border" />}
                 </button>
@@ -363,28 +364,28 @@ export function SolSend() {
           {rent > 0n && (
             <p className="mt-3 flex items-start gap-1.5 text-[12px] leading-5 text-muted-foreground">
               <Info size={14} className="mt-0.5 shrink-0" />
-              对方还没有 {asset?.symbol} 账户，这笔会顺带帮他开户，多付 {sol(rent)} SOL 租金（Solana 规则，钱进了对方的代币账户）。
+              {t("cw.send.solRent", { symbol: asset?.symbol ?? "", n: sol(rent) })}
             </p>
           )}
           {fees.data?.simError && toAddr && value != null && value > 0n && !blocker && (
             <p className="mt-3 flex items-start gap-1.5 text-[12px] leading-5 text-[#d48806]">
               <Warning size={14} className="mt-0.5 shrink-0" />
-              预演失败：{fees.data.simError}
+              {t("cw.send.simFailed", { error: fees.data.simError })}
             </p>
           )}
-          {asset?.mint && <p className="mt-3 text-[12px] text-muted-foreground">需要钱包里有少量 SOL 付网络费。</p>}
+          {asset?.mint && <p className="mt-3 text-[12px] text-muted-foreground">{t("cw.send.needGas", { symbol: "SOL" })}</p>}
         </div>
       </div>
 
       <div aria-hidden className="h-[calc(72px+max(16px,env(safe-area-inset-bottom)))] shrink-0 sm:hidden" />
       <div className="fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-[430px] bg-background/90 px-4 pt-2 pb-[max(16px,env(safe-area-inset-bottom))] backdrop-blur-xl sm:sticky">
         <PrimaryButton disabled={!toAddr || !value || !!blocker || fee == null} onClick={() => setSheet("confirm")}>
-          下一步
+          {t("common.next")}
         </PrimaryButton>
       </div>
 
       <BottomSheet open={sheet === "asset"} onClose={() => setSheet(null)}>
-        <div className="mb-3 text-center text-[17px] font-semibold">选择币种</div>
+        <div className="mb-3 text-center text-[17px] font-semibold">{t("cw.send.pickAsset")}</div>
         <ul className="space-y-1">
           {assets.map((a) => (
             <li key={a.id}>
@@ -438,7 +439,7 @@ function SolConfirm({ asset, amount, fromName, from, to, toName, fee, rent, onCa
   const [busy, setBusy] = useState(false);
   return (
     <>
-      <div className="text-center text-[17px] font-semibold">确认转账</div>
+      <div className="text-center text-[17px] font-semibold">{t("cw.send.confirmTitle")}</div>
       <div className="mt-5 text-center">
         <div className="font-mono text-[34px] font-semibold tracking-tight">
           {amount} <span className="text-[18px] text-muted-foreground">{asset?.symbol}</span>
@@ -446,40 +447,40 @@ function SolConfirm({ asset, amount, fromName, from, to, toName, fee, rent, onCa
         {asset?.priceUsd != null && <div className="mt-1 font-mono text-[13px] text-muted-foreground">≈ ${(Number(amount) * asset.priceUsd).toFixed(2)}</div>}
       </div>
       <dl className="mt-5 divide-y divide-border/60 rounded-[20px] bg-muted/60 px-4 text-[14px]">
-        <Row label="从">
+        <Row label={t("cw.send.from")}>
           <span className="flex items-center gap-1.5">
             <WalletDot address={from} size={16} />
             {fromName}
             <span className="font-mono text-muted-foreground">{shortAddr(from, 4, 4)}</span>
           </span>
         </Row>
-        <Row label="到">
+        <Row label={t("cw.send.to")}>
           <span className="flex max-w-[230px] flex-col items-end text-right">
             {toName && <span className="text-[14px] font-medium">{toName}</span>}
             <span className="font-mono text-[13px] break-all">{to}</span>
           </span>
         </Row>
-        <Row label="网络">
+        <Row label={t("cw.send.network")}>
           <span className="flex items-center gap-1.5">
             <ChainGlyph chain={SOL_CHAIN} size={16} />
             Solana
           </span>
         </Row>
         {asset?.mint && (
-          <Row label="代币合约">
+          <Row label={t("cw.send.tokenContract")}>
             <span className="font-mono text-[13px]">{shortAddr(asset.mint, 6, 6)}</span>
           </Row>
         )}
-        <Row label={rent > 0n ? "网络费 + 开户租金" : "网络费"}>
+        <Row label={rent > 0n ? t("cw.send.feePlusRent") : t("cw.send.fee")}>
           <span className="font-mono">{fee}</span>
         </Row>
       </dl>
       <p className="mt-3 flex items-start gap-1.5 text-[12px] leading-5 text-muted-foreground">
         <Warning size={14} className="mt-0.5 shrink-0" />
-        链上转账发出后无法撤回，请确认地址是 Solana 地址。
+        {t("cw.send.irreversibleSol")}
       </p>
       <div className="mt-4 grid grid-cols-[1fr_2fr] gap-2">
-        <GhostButton onClick={onCancel}>取消</GhostButton>
+        <GhostButton onClick={onCancel}>{t("common.cancel")}</GhostButton>
         <PrimaryButton
           disabled={busy}
           onClick={async () => {
@@ -488,7 +489,7 @@ function SolConfirm({ asset, amount, fromName, from, to, toName, fee, rent, onCa
             setBusy(false);
           }}
         >
-          {busy ? "签名发送中…" : "确认并转账"}
+          {busy ? t("cw.send.signing") : t("cw.send.confirmSend")}
         </PrimaryButton>
       </div>
     </>

@@ -16,6 +16,7 @@ import type { Asset } from "@/lib/wallet/assets";
 import { rememberToken } from "@/lib/wallet/market";
 import { lookupToken } from "@/lib/wallet/swap";
 import { parsePayment, sendLinkOf } from "@/lib/wallet/scan";
+import { t } from "@/lib/wallet/i18n";
 import { formatUnits } from "viem";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -28,7 +29,7 @@ export function SaveContact({ to }: { to: string }) {
     return (
       <div className="mt-5 flex items-center gap-1.5 text-[13px] text-up">
         <CheckCircle size={16} weight="fill" />
-        已存到地址簿
+        {t("cw.send.savedToBook")}
       </div>
     );
   }
@@ -42,11 +43,11 @@ export function SaveContact({ to }: { to: string }) {
   };
   return (
     <div className="mt-5 w-full rounded-[20px] bg-muted/60 p-3 text-left">
-      <div className="text-[13px] font-medium">存到地址簿，下次直接选</div>
+      <div className="text-[13px] font-medium">{t("cw.send.saveToBookHint")}</div>
       <div className="mt-2 flex gap-2">
-        <input value={name} maxLength={MAX_NAME} onChange={(e) => setName(e.target.value)} placeholder="名称，例如：交易所充值" className="h-10 w-0 flex-1 rounded-xl bg-card px-3 text-[14px] ring-1 ring-border outline-none focus:ring-foreground" />
+        <input value={name} maxLength={MAX_NAME} onChange={(e) => setName(e.target.value)} placeholder={t("cw.send.namePlaceholder")} className="h-10 w-0 flex-1 rounded-xl bg-card px-3 text-[14px] ring-1 ring-border outline-none focus:ring-foreground" />
         <button type="button" disabled={!name.trim()} onClick={save} className="h-10 rounded-xl bg-foreground px-4 text-[14px] font-semibold text-background disabled:opacity-40">
-          保存
+          {t("common.save")}
         </button>
       </div>
     </div>
@@ -73,33 +74,33 @@ export function BookPicker({ contacts, recent, current, onPick }: { contacts: Co
     <>
       <div className="mb-3 flex items-center justify-between">
         <span className="w-12" />
-        <span className="text-[17px] font-semibold">地址簿</span>
+        <span className="text-[17px] font-semibold">{t("cw.send.book")}</span>
         <Link href="/wallet/addresses" className="w-12 text-right text-[13px] font-medium text-muted-foreground">
-          管理
+          {t("attach.manage")}
         </Link>
       </div>
       {(contacts.length > 0 || recent.length > 0) && (
         <div className="flex h-10 items-center gap-2 rounded-2xl bg-muted px-3">
           <MagnifyingGlass size={16} className="text-muted-foreground" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索名称 / 地址" className="flex-1 bg-transparent text-[14px] outline-none" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("cw.send.searchBook")} className="flex-1 bg-transparent text-[14px] outline-none" />
         </div>
       )}
       {list.length > 0 && <ul className="mt-2 space-y-0.5">{list.map((c) => row(c.address, c.name))}</ul>}
       {others.length > 0 && (
         <>
-          <div className="mt-3 px-3 text-[12px] font-medium text-muted-foreground">最近转过</div>
+          <div className="mt-3 px-3 text-[12px] font-medium text-muted-foreground">{t("cw.send.recent")}</div>
           <ul className="mt-1 space-y-0.5">{others.map((a) => row(a))}</ul>
         </>
       )}
       {contacts.length === 0 && (
         <p className="py-6 text-center text-[13px] leading-6 text-muted-foreground">
-          还没有保存地址。
+          {t("cw.send.bookEmpty")}
           <br />
-          转账成功后可以顺手存进来，也可以去
+          {t("cw.send.bookEmptyBefore")}
           <Link href="/wallet/addresses" className="font-medium text-foreground underline underline-offset-4">
-            管理
+            {t("attach.manage")}
           </Link>
-          页添加。
+          {t("cw.send.bookEmptyAfter")}
         </p>
       )}
     </>
@@ -164,7 +165,7 @@ export function useScanSwitch() {
     const p = parsePayment(text);
     if (!p) return false;
     const c = p.chain ? chainByKey(p.chain) : null;
-    toast.info(c ? `这是 ${c.name} 的地址，已切换到 ${c.name}` : "这是 EVM 地址，请选择网络");
+    toast.info(c ? t("cw.send.scanSwitched", { chain: c.name }) : t("cw.send.scanEvmPick"));
     router.replace(sendLinkOf(p));
     return true;
   };
@@ -179,7 +180,7 @@ export function Result({ sent, explorer, to, saved }: { sent: Sent; explorer: st
     reverted: <XCircle size={56} weight="fill" className="text-down" />,
     error: <XCircle size={56} weight="fill" className="text-down" />,
   }[sent.status];
-  const title = { pending: "已发出，等待确认…", success: "转账成功", reverted: "交易失败（链上回滚）", error: "出错了" }[sent.status];
+  const title = { pending: t("cw.send.pending"), success: t("cw.send.success"), reverted: t("cw.send.reverted"), error: t("cw.send.error") }[sent.status];
   return (
     <div className="flex flex-col items-center py-4 text-center">
       {icon}
@@ -192,11 +193,11 @@ export function Result({ sent, explorer, to, saved }: { sent: Sent; explorer: st
       {sent.status === "success" && to && !wasSaved && !ret && <SaveContact to={to} />}
       {sent.status !== "pending" && ret ? (
         <button type="button" onClick={closeWallet} className="mt-6 flex h-14 w-full items-center justify-center rounded-2xl bg-primary text-[16px] font-semibold text-primary-foreground">
-          {sent.status === "success" ? "完成，返回聊天" : "返回聊天"}
+          {sent.status === "success" ? t("cw.send.doneBackToChat") : t("cw.send.backToChat")}
         </button>
       ) : sent.status !== "pending" && (
         <Link href="/wallet" className="mt-6 flex h-14 w-full items-center justify-center rounded-2xl bg-primary text-[16px] font-semibold text-primary-foreground">
-          完成
+          {t("common.done")}
         </Link>
       )}
     </div>

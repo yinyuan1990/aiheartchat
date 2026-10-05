@@ -1,4 +1,5 @@
 import { API_BASE } from "@/lib/api";
+import { t } from "./i18n";
 
 /**
  * 「AI 合约」 with the user's own LLM key (wallet plan §5.8). The prompt, indicators and the limit checks live on the
@@ -6,18 +7,20 @@ import { API_BASE } from "@/lib/api";
  * The key is sent in a header for each call and never stored on the server in manual mode.
  */
 
-export type AiProvider = { id: string; name: string; model: string; keyUrl?: string; note?: string };
+/** `nameKey` / `note`: i18n keys; `name` is the fallback shown when there is no `nameKey` */
+export type AiProvider = { id: string; name: string; nameKey?: string; model: string; keyUrl?: string; note?: string };
 export const AI_PROVIDERS: AiProvider[] = [
-  { id: "deepseek", name: "DeepSeek", model: "deepseek-chat", keyUrl: "https://platform.deepseek.com/api_keys", note: "推荐：国内直连、便宜，一次分析大约几分钱" },
-  { id: "siliconflow", name: "硅基流动", model: "deepseek-ai/DeepSeek-V3", keyUrl: "https://cloud.siliconflow.cn/account/ak" },
-  { id: "qwen", name: "通义千问", model: "qwen-plus", keyUrl: "https://bailian.console.aliyun.com/?apiKey=1" },
+  { id: "deepseek", name: "DeepSeek", model: "deepseek-chat", keyUrl: "https://platform.deepseek.com/api_keys", note: "cw.ai.noteDeepseek" },
+  { id: "siliconflow", name: "SiliconFlow", nameKey: "cw.ai.siliconflow", model: "deepseek-ai/DeepSeek-V3", keyUrl: "https://cloud.siliconflow.cn/account/ak" },
+  { id: "qwen", name: "Qwen", nameKey: "cw.ai.qwen", model: "qwen-plus", keyUrl: "https://bailian.console.aliyun.com/?apiKey=1" },
   { id: "moonshot", name: "Kimi", model: "moonshot-v1-32k", keyUrl: "https://platform.moonshot.cn/console/api-keys" },
-  { id: "zhipu", name: "智谱 GLM", model: "glm-4-flash", keyUrl: "https://open.bigmodel.cn/usercenter/apikeys" },
+  { id: "zhipu", name: "Zhipu GLM", nameKey: "cw.ai.zhipu", model: "glm-4-flash", keyUrl: "https://open.bigmodel.cn/usercenter/apikeys" },
   { id: "openrouter", name: "OpenRouter", model: "deepseek/deepseek-chat", keyUrl: "https://openrouter.ai/keys" },
-  { id: "openai", name: "OpenAI", model: "gpt-4o-mini", keyUrl: "https://platform.openai.com/api-keys", note: "服务器在香港，OpenAI 可能拒绝" },
-  { id: "custom", name: "自定义（OpenAI 兼容）", model: "", note: "填 https 公网地址，由服务器转发" },
+  { id: "openai", name: "OpenAI", model: "gpt-4o-mini", keyUrl: "https://platform.openai.com/api-keys", note: "cw.ai.noteOpenai" },
+  { id: "custom", name: "Custom", nameKey: "cw.ai.custom", model: "", note: "cw.ai.noteCustom" },
 ];
 export const providerOf = (id: string) => AI_PROVIDERS.find((p) => p.id === id) ?? AI_PROVIDERS[0];
+export const providerName = (p: AiProvider) => (p.nameKey ? t(p.nameKey) : p.name);
 
 export type AiConfig = { provider: string; model: string; key: string; baseUrl?: string; maxLeverage: number; maxPct: number; minConfidence: number };
 export const AI_CONFIG_KEY = "ai:config";
