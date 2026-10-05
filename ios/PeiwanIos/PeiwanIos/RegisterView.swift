@@ -20,7 +20,7 @@ struct RegisterView: View {
         VStack(spacing: 16) {
             Spacer()
 
-            Text("心之音")
+            Text(t("app.name"))
                 .font(.system(size: 34, weight: .semibold))
                 .tracking(8)
                 .foregroundStyle(Theme.gold)
@@ -41,7 +41,7 @@ struct RegisterView: View {
                             .frame(width: 84, height: 84)
                             .clipShape(Circle())
                     } else {
-                        Text("选择头像")
+                        Text(t("register.chooseAvatar"))
                             .font(.caption2)
                             .foregroundStyle(Theme.textSub)
                     }
@@ -49,14 +49,14 @@ struct RegisterView: View {
             }
             .padding(.bottom, 8)
 
-            field("昵称", text: $nickname)
+            field(t("register.nickname"), text: $nickname)
             // 年纪：点击弹滚轮选择
             Button {
                 pendingAge = age ?? 22
                 showAgeSheet = true
             } label: {
                 HStack {
-                    Text(age.map { "\($0) 岁" } ?? "年纪（点击选择）")
+                    Text(age.map { t("register.ageN", ["n": $0]) } ?? t("register.agePick"))
                         .foregroundStyle(age == nil ? Theme.textSub : Theme.text)
                     Spacer()
                     Text("›").font(.system(size: 20)).foregroundStyle(Theme.textDim)
@@ -67,12 +67,12 @@ struct RegisterView: View {
             .buttonStyle(.plain)
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("性别（注册后不可修改）")
+                Text(t("register.genderHint"))
                     .font(.caption)
                     .foregroundStyle(Theme.textSub)
                 HStack(spacing: 12) {
-                    genderItem(1, "男")
-                    genderItem(2, "女")
+                    genderItem(1, t("register.male"))
+                    genderItem(2, t("register.female"))
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -84,7 +84,7 @@ struct RegisterView: View {
             }
 
             Button(action: submit) {
-                Text(loading ? "创建中…" : "进入")
+                Text(loading ? t("register.creating") : t("register.enter"))
                     .font(.system(size: 16, weight: .semibold))
                     .tracking(4)
                     .frame(maxWidth: .infinity)
@@ -98,7 +98,7 @@ struct RegisterView: View {
             .disabled(loading)
             .padding(.top, 8)
 
-            Text("无需密码，账号与本机自动绑定\n卸载重装后自动恢复")
+            Text(t("register.noPasswordIos"))
                 .font(.caption)
                 .foregroundStyle(Theme.textSub)
                 .multilineTextAlignment(.center)
@@ -106,21 +106,21 @@ struct RegisterView: View {
 
             // 18 岁限制 + 协议入口
             VStack(spacing: 3) {
-                Text("本平台仅限年满 18 周岁用户使用")
+                Text(t("register.adultsOnly"))
                     .font(.caption2)
                     .foregroundStyle(Theme.textSub)
                 HStack(spacing: 0) {
-                    Text("注册即代表已满 18 周岁并同意")
+                    Text(t("register.agreePrefix"))
                         .font(.caption2)
                         .foregroundStyle(Theme.textSub)
-                    Text("《用户协议》")
+                    Text(t("register.userAgreement"))
                         .font(.caption2)
                         .foregroundStyle(Theme.accent)
                         .onTapGesture { agreementIsPrivacy = false; showAgreement = true }
-                    Text("与")
+                    Text(t("register.and"))
                         .font(.caption2)
                         .foregroundStyle(Theme.textSub)
-                    Text("《隐私政策》")
+                    Text(t("register.privacyPolicy"))
                         .font(.caption2)
                         .foregroundStyle(Theme.accent)
                         .onTapGesture { agreementIsPrivacy = true; showAgreement = true }
@@ -138,12 +138,12 @@ struct RegisterView: View {
         .sheet(isPresented: $showAgeSheet) {
             VStack(spacing: 0) {
                 HStack {
-                    Button("取消") { showAgeSheet = false }
+                    Button(t("common.cancel")) { showAgeSheet = false }
                         .font(.system(size: 14)).foregroundStyle(Theme.textSub)
                     Spacer()
-                    Text("选择年纪").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text)
+                    Text(t("profile.pickAge")).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text)
                     Spacer()
-                    Button("确定") { age = pendingAge; showAgeSheet = false }
+                    Button(t("common.ok")) { age = pendingAge; showAgeSheet = false }
                         .font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.accent)
                 }
                 .padding(16)
@@ -185,11 +185,11 @@ struct RegisterView: View {
 
     private func submit() {
         guard let avatarData else {
-            error = "请选择头像"
+            error = t("register.needAvatar")
             return
         }
         guard !nickname.trimmingCharacters(in: .whitespaces).isEmpty, let age, gender != 0 else {
-            error = "请填写昵称、选择年纪和性别"
+            error = t("register.errFields")
             return
         }
         loading = true

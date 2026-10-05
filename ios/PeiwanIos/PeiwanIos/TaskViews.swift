@@ -1,15 +1,21 @@
 import SwiftUI
 
-private let taskStatus: [Int: (String, Color)] = [
-    0: ("待接单", Theme.warn), 1: ("进行中", Theme.success),
-    2: ("已完成", Theme.textSub), 3: ("已取消", Theme.textDim), 4: ("仲裁中", Theme.accent),
-]
+private func taskStatus(_ s: Int) -> (String, Color) {
+    switch s {
+    case 0: return (t("task.status.pending"), Theme.warn)
+    case 1: return (t("task.status.ongoing"), Theme.success)
+    case 2: return (t("task.status.completed"), Theme.textSub)
+    case 3: return (t("task.status.cancelled"), Theme.textDim)
+    case 4: return (t("task.status.arbitrating"), Theme.accent)
+    default: return (t("task.status.unknown"), Theme.textSub)
+    }
+}
 
 struct TaskStatusTag: View {
     let status: Int
     var body: some View {
-        let (t, c) = taskStatus[status] ?? ("未知", Theme.textSub)
-        Text(t).font(.system(size: 11)).foregroundStyle(c)
+        let (label, c) = taskStatus(status)
+        Text(label).font(.system(size: 11)).foregroundStyle(c)
             .padding(.horizontal, 8).padding(.vertical, 2)
             .background(RoundedRectangle(cornerRadius: 4).fill(Theme.bg3))
     }
@@ -26,7 +32,7 @@ struct TaskCardView: View {
                         TaskStatusTag(status: t.status ?? 0)
                     }
                     Text("\(t.cityName ?? "") · \(t.address ?? "")").font(.system(size: 12)).foregroundStyle(Theme.textSub)
-                    Text("\(t.applyCount ?? 0) 人已报名").font(.system(size: 11)).foregroundStyle(Theme.textDim)
+                    Text(PeiwanIos.t("task.card.applyCount", ["n": t.applyCount ?? 0])).font(.system(size: 11)).foregroundStyle(Theme.textDim)
                 }
                 Spacer()
                 Text(fmtPoints(t.reward)).font(.system(size: 20, weight: .bold)).foregroundStyle(Theme.accent)
@@ -44,11 +50,11 @@ struct TaskHallView: View {
     @State private var items: [TaskOrder] = []
     var body: some View {
         Group {
-            if items.isEmpty { EmptyHint(text: "暂无可接约单") }
+            if items.isEmpty { EmptyHint(text: t("task.hall.empty")) }
             else { ScrollView { LazyVStack(spacing: 0) { ForEach(items) { TaskCardView(t: $0) } } } }
         }
         .fullBg()
-        .navigationTitle("接单大厅")
+        .navigationTitle(t("task.hall.title"))
         .navigationBarTitleDisplayMode(.inline)
         .compatNavBarBackground(Theme.bg)
         .task { items = (try? await Api.request("/tasks/hall")) ?? [] }
@@ -62,11 +68,11 @@ struct TaskMineView: View {
     private var isFemale: Bool { state.user?.gender == 2 }
     var body: some View {
         Group {
-            if items.isEmpty { EmptyHint(text: "暂无记录") }
+            if items.isEmpty { EmptyHint(text: t("task.mine.empty")) }
             else { ScrollView { LazyVStack(spacing: 0) { ForEach(items) { TaskCardView(t: $0) } } } }
         }
         .fullBg()
-        .navigationTitle(isFemale ? "我的接单" : "我的约单")
+        .navigationTitle(isFemale ? t("me.myTasksGuide") : t("me.myTasks"))
         .navigationBarTitleDisplayMode(.inline)
         .compatNavBarBackground(Theme.bg)
         .task { items = (try? await Api.request(isFemale ? "/tasks/taken" : "/tasks/mine")) ?? [] }
@@ -86,8 +92,8 @@ struct TaskPostView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 10) {
-                inputField("做什么，如 周末陪逛展", text: $title)
-                DatePicker("时间", selection: $meetAt, in: Date()...)
+                inputField(t("task.post.titleHint"), text: $title)
+                DatePicker(t("task.post.time"), selection: $meetAt, in: Date()...)
                     .datePickerStyle(.compact)
                     .foregroundStyle(Theme.textSub)
                     .tint(Theme.accent)
@@ -95,9 +101,9 @@ struct TaskPostView: View {
                     .padding(14)
                     .background(RoundedRectangle(cornerRadius: 12).fill(Theme.bg2))
                 HStack {
-                    TextField("", text: $city, prompt: Text("城市").foregroundColor(Theme.textDim))
+                    TextField("", text: $city, prompt: Text(t("task.post.city")).foregroundColor(Theme.textDim))
                         .foregroundStyle(Theme.text)
-                    Button("定位") {
+                    Button(t("profile.locate")) {
                         CityLocator.shared.detect { name in
                             DispatchQueue.main.async { if let name { city = name } }
                         }
@@ -106,22 +112,22 @@ struct TaskPostView: View {
                 }
                 .padding(14)
                 .background(RoundedRectangle(cornerRadius: 12).fill(Theme.bg2))
-                inputField("地点", text: $address)
-                TextField("", text: $reward, prompt: Text("报酬（积分）").foregroundColor(Theme.textDim))
+                inputField(t("task.post.place"), text: $address)
+                TextField("", text: $reward, prompt: Text(t("task.post.reward")).foregroundColor(Theme.textDim))
                     .keyboardType(.decimalPad)
                     .foregroundStyle(Theme.text)
                     .padding(14)
                     .background(RoundedRectangle(cornerRadius: 12).fill(Theme.bg2))
 
-                AccentButton(title: "托管发布", enabled: !title.isEmpty && !city.isEmpty && !address.isEmpty && !reward.isEmpty) { post() }
+                AccentButton(title: t("task.post.submit"), enabled: !title.isEmpty && !city.isEmpty && !address.isEmpty && !reward.isEmpty) { post() }
                     .padding(.top, 6)
-                Text("报酬冻结托管，完成后打给对方；发布后自动推送给同城用户")
+                Text(t("task.post.hint"))
                     .font(.system(size: 12)).foregroundStyle(Theme.textSub)
             }
             .padding(16)
         }
         .fullBg()
-        .navigationTitle("发布约单")
+        .navigationTitle(t("task.post.title"))
         .navigationBarTitleDisplayMode(.inline)
         .compatNavBarBackground(Theme.bg)
         .toast($toastMsg)
@@ -172,11 +178,13 @@ struct TaskDetailView: View {
                             Text(detail.title ?? "").font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.text)
                             TaskStatusTag(status: detail.status ?? 0)
                         }
-                        Text("时间：\(String((detail.meetAt ?? "").replacingOccurrences(of: "T", with: " ").prefix(16)))")
+                        let meetTime = String((detail.meetAt ?? "").replacingOccurrences(of: "T", with: " ").prefix(16))
+                        let rewardText = t("task.detail.rewardLabel") + t("task.pointsN", ["n": fmtPoints(detail.reward)]) + t("task.detail.escrowed")
+                        Text(t("task.detail.time", ["time": meetTime]))
                             .font(.system(size: 13)).foregroundStyle(Theme.textSub)
-                        Text("地点：\(detail.cityName ?? "") · \(detail.address ?? "")")
+                        Text(t("task.detail.place", ["city": detail.cityName ?? "", "address": detail.address ?? ""]))
                             .font(.system(size: 13)).foregroundStyle(Theme.textSub)
-                        Text("报酬：\(fmtPoints(detail.reward)) 积分（已托管）")
+                        Text(rewardText)
                             .font(.system(size: 13)).foregroundStyle(Theme.accent)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -184,16 +192,16 @@ struct TaskDetailView: View {
                     .background(RoundedRectangle(cornerRadius: 12).fill(Theme.bg2))
 
                     if isFemale && detail.status == 0 && detail.isOwner != true {
-                        TextField("", text: $msg, prompt: Text("报名留言（可选）").foregroundColor(Theme.textDim))
+                        TextField("", text: $msg, prompt: Text(t("task.detail.applyMsg")).foregroundColor(Theme.textDim))
                             .foregroundStyle(Theme.text)
                             .padding(14)
                             .background(RoundedRectangle(cornerRadius: 12).fill(Theme.bg2))
-                        AccentButton(title: "报名接单") {
+                        AccentButton(title: t("task.detail.apply")) {
                             Task {
                                 do {
                                     struct Empty: Codable { var id: String? }
                                     let _: Empty = try await Api.request("/tasks/\(taskId)/apply", method: "POST", body: ["message": msg])
-                                    toastMsg = "报名成功"
+                                    toastMsg = t("task.detail.applyOk")
                                     await load()
                                 } catch { toastMsg = error.localizedDescription }
                             }
@@ -201,7 +209,7 @@ struct TaskDetailView: View {
                     }
 
                     if detail.isOwner == true && detail.status == 0 {
-                        Text("报名列表（\(detail.applies?.count ?? 0)）")
+                        Text(t("task.detail.applicants", ["n": detail.applies?.count ?? 0]))
                             .font(.system(size: 13)).foregroundStyle(Theme.textSub)
                             .padding(.vertical, 4)
                         ForEach(detail.applies ?? []) { a in
@@ -218,23 +226,23 @@ struct TaskDetailView: View {
                                     Button {
                                         act("/tasks/\(taskId)/choose/\(a.id)")
                                     } label: {
-                                        Text("选TA").font(.system(size: 13)).foregroundStyle(.white)
+                                        Text(t("task.detail.choose")).font(.system(size: 13)).foregroundStyle(.white)
                                             .padding(.horizontal, 14).padding(.vertical, 6)
                                             .background(Capsule().fill(Theme.accent))
                                     }
                                     .buttonStyle(.plain)
                                 } else if a.status == 1 {
-                                    Text("已选中").font(.system(size: 12)).foregroundStyle(Theme.success)
+                                    Text(t("task.detail.chosen")).font(.system(size: 12)).foregroundStyle(Theme.success)
                                 }
                             }
                             .padding(.vertical, 8)
                         }
-                        AccentButton(title: "取消约单") { act("/tasks/\(taskId)/cancel") }
+                        AccentButton(title: t("task.detail.cancel")) { act("/tasks/\(taskId)/cancel") }
                             .padding(.top, 10)
                     }
 
                     if detail.isOwner == true && detail.status == 1 {
-                        AccentButton(title: "确认完成并结算") { act("/tasks/\(taskId)/finish") }
+                        AccentButton(title: t("task.detail.finish")) { act("/tasks/\(taskId)/finish") }
                             .padding(.top, 10)
                     }
                 }
@@ -242,7 +250,7 @@ struct TaskDetailView: View {
             }
         }
         .fullBg()
-        .navigationTitle("约单详情")
+        .navigationTitle(t("task.detail.title"))
         .navigationBarTitleDisplayMode(.inline)
         .compatNavBarBackground(Theme.bg)
         .toast($toastMsg)

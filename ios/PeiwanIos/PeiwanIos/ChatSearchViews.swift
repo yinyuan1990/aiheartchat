@@ -71,7 +71,7 @@ extension Notification.Name {
     static let noticesRead = Notification.Name("noticesRead")
 }
 
-func noticeTitle(_ kind: String) -> String { kind == "task" ? "接单通知" : "评论通知" }
+func noticeTitle(_ kind: String) -> String { kind == "task" ? t("chat.notice.task") : t("chat.notice.comment") }
 
 /// 评论 / 接单系统会话的圆形图标
 struct NoticeIconView: View {
@@ -237,7 +237,7 @@ struct ChatSearchView: View {
         HStack(spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").font(.system(size: 16, weight: .medium)).foregroundStyle(Theme.textSub)
-                TextField("搜索", text: $q)
+                TextField(t("common.search"), text: $q)
                     .font(.system(size: 17))
                     .foregroundStyle(Theme.text)
                     .tint(Theme.accent)
@@ -274,8 +274,8 @@ struct ChatSearchView: View {
     private var tabs: some View {
         let msgCount = resultQuery == keyword ? (result.messages?.count ?? 0) : 0
         return HStack(spacing: 6) {
-            tabPill("聊天", 0)
-            tabPill(msgCount > 0 ? "消息 \(msgCount)" : "消息", 1)
+            tabPill(t("chatSearch.tabChats"), 0)
+            tabPill(msgCount > 0 ? t("chatSearch.tabMessagesN", ["n": msgCount]) : t("chatSearch.tabMessages"), 1)
             Spacer()
         }
         .padding(EdgeInsets(top: 2, leading: 16, bottom: 8, trailing: 16))
@@ -316,9 +316,9 @@ struct ChatSearchView: View {
         }
         let rows = recentRows
         if rows.isEmpty {
-            hint("搜索聊天、消息内容和用户")
+            hint(t("chatSearch.hint"))
         } else {
-            sectionHead("最近", action: "清空") { recent = []; SearchRecentStore.save([]) }
+            sectionHead(t("chatSearch.recent"), action: t("chat.clear")) { recent = []; SearchRecentStore.save([]) }
             ForEach(rows, id: \.self) { r in recentRow(r) }
         }
     }
@@ -361,27 +361,28 @@ struct ChatSearchView: View {
         ForEach(chatHits) { convRow($0) }
         ForEach(knownHits) { convRow($0) }
         if !userHits.isEmpty {
-            sectionHead("全局搜索")
+            sectionHead(t("chatSearch.global"))
             ForEach(userHits) { u in
                 let sub = userHitSubtitle(u)
-                userRow(SearchRecent(kind: "user", id: u.id, title: u.nickname ?? "", avatar: u.avatar ?? "", subtitle: sub.isEmpty ? "用户" : sub))
+                userRow(SearchRecent(kind: "user", id: u.id, title: u.nickname ?? "", avatar: u.avatar ?? "", subtitle: sub.isEmpty ? t("chatSearch.user") : sub))
             }
         }
         if extraHits.isEmpty && chatHits.isEmpty && knownHits.isEmpty && userHits.isEmpty {
-            hint(loading ? "搜索中…" : "没有找到相关聊天")
+            hint(loading ? t("chatSearch.searching") : t("chatSearch.noChats"))
         }
     }
 
     private func userHitSubtitle(_ u: SearchUserHit) -> String {
-        if u.isBot == true { return "@\(u.username ?? "") · 机器人" }
-        let parts: [String?] = [u.age.flatMap { $0 > 0 ? "\($0) 岁" : nil }, u.cityName.flatMap { $0.isEmpty ? nil : $0 }]
+        if u.isBot == true { return t("chatSearch.botSub", ["username": u.username ?? ""]) }
+        let age: String? = u.age.flatMap { $0 > 0 ? t("chatSearch.age", ["n": $0]) : nil }
+        let parts: [String?] = [age, u.cityName.flatMap { $0.isEmpty ? nil : $0 }]
         return parts.compactMap { $0 }.joined(separator: " · ")
     }
 
     @ViewBuilder private var messagesContent: some View {
         let hits = resultQuery == keyword ? (result.messages ?? []) : []
         ForEach(hits) { m in messageRow(m) }
-        if hits.isEmpty { hint(loading ? "搜索中…" : "没有找到相关消息") }
+        if hits.isEmpty { hint(loading ? t("chatSearch.searching") : t("chatSearch.noMessages")) }
     }
 
     // MARK: 行
@@ -394,7 +395,7 @@ struct ChatSearchView: View {
     private func openConv(_ c: ConversationItem, focusMsgId: String? = nil) {
         addRecent(SearchRecent(kind: "conv", id: c.id))
         focused = false
-        let title = c.type == 2 ? "\(convTitle(c))（群）" : convTitle(c)
+        let title = c.type == 2 ? t("chat.groupTitle", ["name": convTitle(c)]) : convTitle(c)
         onOpenChat(ChatTarget(convId: c.id, convType: c.type, targetId: convTarget(c), title: title, focusMsgId: focusMsgId))
     }
 
@@ -413,7 +414,7 @@ struct ChatSearchView: View {
     }
 
     private func groupTag() -> some View {
-        Text("群").font(.system(size: 10)).foregroundStyle(Theme.textSub)
+        Text(t("chat.groupTag")).font(.system(size: 10)).foregroundStyle(Theme.textSub)
             .padding(.horizontal, 4)
             .background(RoundedRectangle(cornerRadius: 4).fill(Theme.bg3))
     }
@@ -459,12 +460,13 @@ struct ChatSearchView: View {
     private func messageRow(_ m: SearchMsgHit) -> some View {
         let isGroup = m.convType == 2
         let sender = m.senderNickname ?? ""
+        let senderPrefix = t("chatSearch.senderPrefix", ["name": sender])
         return row(action: {
             if let c = convs.first(where: { $0.id == m.conversationId }) {
                 openConv(c, focusMsgId: m.id)
             } else {
                 focused = false
-                let title = isGroup ? "\(m.title ?? "")（群）" : (m.title ?? "")
+                let title = isGroup ? t("chat.groupTitle", ["name": m.title ?? ""]) : (m.title ?? "")
                 onOpenChat(ChatTarget(convId: m.conversationId, convType: m.convType ?? 1, targetId: m.targetId ?? "", title: title, focusMsgId: m.id))
             }
         }) {
@@ -476,7 +478,7 @@ struct ChatSearchView: View {
                 Spacer(minLength: 8)
                 Text(shortDate(m.createdAt)).font(.system(size: 11)).foregroundStyle(Theme.textDim)
             }
-            ((isGroup || sender == "我" ? Text("\(sender)：").foregroundColor(Theme.text) : Text(""))
+            ((isGroup || sender == "我" ? Text(senderPrefix).foregroundColor(Theme.text) : Text(""))
                 + highlighted(m.content ?? "", keyword))
                 .font(.system(size: 13)).foregroundColor(Theme.textSub).lineLimit(2)
         }
@@ -508,7 +510,7 @@ struct NoticesView: View {
         Group {
             if let list {
                 if list.isEmpty {
-                    EmptyHint(text: kind == "task" ? "暂无接单消息" : "暂无评论消息")
+                    EmptyHint(text: kind == "task" ? t("chat.notice.taskEmpty") : t("chat.notice.commentEmpty"))
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 0) { ForEach(list) { row($0) } }

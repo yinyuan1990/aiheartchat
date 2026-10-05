@@ -123,6 +123,15 @@ private fun SplashContent() {
         Column(Modifier.align(Alignment.Center).offset(y = (-24).dp), horizontalAlignment = Alignment.CenterHorizontally) {
             HeartGlyph(pulse, glow)
             Spacer(Modifier.height(44.dp))
+            // 竖排逐字只适合中文；其它语言两行横排淡入
+            if (com.wh.peiwana.i18n.I18n.lang != "zh") {
+                val a by animateFloatAsState(if (shown) 1f else 0f, tween(900, delayMillis = 200), label = "slogan")
+                Column(Modifier.alpha(a).padding(horizontal = 32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(com.wh.peiwana.i18n.t("boot.slogan1"), color = TextMain, fontSize = 22.sp, fontWeight = FontWeight.Medium, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    Spacer(Modifier.height(10.dp))
+                    Text(com.wh.peiwana.i18n.t("boot.slogan2"), color = TextSub, fontSize = 16.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                }
+            } else
             // 右起竖读：右列第一句，左列第二句略下沉，左列底下一枚「心」印
             Row(verticalAlignment = Alignment.Top) {
                 Column(Modifier.padding(top = 56.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -142,7 +151,7 @@ private fun SplashContent() {
 
         // 底部品牌 + 三点加载
         Column(Modifier.align(Alignment.BottomCenter).padding(bottom = 54.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("心 之 音", color = TextSub, fontSize = 13.sp, letterSpacing = 4.sp)
+            Text(com.wh.peiwana.i18n.t("boot.brand"), color = TextSub, fontSize = 13.sp, letterSpacing = 4.sp)
             Spacer(Modifier.height(4.dp))
             Text("LOVE HAS NOTHING TO DO WITH MONEY", color = TextDim, fontSize = 9.sp, letterSpacing = 2.sp)
             Spacer(Modifier.height(18.dp))

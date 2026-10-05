@@ -80,7 +80,7 @@ struct MediaViewerView: View {
 
     private var counter: String {
         var s = ""
-        if groups.count > 1 { s += "\(group + 1) / \(groups.count) 条" }
+        if groups.count > 1 { s += t("gallery.postIndex", ["i": group + 1, "n": groups.count]) }
         let n = groups.indices.contains(group) ? groups[group].count : 0
         if n > 1 { s += (s.isEmpty ? "" : " · ") + "\(indexes[group] + 1) / \(n)" }
         return s

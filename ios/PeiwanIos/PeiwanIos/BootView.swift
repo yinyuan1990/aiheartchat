@@ -81,6 +81,17 @@ private struct SplashContent: View {
                     .frame(width: 96, height: 96)
                     .scaleEffect(pulse ? 1.06 : 0.94)
 
+                // 竖排逐字只适合中文；其它语言两行横排淡入
+                if I18nStore.shared.lang != "zh" {
+                    VStack(spacing: 10) {
+                        Text(t("boot.slogan1")).font(.system(size: 22, weight: .medium)).foregroundStyle(Theme.text)
+                        Text(t("boot.slogan2")).font(.system(size: 16)).foregroundStyle(Theme.textSub)
+                    }
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                    .opacity(shown ? 1 : 0)
+                    .animation(.easeOut(duration: 0.9).delay(0.2), value: shown)
+                } else {
                 // 右起竖读：右列第一句，左列第二句略下沉，左列底下一枚「心」印
                 HStack(alignment: .top, spacing: 26) {
                     VStack(spacing: 14) {
@@ -96,12 +107,13 @@ private struct SplashContent: View {
                     // 浅色主题：主句用正文色（原来写死白色，白底上看不见）
                     VerticalChars(text: "爱情和金钱无关", shown: shown, startIndex: 0, size: 24, color: Theme.text, weight: .medium)
                 }
+                }
             }
             .offset(y: -24)
 
             // 底部品牌 + 三点加载
             VStack(spacing: 4) {
-                Text("心 之 音").font(.system(size: 13)).tracking(4).foregroundStyle(Theme.textSub)
+                Text(t("boot.brand")).font(.system(size: 13)).tracking(4).foregroundStyle(Theme.textSub)
                 Text("LOVE HAS NOTHING TO DO WITH MONEY").font(.system(size: 9)).tracking(2).foregroundStyle(Theme.textDim)
                 HStack(spacing: 6) {
                     ForEach(0..<3, id: \.self) { i in

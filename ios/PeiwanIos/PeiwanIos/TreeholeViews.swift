@@ -67,7 +67,7 @@ final class TreeholeStore: ObservableObject {
 
 // MARK: - 工具
 
-private let channelName = "私密树洞"
+private func channelName() -> String { t("treehole.channel") }
 private let channelColor = Color(red: 0.706, green: 0.549, blue: 1.0)   // #B48CFF
 private let linkBlue = Color(red: 0.353, green: 0.663, blue: 1.0)       // #5AA9FF
 private let nameColors: [Color] = [
@@ -79,6 +79,11 @@ private let nameColors: [Color] = [
 
 /// 阅读数：1234 → 1.2K，12345 → 1.2万
 func fmtCount(_ n: Int) -> String {
+    if I18nStore.shared.lang != "zh" {
+        if n >= 100_000 { return "\(n / 1_000)K" }
+        if n >= 1_000 { return String(format: "%.1fK", Double(n) / 1_000) }
+        return "\(n)"
+    }
     if n >= 100_000 { return "\(n / 10_000)万" }
     if n >= 10_000 { return String(format: "%.1f万", Double(n) / 10_000) }
     if n >= 1_000 { return String(format: "%.1fK", Double(n) / 1_000) }
@@ -94,7 +99,9 @@ func fmtTreeholeTime(_ iso: String?) -> String {
     if cal.isDateInToday(d) {
         df.dateFormat = "HH:mm"
     } else if cal.component(.year, from: d) == cal.component(.year, from: Date()) {
-        df.dateFormat = "M月d日 HH:mm"
+        df.dateFormat = "HH:mm"
+        let time = df.string(from: d)
+        return t("treehole.monthDay", ["m": cal.component(.month, from: d), "d": cal.component(.day, from: d), "time": time])
     } else {
         df.dateFormat = "yyyy/M/d HH:mm"
     }
@@ -117,7 +124,7 @@ struct TreeholeSectionView: View {
         ZStack(alignment: .bottomTrailing) {
             if store.items.isEmpty {
                 ScrollView {
-                    EmptyHint(text: store.loaded ? "树洞还是空的\n说点只想让陌生人听见的话吧" : "加载中…")
+                    EmptyHint(text: store.loaded ? t("treehole.emptyTitle") + "\n" + t("treehole.emptySub") : t("common.loading"))
                         .frame(height: 360)
                 }
                 .refreshable { await store.refresh() }
@@ -149,7 +156,7 @@ struct TreeholeSectionView: View {
             }
 
             RouteLink(.treeholePublish) {
-                Text("✎ 写树洞")
+                Text("✎ " + t("treehole.write"))
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 18).padding(.vertical, 12)
@@ -176,7 +183,8 @@ func treeholeShareLink(_ id: String) -> URL { URL(string: "https://app.yyheart.c
 func shareTreehole(_ post: TreeholePost) {
     let raw = post.content.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
     let imgs = post.images ?? []
-    let text = raw.isEmpty ? "\(channelName) · \(imgs.count) 张图片" : String(raw.prefix(60))
+    let imgCount = t("treehole.imageCount", ["n": imgs.count])
+    let text = raw.isEmpty ? "\(channelName()) · \(imgCount)" : String(raw.prefix(60))
     let link = treeholeShareLink(post.id)
     guard let first = imgs.first else {
         ShareSheet.present([ShareLinkItem(payload: "\(text)\n\(link.absoluteString)", title: text, url: link)])
@@ -205,7 +213,7 @@ struct TreeholeCardView: View {
     var body: some View {
         let imgs = post.images ?? []
         VStack(alignment: .leading, spacing: 0) {
-            Text(channelName).font(.system(size: 13, weight: .semibold)).foregroundStyle(channelColor)
+            Text(channelName()).font(.system(size: 13, weight: .semibold)).foregroundStyle(channelColor)
                 .padding(.horizontal, 14)
             // 配图：单图通栏（Telegram 式，左右出血），多图网格
             if imgs.count == 1 {
@@ -244,7 +252,7 @@ struct TreeholeCardView: View {
                 Button { shareTreehole(post) } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "square.and.arrow.up").font(.system(size: 12))
-                        Text("分享").font(.system(size: 12))
+                        Text(t("common.share")).font(.system(size: 12))
                     }
                     .foregroundStyle(Theme.textSub)
                     .padding(.trailing, 8).padding(.vertical, 2)
@@ -273,7 +281,8 @@ struct TreeholeCardView: View {
                             }
                         }
                     }
-                    Text((post.commentCount ?? 0) > 0 ? "\(post.commentCount ?? 0) 条评论" : "发表评论")
+                    let commentN = post.commentCount ?? 0
+                    Text(commentN > 0 ? t("treehole.commentCount", ["n": commentN]) : t("treehole.addComment"))
                         .font(.system(size: 14, weight: .medium)).foregroundStyle(linkBlue)
                     Spacer()
                     Text("›").font(.system(size: 20)).foregroundStyle(linkBlue)
@@ -310,8 +319,8 @@ struct TreeholeDetailView: View {
     @FocusState private var inputFocused: Bool
 
     private var title: String {
-        if let c = post?.commentCount, c > 0 { return "\(c) 条评论" }
-        return channelName
+        if let c = post?.commentCount, c > 0 { return t("treehole.commentCount", ["n": c]) }
+        return channelName()
     }
 
     var body: some View {
@@ -322,12 +331,12 @@ struct TreeholeDetailView: View {
                         if let p = post {
                             TreeholeCardView(post: p, clamp: false)
                             // 评论区标题（和动态详情一致的平铺列表，不再用聊天气泡）
-                            Text(comments.isEmpty ? "还没有人评论，来说第一句" : "全部评论（\(comments.count)）")
+                            Text(comments.isEmpty ? t("treehole.noComments") : t("treehole.allComments", ["n": comments.count]))
                                 .font(.system(size: comments.isEmpty ? 13 : 15, weight: .semibold))
                                 .foregroundStyle(comments.isEmpty ? Theme.textSub : Theme.text)
                                 .padding(.top, 18).padding(.bottom, 6).padding(.leading, 2)
                         } else {
-                            Text("加载中…").font(.system(size: 13)).foregroundStyle(Theme.textSub)
+                            Text(t("common.loading")).font(.system(size: 13)).foregroundStyle(Theme.textSub)
                                 .frame(maxWidth: .infinity).padding(.top, 60)
                         }
                         ForEach(comments) { c in
@@ -336,13 +345,13 @@ struct TreeholeDetailView: View {
                                 AvatarView(url: c.user?.avatar, size: 32)
                                 VStack(alignment: .leading, spacing: 0) {
                                     HStack(spacing: 8) {
-                                        Text(c.user?.nickname ?? "用户")
+                                        Text(c.user?.nickname ?? t("treehole.user"))
                                             .font(.system(size: 13, weight: .semibold))
                                             .foregroundStyle(nameColor(c.user?.id ?? c.id))
                                             .lineLimit(1)
                                         Text(fmtTreeholeTime(c.createdAt)).font(.system(size: 11)).foregroundStyle(Theme.textDim)
                                         Spacer(minLength: 0)
-                                        Button("回复") { replyTo = c; inputFocused = true }
+                                        Button(t("treehole.reply")) { replyTo = c; inputFocused = true }
                                             .font(.system(size: 12)).foregroundStyle(Theme.textSub)
                                             .buttonStyle(.plain)
                                             .padding(.leading, 12).padding(.vertical, 2)
@@ -378,9 +387,9 @@ struct TreeholeDetailView: View {
                 HStack(spacing: 10) {
                     if let s = sticker { PendingStickerChip(p: s) { sticker = nil } }
                     if let r = replyTo {
-                        Text("回复 @\(r.user?.nickname ?? "")").font(.system(size: 12)).foregroundStyle(Theme.accent)
+                        Text(t("treehole.replyTo", ["name": r.user?.nickname ?? ""])).font(.system(size: 12)).foregroundStyle(Theme.accent)
                         Spacer()
-                        Button("取消") { replyTo = nil }.font(.system(size: 12)).foregroundStyle(Theme.textSub)
+                        Button(t("common.cancel")) { replyTo = nil }.font(.system(size: 12)).foregroundStyle(Theme.textSub)
                     } else {
                         Spacer()
                     }
@@ -401,14 +410,14 @@ struct TreeholeDetailView: View {
                     .buttonStyle(.plain)
                     CompatVerticalTextField(
                         text: $input,
-                        prompt: Text(replyTo != nil ? "回复 @\(replyTo?.user?.nickname ?? "")" : "说点什么…").foregroundColor(Theme.textSub),
+                        prompt: Text(inputPrompt).foregroundColor(Theme.textSub),
                         lineRange: 1...4
                     )
                     .focused($inputFocused)
                     .padding(.horizontal, 14).padding(.vertical, 10)
                     .background(RoundedRectangle(cornerRadius: 20).fill(Theme.bg3))
                     .foregroundStyle(Theme.text)
-                    Button(sending ? "发送中" : "发送") { send() }
+                    Button(sending ? t("treehole.sending") : t("common.send")) { send() }
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(canSend ? Theme.accent : Theme.textDim)
                         .disabled(!canSend)
@@ -429,18 +438,23 @@ struct TreeholeDetailView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 // 只有自己的投稿才能删
                 if post?.mine == true {
-                    Button("删除") { confirmDelete = true }.font(.system(size: 14)).foregroundStyle(Theme.textSub)
+                    Button(t("common.delete")) { confirmDelete = true }.font(.system(size: 14)).foregroundStyle(Theme.textSub)
                 }
             }
         }
-        .alert("删除这条树洞？", isPresented: $confirmDelete) {
-            Button("删除", role: .destructive) { remove() }
-            Button("取消", role: .cancel) {}
+        .alert(t("treehole.deleteTitle"), isPresented: $confirmDelete) {
+            Button(t("common.delete"), role: .destructive) { remove() }
+            Button(t("common.cancel"), role: .cancel) {}
         } message: {
-            Text("评论也会一起消失")
+            Text(t("treehole.deleteBody"))
         }
         .toast($toastMsg)
         .task { await load() }
+    }
+
+    private var inputPrompt: String {
+        if let r = replyTo { return t("treehole.replyTo", ["name": r.user?.nickname ?? ""]) }
+        return t("treehole.inputPlaceholder")
     }
 
     private var canSend: Bool {
@@ -450,7 +464,7 @@ struct TreeholeDetailView: View {
     private func load() async {
         post = try? await Api.request("/treehole/\(postId)")
         if post == nil {
-            toastMsg = "内容不存在"
+            toastMsg = t("treehole.notFound")
             return
         }
         comments = (try? await Api.request("/treehole/\(postId)/comments")) ?? []
@@ -516,7 +530,7 @@ struct TreeholePublishView: View {
         VStack(alignment: .leading, spacing: 10) {
             ZStack(alignment: .topLeading) {
                 if content.isEmpty {
-                    Text("把想说却无处说的话放进树洞…")
+                    Text(t("treehole.publishPlaceholder"))
                         .font(.system(size: 15)).foregroundStyle(Theme.textSub)
                         .padding(.horizontal, 18).padding(.top, 22)
                 }
@@ -563,7 +577,7 @@ struct TreeholePublishView: View {
             }
 
             HStack {
-                Text("匿名发布：其他人只能看到内容，不会显示你的昵称和头像")
+                Text(t("treehole.anonHint"))
                     .font(.system(size: 11)).foregroundStyle(Theme.textDim)
                 Spacer()
                 Text("\(content.count) / \(maxLen)").font(.system(size: 11)).foregroundStyle(Theme.textDim)
@@ -572,12 +586,12 @@ struct TreeholePublishView: View {
         }
         .padding(16)
         .fullBg()
-        .navigationTitle("写树洞")
+        .navigationTitle(t("treehole.write"))
         .navigationBarTitleDisplayMode(.inline)
         .compatNavBarBackground(Theme.bg)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button(busy ? "发布中" : "发布") { submit() }
+                Button(busy ? t("treehole.publishing") : t("treehole.publish")) { submit() }
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(canSubmit ? Theme.accent : Theme.accent.opacity(0.4))
             }
@@ -589,7 +603,7 @@ struct TreeholePublishView: View {
     private func submit() {
         let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !busy, !uploading else { return }
-        guard text.count >= 5 || !images.isEmpty else { toastMsg = "至少写 5 个字，或配一张图"; return }
+        guard text.count >= 5 || !images.isEmpty else { toastMsg = t("treehole.tooShort"); return }
         busy = true
         Task {
             struct IdResp: Codable { var id: String? }

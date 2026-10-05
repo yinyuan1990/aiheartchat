@@ -356,7 +356,7 @@ struct EmojiPanel: View {
                 }
                 Spacer()
                 HStack(spacing: 2) {
-                    pillItem(.gif, "GIF"); pillItem(.sticker, "贴纸"); pillItem(.emoji, "表情")
+                    pillItem(.gif, "GIF"); pillItem(.sticker, t("emoji.tabStickers")); pillItem(.emoji, t("emoji.tabEmoji"))
                 }
                 .padding(3)
                 .background(Capsule().fill(Theme.bg).shadow(color: .black.opacity(0.14), radius: 6, y: 2))
@@ -579,7 +579,7 @@ private struct StickerPane: View {
 
     private var sections: [StickerSection] {
         var out: [StickerSection] = []
-        if !store.recent.isEmpty { out.append(StickerSection(key: "recent", title: "最近使用", items: store.recent)) }
+        if !store.recent.isEmpty { out.append(StickerSection(key: "recent", title: t("emoji.recent"), items: store.recent)) }
         out += store.mineSets.map { StickerSection(key: "s\($0.id)", title: $0.title ?? "", items: $0.items) }
         return out
     }
@@ -591,10 +591,10 @@ private struct StickerPane: View {
                     ScrollViewReader { proxy in
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 2) {
-                                BarCell(active: false, expanded: bar.expanded, title: "表情商店", action: { onStore(nil) }) {
+                                BarCell(active: false, expanded: bar.expanded, title: t("emoji.store"), action: { onStore(nil) }) {
                                     Image(systemName: "plus.circle").font(.system(size: 22)).foregroundStyle(Theme.textSub)
                                 }
-                                BarCell(active: active == "recent", expanded: bar.expanded, title: "最近使用", action: { jump("recent") }) {
+                                BarCell(active: active == "recent", expanded: bar.expanded, title: t("emoji.recent"), action: { jump("recent") }) {
                                     Image(systemName: "clock").font(.system(size: 18)).foregroundStyle(Theme.textSub)
                                 }.id("recent")
                                 ForEach(store.mineSets) { s in
@@ -614,7 +614,7 @@ private struct StickerPane: View {
                     }
                     .frame(height: bar.expanded ? 76 : 52)
                     .animation(.easeInOut(duration: 0.15), value: bar.expanded)
-                    SearchRow(text: $noText, chip: $chipTap, placeholder: "搜索", onTap: { onStore("") })
+                    SearchRow(text: $noText, chip: $chipTap, placeholder: t("common.search"), onTap: { onStore("") })
                         .onChange(of: chipTap) { e in if !e.isEmpty { chipTap = ""; onStore(e) } }
                 }
                 .transition(.move(edge: .top).combined(with: .opacity))
@@ -627,10 +627,10 @@ private struct StickerPane: View {
                         let secs = sections
                         if secs.isEmpty {
                             VStack(spacing: 10) {
-                                Text(store.mineSets.isEmpty ? "还没有贴纸包" : "还没用过贴纸，往下挑一个")
+                                Text(store.mineSets.isEmpty ? t("emoji.noPacks") : t("emoji.noRecentStickers"))
                                     .font(.system(size: 13)).foregroundStyle(Theme.textDim)
                                 if store.mineSets.isEmpty {
-                                    Button("去表情商店添加") { onStore(nil) }.font(.system(size: 13, weight: .medium)).foregroundStyle(.white)
+                                    Button(t("emoji.goStore")) { onStore(nil) }.font(.system(size: 13, weight: .medium)).foregroundStyle(.white)
                                         .padding(.horizontal, 16).padding(.vertical, 7).background(Capsule().fill(Theme.accent)).buttonStyle(.plain)
                                 }
                             }
@@ -755,7 +755,7 @@ private struct EmojiPane: View {
                     ScrollViewReader { proxy in
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 2) {
-                                BarCell(active: active == "recent", expanded: bar.expanded, title: "最近使用", action: { jump("recent") }) {
+                                BarCell(active: active == "recent", expanded: bar.expanded, title: t("emoji.recent"), action: { jump("recent") }) {
                                     Image(systemName: "clock").font(.system(size: 18)).foregroundStyle(Theme.textSub)
                                 }.id("recent")
                                 ForEach(store.groups) { g in
@@ -771,7 +771,7 @@ private struct EmojiPane: View {
                     }
                     .frame(height: bar.expanded ? 76 : 52)
                     .animation(.easeInOut(duration: 0.15), value: bar.expanded)
-                    SearchRow(text: $noText, chip: $chipTap, placeholder: "搜索表情", onTap: { onSearch("") })
+                    SearchRow(text: $noText, chip: $chipTap, placeholder: t("emoji.searchEmoji"), onTap: { onSearch("") })
                         .onChange(of: chipTap) { e in if !e.isEmpty { chipTap = ""; onSearch(e) } }
                 }
                 .transition(.move(edge: .top).combined(with: .opacity))
@@ -782,14 +782,14 @@ private struct EmojiPane: View {
                     ScrollTrackerView(tracker: tracker) { top, maxTop in chrome.onOffset(top: top, maxTop: maxTop) }.frame(height: 1)
                     LazyVStack(alignment: .leading, spacing: 0) {
                         if !store.recent.isEmpty {
-                            header("recent", "最近使用")
+                            header("recent", t("emoji.recent"))
                             EmojiRows(items: store.recent, key: "recent", onEmoji: onEmoji)
                         }
                         ForEach(store.groups) { g in
                             header(g.key, g.name)
                             EmojiRows(items: g.items.map { $0[0] }, key: g.key, onEmoji: onEmoji)
                         }
-                        if store.groups.isEmpty { emptyText("加载中…") }
+                        if store.groups.isEmpty { emptyText(t("common.loading")) }
                         Color.clear.frame(height: 64)
                     }
                 }
@@ -862,7 +862,7 @@ private struct GifPane: View {
     var body: some View {
         VStack(spacing: 0) {
             if !chrome.hidden {
-                SearchRow(text: $noText, chip: $chipTap, placeholder: "搜索 GIF", onTap: { onSearch("") })
+                SearchRow(text: $noText, chip: $chipTap, placeholder: t("emoji.searchGif"), onTap: { onSearch("") })
                     .onChange(of: chipTap) { e in if !e.isEmpty { chipTap = ""; onSearch(e) } }
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
@@ -870,12 +870,12 @@ private struct GifPane: View {
                 ScrollTrackerView(tracker: tracker) { top, maxTop in chrome.onOffset(top: top, maxTop: maxTop) }.frame(height: 1)
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if !store.recentGifs.isEmpty {
-                        sectionTitle("最近使用").padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 4)
+                        sectionTitle(t("emoji.recent")).padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 4)
                         GifGrid(items: store.recentGifs, key: "recent", onPick: onPick, onNearEnd: nil)
                     }
-                    sectionTitle("热门").padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 4)
+                    sectionTitle(t("emoji.trending")).padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 4)
                     GifGrid(items: feed.items, key: "hot", onPick: onPick, onNearEnd: { feed.more() })
-                    GifFooter(feed: feed, emptyHint: "暂无 GIF")
+                    GifFooter(feed: feed, emptyHint: t("emoji.noGif"))
                     Color.clear.frame(height: 64)
                 }
                 // 滚动中瓦片停在当前帧，停下再播
@@ -971,7 +971,7 @@ private struct GifFooter: View {
     @ObservedObject var feed: GifFeed
     var emptyHint: String
     var body: some View {
-        if feed.loading { emptyText(feed.items.isEmpty ? "正在拉取 GIF，第一次会慢几秒…" : "加载更多…") }
+        if feed.loading { emptyText(feed.items.isEmpty ? t("emoji.gifFirstLoad") : t("emoji.loadingMore")) }
         else if !feed.error.isEmpty { emptyText(feed.error) }
         else if feed.items.isEmpty { emptyText(emptyHint) }
     }
@@ -1000,7 +1000,7 @@ private struct SearchSheetShell<Content: View>: View {
                 }
                 .padding(.horizontal, 10).frame(height: 36)
                 .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bg3))
-                Button("完成") { dismiss() }.font(.system(size: 16)).foregroundStyle(Theme.accent)
+                Button(t("common.done")) { dismiss() }.font(.system(size: 16)).foregroundStyle(Theme.accent)
             }
             .padding(.horizontal, 12).padding(.top, 14).padding(.bottom, 6)
             ScrollView(.horizontal, showsIndicators: false) {
@@ -1037,13 +1037,13 @@ struct GifSearchSheet: View {
     private var query: String { q.trimmingCharacters(in: .whitespaces) }
 
     var body: some View {
-        SearchSheetShell(placeholder: "搜索 GIF", query: $q) {
+        SearchSheetShell(placeholder: t("emoji.searchGif"), query: $q) {
             ScrollView {
                 ScrollTrackerView(tracker: tracker) { _, _ in }.frame(height: 1)
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    if query.isEmpty { sectionTitle("热门").padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 4) }
+                    if query.isEmpty { sectionTitle(t("emoji.trending")).padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 4) }
                     GifGrid(items: feed.items, key: "q", onPick: { p in onPick(p); dismiss() }, onNearEnd: { feed.more() })
-                    GifFooter(feed: feed, emptyHint: query.isEmpty ? "暂无 GIF" : "没有找到相关 GIF")
+                    GifFooter(feed: feed, emptyHint: query.isEmpty ? t("emoji.noGif") : t("emoji.noGifFound"))
                     Color.clear.frame(height: 30)
                 }
                 .environment(\.stickerPlaybackPaused, tracker.scrolling)
@@ -1070,13 +1070,13 @@ struct EmojiSearchSheet: View {
 
     var body: some View {
         // 打开时不自动弹键盘：先看最近使用 / 快捷 emoji，要搜再点输入框
-        SearchSheetShell(placeholder: "搜索表情", query: $q, autoFocus: false) {
+        SearchSheetShell(placeholder: t("emoji.searchEmoji"), query: $q, autoFocus: false) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     let results = query.isEmpty ? store.recent : store.search(query)
-                    if query.isEmpty, !store.recent.isEmpty { sectionTitle("最近使用").padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 4) }
+                    if query.isEmpty, !store.recent.isEmpty { sectionTitle(t("emoji.recent")).padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 4) }
                     if results.isEmpty {
-                        emptyText(query.isEmpty ? "输入关键词搜表情，比如「笑」「猫」「爱心」" : "没有匹配的表情")
+                        emptyText(query.isEmpty ? t("emoji.searchHint") : t("emoji.noMatch"))
                     } else {
                         EmojiRows(items: results, key: "q", onEmoji: onEmoji)
                     }
@@ -1124,7 +1124,7 @@ struct StickerStoreSheet: View {
             HStack(spacing: 12) {
                 HStack(spacing: 6) {
                     Image(systemName: "magnifyingglass").font(.system(size: 14)).foregroundStyle(Theme.textDim)
-                    TextField(manage ? "搜索我的贴纸" : "搜索贴纸", text: $q).font(.system(size: 15)).foregroundStyle(Theme.text)
+                    TextField(manage ? t("emoji.searchMyStickers") : t("emoji.searchStickers"), text: $q).font(.system(size: 15)).foregroundStyle(Theme.text)
                         .focused($searchFocused)
                     if !q.isEmpty {
                         Image(systemName: "xmark.circle.fill").font(.system(size: 14)).foregroundStyle(Theme.textDim).onTapGesture { q = "" }
@@ -1132,14 +1132,14 @@ struct StickerStoreSheet: View {
                 }
                 .padding(.horizontal, 10).frame(height: 36)
                 .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bg3))
-                Button("完成") { dismiss() }.font(.system(size: 16)).foregroundStyle(Theme.accent)
+                Button(t("common.done")) { dismiss() }.font(.system(size: 16)).foregroundStyle(Theme.accent)
             }
             .padding(.horizontal, 12).padding(.top, 14).padding(.bottom, 8)
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if manage {
-                        Text("我的贴纸（\(store.mineSets.count)）").font(.system(size: 12)).foregroundStyle(Theme.textSub).padding(.horizontal, 16).padding(.top, 4)
+                        Text(t("emoji.myStickersN", ["n": store.mineSets.count])).font(.system(size: 12)).foregroundStyle(Theme.textSub).padding(.horizontal, 16).padding(.top, 4)
                     }
                     ForEach(list, id: \.set.id) { item in
                         let s = item.set
@@ -1148,18 +1148,18 @@ struct StickerStoreSheet: View {
                             if manage {
                                 HStack(spacing: 6) {
                                     if idx > 0, q.isEmpty {
-                                        actionBtn("置顶", primary: false, busy: busy == s.id) { run(s.id) { try await store.reorderMine([s.id] + store.mineIds.filter { $0 != s.id }) } }
+                                        actionBtn(t("emoji.moveTop"), primary: false, busy: busy == s.id) { run(s.id) { try await store.reorderMine([s.id] + store.mineIds.filter { $0 != s.id }) } }
                                     }
-                                    actionBtn("移除", primary: false, busy: busy == s.id) { run(s.id) { try await store.removeMine(s.id) } }
+                                    actionBtn(t("emoji.remove"), primary: false, busy: busy == s.id) { run(s.id) { try await store.removeMine(s.id) } }
                                 }
                             } else if idx >= 0 {
-                                actionBtn("已添加", primary: false, busy: busy == s.id) { run(s.id) { try await store.removeMine(s.id) } }
+                                actionBtn(t("emoji.added"), primary: false, busy: busy == s.id) { run(s.id) { try await store.removeMine(s.id) } }
                             } else {
-                                actionBtn("添加", primary: true, busy: busy == s.id) { run(s.id) { try await store.addMine(s.id) } }
+                                actionBtn(t("emoji.add"), primary: true, busy: busy == s.id) { run(s.id) { try await store.addMine(s.id) } }
                             }
                         }
                     }
-                    if list.isEmpty { emptyText(store.sets.isEmpty ? "表情包还在路上…" : "没有匹配的贴纸包") }
+                    if list.isEmpty { emptyText(store.sets.isEmpty ? t("emoji.setsComing") : t("emoji.noMatchingSets")) }
                     Color.clear.frame(height: 30)
                 }
             }
@@ -1193,7 +1193,7 @@ struct StickerStoreSheet: View {
     }
 
     private func kindText(_ k: String?) -> String {
-        switch k { case "static": return "静态"; case "animated", "video": return "动态"; default: return "" }
+        switch k { case "static": return t("emoji.kindStatic"); case "animated", "video": return t("emoji.kindAnimated"); default: return "" }
     }
 
     private func row<A: View>(_ s: StickerSetItem, _ preview: [StickerPayload], @ViewBuilder actions: () -> A) -> some View {
@@ -1201,7 +1201,7 @@ struct StickerStoreSheet: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(s.title ?? "").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
-                    Text("\(s.items.count) 张贴图 · \(kindText(s.kind))").font(.system(size: 12)).foregroundStyle(Theme.textSub)
+                    Text(t("emoji.packInfo", ["n": s.items.count, "kind": kindText(s.kind)])).font(.system(size: 12)).foregroundStyle(Theme.textSub)
                 }
                 Spacer(minLength: 8)
                 actions()

@@ -105,7 +105,7 @@ final class VoiceRoomManager: ObservableObject {
         // 服务端已把我剔除（心跳超时等）→ 本地同步退房
         if !new.contains(myUserId) {
             vlog("kicked by server (not in member list)")
-            teardown(reason: "语音房连接超时，已退出")
+            teardown(reason: t("voiceRoom.timeoutLeft"))
             return
         }
         for uid in new.subtracting(old) where uid != myUserId { subscribe(uid) }
@@ -116,7 +116,7 @@ final class VoiceRoomManager: ObservableObject {
 
     func join(groupId: String) {
         if let cur = joinedGroupId {
-            if cur != groupId { toastMsg = "请先退出当前语音房" }
+            if cur != groupId { toastMsg = t("voiceRoom.leaveCurrentFirst") }
             return
         }
         if joining { return }
@@ -208,7 +208,7 @@ final class VoiceRoomManager: ObservableObject {
         rtcConfig.sdpSemantics = .unifiedPlan
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
         guard let push = factory.peerConnection(with: rtcConfig, constraints: constraints, delegate: pcDelegate) else {
-            throw ApiError(code: -1, msg: "创建推流连接失败")
+            throw ApiError(code: -1, msg: t("voiceRoom.createPcFailed"))
         }
         let track = factory.audioTrack(with: factory.audioSource(with: constraints), trackId: "audio0")
         track.isEnabled = !muted
@@ -231,7 +231,7 @@ final class VoiceRoomManager: ObservableObject {
             }
             if attempt < 2 { try? await Task.sleep(nanoseconds: 1_000_000_000) }
         }
-        guard let answerSdp = answer else { throw ApiError(code: -1, msg: "语音推流失败") }
+        guard let answerSdp = answer else { throw ApiError(code: -1, msg: t("voiceRoom.publishFailed")) }
         try await push.setRemoteDescription(RTCSessionDescription(type: .answer, sdp: answerSdp))
         vlog("push ready stream=\(stream)")
     }
@@ -337,7 +337,7 @@ final class VoiceRoomManager: ObservableObject {
                 let resp: HbResp? = try? await Api.request("/im/group/\(groupId)/voiceroom/heartbeat", method: "POST")
                 if let inRoom = resp?.inRoom, !inRoom {
                     self.vlog("heartbeat: server says not in room, teardown")
-                    self.teardown(reason: "语音房连接超时，已退出")
+                    self.teardown(reason: t("voiceRoom.timeoutLeft"))
                     return
                 }
             }

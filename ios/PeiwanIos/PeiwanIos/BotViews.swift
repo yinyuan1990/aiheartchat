@@ -127,7 +127,7 @@ final class BotCallbacks {
 
 struct BotTag: View {
     var body: some View {
-        Text("机器人").font(.system(size: 10)).foregroundStyle(botBlue)
+        Text(t("bot.tag")).font(.system(size: 10)).foregroundStyle(botBlue)
             .padding(.horizontal, 4).padding(.vertical, 1)
             .background(RoundedRectangle(cornerRadius: 4).fill(botBlue.opacity(0.1)))
     }
@@ -162,11 +162,11 @@ struct InlineKeyboardView: View {
                 }
             }
             .padding(.top, 4)
-            .fullScreenCover(item: $webTarget) { t in
-                WebPreviewSheet(url: t.url, title: t.url.host ?? "网页")
+            .fullScreenCover(item: $webTarget) { target in
+                WebPreviewSheet(url: target.url, title: target.url.host ?? t("bot.webPage"))
             }
             .alert(alertText ?? "", isPresented: Binding(get: { alertText != nil }, set: { if !$0 { alertText = nil } })) {
-                Button("好", role: .cancel) { alertText = nil }
+                Button(t("bot.ok"), role: .cancel) { alertText = nil }
             }
         }
     }
@@ -238,40 +238,40 @@ struct AddBotSheet: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                Text(channel ? "频道机器人" : "群机器人").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
+                Text(channel ? t("bot.channelBots") : t("bot.groupBots")).font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
                     .frame(maxWidth: .infinity)
-                Text(channel ? "机器人在频道里是管理员，可以发帖，能收到所有帖子" : "机器人默认只收到 /命令 和 @它 的消息（创建者可关闭隐私模式）")
+                Text(channel ? t("bot.channelBotsTip") : t("bot.groupBotsTip"))
                     .font(.system(size: 12)).foregroundStyle(Theme.textSub).multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity).padding(.top, 4).padding(.bottom, 12)
                 HStack(spacing: 8) {
-                    TextField("", text: $username, prompt: Text("机器人用户名，如 @weather_bot").foregroundColor(Theme.textDim))
+                    TextField("", text: $username, prompt: Text(t("bot.addUsernamePlaceholder")).foregroundColor(Theme.textDim))
                         .textInputAutocapitalization(.never).autocorrectionDisabled()
                         .foregroundStyle(Theme.text)
                         .padding(12)
                         .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bg2))
                     Button { add(username) } label: {
-                        Text("添加").font(.system(size: 14)).foregroundStyle(.white)
+                        Text(t("bot.add")).font(.system(size: 14)).foregroundStyle(.white)
                             .padding(.horizontal, 16).padding(.vertical, 9)
                             .background(Capsule().fill(Theme.accent))
                     }
                     .buttonStyle(.plain)
                 }
                 if !inChat.isEmpty {
-                    Text("已加入").font(.system(size: 12)).foregroundStyle(Theme.textSub).padding(.top, 16).padding(.bottom, 4)
+                    Text(t("bot.joined")).font(.system(size: 12)).foregroundStyle(Theme.textSub).padding(.top, 16).padding(.bottom, 4)
                     ForEach(inChat) { b in
                         HStack(spacing: 10) {
                             AvatarView(url: b.avatar, size: 36)
                             Text(b.nickname ?? "").font(.system(size: 14)).foregroundStyle(Theme.text).lineLimit(1)
                             BotTag()
                             Spacer()
-                            Button("移出") { remove(b) }.font(.system(size: 13)).foregroundStyle(Theme.danger).buttonStyle(.plain)
+                            Button(t("bot.remove")) { remove(b) }.font(.system(size: 13)).foregroundStyle(Theme.danger).buttonStyle(.plain)
                         }
                         .padding(.vertical, 6)
                     }
                 }
                 let addable = mine.filter { m in !inChat.contains { $0.id == m.id } }
                 if !addable.isEmpty {
-                    Text("我的机器人").font(.system(size: 12)).foregroundStyle(Theme.textSub).padding(.top, 16).padding(.bottom, 4)
+                    Text(t("me.bots")).font(.system(size: 12)).foregroundStyle(Theme.textSub).padding(.top, 16).padding(.bottom, 4)
                     ForEach(addable) { b in
                         HStack(spacing: 10) {
                             AvatarView(url: b.avatar, size: 36)
@@ -280,7 +280,7 @@ struct AddBotSheet: View {
                                 Text("@\(b.username ?? "")").font(.system(size: 11)).foregroundStyle(Theme.textDim)
                             }
                             Spacer()
-                            Button("添加") { add(b.username ?? "") }.font(.system(size: 13)).foregroundStyle(Theme.accent).buttonStyle(.plain)
+                            Button(t("bot.add")) { add(b.username ?? "") }.font(.system(size: 13)).foregroundStyle(Theme.accent).buttonStyle(.plain)
                         }
                         .padding(.vertical, 6)
                     }
@@ -311,7 +311,7 @@ struct AddBotSheet: View {
             do {
                 let _: BotOkResp = try await Api.request("/im/group/\(groupId)/bot", method: "POST", body: ["username": u])
                 username = ""
-                toastMsg = "已添加"
+                toastMsg = t("bot.added")
                 await load()
                 onChanged()
             } catch {
@@ -341,8 +341,8 @@ private struct TokenSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("机器人 Token").font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.text)
-            Text("只显示这一次，请马上保存。拿到 token 就能控制这个机器人，不要泄露；泄露了就去重置。")
+            Text(t("bot.tokenTitle")).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.text)
+            Text(t("bot.tokenTip"))
                 .font(.system(size: 13)).foregroundStyle(Theme.textSub)
             Text(token).font(.system(size: 12, design: .monospaced)).foregroundStyle(Theme.text)
                 .textSelection(.enabled)
@@ -353,12 +353,12 @@ private struct TokenSheet: View {
                     UIPasteboard.general.string = token
                     copied = true
                 } label: {
-                    Text(copied ? "已复制" : "复制").font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
+                    Text(copied ? t("common.copied") : t("common.copy")).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
                         .frame(maxWidth: .infinity).frame(height: 42)
                         .background(Capsule().fill(Theme.accent))
                 }
                 Button(action: onClose) {
-                    Text("我已保存").font(.system(size: 15)).foregroundStyle(Theme.text)
+                    Text(t("bot.tokenSaved")).font(.system(size: 15)).foregroundStyle(Theme.text)
                         .frame(maxWidth: .infinity).frame(height: 42)
                         .background(Capsule().fill(Theme.bg3))
                 }
@@ -385,20 +385,20 @@ private struct CreateBotSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("创建机器人").font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.text)
-            field($name, "名称（聊天里显示的名字）")
+            Text(t("bot.createTitle")).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.text)
+            field($name, t("bot.namePlaceholder"))
                 .onChange(of: name) { v in if v.count > 30 { name = String(v.prefix(30)) } }
-            field($username, "用户名，以 bot 结尾，如 weather_bot")
+            field($username, t("bot.usernamePlaceholder"))
                 .onChange(of: username) { v in
                     let f = String(v.filter { ($0.isASCII && ($0.isLetter || $0.isNumber)) || $0 == "_" }.prefix(32))
                     if f != v { username = f }
                 }
-            CompatVerticalTextField(text: $desc, prompt: Text("简介（用户第一次打开聊天时看到）").foregroundColor(Theme.textDim), lineRange: 2...4)
+            CompatVerticalTextField(text: $desc, prompt: Text(t("bot.descPlaceholder")).foregroundColor(Theme.textDim), lineRange: 2...4)
                 .foregroundStyle(Theme.text)
                 .padding(12)
                 .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bg2))
                 .onChange(of: desc) { v in if v.count > 500 { desc = String(v.prefix(500)) } }
-            AccentButton(title: saving ? "创建中…" : "创建") { create() }
+            AccentButton(title: saving ? t("bot.creating") : t("bot.create")) { create() }
                 .padding(.top, 6)
             Spacer(minLength: 0)
         }
@@ -445,14 +445,14 @@ struct BotsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                Text("机器人可以接入你自己的程序：用 Telegram 兼容的 Bot API 收发消息、发图片、带按钮，能私聊、进群、在频道发帖。现有的 Telegram 机器人代码改一下接口地址就能直接用。")
+                Text(t("bot.intro"))
                     .font(.system(size: 12)).foregroundStyle(Theme.textSub).lineSpacing(5)
                     .padding(.horizontal, 16).padding(.vertical, 8)
                 if let l = list {
                     if l.isEmpty {
                         VStack(spacing: 16) {
-                            Text("还没有机器人").font(.system(size: 14)).foregroundStyle(Theme.textSub)
-                            AccentButton(title: "创建第一个机器人") { creating = true }.frame(width: 200)
+                            Text(t("bot.empty")).font(.system(size: 14)).foregroundStyle(Theme.textSub)
+                            AccentButton(title: t("bot.createFirst")) { creating = true }.frame(width: 200)
                         }
                         .frame(maxWidth: .infinity).padding(.top, 40)
                     } else {
@@ -461,17 +461,17 @@ struct BotsView: View {
                         }
                     }
                 } else {
-                    EmptyHint(text: "加载中…").padding(.top, 30)
+                    EmptyHint(text: t("common.loading")).padding(.top, 30)
                 }
             }
         }
         .fullBg()
-        .navigationTitle("我的机器人")
+        .navigationTitle(t("me.bots"))
         .navigationBarTitleDisplayMode(.inline)
         .compatNavBarBackground(Theme.bg)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button("创建") { creating = true }.font(.system(size: 14)).foregroundStyle(Theme.accent)
+                Button(t("bot.create")) { creating = true }.font(.system(size: 14)).foregroundStyle(Theme.accent)
             }
         }
         .routePush($pushRoute)
@@ -502,7 +502,7 @@ struct BotsView: View {
                 HStack(spacing: 6) {
                     Text(b.name ?? "").font(.system(size: 16, weight: .medium)).foregroundStyle(Theme.text).lineLimit(1)
                     BotTag()
-                    if (b.status ?? 0) != 0 { Text("已封禁").font(.system(size: 11)).foregroundStyle(Theme.warn) }
+                    if (b.status ?? 0) != 0 { Text(t("bot.banned")).font(.system(size: 11)).foregroundStyle(Theme.warn) }
                 }
                 Text("@\(b.username ?? "") · \((b.webhookUrl ?? "").isEmpty ? "getUpdates" : "Webhook")")
                     .font(.system(size: 13)).foregroundStyle(Theme.textSub)
@@ -535,18 +535,18 @@ struct BotDetailView: View {
             if let b = bot {
                 content(b)
             } else {
-                EmptyHint(text: error.isEmpty ? "加载中…" : error)
+                EmptyHint(text: error.isEmpty ? t("common.loading") : error)
             }
         }
         .fullBg()
         .toast($toastMsg)
-        .navigationTitle(bot?.name ?? "机器人")
+        .navigationTitle(bot?.name ?? t("bot.title"))
         .navigationBarTitleDisplayMode(.inline)
         .compatNavBarBackground(Theme.bg)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 if let b = bot {
-                    Button("聊天") {
+                    Button(t("bot.chat")) {
                         Task { chatTarget = await openChatWith(userId: b.id, nickname: b.name ?? "") }
                     }
                     .font(.system(size: 14)).foregroundStyle(Theme.accent)
@@ -554,20 +554,20 @@ struct BotDetailView: View {
             }
         }
         .fullScreenCover(item: $chatTarget) { ChatRoomSheet(target: $0) }
-        .sheet(item: $newToken) { t in
-            TokenSheet(token: t) { newToken = nil }.compatDetents(height: 320)
+        .sheet(item: $newToken) { token in
+            TokenSheet(token: token) { newToken = nil }.compatDetents(height: 320)
         }
-        .alert("重置 Token？", isPresented: $confirmReset) {
-            Button("重置", role: .destructive) { resetToken() }
-            Button("取消", role: .cancel) {}
+        .alert(t("bot.resetTokenTitle"), isPresented: $confirmReset) {
+            Button(t("bot.reset"), role: .destructive) { resetToken() }
+            Button(t("common.cancel"), role: .cancel) {}
         } message: {
-            Text("重置后旧 token 立即失效，正在运行的程序要换成新 token")
+            Text(t("bot.resetTokenMsg"))
         }
-        .alert("删除机器人？", isPresented: $confirmDelete) {
-            Button("删除", role: .destructive) { remove() }
-            Button("取消", role: .cancel) {}
+        .alert(t("bot.deleteTitle"), isPresented: $confirmDelete) {
+            Button(t("common.delete"), role: .destructive) { remove() }
+            Button(t("common.cancel"), role: .cancel) {}
         } message: {
-            Text("删除 @\(bot?.username ?? "")？会退出所有群和频道，不能恢复")
+            Text(t("bot.deleteMsg", ["name": bot?.username ?? ""]))
         }
         .task { await load() }
     }
@@ -584,28 +584,28 @@ struct BotDetailView: View {
                             if let url = try? await Api.upload("image", data: data, filename: "bot.jpg", mime: "image/jpeg") {
                                 save(["avatar": url])
                             } else {
-                                toastMsg = "上传失败"
+                                toastMsg = t("bot.uploadFailed")
                             }
                         }
                     }) {
                         AvatarView(url: b.avatar, size: 76)
                     }
-                    Text("点头像可修改").font(.system(size: 11)).foregroundStyle(Theme.textDim)
+                    Text(t("bot.tapAvatarToChange")).font(.system(size: 11)).foregroundStyle(Theme.textDim)
                     if editing {
-                        TextField("", text: $name, prompt: Text("名称").foregroundColor(Theme.textDim))
+                        TextField("", text: $name, prompt: Text(t("bot.name")).foregroundColor(Theme.textDim))
                             .foregroundStyle(Theme.text).padding(12)
                             .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bg2))
                             .padding(.top, 10)
                             .onChange(of: name) { v in if v.count > 30 { name = String(v.prefix(30)) } }
-                        CompatVerticalTextField(text: $desc, prompt: Text("简介").foregroundColor(Theme.textDim), lineRange: 3...6)
+                        CompatVerticalTextField(text: $desc, prompt: Text(t("bot.desc")).foregroundColor(Theme.textDim), lineRange: 3...6)
                             .foregroundStyle(Theme.text).padding(12)
                             .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bg2))
                             .padding(.top, 6)
                             .onChange(of: desc) { v in if v.count > 500 { desc = String(v.prefix(500)) } }
                         HStack(spacing: 20) {
                             Spacer()
-                            Button("取消") { editing = false }.font(.system(size: 14)).foregroundStyle(Theme.textSub)
-                            Button("保存") {
+                            Button(t("common.cancel")) { editing = false }.font(.system(size: 14)).foregroundStyle(Theme.textSub)
+                            Button(t("common.save")) {
                                 save(["name": name.trimmingCharacters(in: .whitespaces), "description": desc.trimmingCharacters(in: .whitespacesAndNewlines)])
                             }
                             .font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.accent)
@@ -617,12 +617,13 @@ struct BotDetailView: View {
                             BotTag()
                         }
                         .padding(.top, 8)
-                        Text("@\(b.username ?? "")" + ((b.status ?? 0) != 0 ? "  · 已被平台封禁" : ""))
+                        let bannedTip: String = (b.status ?? 0) != 0 ? "  · " + t("bot.bannedByPlatform") : ""
+                        Text("@\(b.username ?? "")" + bannedTip)
                             .font(.system(size: 13)).foregroundStyle((b.status ?? 0) != 0 ? Theme.warn : Theme.textSub)
                         let d = b.description ?? ""
-                        Text(d.isEmpty ? "（无简介）" : d).font(.system(size: 14)).foregroundStyle(d.isEmpty ? Theme.textDim : Theme.text)
+                        Text(d.isEmpty ? t("bot.noDesc") : d).font(.system(size: 14)).foregroundStyle(d.isEmpty ? Theme.textDim : Theme.text)
                             .lineSpacing(4).multilineTextAlignment(.center).padding(.top, 10)
-                        Button("编辑资料") { name = b.name ?? ""; desc = b.description ?? ""; editing = true }
+                        Button(t("me.editProfile")) { name = b.name ?? ""; desc = b.description ?? ""; editing = true }
                             .font(.system(size: 13)).foregroundStyle(Theme.accent).padding(.top, 8)
                     }
                 }
@@ -631,14 +632,14 @@ struct BotDetailView: View {
                 card {
                     HStack(spacing: 8) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("群隐私模式").font(.system(size: 15)).foregroundStyle(Theme.text)
-                            Text("开启：群里只收到 /命令 和 @它 的消息；关闭：收到全部群消息")
+                            Text(t("bot.privacyMode")).font(.system(size: 15)).foregroundStyle(Theme.text)
+                            Text(t("bot.privacyTip"))
                                 .font(.system(size: 12)).foregroundStyle(Theme.textSub)
                         }
                         Spacer(minLength: 0)
                         let on = b.privacy ?? true
                         Button { save(["privacy": !on]) } label: {
-                            Text(on ? "已开启" : "已关闭").font(.system(size: 12)).foregroundStyle(on ? .white : Theme.textSub)
+                            Text(on ? t("bot.on") : t("bot.off")).font(.system(size: 12)).foregroundStyle(on ? .white : Theme.textSub)
                                 .padding(.horizontal, 14).padding(.vertical, 5)
                                 .background(Capsule().fill(on ? Theme.accent : Theme.bg3))
                         }
@@ -647,21 +648,23 @@ struct BotDetailView: View {
                     .padding(.vertical, 12)
                     Rectangle().fill(Theme.line).frame(height: 1)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("接收方式").font(.system(size: 15)).foregroundStyle(Theme.text)
+                        Text(t("bot.deliveryMode")).font(.system(size: 15)).foregroundStyle(Theme.text)
                         let hook = b.webhookUrl ?? ""
-                        Text((hook.isEmpty ? "getUpdates 轮询（没有设置 Webhook）" : "Webhook：\(hook)") + " · 待取消息 \(b.pendingUpdates ?? 0) 条")
+                        let delivery: String = hook.isEmpty ? t("bot.polling") : t("bot.webhookUrl", ["url": hook])
+                        let pending: String = t("bot.pendingUpdates", ["n": b.pendingUpdates ?? 0])
+                        Text(delivery + " · " + pending)
                             .font(.system(size: 12)).foregroundStyle(Theme.textSub)
                         if let e = b.lastError, !e.isEmpty {
-                            Text("最近一次推送失败：\(e)").font(.system(size: 12)).foregroundStyle(Theme.danger).padding(.top, 2)
+                            Text(t("bot.lastError", ["error": e])).font(.system(size: 12)).foregroundStyle(Theme.danger).padding(.top, 2)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 12)
                     Rectangle().fill(Theme.line).frame(height: 1)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("命令菜单").font(.system(size: 15)).foregroundStyle(Theme.text)
+                        Text(t("bot.commandMenu")).font(.system(size: 15)).foregroundStyle(Theme.text)
                         let cmds = b.commands ?? []
-                        Text(cmds.isEmpty ? "还没设置，程序里调用 setMyCommands 设置" : cmds.map { "/\($0.command) \($0.description ?? "")" }.joined(separator: "\n"))
+                        Text(cmds.isEmpty ? t("bot.noCommands") : cmds.map { "/\($0.command) \($0.description ?? "")" }.joined(separator: "\n"))
                             .font(.system(size: 12)).foregroundStyle(Theme.textSub).lineSpacing(3)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -670,19 +673,14 @@ struct BotDetailView: View {
                 .padding(.top, 16)
 
                 card {
-                    menuRow("重置 Token", Theme.text) { confirmReset = true }
+                    menuRow(t("bot.resetToken"), Theme.text) { confirmReset = true }
                     Rectangle().fill(Theme.line).frame(height: 1)
-                    menuRow("删除机器人", Theme.danger) { confirmDelete = true }
+                    menuRow(t("bot.delete"), Theme.danger) { confirmDelete = true }
                 }
                 .padding(.top, 12)
 
-                Text("接入说明").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text).padding(.top, 20).padding(.bottom, 6)
-                Text("接口和 Telegram Bot API 一样，只是地址换成：\n\(apiBase)/bot<token>/方法名\n\n"
-                    + "支持 getMe、getUpdates、setWebhook、deleteWebhook、getWebhookInfo、sendMessage、sendPhoto、editMessageText、editMessageReplyMarkup、deleteMessage、answerCallbackQuery、setMyCommands、getChat、getFile 等。"
-                    + "按钮只支持 inline_keyboard（url / callback_data）。chat_id：私聊是用户 id，群和频道是负数。用户要先给机器人发过消息，机器人才能私聊他。\n\n"
-                    + "Python（python-telegram-bot）：base_url 设为 \(apiBase)/bot，base_file_url 设为 \(apiBase)/file/bot\n"
-                    + "Node.js（Telegraf）：telegram.apiRoot 设为 \(apiBase)\n\n"
-                    + "Webhook 需要 https 公网地址；设置 secret_token 后每次推送都会带 X-Telegram-Bot-Api-Secret-Token 头。")
+                Text(t("bot.guideTitle")).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text).padding(.top, 20).padding(.bottom, 6)
+                Text(t("bot.guide", ["api": apiBase]))
                     .font(.system(size: 12)).foregroundStyle(Theme.textSub).lineSpacing(5)
                     .textSelection(.enabled)
                 Spacer(minLength: 30)

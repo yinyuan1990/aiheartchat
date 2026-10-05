@@ -294,9 +294,10 @@ struct NowPlayingBar: View {
         }
     }
 
-    private func subtitle(_ t: MusicTrackModel) -> String {
-        let base = (t.performer?.isEmpty == false ? t.performer! : (center.sourceTitle.isEmpty ? "未知艺术家" : center.sourceTitle))
-        return center.buffering ? base + " · 缓冲中…" : base
+    private func subtitle(_ track: MusicTrackModel) -> String {
+        let fallback = center.sourceTitle.isEmpty ? t("music.unknownArtist") : center.sourceTitle
+        let base = track.performer?.isEmpty == false ? track.performer! : fallback
+        return center.buffering ? base + " · " + t("music.buffering") : base
     }
 }
 
@@ -325,9 +326,9 @@ struct MusicSheetView: View {
         VStack(spacing: 0) {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(center.sourceTitle.isEmpty ? "音乐" : center.sourceTitle)
+                    Text(center.sourceTitle.isEmpty ? t("music.title") : center.sourceTitle)
                         .font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
-                    Text("最多保留 100 首" + (center.queue.isEmpty ? "" : " · 共 \(center.queue.count) 首"))
+                    Text(t("music.keep100") + (center.queue.isEmpty ? "" : " · " + t("music.totalN", ["n": center.queue.count])))
                         .font(.system(size: 11)).foregroundStyle(Theme.textDim)
                 }
                 Spacer()
@@ -348,7 +349,7 @@ struct MusicView: View {
     var body: some View {
         MusicListAndPlayer(showHeadline: true)
             .fullBg()
-            .navigationTitle(center.sourceTitle.isEmpty ? "音乐" : center.sourceTitle)
+            .navigationTitle(center.sourceTitle.isEmpty ? t("music.title") : center.sourceTitle)
             .navigationBarTitleDisplayMode(.inline)
     }
 }
@@ -363,14 +364,14 @@ struct MusicListAndPlayer: View {
         VStack(spacing: 0) {
             Group {
                 if !loaded {
-                    EmptyHint(text: "加载中…")
+                    EmptyHint(text: t("common.loading"))
                 } else if center.queue.isEmpty {
-                    EmptyHint(text: "还没有歌曲\n稍后再来看看")
+                    EmptyHint(text: t("music.emptyLater"))
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 0) {
                             if showHeadline {
-                                Text("最多保留 100 首 · 共 \(center.queue.count) 首")
+                                Text(t("music.keep100") + " · " + t("music.totalN", ["n": center.queue.count]))
                                     .font(.system(size: 12)).foregroundStyle(Theme.textSub)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 2)
@@ -433,25 +434,25 @@ struct BigPlayer: View {
         VStack(spacing: 0) {
             Rectangle().fill(Theme.line).frame(height: 1)
             VStack(spacing: 0) {
-                if let t = center.current {
+                if let track = center.current {
                     HStack(spacing: 12) {
-                        MusicCover(track: t, size: 52, spinning: false, round: false)
+                        MusicCover(track: track, size: 52, spinning: false, round: false)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(t.title).font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
-                            Text(t.performer?.isEmpty == false ? t.performer! : "未知艺术家").font(.system(size: 13)).foregroundStyle(Theme.textSub).lineLimit(1)
+                            Text(track.title).font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
+                            Text(track.performer?.isEmpty == false ? track.performer! : t("music.unknownArtist")).font(.system(size: 13)).foregroundStyle(Theme.textSub).lineLimit(1)
                         }
                         Spacer(minLength: 0)
                         // 保存到手机（下载后弹系统面板：存到「文件」/ AirDrop / 微信）
-                        Button { center.saveToPhone(t) } label: {
+                        Button { center.saveToPhone(track) } label: {
                             Group {
-                                if center.savingId == t.id { ProgressView().tint(Theme.text) }
+                                if center.savingId == track.id { ProgressView().tint(Theme.text) }
                                 else { Image(systemName: "arrow.down.to.line").font(.system(size: 17, weight: .medium)) }
                             }
                             .foregroundStyle(Theme.text).frame(width: 36, height: 36)
                         }
                         .buttonStyle(.plain)
                         // 分享链接
-                        Button { center.shareLink(t) } label: {
+                        Button { center.shareLink(track) } label: {
                             Image(systemName: "square.and.arrow.up").font(.system(size: 17, weight: .medium)).foregroundStyle(Theme.text).frame(width: 36, height: 36)
                         }
                         .buttonStyle(.plain)
@@ -481,7 +482,7 @@ struct BigPlayer: View {
                     }
                     .padding(.top, 2)
                 } else {
-                    Text("点上面的歌开始播放").font(.system(size: 13)).foregroundStyle(Theme.textSub).padding(.vertical, 6)
+                    Text(t("music.tapToPlay")).font(.system(size: 13)).foregroundStyle(Theme.textSub).padding(.vertical, 6)
                 }
                 HStack {
                     ctl("shuffle", on: center.shuffle) { center.shuffle.toggle() }

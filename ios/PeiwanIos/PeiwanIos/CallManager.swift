@@ -238,7 +238,7 @@ final class CallManager: ObservableObject {
                 if let balStr = wallet?.balance, let balance = Int(balStr),
                    let price = peer?.videoPriceActualFen, price > 0, balance < price {
                     Self.clog("local precheck insufficient: balance=\(balance) price/min=\(price)")
-                    alertMsg = "视频通话需 \(fmtPoints(String(price))) 积分/分钟\n当前积分不足，无法发起"
+                    alertMsg = t("call.insufficientPoints", ["n": fmtPoints(String(price))])
                     return
                 }
             }
@@ -351,8 +351,8 @@ final class CallManager: ObservableObject {
         DispatchQueue.main.async {
             guard UIApplication.shared.applicationState != .active else { return }
             let content = UNMutableNotificationContent()
-            content.title = self.peerName.isEmpty ? "来电" : self.peerName
-            content.body = type == 2 ? "邀请你进行视频通话" : "邀请你进行语音通话"
+            content.title = self.peerName.isEmpty ? t("call.incoming") : self.peerName
+            content.body = type == 2 ? t("call.invitedVideo") : t("call.invitedVoice")
             content.sound = .defaultRingtone
             content.interruptionLevel = .timeSensitive
             let req = UNNotificationRequest(identifier: "incoming_call", content: content, trigger: nil)
@@ -526,7 +526,7 @@ final class CallManager: ObservableObject {
             startPullWatchdog(callId: callId, peerId: peerId, type: type)
         } catch {
             Self.clog("startMedia ERROR: \(error)")
-            errorMsg = "媒体连接失败，请重试"
+            errorMsg = t("call.mediaFailed")
             hangup()
         }
     }

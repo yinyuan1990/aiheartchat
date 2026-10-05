@@ -24,7 +24,7 @@ struct UserHomeView: View {
             if let p {
                 content(p)
             } else {
-                Text("加载中…").font(.system(size: 13)).foregroundStyle(Theme.textDim)
+                Text(t("common.loading")).font(.system(size: 13)).foregroundStyle(Theme.textDim)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
@@ -62,7 +62,7 @@ struct UserHomeView: View {
         guard let s, s.count >= 10 else { return "" }
         let mm = String(s[s.index(s.startIndex, offsetBy: 5)..<s.index(s.startIndex, offsetBy: 7)])
         let dd = String(s[s.index(s.startIndex, offsetBy: 8)..<s.index(s.startIndex, offsetBy: 10)])
-        return "\(mm)月\(dd)日"
+        return t("userHome.monthDay", ["m": mm, "d": dd])
     }
 
     @ViewBuilder
@@ -77,8 +77,8 @@ struct UserHomeView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         // tab 行 + 关注按钮
                         HStack(alignment: .center, spacing: 24) {
-                            tabLabel("关于我", selected: tab == 0) { tab = 0 }
-                            tabLabel("我的动态", selected: tab == 1) { tab = 1 }
+                            tabLabel(t("userHome.aboutMe"), selected: tab == 0) { tab = 0 }
+                            tabLabel(t("userHome.posts"), selected: tab == 1) { tab = 1 }
                             Spacer()
                             Button {
                                 Task {
@@ -88,7 +88,7 @@ struct UserHomeView: View {
                                     }
                                 }
                             } label: {
-                                Text(following ? "已关注" : "＋ 关注")
+                                Text(following ? t("common.followed") : t("userHome.followPlus"))
                                     .font(.system(size: 13, weight: .semibold))
                                     .foregroundStyle(following ? Theme.textSub : .white)
                                     .padding(.horizontal, 18).padding(.vertical, 8)
@@ -173,13 +173,13 @@ struct UserHomeView: View {
                     if isFemale, let rate = p.answerRate, rate >= 0 {
                         HStack(alignment: .lastTextBaseline, spacing: 0) {
                             Text("\(rate)").font(.system(size: 26, weight: .bold)).foregroundStyle(.white)
-                            Text(" % 接通率").font(.system(size: 12)).foregroundStyle(.white.opacity(0.75))
+                            Text(" " + t("userHome.answerRate")).font(.system(size: 12)).foregroundStyle(.white.opacity(0.75))
                         }
                     }
                     if isFemale, let price = p.videoPriceActualFen, price > 0 {
                         HStack(alignment: .lastTextBaseline, spacing: 0) {
                             Text(fmtPoints(String(price))).font(.system(size: 26, weight: .bold)).foregroundStyle(.white)
-                            Text(" 积分/分钟").font(.system(size: 12)).foregroundStyle(.white.opacity(0.75))
+                            Text(" " + t("userHome.pointsPerMin")).font(.system(size: 12)).foregroundStyle(.white.opacity(0.75))
                         }
                     }
                 }
@@ -197,11 +197,12 @@ struct UserHomeView: View {
             HStack(spacing: 8) {
                 Text(p.nickname ?? "").font(.system(size: 20, weight: .bold)).foregroundStyle(Theme.text)
                 let stColor: Color = p.busy == true ? busyOrange : p.online == true ? Theme.success : Theme.textDim
-                let stText = p.busy == true ? "通话中" : p.online == true ? "在线" : "离线"
+                let stText = p.busy == true ? t("common.inCall") : p.online == true ? t("common.online") : t("common.offline")
                 Text("● \(stText)").font(.system(size: 11)).foregroundStyle(stColor)
             }
             HStack(spacing: 6) {
-                Text("\(p.gender == 1 ? "男" : "女") \(p.age ?? 0)")
+                let genderText = p.gender == 1 ? t("me.male") : t("me.female")
+                Text("\(genderText) \(p.age ?? 0)")
                     .font(.system(size: 11))
                     .foregroundStyle(p.gender == 1 ? Color(red: 0.43, green: 0.7, blue: 1) : Color(red: 1, green: 0.48, blue: 0.58))
                     .padding(.horizontal, 6).padding(.vertical, 2)
@@ -217,8 +218,8 @@ struct UserHomeView: View {
                 Text(sig).font(.system(size: 13)).foregroundStyle(Theme.textSub).lineSpacing(5).padding(.top, 12)
             }
             HStack(spacing: 24) {
-                statCell("\(p.following ?? 0)", "关注", Theme.text)
-                statCell("\(p.fans ?? 0)", "粉丝", Theme.text)
+                statCell("\(p.following ?? 0)", t("me.following"), Theme.text)
+                statCell("\(p.fans ?? 0)", t("me.fans"), Theme.text)
             }
             .padding(.top, 16)
             // ===== 评分：星级总分 + 五维度方格，最高维度渐变高亮 =====
@@ -227,16 +228,16 @@ struct UserHomeView: View {
                 let filled = min(max(Int(star.rounded()), 0), 5)
                 // 按分从高到低排成 3+2 方格，第一格（她最突出的）用渐变填充
                 let dims: [(String, Int)] = [
-                    ("真实度", r.photo ?? 0), ("配合度", r.obedience ?? 0),
-                    ("腿型", r.legs ?? 0), ("曲线", r.chest ?? 0), ("肤质", r.skin ?? 0),
+                    (t("userHome.ratingPhoto"), r.photo ?? 0), (t("userHome.ratingObedience"), r.obedience ?? 0),
+                    (t("userHome.ratingLegs"), r.legs ?? 0), (t("userHome.ratingChest"), r.chest ?? 0), (t("userHome.ratingSkin"), r.skin ?? 0),
                 ].sorted { $0.1 > $1.1 }
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 6) {
-                        Text("评分").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.text)
+                        Text(t("userHome.rating")).font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.text)
                         Text(String(repeating: "★", count: filled) + String(repeating: "☆", count: 5 - filled))
                             .font(.system(size: 13)).foregroundStyle(Theme.accent)
                         Text(String(format: "%.1f", star)).font(.system(size: 15, weight: .bold)).foregroundStyle(Theme.accent)
-                        Text("\(r.count ?? 0)次评价").font(.system(size: 11)).foregroundStyle(Theme.textDim)
+                        Text(t("userHome.ratingCount", ["n": r.count ?? 0])).font(.system(size: 11)).foregroundStyle(Theme.textDim)
                     }
                     HStack(spacing: 8) {
                         ForEach(0..<3, id: \.self) { i in
@@ -256,7 +257,7 @@ struct UserHomeView: View {
             // 照片墙（最多 8 张）
             let wall = (p.albums ?? []).filter { ($0.type ?? 1) == 1 }
             if !wall.isEmpty {
-                Text("照片墙").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.text)
+                Text(t("userHome.photoWall")).font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.text)
                     .padding(.top, 18)
                 let cols = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
                 LazyVGrid(columns: cols, spacing: 8) {
@@ -272,11 +273,11 @@ struct UserHomeView: View {
             }
             // 认证信息：简约行，无背景卡
             VStack(alignment: .leading, spacing: 10) {
-                Text("认证信息").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.text)
+                Text(t("userHome.certs")).font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.text)
                 HStack(spacing: 18) {
-                    certLine("平台认证", verified: p.isGuide == true)
+                    certLine(t("userHome.platformCert"), verified: p.isGuide == true)
                     if isFemale {
-                        certLine("实名认证", verified: p.realnameVerified == true)
+                        certLine(t("userHome.realnameCert"), verified: p.realnameVerified == true)
                     }
                 }
             }
@@ -290,7 +291,7 @@ struct UserHomeView: View {
     @ViewBuilder
     private func momentsSection(_ p: HomeProfile) -> some View {
         if moments.isEmpty {
-            Text("暂无动态").font(.system(size: 13)).foregroundStyle(Theme.textDim)
+            Text(t("userHome.noPosts")).font(.system(size: 13)).foregroundStyle(Theme.textDim)
                 .frame(maxWidth: .infinity).padding(40)
         }
         LazyVStack(alignment: .leading, spacing: 0) {
@@ -345,7 +346,7 @@ struct UserHomeView: View {
             }
             HStack(spacing: 18) {
                 Text("♡ \(m.likeCount ?? 0)").font(.system(size: 13)).foregroundStyle(Theme.textSub)
-                Text("评论 \(m.commentCount ?? 0)").font(.system(size: 13)).foregroundStyle(Theme.textSub)
+                Text(t("userHome.comments") + " \(m.commentCount ?? 0)").font(.system(size: 13)).foregroundStyle(Theme.textSub)
             }
             .padding(.top, 10)
             Rectangle().fill(Theme.line).frame(height: 0.5).padding(.top, 14)
@@ -364,14 +365,14 @@ struct UserHomeView: View {
                     }
                 }
             } label: {
-                Text("聊天").font(.system(size: 12)).foregroundStyle(Theme.text)
+                Text(t("userHome.chat")).font(.system(size: 12)).foregroundStyle(Theme.text)
                     .frame(width: 48, height: 48)
                     .background(Circle().fill(Theme.bg2))
             }
             .buttonStyle(.plain)
 
             Button { showGift = true } label: {
-                Text("礼物").font(.system(size: 12)).foregroundStyle(Theme.accent2)
+                Text(t("userHome.gift")).font(.system(size: 12)).foregroundStyle(Theme.accent2)
                     .frame(width: 48, height: 48)
                     .background(Circle().fill(Theme.bg2))
             }
@@ -381,21 +382,21 @@ struct UserHomeView: View {
                 let busy = p.busy == true
                 let online = p.online == true
                 Button {
-                    if busy { toast = "对方正在通话中，请稍后再试"; return }
-                    if !online { toast = "对方不在线"; return }
+                    if busy { toast = t("common.peerBusy"); return }
+                    if !online { toast = t("common.peerOffline"); return }
                     CallManager.shared.startCall(calleeId: userId, type: 2, name: p.nickname ?? "", avatar: p.avatar ?? "")
                 } label: {
                     let priceFen = p.videoPriceActualFen ?? 0
                     let mainColor: Color = busy ? busyOrange : !online ? Theme.textDim : .white
                     VStack(spacing: 1) {
-                        Text(busy ? "通话中" : "视频聊天")
+                        Text(busy ? t("common.inCall") : t("userHome.videoChat"))
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(mainColor)
                         if !busy {
                             if !online {
-                                Text("对方离线").font(.system(size: 10)).foregroundStyle(Theme.textDim)
+                                Text(t("userHome.peerOffline")).font(.system(size: 10)).foregroundStyle(Theme.textDim)
                             } else if priceFen > 0 {
-                                Text("\(fmtPoints(String(priceFen)))积分/分钟")
+                                Text(t("userHome.pricePerMin", ["price": fmtPoints(String(priceFen))]))
                                     .font(.system(size: 10)).foregroundStyle(.white.opacity(0.85))
                             }
                         }
@@ -419,7 +420,7 @@ struct UserHomeView: View {
                         }
                     }
                 } label: {
-                    Text("发消息")
+                    Text(t("userHome.message"))
                         .font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 48)
@@ -440,7 +441,7 @@ struct UserHomeView: View {
     private func certLine(_ label: String, verified: Bool) -> some View {
         HStack(spacing: 5) {
             Text("✓").font(.system(size: 13, weight: .bold)).foregroundStyle(verified ? Theme.accent : Theme.textDim)
-            Text(verified ? label : "\(label)（未认证）")
+            Text(verified ? label : t("userHome.unverified", ["label": label]))
                 .font(.system(size: 13)).foregroundStyle(verified ? Theme.text : Theme.textDim)
         }
     }

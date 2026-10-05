@@ -11,10 +11,10 @@ func timeAgo(_ iso: String?) -> String {
     let date = f1.date(from: iso) ?? f2.date(from: iso)
     guard let d = date else { return "" }
     let min = Int(Date().timeIntervalSince(d) / 60)
-    if min < 1 { return "刚刚" }
-    if min < 60 { return "\(min)分钟前" }
-    if min < 1440 { return "\(min / 60)小时前" }
-    if min < 43200 { return "\(min / 1440)天前" }
+    if min < 1 { return t("time.justNow") }
+    if min < 60 { return t("time.minutesAgoCompact", ["n": min]) }
+    if min < 1440 { return t("time.hoursAgoCompact", ["n": min / 60]) }
+    if min < 43200 { return t("time.daysAgoCompact", ["n": min / 1440]) }
     return String(iso.prefix(10))
 }
 

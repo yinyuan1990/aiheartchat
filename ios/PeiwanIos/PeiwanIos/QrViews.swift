@@ -71,7 +71,7 @@ struct ScanFlowModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .fullScreenCover(isPresented: $isPresented) {
-                QrScanView(hint: "扫名片、群码、收款码或钱包地址") { text in
+                QrScanView(hint: t("qr.scanPrompt")) { text in
                     // 等扫码页收起再处理，免得下一页的弹出 / push 被吞
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { scanned = text }
                 }
@@ -120,20 +120,20 @@ struct ScanHandlerModifier: ViewModifier {
         } else if let v = parseVroomQr(text) {
             joinVroomByQr(v.groupId, v.token)
         } else if text.contains("pay?sid=") {
-            if let s = parsePaySid(text) { route = .transferTo(s) } else { toast = "收款码不完整" }
+            if let s = parsePaySid(text) { route = .transferTo(s) } else { toast = t("qr.payCodeIncomplete") }
         } else if !wallet, let c = parseGroupCode(text) {
             joinCode = ScannedCode(code: c)
         } else if wallet {
             openWallet(text)
         } else {
-            toast = "无法识别的二维码"
+            toast = t("qr.unrecognized")
         }
     }
 
     private func openWallet(_ text: String) {
         Task { @MainActor in
             guard await ChainWallet.visible(state.user) else {
-                toast = "这是链上钱包地址，当前版本不能在 App 里转账"
+                toast = t("qr.walletUnsupported")
                 return
             }
             let enc = text.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
@@ -169,22 +169,23 @@ struct ScanHandlerModifier: ViewModifier {
                     "token": token,
                 ])
                 guard let convId = r.conversationId, !convId.isEmpty else {
-                    toast = "群会话不存在"
+                    toast = t("qr.groupNotFound")
                     return
                 }
-                chat = ChatTarget(convId: convId, convType: 2, targetId: r.groupId ?? groupId, title: r.groupName ?? "群聊")
+                chat = ChatTarget(convId: convId, convType: 2, targetId: r.groupId ?? groupId, title: r.groupName ?? t("chat.groupChat"))
                 if r.roomActive == true {
+                    let micDenied = t("qr.micDenied")
                     AVCaptureDevice.requestAccess(for: .audio) { ok in
                         DispatchQueue.main.async {
                             if ok {
                                 VoiceRoomManager.shared.join(groupId: r.groupId ?? groupId)
                             } else {
-                                VoiceRoomManager.shared.toastMsg = "需要麦克风权限，请在系统设置中开启"
+                                VoiceRoomManager.shared.toastMsg = micDenied
                             }
                         }
                     }
                 } else {
-                    toast = "已入群，语音房当前未开启"
+                    toast = t("qr.joinedRoomClosed")
                 }
             } catch {
                 toast = error.localizedDescription
@@ -227,7 +228,7 @@ struct MyQrCodeView: View {
                 AvatarView(url: state.user?.avatar ?? "", size: 44)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(state.user?.nickname ?? "").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
-                    Text("ID：\(state.user?.shortId ?? "")").font(.system(size: 13)).foregroundStyle(Theme.textSub)
+                    Text(t("me.id", ["id": state.user?.shortId ?? ""])).font(.system(size: 13)).foregroundStyle(Theme.textSub)
                 }
                 Spacer()
             }
@@ -242,17 +243,17 @@ struct MyQrCodeView: View {
                     .background(RoundedRectangle(cornerRadius: 14).fill(.white))
             }
 
-            Text("使用「积分转赠 - 扫一扫」扫码给我转积分")
+            Text(t("transfer.qrHint"))
                 .font(.system(size: 12)).foregroundStyle(Theme.textDim)
 
             HStack(spacing: 14) {
                 Button {
                     if let img = qrImage {
                         UIImageWriteToSavedPhotosAlbum(img, nil, nil, nil)
-                        toastMsg = "已保存到相册"
+                        toastMsg = t("qr.savedToGallery")
                     }
                 } label: {
-                    Text("保存")
+                    Text(t("common.save"))
                         .font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.text)
                         .frame(width: 110, height: 40)
                         .background(Capsule().fill(Theme.bg3))
@@ -261,7 +262,7 @@ struct MyQrCodeView: View {
                     Button {
                         ShareSheet.present([img])
                     } label: {
-                        Text("分享")
+                        Text(t("common.share"))
                             .font(.system(size: 14, weight: .medium)).foregroundStyle(.white)
                             .frame(width: 110, height: 40)
                             .background(Capsule().fill(Theme.accent))
@@ -271,7 +272,7 @@ struct MyQrCodeView: View {
             }
             .padding(.top, 4)
 
-            Button("关闭") { dismiss() }
+            Button(t("common.close")) { dismiss() }
                 .font(.system(size: 14)).foregroundStyle(Theme.textSub)
                 .padding(.top, 2)
         }
@@ -285,7 +286,7 @@ struct MyQrCodeView: View {
 /// 扫一扫（扫收款码）
 struct QrScanView: View {
     @Environment(\.dismiss) private var dismiss
-    var hint = "对准对方的收款二维码"
+    var hint: String? = nil
     let onResult: (String) -> Void
     @State private var denied = false
 
@@ -293,8 +294,8 @@ struct QrScanView: View {
         ZStack {
             if denied {
                 VStack(spacing: 12) {
-                    Text("未获得相机权限").font(.system(size: 15)).foregroundStyle(Theme.text)
-                    Text("请在系统设置中允许访问相机").font(.system(size: 12)).foregroundStyle(Theme.textDim)
+                    Text(t("qr.noCameraPermission")).font(.system(size: 15)).foregroundStyle(Theme.text)
+                    Text(t("qr.allowCameraHint")).font(.system(size: 12)).foregroundStyle(Theme.textDim)
                 }
             } else {
                 QrCameraView { text in
@@ -307,7 +308,7 @@ struct QrScanView: View {
                 RoundedRectangle(cornerRadius: 14)
                     .stroke(Theme.accent, lineWidth: 2)
                     .frame(width: 230, height: 230)
-                Text(hint)
+                Text(hint ?? t("transfer.scanHint"))
                     .font(.system(size: 13)).foregroundStyle(.white)
                     .padding(.top, 300)
             }

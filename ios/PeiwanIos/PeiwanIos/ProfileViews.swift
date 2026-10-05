@@ -206,12 +206,24 @@ struct MeView: View {
     }
 }
 
-private let txLabels: [String: String] = [
-    "admin_grant": "平台发放", "gift_send": "送出礼物", "gift_recv": "收到礼物",
-    "task_freeze": "约单托管", "task_settle": "约单结算", "task_refund": "约单退回",
-    "msg_fee": "发送消息", "msg_income": "消息收入", "call_fee": "视频通话", "call_income": "通话收入",
-    "transfer_out": "转赠支出", "transfer_in": "收到转赠", "adjust": "调整",
-]
+private func txLabel(_ type: String) -> String {
+    switch type {
+    case "admin_grant": return t("wallet.tx.adminGrant")
+    case "gift_send": return t("wallet.tx.giftSend")
+    case "gift_recv": return t("wallet.tx.giftRecv")
+    case "task_freeze": return t("wallet.tx.taskFreeze")
+    case "task_settle": return t("wallet.tx.taskSettle")
+    case "task_refund": return t("wallet.tx.taskRefund")
+    case "msg_fee": return t("wallet.tx.msgFee")
+    case "msg_income": return t("wallet.tx.msgIncome")
+    case "call_fee": return t("wallet.tx.callFee")
+    case "call_income": return t("wallet.tx.callIncome")
+    case "transfer_out": return t("wallet.tx.transferOut")
+    case "transfer_in": return t("wallet.tx.transferIn")
+    case "adjust": return t("wallet.tx.adjust")
+    default: return type
+    }
+}
 
 /// 贡献榜条目
 struct ContribRankItem: Codable, Identifiable {
@@ -236,15 +248,15 @@ struct WalletView: View {
     @State private var rank: [ContribRankItem] = []
     @State private var rankLoaded = false
 
-    private var rankTitle: String { state.user?.gender == 2 ? "贡献榜" : "送花榜" }
+    private var rankTitle: String { state.user?.gender == 2 ? t("wallet.rankContrib") : t("wallet.rankGifting") }
 
     var body: some View {
         VStack(spacing: 0) {
             // 积分卡固定在顶部，不随流水滚动
             VStack(spacing: 4) {
-                Text("可用积分").font(.system(size: 13)).foregroundStyle(Theme.textSub)
+                Text(t("wallet.available")).font(.system(size: 13)).foregroundStyle(Theme.textSub)
                 Text(fmtPoints(wallet?.balance)).font(.system(size: 38, weight: .bold)).foregroundStyle(Theme.text)
-                Text("冻结中 \(fmtPoints(wallet?.frozen))").font(.system(size: 12)).foregroundStyle(Theme.textDim)
+                Text(t("wallet.frozenN", ["n": fmtPoints(wallet?.frozen)])).font(.system(size: 12)).foregroundStyle(Theme.textDim)
             }
             .frame(maxWidth: .infinity)
             .padding(24)
@@ -253,7 +265,7 @@ struct WalletView: View {
 
             // 明细 / 榜单切换
             HStack(spacing: 10) {
-                ForEach(Array(["明细", rankTitle].enumerated()), id: \.offset) { idx, label in
+                ForEach(Array([t("wallet.tabTxs"), rankTitle].enumerated()), id: \.offset) { idx, label in
                     Text(label)
                         .font(.system(size: 13, weight: tab == idx ? .semibold : .regular))
                         .foregroundStyle(tab == idx ? .white : Theme.textSub)
@@ -281,15 +293,15 @@ struct WalletView: View {
             } else {
             ScrollView {
                 VStack(spacing: 0) {
-                    ForEach(txs) { t in
+                    ForEach(txs) { tx in
                         VStack(spacing: 0) {
                             HStack {
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text(txLabels[t.type ?? ""] ?? (t.type ?? "")).font(.system(size: 14)).foregroundStyle(Theme.text)
-                                    Text(t.remark ?? "").font(.system(size: 11)).foregroundStyle(Theme.textDim)
+                                    Text(txLabel(tx.type ?? "")).font(.system(size: 14)).foregroundStyle(Theme.text)
+                                    Text(tx.remark ?? "").font(.system(size: 11)).foregroundStyle(Theme.textDim)
                                 }
                                 Spacer()
-                                let amount = t.amount ?? "0"
+                                let amount = tx.amount ?? "0"
                                 let neg = amount.hasPrefix("-")
                                 Text((neg ? "-" : "+") + fmtPoints(neg ? String(amount.dropFirst()) : amount))
                                     .font(.system(size: 15, weight: .semibold))
@@ -301,7 +313,7 @@ struct WalletView: View {
                         .padding(.horizontal, 16)
                         .onAppear {
                             // 滚动到最后一条时自动加载下一页
-                            if t.id == txs.last?.id, hasMore {
+                            if tx.id == txs.last?.id, hasMore {
                                 Task { await loadMore() }
                             }
                         }
@@ -315,13 +327,13 @@ struct WalletView: View {
             }
         }
         .fullBg()
-        .navigationTitle("积分明细")
+        .navigationTitle(t("wallet.title"))
         .navigationBarTitleDisplayMode(.inline)
         .compatNavBarBackground(Theme.bg)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 RouteLink(.transfer) {
-                    Text("转赠").font(.system(size: 14)).foregroundStyle(Theme.accent)
+                    Text(t("wallet.transfer")).font(.system(size: 14)).foregroundStyle(Theme.accent)
                 }
             }
         }
@@ -346,7 +358,7 @@ struct WalletView: View {
         ScrollView {
             VStack(spacing: 0) {
                 if rank.isEmpty {
-                    Text("暂无数据").font(.system(size: 13)).foregroundStyle(Theme.textDim).padding(30)
+                    Text(t("wallet.noData")).font(.system(size: 13)).foregroundStyle(Theme.textDim).padding(30)
                 }
                 ForEach(Array(rank.enumerated()), id: \.element.id) { idx, r in
                     VStack(spacing: 0) {
@@ -357,8 +369,8 @@ struct WalletView: View {
                                 .frame(width: 24)
                             AvatarView(url: r.avatar ?? "", size: 40)
                             VStack(alignment: .leading, spacing: 3) {
-                                Text(r.nickname ?? "用户").font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.text)
-                                Text("礼物 \(fmtPoints(r.giftFen)) · 通话 \(fmtPoints(r.callFen)) · 消息 \(fmtPoints(r.msgFen))")
+                                Text(r.nickname ?? t("chatSearch.user")).font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.text)
+                                Text(t("wallet.rankBreakdown", ["gift": fmtPoints(r.giftFen), "call": fmtPoints(r.callFen), "msg": fmtPoints(r.msgFen)]))
                                     .font(.system(size: 11)).foregroundStyle(Theme.textDim)
                             }
                             Spacer()
@@ -397,8 +409,8 @@ struct TransferView: View {
             VStack(spacing: 14) {
                 // 收款人
                 VStack(spacing: 12) {
-                    Text("对方 ID").font(.system(size: 13)).foregroundStyle(Theme.textSub)
-                    TextField("", text: $sid, prompt: Text("6 位数字").foregroundColor(Theme.textDim))
+                    Text(t("transfer.targetId")).font(.system(size: 13)).foregroundStyle(Theme.textSub)
+                    TextField("", text: $sid, prompt: Text(t("transfer.idPlaceholder")).foregroundColor(Theme.textDim))
                         .keyboardType(.numberPad)
                         .multilineTextAlignment(.center)
                         .font(.system(size: 30, weight: .semibold, design: .monospaced))
@@ -413,21 +425,21 @@ struct TransferView: View {
                         }
                     Rectangle().fill(Theme.line).frame(height: 1).padding(.horizontal, 40)
 
-                    if let t = target {
+                    if let tu = target {
                         HStack(spacing: 10) {
-                            AvatarView(url: t.avatar, size: 40)
-                            Text(t.nickname ?? "").font(.system(size: 15, weight: .medium)).foregroundStyle(Theme.text)
+                            AvatarView(url: tu.avatar, size: 40)
+                            Text(tu.nickname ?? "").font(.system(size: 15, weight: .medium)).foregroundStyle(Theme.text)
                             Spacer()
                             HStack(spacing: 4) {
                                 Circle().fill(Theme.success).frame(width: 6, height: 6)
-                                Text("已确认").font(.system(size: 12)).foregroundStyle(Theme.success)
+                                Text(t("transfer.confirmed")).font(.system(size: 12)).foregroundStyle(Theme.success)
                             }
                         }
                         .padding(.horizontal, 4)
                     } else if sid.count == 6 {
-                        Text("正在查找…").font(.system(size: 12)).foregroundStyle(Theme.textDim)
+                        Text(t("transfer.lookingUp")).font(.system(size: 12)).foregroundStyle(Theme.textDim)
                     } else {
-                        Text("输入对方的 6 位 ID 自动确认收款人").font(.system(size: 12)).foregroundStyle(Theme.textDim)
+                        Text(t("transfer.idHint")).font(.system(size: 12)).foregroundStyle(Theme.textDim)
                     }
 
                     HStack(spacing: 0) {
@@ -436,7 +448,7 @@ struct TransferView: View {
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "qrcode.viewfinder").font(.system(size: 15))
-                                Text("扫一扫").font(.system(size: 13))
+                                Text(t("me.scan")).font(.system(size: 13))
                             }
                             .foregroundStyle(Theme.accent)
                             .frame(maxWidth: .infinity)
@@ -447,7 +459,7 @@ struct TransferView: View {
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "qrcode").font(.system(size: 15))
-                                Text("我的收款码").font(.system(size: 13))
+                                Text(t("transfer.myQr")).font(.system(size: 13))
                             }
                             .foregroundStyle(Theme.accent)
                             .frame(maxWidth: .infinity)
@@ -461,7 +473,7 @@ struct TransferView: View {
 
                 // 金额
                 VStack(spacing: 10) {
-                    Text("转赠积分").font(.system(size: 13)).foregroundStyle(Theme.textSub)
+                    Text(t("transfer.amountLabel")).font(.system(size: 13)).foregroundStyle(Theme.textSub)
                     TextField("", text: $amount, prompt: Text("0").foregroundColor(Theme.textDim))
                         .keyboardType(.decimalPad)
                         .multilineTextAlignment(.center)
@@ -469,8 +481,8 @@ struct TransferView: View {
                         .foregroundStyle(Theme.accent)
                     Rectangle().fill(Theme.line).frame(height: 1).padding(.horizontal, 40)
                     HStack(spacing: 6) {
-                        Text("可用余额 \(fmtPoints(balance))").font(.system(size: 12)).foregroundStyle(Theme.textSub)
-                        Button("全部") { amount = fmtPoints(balance) }
+                        Text(t("transfer.available", ["n": fmtPoints(balance)])).font(.system(size: 12)).foregroundStyle(Theme.textSub)
+                        Button(t("transfer.all")) { amount = fmtPoints(balance) }
                             .font(.system(size: 12)).foregroundStyle(Theme.accent)
                     }
                 }
@@ -478,7 +490,7 @@ struct TransferView: View {
                 .frame(maxWidth: .infinity)
                 .background(RoundedRectangle(cornerRadius: 14).fill(Theme.bg2))
 
-                AccentButton(title: "确认转赠", enabled: target != nil && toFen(amount) > 0) {
+                AccentButton(title: t("transfer.submit"), enabled: target != nil && toFen(amount) > 0) {
                     Task {
                         let fen = toFen(amount)
                         do {
@@ -496,14 +508,14 @@ struct TransferView: View {
                 .padding(.top, 6)
 
                 if let mySid = state.user?.shortId {
-                    Text("我的 ID：\(mySid)（告诉对方即可互转）")
+                    Text(t("transfer.myIdHint", ["id": mySid]))
                         .font(.system(size: 12)).foregroundStyle(Theme.textDim)
                 }
             }
             .padding(16)
         }
         .fullBg()
-        .navigationTitle("积分转赠")
+        .navigationTitle(t("transfer.title"))
         .navigationBarTitleDisplayMode(.inline)
         .compatNavBarBackground(Theme.bg)
         .toast($toastMsg)
@@ -512,7 +524,7 @@ struct TransferView: View {
                 if let s = parsePaySid(text) {
                     sid = s
                 } else {
-                    toastMsg = "无法识别的二维码"
+                    toastMsg = t("transfer.badQr")
                 }
             }
         }
@@ -545,8 +557,8 @@ struct RealnameView: View {
                     VStack(spacing: 10) {
                         Image(systemName: "checkmark.seal.fill")
                             .font(.system(size: 44)).foregroundStyle(Theme.success)
-                        Text("已完成实名认证").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
-                        Text("认证姓名：\(state.user?.realNameMasked ?? "")")
+                        Text(t("realname.done")).font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
+                        Text(t("realname.verifiedName", ["name": state.user?.realNameMasked ?? ""]))
                             .font(.system(size: 13)).foregroundStyle(Theme.textSub)
                     }
                     .frame(maxWidth: .infinity)
@@ -555,15 +567,15 @@ struct RealnameView: View {
                 } else {
                     VStack(alignment: .leading, spacing: 14) {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("真实姓名").font(.system(size: 13)).foregroundStyle(Theme.textSub)
-                            TextField("", text: $name, prompt: Text("与身份证一致").foregroundColor(Theme.textDim))
+                            Text(t("realname.name")).font(.system(size: 13)).foregroundStyle(Theme.textSub)
+                            TextField("", text: $name, prompt: Text(t("realname.namePlaceholder")).foregroundColor(Theme.textDim))
                                 .font(.system(size: 16)).foregroundStyle(Theme.text)
                                 .padding(12)
                                 .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bg3))
                         }
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("身份证号").font(.system(size: 13)).foregroundStyle(Theme.textSub)
-                            TextField("", text: $idCard, prompt: Text("18 位身份证号码").foregroundColor(Theme.textDim))
+                            Text(t("realname.idCardNo")).font(.system(size: 13)).foregroundStyle(Theme.textSub)
+                            TextField("", text: $idCard, prompt: Text(t("realname.idCardPlaceholder")).foregroundColor(Theme.textDim))
                                 .font(.system(size: 16, design: .monospaced)).foregroundStyle(Theme.text)
                                 .textInputAutocapitalization(.characters)
                                 .autocorrectionDisabled()
@@ -574,13 +586,13 @@ struct RealnameView: View {
                                     if filtered != v { idCard = filtered }
                                 }
                         }
-                        Text("信息仅用于身份核验，平台不对外展示。每个身份证号仅可认证一个账号。")
+                        Text(t("realname.privacy"))
                             .font(.system(size: 12)).foregroundStyle(Theme.textDim)
                     }
                     .padding(18)
                     .background(RoundedRectangle(cornerRadius: 14).fill(Theme.bg2))
 
-                    AccentButton(title: busy ? "提交中…" : "提交认证", enabled: !busy && name.count >= 2 && idCard.count == 18) {
+                    AccentButton(title: busy ? t("realname.submitting") : t("realname.submit"), enabled: !busy && name.count >= 2 && idCard.count == 18) {
                         Task { await submit() }
                     }
                 }
@@ -588,7 +600,7 @@ struct RealnameView: View {
             .padding(16)
         }
         .fullBg()
-        .navigationTitle("实名认证")
+        .navigationTitle(t("realname.title"))
         .navigationBarTitleDisplayMode(.inline)
         .compatNavBarBackground(Theme.bg)
         .toast($toastMsg)
@@ -604,7 +616,7 @@ struct RealnameView: View {
                 "idCard": idCard,
             ])
             if let u: UserProfile = try? await Api.request("/user/me") { state.user = u }
-            toastMsg = "认证成功"
+            toastMsg = t("realname.success")
         } catch {
             toastMsg = error.localizedDescription
         }
@@ -647,26 +659,26 @@ struct EditProfileView: View {
                     VStack(spacing: 8) {
                         ZStack(alignment: .bottom) {
                             AvatarView(url: avatar, size: 92)
-                            Text("更换")
+                            Text(t("profile.change"))
                                 .font(.system(size: 10)).foregroundStyle(.white)
                                 .padding(.horizontal, 10).padding(.vertical, 2)
                                 .background(Capsule().fill(Color.black.opacity(0.55)))
                         }
-                        Text("点击更换头像").font(.system(size: 11)).foregroundStyle(Theme.textDim)
+                        Text(t("profile.changeAvatar")).font(.system(size: 11)).foregroundStyle(Theme.textDim)
                     }
                 }
                 .padding(.top, 10)
 
                 // ===== 基本信息 =====
                 editCard {
-                    editRow("昵称") {
-                        TextField("填写昵称", text: $nickname)
+                    editRow(t("profile.nickname")) {
+                        TextField(t("profile.nicknameHint"), text: $nickname)
                             .font(.system(size: 15)).foregroundStyle(Theme.text)
                     }
                     editDivider
-                    editRow("年纪") {
+                    editRow(t("profile.age")) {
                         HStack {
-                            Text("\(age) 岁").font(.system(size: 15)).foregroundStyle(Theme.text)
+                            Text(t("profile.ageYears", ["n": age])).font(.system(size: 15)).foregroundStyle(Theme.text)
                             Spacer()
                             Text("›").font(.system(size: 20)).foregroundStyle(Theme.textDim)
                         }
@@ -674,11 +686,11 @@ struct EditProfileView: View {
                     .contentShape(Rectangle())
                     .onTapGesture { pendingAge = age; showAgeSheet = true }
                     editDivider
-                    editRow("城市") {
+                    editRow(t("profile.city")) {
                         HStack(spacing: 10) {
-                            TextField("填写或点右侧定位", text: $city)
+                            TextField(t("profile.cityHint"), text: $city)
                                 .font(.system(size: 15)).foregroundStyle(Theme.text)
-                            Button("定位") {
+                            Button(t("profile.locate")) {
                                 CityLocator.shared.detect { name in
                                     DispatchQueue.main.async { if let name { city = name } }
                                 }
@@ -691,19 +703,19 @@ struct EditProfileView: View {
                 // ===== 视频价格（仅女生） =====
                 if state.user?.gender == 2 {
                     editCard {
-                        editRow("视频价格") {
+                        editRow(t("profile.videoPrice")) {
                             HStack(spacing: 8) {
                                 TextField("0", text: $videoPrice)
                                     .keyboardType(.decimalPad)
                                     .font(.system(size: 15)).foregroundStyle(Theme.text)
-                                Text("积分/分钟").font(.system(size: 13)).foregroundStyle(Theme.textDim)
+                                Text(t("profile.perMin")).font(.system(size: 13)).foregroundStyle(Theme.textDim)
                             }
                         }
                         editDivider
                         // 手续费提示：收入 = 价格 - 手续费，价格须高于手续费
                         let priceFen = toFen(videoPrice)
                         let income = max(0, priceFen - feeCut)
-                        Text("平台手续费 \(fmtPoints(String(feeCut))) 积分/分钟，你的收入 \(fmtPoints(String(income))) 积分/分钟（价格须高于手续费）")
+                        Text(t("profile.feeHint", ["fee": fmtPoints(String(feeCut)), "income": fmtPoints(String(income))]))
                             .font(.system(size: 11)).lineSpacing(3)
                             .foregroundStyle(priceFen > feeCut ? Theme.textDim : Theme.danger)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -714,8 +726,8 @@ struct EditProfileView: View {
                 // ===== 签名 =====
                 editCard {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("签名").font(.system(size: 14)).foregroundStyle(Theme.textSub)
-                        CompatVerticalTextField(text: $signature, prompt: Text("介绍一下自己…"), lineRange: 3...6)
+                        Text(t("profile.bio")).font(.system(size: 14)).foregroundStyle(Theme.textSub)
+                        CompatVerticalTextField(text: $signature, prompt: Text(t("profile.bioPlaceholder")), lineRange: 3...6)
                             .font(.system(size: 15)).foregroundStyle(Theme.text)
                             .onChange(of: signature) { v in
                                 if v.count > 80 { signature = String(v.prefix(80)) }
@@ -731,15 +743,15 @@ struct EditProfileView: View {
                 editCard {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text("照片墙").font(.system(size: 14)).foregroundStyle(Theme.textSub)
+                            Text(t("profile.photoWall")).font(.system(size: 14)).foregroundStyle(Theme.textSub)
                             Spacer()
                             Text("\(photos.count)/8")
                                 .font(.system(size: 12))
                                 .foregroundStyle(photos.count >= 8 ? Theme.accent : Theme.textDim)
                         }
                         Text(photos.count >= 8
-                            ? "已满 8 张，删除后可再添加 · 展示在你的个人主页"
-                            : "还可选 \(8 - photos.count) 张（支持多选）· 展示在你的个人主页")
+                            ? t("profile.wallFull")
+                            : t("profile.wallRemain", ["n": 8 - photos.count]))
                             .font(.system(size: 11)).foregroundStyle(Theme.textDim)
                         let cols = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
                         LazyVGrid(columns: cols, spacing: 8) {
@@ -788,12 +800,12 @@ struct EditProfileView: View {
             .padding(.horizontal, 16)
         }
         .fullBg()
-        .navigationTitle("编辑资料")
+        .navigationTitle(t("me.editProfile"))
         .navigationBarTitleDisplayMode(.inline)
         .compatNavBarBackground(Theme.bg)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button("保存") { save() }
+                Button(t("common.save")) { save() }
                     .font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.accent)
             }
         }
@@ -801,12 +813,12 @@ struct EditProfileView: View {
         .sheet(isPresented: $showAgeSheet) {
             VStack(spacing: 0) {
                 HStack {
-                    Button("取消") { showAgeSheet = false }
+                    Button(t("common.cancel")) { showAgeSheet = false }
                         .font(.system(size: 14)).foregroundStyle(Theme.textSub)
                     Spacer()
-                    Text("选择年纪").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text)
+                    Text(t("profile.pickAge")).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text)
                     Spacer()
-                    Button("确定") { age = pendingAge; showAgeSheet = false }
+                    Button(t("common.ok")) { age = pendingAge; showAgeSheet = false }
                         .font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.accent)
                 }
                 .padding(16)
@@ -868,7 +880,7 @@ struct EditProfileView: View {
 
     private func save() {
         guard !nickname.trimmingCharacters(in: .whitespaces).isEmpty else {
-            toastMsg = "昵称不能为空"
+            toastMsg = t("profile.nicknameEmpty")
             return
         }
         Task {
@@ -909,13 +921,13 @@ struct GuideApplyView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 12) {
-                Text("认证需提交真实姓名与身份证号，审核通过即同时完成实名认证")
+                Text(t("guide.applyHint"))
                     .font(.system(size: 12)).foregroundStyle(Theme.textDim)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                inputField("真实姓名", text: $realName)
-                inputField("身份证号", text: $idCard)
-                inputField("自我介绍", text: $intro)
-                AccentButton(title: "提交申请", enabled: !realName.isEmpty && !idCard.isEmpty) {
+                inputField(t("realname.name"), text: $realName)
+                inputField(t("realname.idCardNo"), text: $idCard)
+                inputField(t("guide.intro"), text: $intro)
+                AccentButton(title: t("guide.submitApply"), enabled: !realName.isEmpty && !idCard.isEmpty) {
                     Task {
                         do {
                             struct Empty: Codable { var ok: Bool? }
@@ -933,7 +945,7 @@ struct GuideApplyView: View {
             .padding(16)
         }
         .fullBg()
-        .navigationTitle("搭子认证")
+        .navigationTitle(t("me.guideApply"))
         .navigationBarTitleDisplayMode(.inline)
         .compatNavBarBackground(Theme.bg)
         .toast($toastMsg)
@@ -971,7 +983,7 @@ struct GiftsReceivedView: View {
             .padding(16)
         }
         .fullBg()
-        .navigationTitle("收到的礼物")
+        .navigationTitle(t("me.gifts"))
         .navigationBarTitleDisplayMode(.inline)
         .compatNavBarBackground(Theme.bg)
         .task {
@@ -988,7 +1000,7 @@ struct MyMomentsView: View {
     var body: some View {
         Group {
             if items.isEmpty {
-                EmptyHint(text: "还没有发布过动态")
+                EmptyHint(text: t("profile.myMomentsEmpty"))
             } else {
                 ScrollView {
                     let cols = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
@@ -1002,11 +1014,11 @@ struct MyMomentsView: View {
             }
         }
         .fullBg()
-        .navigationTitle("我的动态")
+        .navigationTitle(t("me.myMoments"))
         .navigationBarTitleDisplayMode(.inline)
         .compatNavBarBackground(Theme.bg)
-        .confirmationDialog("删除后不可恢复，确定删除这条动态吗？", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
-            Button("删除", role: .destructive) {
+        .confirmationDialog(t("moments.deleteConfirm"), isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
+            Button(t("common.delete"), role: .destructive) {
                 guard let m = deleting else { return }
                 Task {
                     struct OkResp: Codable { var ok: Bool? }
@@ -1016,7 +1028,7 @@ struct MyMomentsView: View {
                     deleting = nil
                 }
             }
-            Button("取消", role: .cancel) { deleting = nil }
+            Button(t("common.cancel"), role: .cancel) { deleting = nil }
         }
         .task {
             items = (try? await Api.request("/moments/mine")) ?? []
@@ -1045,7 +1057,7 @@ struct MyMomentsView: View {
                             Text(content).font(.system(size: 13)).foregroundStyle(Theme.text).lineLimit(2)
                                 .multilineTextAlignment(.leading)
                         }
-                        Text("赞 \(m.likeCount ?? 0) · 评 \(m.commentCount ?? 0)")
+                        Text(t("moments.stats", ["likes": m.likeCount ?? 0, "comments": m.commentCount ?? 0]))
                             .font(.system(size: 11)).foregroundStyle(Theme.textDim)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1088,7 +1100,7 @@ struct FollowListView: View {
         Group {
             if let list {
                 if list.isEmpty {
-                    Text(type == "fans" ? "还没有粉丝" : "还没有关注的人")
+                    Text(type == "fans" ? t("me.noFans") : t("me.noFollowing"))
                         .font(.system(size: 13)).foregroundStyle(Theme.textDim)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
@@ -1102,7 +1114,7 @@ struct FollowListView: View {
                                             HStack(spacing: 6) {
                                                 Text(u.nickname ?? "").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text)
                                                 if u.isGuide == true {
-                                                    Text("认证").font(.system(size: 10)).foregroundStyle(Theme.accent)
+                                                    Text(t("me.verified")).font(.system(size: 10)).foregroundStyle(Theme.accent)
                                                         .padding(.horizontal, 5).padding(.vertical, 1)
                                                         .background(RoundedRectangle(cornerRadius: 3).fill(Theme.accent.opacity(0.12)))
                                                 }
@@ -1124,12 +1136,12 @@ struct FollowListView: View {
                     }
                 }
             } else {
-                Text("加载中…").font(.system(size: 13)).foregroundStyle(Theme.textDim)
+                Text(t("common.loading")).font(.system(size: 13)).foregroundStyle(Theme.textDim)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .fullBg()
-        .navigationTitle(type == "fans" ? "粉丝" : "关注")
+        .navigationTitle(type == "fans" ? t("me.fans") : t("me.following"))
         .navigationBarTitleDisplayMode(.inline)
         .compatNavBarBackground(Theme.bg)
         .task {

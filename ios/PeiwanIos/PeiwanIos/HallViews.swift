@@ -23,7 +23,7 @@ struct HallView: View {
                     onViewMedia: { target in mediaTarget = target }
                 )
             } else {
-                EmptyHint(text: "加载中…")
+                EmptyHint(text: t("common.loading"))
             }
         }
         .fullBg()
@@ -348,7 +348,7 @@ struct GameWebSheet: View {
                             .foregroundStyle(Theme.text)
                             .lineLimit(1)
                             .frame(maxWidth: .infinity)
-                        Button("关闭") { dismiss() }
+                        Button(t("common.close")) { dismiss() }
                             .font(.system(size: 14))
                             .foregroundStyle(model.canGoBack ? Theme.textSub : .clear)
                             .frame(width: 56, height: 40)
@@ -514,14 +514,14 @@ private struct GameWebView: UIViewRepresentable {
         // alert / confirm / prompt 转原生弹窗（WKWebView 默认不显示）
         func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
             present(UIAlertController(title: nil, message: message, preferredStyle: .alert), actions: [
-                UIAlertAction(title: "好", style: .default) { _ in completionHandler() },
+                UIAlertAction(title: t("bot.ok"), style: .default) { _ in completionHandler() },
             ], onFail: completionHandler)
         }
 
         func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
             present(UIAlertController(title: nil, message: message, preferredStyle: .alert), actions: [
-                UIAlertAction(title: "取消", style: .cancel) { _ in completionHandler(false) },
-                UIAlertAction(title: "确定", style: .default) { _ in completionHandler(true) },
+                UIAlertAction(title: t("common.cancel"), style: .cancel) { _ in completionHandler(false) },
+                UIAlertAction(title: t("common.ok"), style: .default) { _ in completionHandler(true) },
             ], onFail: { completionHandler(false) })
         }
 
@@ -529,8 +529,8 @@ private struct GameWebView: UIViewRepresentable {
             let alert = UIAlertController(title: nil, message: prompt, preferredStyle: .alert)
             alert.addTextField { $0.text = defaultText }
             present(alert, actions: [
-                UIAlertAction(title: "取消", style: .cancel) { _ in completionHandler(nil) },
-                UIAlertAction(title: "确定", style: .default) { _ in completionHandler(alert.textFields?.first?.text) },
+                UIAlertAction(title: t("common.cancel"), style: .cancel) { _ in completionHandler(nil) },
+                UIAlertAction(title: t("common.ok"), style: .default) { _ in completionHandler(alert.textFields?.first?.text) },
             ], onFail: { completionHandler(nil) })
         }
 
@@ -563,24 +563,24 @@ struct GuideProjectView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 10) {
-                        entryCard("找搭子", "按城市寻找认证搭子", Route.people("guide"))
-                        entryCard("找人", "发现新朋友打招呼", Route.people("all"))
+                        entryCard(t("hall.findBuddy"), t("hall.findBuddySub"), Route.people("guide"))
+                        entryCard(t("hall.findPeople"), t("hall.findPeopleSub"), Route.people("all"))
                     }
                     HStack(spacing: 10) {
                         if isFemale {
-                            entryCard("接单大厅", "报名接单赚积分", Route.taskHall)
+                            entryCard(t("hall.taskHall"), t("hall.taskHallSub"), Route.taskHall)
                         } else {
-                            entryCard("发布约单", "时间地点报酬托管", Route.taskPost)
+                            entryCard(t("hall.postTask"), t("hall.postTaskSub"), Route.taskPost)
                         }
-                        entryCard(isFemale ? "我的接单" : "我的约单", "查看进行中的约单", Route.taskMine)
+                        entryCard(isFemale ? t("me.myTasksGuide") : t("me.myTasks"), t("hall.myTasksSub"), Route.taskMine)
                     }
 
-                    Text("推荐搭子")
+                    Text(t("hall.recommended"))
                         .font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text)
                         .padding(.vertical, 16)
 
                     if guides.isEmpty {
-                        Text("暂无认证搭子").font(.system(size: 14)).foregroundStyle(Theme.textSub)
+                        Text(t("hall.noBuddies")).font(.system(size: 14)).foregroundStyle(Theme.textSub)
                             .frame(maxWidth: .infinity).padding(40)
                     } else {
                         ForEach(guides) { p in
@@ -592,7 +592,7 @@ struct GuideProjectView: View {
             }
         }
         .fullBg()
-        .navigationTitle("同城搭子")
+        .navigationTitle(t("hall.localBuddy"))
         .navigationBarTitleDisplayMode(.inline)
         .compatNavBarBackground(Theme.bg)
         .fullScreenCover(item: $chatTarget) { t in
@@ -636,9 +636,9 @@ struct PersonRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 4) {
                     Text("\(p.nickname ?? "") · \(p.age ?? 0)").font(.system(size: 15)).foregroundStyle(Theme.text)
-                    if p.isGuide == true { Text("认证").font(.system(size: 11)).foregroundStyle(Theme.accent) }
+                    if p.isGuide == true { Text(t("me.verified")).font(.system(size: 11)).foregroundStyle(Theme.accent) }
                 }
-                Text((p.signature?.isEmpty == false) ? p.signature! : "这个人很神秘")
+                Text((p.signature?.isEmpty == false) ? p.signature! : t("hall.mystery"))
                     .font(.system(size: 12)).foregroundStyle(Theme.textSub).lineLimit(1)
                 if showCity, let city = p.cityName, !city.isEmpty {
                     Text(city).font(.system(size: 11)).foregroundStyle(Theme.textDim)
@@ -646,7 +646,7 @@ struct PersonRow: View {
             }
             Spacer()
             Button(action: onGreet) {
-                Text("打招呼").font(.system(size: 13)).foregroundStyle(.white)
+                Text(t("hall.sayHi")).font(.system(size: 13)).foregroundStyle(.white)
                     .padding(.horizontal, 14).padding(.vertical, 6)
                     .background(Capsule().fill(Theme.accent))
             }
@@ -666,14 +666,14 @@ struct PeopleView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 20) {
-                TextTab(text: "认证", selected: tab == "guide") { tab = "guide"; Task { await load() } }
-                TextTab(text: "全部", selected: tab == "all") { tab = "all"; Task { await load() } }
+                TextTab(text: t("me.verified"), selected: tab == "guide") { tab = "guide"; Task { await load() } }
+                TextTab(text: t("hall.all"), selected: tab == "all") { tab = "all"; Task { await load() } }
                 Spacer()
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
 
             if items.isEmpty {
-                EmptyHint(text: "暂无用户")
+                EmptyHint(text: t("hall.noUsers"))
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
@@ -690,7 +690,7 @@ struct PeopleView: View {
             }
         }
         .fullBg()
-        .navigationTitle(tab == "guide" ? "找搭子" : "找人")
+        .navigationTitle(tab == "guide" ? t("hall.findBuddy") : t("hall.findPeople"))
         .navigationBarTitleDisplayMode(.inline)
         .compatNavBarBackground(Theme.bg)
         .fullScreenCover(item: $chatTarget) { t in

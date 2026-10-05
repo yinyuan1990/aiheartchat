@@ -64,11 +64,11 @@ struct UpdateOverlay: View {
             ZStack {
                 Color.black.opacity(0.72).ignoresSafeArea()
                 VStack(spacing: 0) {
-                    Text(force ? "需要更新后才能继续使用" : "发现新版本")
+                    Text(force ? t("update.forceTitle") : t("update.newVersion"))
                         .font(.system(size: 17, weight: .bold))
                         .foregroundStyle(Theme.text)
                         .padding(.top, 22)
-                    Text("最新版本 \(info.latest ?? "")　当前 \(UpdateChecker.currentVersion)")
+                    Text(t("update.versions", ["latest": info.latest ?? "", "current": UpdateChecker.currentVersion]))
                         .font(.system(size: 12))
                         .foregroundStyle(Theme.textSub)
                         .padding(.top, 6)
@@ -84,12 +84,12 @@ struct UpdateOverlay: View {
                         .padding(.horizontal, 22)
                         .padding(.top, 16)
                     }
-                    Text(isTF ? "将跳转到 TestFlight 安装最新测试版" : "将跳转到 App Store 更新")
+                    Text(isTF ? t("update.tfHint") : t("update.storeHint"))
                         .font(.system(size: 12))
                         .foregroundStyle(Theme.textSub)
                         .padding(.top, 14)
                     Button { checker.go() } label: {
-                        Text(isTF ? "打开 TestFlight 更新" : "前往 App Store 更新")
+                        Text(isTF ? t("update.openTestFlight") : t("update.goAppStore"))
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
@@ -101,7 +101,7 @@ struct UpdateOverlay: View {
                     .padding(.top, 16)
                     if !force {
                         Button { checker.later() } label: {
-                            Text("以后再说")
+                            Text(t("update.later"))
                                 .font(.system(size: 14))
                                 .foregroundStyle(Theme.textSub)
                                 .frame(maxWidth: .infinity)

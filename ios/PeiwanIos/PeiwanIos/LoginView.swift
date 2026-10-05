@@ -16,24 +16,25 @@ struct LoginView: View {
         VStack(spacing: 16) {
             Spacer()
 
-            Text("心之音")
+            Text(t("app.name"))
                 .font(.system(size: 34, weight: .semibold))
                 .tracking(8)
                 .foregroundStyle(Theme.gold)
-            Text("爱情和金钱无关 · 与内心相连")
+            Text(t("login.slogan"))
                 .font(.system(size: 13))
                 .tracking(2)
                 .foregroundStyle(Theme.textSub)
+                .multilineTextAlignment(.center)
                 .padding(.bottom, 14)
 
-            TextField("", text: $username, prompt: Text("账号").foregroundColor(Theme.textSub))
+            TextField("", text: $username, prompt: Text(t("login.account")).foregroundColor(Theme.textSub))
                 .keyboardType(.numberPad)
                 .textContentType(.username)
                 .focused($focus, equals: .user)
                 .padding(13)
                 .background(RoundedRectangle(cornerRadius: 14).fill(Theme.bg3))
                 .foregroundStyle(Theme.text)
-            SecureField("", text: $password, prompt: Text("密码").foregroundColor(Theme.textSub))
+            SecureField("", text: $password, prompt: Text(t("login.password")).foregroundColor(Theme.textSub))
                 .textContentType(.password)
                 .focused($focus, equals: .pass)
                 .padding(13)
@@ -45,7 +46,7 @@ struct LoginView: View {
             }
 
             Button(action: submit) {
-                Text(loading ? "登录中…" : "登录")
+                Text(loading ? t("login.loggingIn") : t("login.login"))
                     .font(.system(size: 16, weight: .semibold))
                     .tracking(4)
                     .frame(maxWidth: .infinity)
@@ -59,7 +60,7 @@ struct LoginView: View {
             Button {
                 state.stage = .register
             } label: {
-                Text("没有账号？注册新账号")
+                Text(t("login.register"))
                     .font(.system(size: 13))
                     .foregroundStyle(Theme.textSub)
             }
@@ -67,7 +68,7 @@ struct LoginView: View {
 
             Spacer()
 
-            Text("本平台仅限年满 18 周岁用户使用")
+            Text(t("login.adultOnly"))
                 .font(.caption2)
                 .foregroundStyle(Theme.textSub)
         }
@@ -77,8 +78,8 @@ struct LoginView: View {
 
     private func submit() {
         let u = username.trimmingCharacters(in: .whitespaces)
-        guard !u.isEmpty else { error = "请输入账号"; return }
-        guard !password.isEmpty else { error = "请输入密码"; return }
+        guard !u.isEmpty else { error = t("login.needAccount"); return }
+        guard !password.isEmpty else { error = t("login.needPassword"); return }
         loading = true
         error = ""
         Task {
@@ -88,7 +89,7 @@ struct LoginView: View {
                 state.user = resp.user
                 state.stage = .main
             } catch {
-                self.error = (error as? ApiError)?.msg ?? "账号或密码错误"
+                self.error = (error as? ApiError)?.msg ?? t("login.wrong")
             }
             loading = false
         }

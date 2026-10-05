@@ -126,8 +126,8 @@ enum ChainWalletBio {
     static func enable(_ password: String, done: @escaping (Result<Bool, Error>) -> Void) {
         let ctx = LAContext()
         ctx.localizedFallbackTitle = ""
-        ctx.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: "开启后可以直接用 Face ID / 指纹解锁钱包") { ok, err in
-            guard ok else { return done(cancelled(err) ? .success(false) : .failure(err ?? Failure(message: "验证失败"))) }
+        ctx.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: t("chainWallet.bioReason")) { ok, err in
+            guard ok else { return done(cancelled(err) ? .success(false) : .failure(err ?? Failure(message: t("chainWallet.verifyFailed")))) }
             guard let ac = SecAccessControlCreateWithFlags(nil, kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly, .biometryCurrentSet, nil) else {
                 return done(.failure(Failure(message: "access control")))
             }
@@ -145,8 +145,8 @@ enum ChainWalletBio {
     static func unlock(done: @escaping (Result<String?, Error>) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
             let ctx = LAContext()
-            ctx.localizedReason = "解锁钱包"
-            ctx.localizedCancelTitle = "用密码"
+            ctx.localizedReason = t("chainWallet.unlockReason")
+            ctx.localizedCancelTitle = t("bio.usePassword")
             ctx.localizedFallbackTitle = ""
             var q = base
             q[kSecReturnData as String] = true
@@ -163,7 +163,7 @@ enum ChainWalletBio {
                 clear()
                 done(.failure(Failure(message: "invalidated")))
             default:
-                done(.failure(Failure(message: s == errSecAuthFailed ? "验证失败" : "keychain \(s)")))
+                done(.failure(Failure(message: s == errSecAuthFailed ? t("chainWallet.verifyFailed") : "keychain \(s)")))
             }
         }
     }
@@ -218,14 +218,14 @@ struct ChainWalletView: View {
             }
         }
         .fullScreenCover(isPresented: Binding(get: { model.scanning }, set: { if !$0 { model.finishScan(nil) } })) {
-            QrScanView(hint: "对准收款地址二维码") { model.finishScan($0) }
+            QrScanView(hint: t("chainWallet.scanHint")) { model.finishScan($0) }
         }
         .onAppear { captured = Self.screenCaptured() }
         .onReceive(NotificationCenter.default.publisher(for: UIScreen.capturedDidChangeNotification)) { _ in
             captured = Self.screenCaptured()
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.userDidTakeScreenshotNotification)) { _ in
-            if model.secure { model.toast = "截图里有助记词 / 私钥，请马上到相册删除这张截图" }
+            if model.secure { model.toast = t("chainWallet.screenshotWarn") }
         }
         .task { await load() }
         .onChange(of: model.closeRequested) { if $0 { dismiss() } }
@@ -239,7 +239,7 @@ struct ChainWalletView: View {
         guard case .loading = phase else { return }
         let me: UserProfile? = try? await Api.request("/user/me")
         guard await ChainWallet.visible(me) else {
-            phase = .blocked("钱包功能暂未对你开放")
+            phase = .blocked(t("chainWallet.notEnabled"))
             return
         }
         // 网站用 Tailwind v4，要 Safari 16.4+（WKWebView 跟系统版本走）
@@ -277,12 +277,12 @@ struct ChainWalletView: View {
                     .foregroundStyle(Theme.text)
                     .frame(width: 40, height: 40)
             }
-            Text("链上钱包")
+            Text(t("me.chainWallet"))
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Theme.text)
                 .frame(maxWidth: .infinity)
             Button { dismiss() } label: {
-                Text("关闭").font(.system(size: 14)).foregroundStyle(Theme.textSub).frame(width: 56, height: 40)
+                Text(t("common.close")).font(.system(size: 14)).foregroundStyle(Theme.textSub).frame(width: 56, height: 40)
             }
         }
         .padding(.horizontal, 8)
@@ -315,21 +315,21 @@ struct ChainWalletView: View {
                     .lineLimit(1)
                 HStack(spacing: 3) {
                     Image(systemName: secure ? "lock.fill" : "exclamationmark.triangle.fill").font(.system(size: 9))
-                    Text(secure ? host : "不安全 · \(host)").font(.system(size: 11)).lineLimit(1)
+                    Text(secure ? host : t("chainWallet.insecure", ["host": host])).font(.system(size: 11)).lineLimit(1)
                 }
                 .foregroundStyle(secure ? Theme.textSub : Theme.warn)
             }
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 4)
             Menu {
-                Button("收藏 / 取消收藏") { model.favorite() }
-                Button("复制链接") {
+                Button(t("chainWallet.toggleFavorite")) { model.favorite() }
+                Button(t("chainWallet.copyLink")) {
                     UIPasteboard.general.string = model.dappURL?.absoluteString
-                    model.toast = "已复制"
+                    model.toast = t("common.copied")
                 }
-                Button("刷新") { model.dappWeb?.reload() }
-                Button("在浏览器打开") { if let u = model.dappURL { UIApplication.shared.open(u) } }
-                Button("分享") { if let u = model.dappURL { model.share(u.absoluteString) } }
+                Button(t("chainWallet.refresh")) { model.dappWeb?.reload() }
+                Button(t("chainWallet.openInBrowser")) { if let u = model.dappURL { UIApplication.shared.open(u) } }
+                Button(t("common.share")) { if let u = model.dappURL { model.share(u.absoluteString) } }
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 17, weight: .bold))
@@ -361,7 +361,7 @@ struct ChainWalletView: View {
         case .blocked(let msg):
             notice(msg)
         case .tooOld:
-            notice("钱包需要 iOS 16.4 或更高版本。请到「设置 → 通用 → 软件更新」升级系统后再打开。")
+            notice(t("chainWallet.tooOld"))
         case .ready(let url):
             ChainWalletContainer(model: model, url: url)
         }
@@ -381,7 +381,7 @@ struct ChainWalletView: View {
             Theme.bg
             VStack(spacing: 10) {
                 Image(systemName: "lock.shield.fill").font(.system(size: 40)).foregroundStyle(Theme.textSub)
-                Text("钱包内容已隐藏").font(.system(size: 14)).foregroundStyle(Theme.textSub)
+                Text(t("chainWallet.hidden")).font(.system(size: 14)).foregroundStyle(Theme.textSub)
             }
         }
         .ignoresSafeArea()
@@ -886,15 +886,15 @@ extension ChainWalletModel: WKNavigationDelegate, WKUIDelegate {
 
     func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
         let alert = UIAlertController(title: frame.securityOrigin.host, message: message, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "好", style: .default) { _ in completionHandler() })
+        alert.addAction(UIAlertAction(title: t("bot.ok"), style: .default) { _ in completionHandler() })
         guard let top = Self.topController() else { return completionHandler() }
         top.present(alert, animated: true)
     }
 
     func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
         let alert = UIAlertController(title: frame.securityOrigin.host, message: message, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "取消", style: .cancel) { _ in completionHandler(false) })
-        alert.addAction(UIAlertAction(title: "确定", style: .default) { _ in completionHandler(true) })
+        alert.addAction(UIAlertAction(title: t("common.cancel"), style: .cancel) { _ in completionHandler(false) })
+        alert.addAction(UIAlertAction(title: t("common.ok"), style: .default) { _ in completionHandler(true) })
         guard let top = Self.topController() else { return completionHandler(false) }
         top.present(alert, animated: true)
     }

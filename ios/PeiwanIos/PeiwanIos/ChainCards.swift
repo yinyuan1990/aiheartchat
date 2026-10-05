@@ -62,19 +62,22 @@ enum ChainCards {
     /// 会话列表 / 引用里的一行预览
     static func preview(_ type: String, _ content: String) -> String? {
         let o = obj(content)
+        let symbol = o["symbol"] as? String ?? ""
         switch type {
         case "transfer":
             let dec = (o["decimals"] as? Int) ?? Int(o["decimals"] as? String ?? "") ?? 0
-            return "[转账] \(amount(o["amount"] as? String, dec)) \(o["symbol"] as? String ?? "")"
+            return t("card.preview.transfer", ["amount": amount(o["amount"] as? String, dec), "symbol": symbol])
         case "callout":
-            return "[喊单] $\(o["symbol"] as? String ?? "")"
+            return t("card.preview.callout", ["symbol": symbol])
         case "perp":
-            let side = (o["side"] as? String) == "short" ? "做空" : "做多"
+            let side = (o["side"] as? String) == "short" ? t("card.short") : t("card.long")
             let lev = Int(PerpLive.num(o["lev"]) ?? 0)
-            return "[合约喊单] \(side) \(o["coin"] as? String ?? "") \(lev)x"
+            return t("card.preview.perp", ["side": side, "coin": o["coin"] as? String ?? "", "lev": lev])
         case "payreq":
-            if let a = o["amount"] as? String { return "[收款] \(amount(a, (o["decimals"] as? Int) ?? 0)) \(o["symbol"] as? String ?? "")" }
-            return "[收款] \(chainName(o["chain"] as? String ?? ""))"
+            if let a = o["amount"] as? String {
+                return t("card.preview.payreq", ["amount": amount(a, (o["decimals"] as? Int) ?? 0), "symbol": symbol])
+            }
+            return t("card.preview.payreqChain", ["chain": chainName(o["chain"] as? String ?? "")])
         default:
             return nil
         }
@@ -154,15 +157,15 @@ struct TransferCardView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("\(ChainCards.amount(o["amount"] as? String, dec)) \(o["symbol"] as? String ?? "")")
                             .font(.system(size: 17, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
-                        Text(mine ? "已转账给对方" : "对方给你转账").font(.system(size: 12)).foregroundStyle(.white.opacity(0.85))
+                        Text(mine ? t("card.transferSent") : t("card.transferReceived")).font(.system(size: 12)).foregroundStyle(.white.opacity(0.85))
                     }
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 14).padding(.vertical, 12)
                 HStack {
-                    Text("链上转账 · \(ChainCards.chainName(chain))").font(.system(size: 11)).foregroundStyle(Color(red: 0.6, green: 0.36, blue: 0))
+                    Text(t("card.onchainTransfer", ["chain": ChainCards.chainName(chain)])).font(.system(size: 11)).foregroundStyle(Color(red: 0.6, green: 0.36, blue: 0))
                     Spacer()
-                    if o["verified"] as? Bool == true { Text("已到账 ✓").font(.system(size: 11)).foregroundStyle(Color(red: 0.09, green: 0.64, blue: 0.29)) }
+                    if o["verified"] as? Bool == true { Text(t("card.arrived")).font(.system(size: 11)).foregroundStyle(Color(red: 0.09, green: 0.64, blue: 0.29)) }
                 }
                 .padding(.horizontal, 14).padding(.vertical, 6)
                 .background(Color(red: 1, green: 0.957, blue: 0.87))
@@ -203,7 +206,7 @@ struct CalloutCardView: View {
                     Spacer(minLength: 0)
                     VStack(alignment: .trailing, spacing: 1) {
                         if let p = ChainCards.usd(o["priceUsd"] as? Double) { Text(p).font(.system(size: 12)).foregroundStyle(.white) }
-                        if let m = ChainCards.usd(o["mcapUsd"] as? Double) { Text("市值 \(m)").font(.system(size: 10)).foregroundStyle(.white.opacity(0.55)) }
+                        if let m = ChainCards.usd(o["mcapUsd"] as? Double) { Text(t("card.mcap", ["v": m])).font(.system(size: 10)).foregroundStyle(.white.opacity(0.55)) }
                     }
                 }
                 if let note = o["note"] as? String, !note.isEmpty {
@@ -211,9 +214,9 @@ struct CalloutCardView: View {
                 }
                 HStack(spacing: 4) {
                     Image(systemName: "megaphone.fill").font(.system(size: 11)).foregroundStyle(Color(red: 0.29, green: 0.87, blue: 0.5))
-                    Text("喊单 · \(ChainCards.chainName(o["chain"] as? String ?? ""))").font(.system(size: 11)).foregroundStyle(.white.opacity(0.55))
+                    Text(t("card.calloutFooter", ["chain": ChainCards.chainName(o["chain"] as? String ?? "")])).font(.system(size: 11)).foregroundStyle(.white.opacity(0.55))
                     Spacer()
-                    Text(canWallet ? "去看看" : "看行情")
+                    Text(canWallet ? t("card.view") : t("card.viewMarket"))
                         .font(.system(size: 12, weight: .semibold)).foregroundStyle(.black)
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(Capsule().fill(Color(red: 0.29, green: 0.87, blue: 0.5)))
@@ -309,24 +312,24 @@ struct PerpCardView: View {
             let l = PerpLive.num(st["lev"]) ?? lev
             var r = PerpLive.num(st["roe"]) ?? 0
             if let mark = live.marks[coin], e > 0 { r = PerpLive.roe(entry: e, price: mark, lev: l, long: long) }
-            return PerpLine(label: "持仓中", value: PerpLive.pct(r), color: r >= 0 ? PerpCardView.up : PerpCardView.down)
+            return PerpLine(label: t("card.open"), value: PerpLive.pct(r), color: r >= 0 ? PerpCardView.up : PerpCardView.down)
         }
         if state == "closed" {
             let reason = st["reason"] as? String ?? ""
             let exit = PerpLive.num(st["exit"]) ?? 0
             let r = entry > 0 && exit > 0 ? PerpLive.roe(entry: entry, price: exit, lev: lev, long: long) : 0
-            var why = "已平仓"
-            if reason == "tp" { why = "止盈出局" }
-            if reason == "sl" { why = "止损出局" }
-            if reason == "liq" { return PerpLine(label: "已强平", value: "-100%", color: PerpCardView.down) }
+            var why = t("card.closed")
+            if reason == "tp" { why = t("card.closedTp") }
+            if reason == "sl" { why = t("card.closedSl") }
+            if reason == "liq" { return PerpLine(label: t("card.liquidated"), value: "-100%", color: PerpCardView.down) }
             return PerpLine(label: why, value: PerpLive.pct(r), color: r >= 0 ? PerpCardView.up : PerpCardView.down)
         }
         if state == "pending" {
             let p = PerpLive.num(st["px"]).map { "@ " + PerpLive.px($0) } ?? ""
-            return PerpLine(label: "挂单中", value: p, color: .white.opacity(0.7))
+            return PerpLine(label: t("card.pending"), value: p, color: .white.opacity(0.7))
         }
-        if state == "none" { return PerpLine(label: "未成交 / 已撤单", value: "", color: PerpCardView.dim) }
-        return PerpLine(label: "读取实时状态…", value: "", color: PerpCardView.dim)
+        if state == "none" { return PerpLine(label: t("card.unfilled"), value: "", color: PerpCardView.dim) }
+        return PerpLine(label: t("card.loadingStatus"), value: "", color: PerpCardView.dim)
     }
 
     private func cell(_ k: String, _ v: Double?) -> some View {
@@ -349,16 +352,16 @@ struct PerpCardView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Text("\(coin)-USD").font(.system(size: 16, weight: .bold)).foregroundStyle(.white)
-                Text("\(long ? "做多" : "做空") \(lev)x").font(.system(size: 11, weight: .semibold)).foregroundStyle(sideColor)
+                Text("\(long ? t("card.long") : t("card.short")) \(lev)x").font(.system(size: 11, weight: .semibold)).foregroundStyle(sideColor)
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(RoundedRectangle(cornerRadius: 6).fill(sideColor.opacity(0.18)))
                 Spacer(minLength: 0)
                 if let m = live.marks[coin] { Text(PerpLive.px(m)).font(.system(size: 12)).foregroundStyle(.white.opacity(0.7)) }
             }
             HStack(spacing: 4) {
-                cell((o["orderType"] as? String) == "limit" ? "挂单" : "开仓", PerpLive.num(o["entry"]))
-                cell("止盈", PerpLive.num(o["tp"]))
-                cell("止损", PerpLive.num(o["sl"]))
+                cell((o["orderType"] as? String) == "limit" ? t("card.limit") : t("card.entry"), PerpLive.num(o["entry"]))
+                cell(t("card.tp"), PerpLive.num(o["tp"]))
+                cell(t("card.sl"), PerpLive.num(o["sl"]))
             }
             HStack {
                 Text(l.label).font(.system(size: 12)).foregroundStyle(.white.opacity(0.75))
@@ -372,11 +375,11 @@ struct PerpCardView: View {
             }
             HStack(spacing: 4) {
                 Image(systemName: "megaphone.fill").font(.system(size: 11)).foregroundStyle(Color(red: 0.29, green: 0.87, blue: 0.5))
-                Text("合约喊单 · 收益率实时").font(.system(size: 11)).foregroundStyle(PerpCardView.dim)
+                Text(t("card.perpFooter")).font(.system(size: 11)).foregroundStyle(PerpCardView.dim)
                 Spacer()
                 if canWallet && !closed {
                     Button(action: onFollow) {
-                        Text("跟单").font(.system(size: 12, weight: .semibold)).foregroundStyle(.black)
+                        Text(t("card.copyTrade")).font(.system(size: 12, weight: .semibold)).foregroundStyle(.black)
                             .padding(.horizontal, 12).padding(.vertical, 4)
                             .background(Capsule().fill(Color(red: 0.29, green: 0.87, blue: 0.5)))
                     }
@@ -413,15 +416,17 @@ struct PayreqCardView: View {
         let address = o["address"] as? String ?? ""
         let chain = o["chain"] as? String ?? ""
         let amount = (o["amount"] as? String).map { "\(ChainCards.amount($0, (o["decimals"] as? Int) ?? 0)) \(o["symbol"] as? String ?? "")" }
+        let noAmount = (o["symbol"] as? String).map { t("card.receiveSymbol", ["symbol": $0]) } ?? t("card.amountByPayer")
+        let hint = copied ? t("card.addressCopied") : t("card.payreqHint", ["chain": ChainCards.chainName(chain)])
         VStack(spacing: 0) {
             HStack(spacing: 4) {
                 Image(systemName: "arrow.left.arrow.right").font(.system(size: 12, weight: .semibold))
-                Text("收款 · \(ChainCards.chainName(chain))").font(.system(size: 13, weight: .semibold))
+                Text(t("card.payreqHeader", ["chain": ChainCards.chainName(chain)])).font(.system(size: 13, weight: .semibold))
                 Spacer()
             }
             .foregroundStyle(.white).padding(.horizontal, 12).padding(.vertical, 9).background(Self.orange)
             VStack(spacing: 6) {
-                Text(amount ?? ((o["symbol"] as? String).map { "收 \($0)" } ?? "金额由付款人填写"))
+                Text(amount ?? noAmount)
                     .font(.system(size: amount != nil ? 20 : 14, weight: .semibold)).foregroundStyle(Color(white: 0.07))
                 if let note = o["note"] as? String, !note.isEmpty { Text(note).font(.system(size: 12)).foregroundStyle(Color(white: 0.33)) }
                 if let img = Self.qr(address) {
@@ -435,10 +440,10 @@ struct PayreqCardView: View {
                         UIPasteboard.general.string = address
                         copied = true
                     }
-                Text(copied ? "地址已复制" : "点地址复制 · 只收 \(ChainCards.chainName(chain)) 上的币").font(.system(size: 10)).foregroundStyle(Color(white: 0.53))
+                Text(hint).font(.system(size: 10)).foregroundStyle(Color(white: 0.53))
                 if !mine, let onPay {
                     Button(action: onPay) {
-                        Text("转账").font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
+                        Text(t("card.transfer")).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
                             .frame(maxWidth: .infinity).frame(height: 36).background(Capsule().fill(Self.orange))
                     }
                     .buttonStyle(.plain).padding(.top, 4)
@@ -472,17 +477,18 @@ struct ShareCardSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Button("取消") { dismiss() }.font(.system(size: 14)).foregroundStyle(Theme.textSub)
+                Button(t("common.cancel")) { dismiss() }.font(.system(size: 14)).foregroundStyle(Theme.textSub)
                 Spacer()
-                Text(isPayreq ? "把收款发到…" : "喊单 $\(card["symbol"] as? String ?? "") 到…").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
+                let title = isPayreq ? t("card.sendPayreqTo") : t("card.calloutTo", ["symbol": card["symbol"] as? String ?? ""])
+                Text(title).font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
                 Spacer()
-                Button(picked.isEmpty ? "发送" : "发送(\(picked.count))") { send() }
+                Button(picked.isEmpty ? t("common.send") : t("msg.sendCount", ["n": picked.count])) { send() }
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(picked.isEmpty ? Theme.textDim : Theme.accent)
                     .disabled(picked.isEmpty)
             }
             .padding(16)
-            TextField("搜索", text: $q)
+            TextField(t("common.search"), text: $q)
                 .foregroundStyle(Theme.text)
                 .padding(.horizontal, 12).padding(.vertical, 9)
                 .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bg3))
@@ -528,7 +534,7 @@ struct ShareCardSheet: View {
             if c.type == 1, let p = c.peer { _ = WsClient.shared.send(convType: 1, targetId: p.id, msgType: type, content: content) }
             else if let g = c.group { _ = WsClient.shared.send(convType: 2, targetId: g.id, msgType: type, content: content) }
         }
-        onDone(isPayreq ? "收款已发到 \(picked.count) 个聊天" : "已喊单到 \(picked.count) 个聊天")
+        onDone(isPayreq ? t("card.payreqSent", ["n": picked.count]) : t("card.calloutSent", ["n": picked.count]))
         dismiss()
     }
 }
@@ -541,12 +547,12 @@ struct TransferChainSheet: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            Text("转账到哪条链").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text).padding(.top, 18)
-            if let a = addr.evm { choice("EVM 链", "Arc / Ethereum / BNB / Base / Arbitrum / Polygon", a) { onPick(a, nil) } }
-            if let a = addr.sol { choice("Solana", "SOL、USDC、pump 币等", a) { onPick(a, "sol") } }
-            if let a = addr.trx { choice("TRON 波场", "TRX、USDT（TRC20）", a) { onPick(a, "trx") } }
-            if let a = addr.ton { choice("TON", "GRAM（原 Toncoin）、USDT 等", a) { onPick(a, "ton") } }
-            Text("转账页里可以选币种和网络；转完会在聊天里发一张转账卡片。").font(.system(size: 12)).foregroundStyle(Theme.textSub)
+            Text(t("card.pickChain")).font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text).padding(.top, 18)
+            if let a = addr.evm { choice(t("card.evmChain"), "Arc / Ethereum / BNB / Base / Arbitrum / Polygon", a) { onPick(a, nil) } }
+            if let a = addr.sol { choice("Solana", t("card.solTokens"), a) { onPick(a, "sol") } }
+            if let a = addr.trx { choice(t("card.tron"), t("card.trxTokens"), a) { onPick(a, "trx") } }
+            if let a = addr.ton { choice("TON", t("card.tonTokens"), a) { onPick(a, "ton") } }
+            Text(t("card.pickChainHint")).font(.system(size: 12)).foregroundStyle(Theme.textSub)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 16)

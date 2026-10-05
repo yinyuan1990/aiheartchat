@@ -35,7 +35,7 @@ struct MeetSectionView: View {
         VStack(spacing: 0) {
             // 子栏胶囊：所有 / 新人 / 同城 / 亲密度
             HStack(spacing: 8) {
-                ForEach([("all", "所有"), ("new", "新人"), ("city", "同城"), ("intimacy", "亲密度")], id: \.0) { k, label in
+                ForEach([("all", t("meet.tabAll")), ("new", t("meet.tabNew")), ("city", t("meet.tabCity")), ("intimacy", t("meet.tabIntimacy"))], id: \.0) { k, label in
                     let sel = tab == k
                     Button {
                         tab = k
@@ -79,11 +79,11 @@ struct MeetSectionView: View {
     }
 
     private var emptyText: String {
-        if loading { return "加载中…" }
+        if loading { return t("common.loading") }
         switch tab {
-        case "intimacy": return "还没有亲密的人\n聊天、视频、点赞评论都会累计亲密度"
-        case "city": return "「\(city.isEmpty ? "同城" : city)」还没有人\n切到所有看看"
-        default: return "暂时没有人"
+        case "intimacy": return t("meet.emptyIntimacy")
+        case "city": return t("meet.emptyCity", ["city": city.isEmpty ? t("meet.tabCity") : city])
+        default: return t("meet.empty")
         }
     }
 
@@ -118,9 +118,9 @@ struct MeetCardView: View {
                 VStack {
                     HStack {
                         if u.isGuide == true || u.realnameVerified == true {
-                            badge("已认证", bg: Theme.accent)
+                            badge(t("meet.verified"), bg: Theme.accent)
                         } else if u.isNew == true {
-                            badge("新人", bg: Color(red: 0.42, green: 0.36, blue: 0.91))
+                            badge(t("meet.tabNew"), bg: Color(red: 0.42, green: 0.36, blue: 0.91))
                         }
                         Spacer()
                         Circle()
@@ -139,7 +139,7 @@ struct MeetCardView: View {
                             .lineLimit(1)
                         HStack(spacing: 6) {
                             // 评分五星换算（0-100 → 5.0）
-                            Text("★ \((u.ratingCount ?? 0) > 0 ? String(format: "%.1f", Double(u.ratingAvg ?? 0) / 20.0) : "新")")
+                            Text("★ \((u.ratingCount ?? 0) > 0 ? String(format: "%.1f", Double(u.ratingAvg ?? 0) / 20.0) : t("meet.ratingNew"))")
                                 .font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
                                 .padding(.horizontal, 6).padding(.vertical, 1)
                                 .background(RoundedRectangle(cornerRadius: 8).fill(Theme.warn.opacity(0.85)))
@@ -173,7 +173,8 @@ struct MeetCardView: View {
             // 视频按钮三态：通话中 / 离线置灰 / 可打（显示价格）
             let busyOrange = Color(red: 1, green: 0.67, blue: 0.24)
             let price = u.videoPriceFen ?? 0
-            Text(u.busy == true ? "通话中" : price > 0 ? "视频 \(fmtPoints(String(price)))/分" : "视频")
+            let videoLabel = price > 0 ? t("meet.videoPrice", ["n": fmtPoints(String(price))]) : t("common.video")
+            Text(u.busy == true ? t("meet.busy") : videoLabel)
                 .font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
                 .padding(.horizontal, 8).padding(.vertical, 3)
                 .background(

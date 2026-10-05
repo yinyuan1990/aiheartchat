@@ -123,14 +123,14 @@ struct PlazaView: View {
                     // 左侧 tab 横向滑动，占剩余宽度；右侧定位按钮固定尺寸不被压缩
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 16) {
-                            TextTab(text: "动态", selected: tab == "feed") { tab = "feed"; Task { await load() } }
-                            TextTab(text: "遇见", selected: tab == "meet") { tab = "meet" }
-                            TextTab(text: "励志行", selected: tab == "quotes") { tab = "quotes" }
-                            TextTab(text: "私密树洞", selected: tab == "treehole") { tab = "treehole" }
+                            TextTab(text: t("plaza.tab.feed"), selected: tab == "feed") { tab = "feed"; Task { await load() } }
+                            TextTab(text: t("plaza.tab.meet"), selected: tab == "meet") { tab = "meet" }
+                            TextTab(text: t("plaza.tab.quotes"), selected: tab == "quotes") { tab = "quotes" }
+                            TextTab(text: t("plaza.tab.treehole"), selected: tab == "treehole") { tab = "treehole" }
                         }
                         .padding(.trailing, 4)
                     }
-                    Button(locating ? "定位中…" : (city.isEmpty ? "定位" : "\(city) ▾")) { locate() }
+                    Button(locating ? t("plaza.locating") : (city.isEmpty ? t("plaza.locate") : "\(city) ▾")) { locate() }
                         .font(.system(size: 13)).foregroundStyle(Theme.textSub)
                         .lineLimit(1).fixedSize()
                         .layoutPriority(1)
@@ -147,7 +147,7 @@ struct PlazaView: View {
                     // 私密树洞：匿名投稿信息流（原生实现，大厅 H5 内不再展示）
                     TreeholeSectionView()
                 } else if items.isEmpty {
-                    EmptyHint(text: "暂无动态\n自己发布的仅异性可见")
+                    EmptyHint(text: t("plaza.emptyFeed"))
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 0) {
@@ -220,7 +220,7 @@ struct FollowMomentsView: View {
     var body: some View {
         Group {
             if loaded, items.isEmpty {
-                EmptyHint(text: "关注的人还没有动态\n去遇见里关注一些人吧")
+                EmptyHint(text: t("plaza.emptyFollow"))
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
@@ -235,7 +235,7 @@ struct FollowMomentsView: View {
             }
         }
         .fullBg()
-        .navigationTitle("关注动态")
+        .navigationTitle(t("me.followMoments"))
         .navigationBarTitleDisplayMode(.inline)
         .compatNavBarBackground(Theme.bg)
         .task { await load() }
@@ -284,7 +284,7 @@ struct MomentCardView: View {
                     HStack(spacing: 5) {
                         Text(m.user?.nickname ?? "").font(.system(size: 15, weight: .medium)).foregroundStyle(Theme.text)
                         if m.user?.isGuide == true {
-                            Text("认证").font(.system(size: 10)).foregroundStyle(Theme.accent)
+                            Text(t("me.verified")).font(.system(size: 10)).foregroundStyle(Theme.accent)
                                 .padding(.horizontal, 5).padding(.vertical, 1)
                                 .background(RoundedRectangle(cornerRadius: 3).fill(Theme.accent.opacity(0.12)))
                         }
@@ -309,7 +309,7 @@ struct MomentCardView: View {
                             }
                         }
                     } label: {
-                        Text(following ? "已关注" : "关注")
+                        Text(following ? t("common.followed") : t("common.follow"))
                             .font(.system(size: 12))
                             .foregroundStyle(following ? Theme.textSub : .white)
                             .padding(.horizontal, 11).padding(.vertical, 4)
@@ -330,11 +330,12 @@ struct MomentCardView: View {
                         let priceFen = m.user?.videoPriceFen ?? 0
                         let busyOrange = Color(red: 1, green: 0.67, blue: 0.24)
                         let fgColor: Color = peerBusy ? busyOrange : peerOnline ? Theme.accent : Theme.textDim
+                        let callText = priceFen > 0 ? t("plaza.videoCallPrice", ["n": fmtPoints(String(priceFen))]) : t("plaza.videoCall")
                         Button {
                             if peerBusy || !peerOnline { return }
                             if let u = m.user { onVideoCall(u) }
                         } label: {
-                            Text(peerBusy ? "通话中" : priceFen > 0 ? "视频通话 \(fmtPoints(String(priceFen)))/分" : "视频通话")
+                            Text(peerBusy ? t("plaza.inCall") : callText)
                                 .font(.system(size: 12))
                                 .foregroundStyle(fgColor)
                                 .padding(.horizontal, 11).padding(.vertical, 4)
@@ -367,12 +368,12 @@ struct MomentCardView: View {
                 if m.user?.online == true {
                     HStack(spacing: 4) {
                         Circle().fill(Theme.success).frame(width: 6, height: 6)
-                        Text("在线").font(.system(size: 12)).foregroundStyle(Theme.success)
+                        Text(t("plaza.online")).font(.system(size: 12)).foregroundStyle(Theme.success)
                     }
                 } else {
                     HStack(spacing: 4) {
                         Circle().fill(Theme.textDim).frame(width: 6, height: 6)
-                        Text("离线").font(.system(size: 12)).foregroundStyle(Theme.textDim)
+                        Text(t("plaza.offline")).font(.system(size: 12)).foregroundStyle(Theme.textDim)
                     }
                 }
                 if let distance = distanceText {
@@ -393,7 +394,7 @@ struct MomentCardView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: liked ? "heart.fill" : "heart").font(.system(size: 13))
-                        Text("点赞\(likeCount > 0 ? " \(likeCount)" : "")").font(.system(size: 13))
+                        Text(t("plaza.like") + (likeCount > 0 ? " \(likeCount)" : "")).font(.system(size: 13))
                     }
                     .foregroundStyle(liked ? Theme.accent : Theme.textSub)
                 }
@@ -403,7 +404,7 @@ struct MomentCardView: View {
                 Group {
                     let commentLabel = HStack(spacing: 4) {
                         Image(systemName: "bubble.right").font(.system(size: 12))
-                        Text("评论\((m.commentCount ?? 0) > 0 ? " \(m.commentCount ?? 0)" : "")").font(.system(size: 13))
+                        Text(t("plaza.comment") + ((m.commentCount ?? 0) > 0 ? " \(m.commentCount ?? 0)" : "")).font(.system(size: 13))
                     }
                     .foregroundStyle(Theme.textSub)
 
@@ -552,7 +553,7 @@ struct MomentDetailView: View {
                                 .onDisappear { detailPlayer?.pause() }
                         }
                     }
-                    Text("评论 \(comments.count)")
+                    Text(t("userHome.comments") + " \(comments.count)")
                         .font(.system(size: 15, weight: .bold)).foregroundStyle(Theme.text)
                         .padding(16)
                     ForEach(comments) { c in
@@ -561,7 +562,7 @@ struct MomentDetailView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(c.user?.nickname ?? "").font(.system(size: 13)).foregroundStyle(Theme.textSub)
                                 if let reply = c.replyToNickname, !reply.isEmpty {
-                                    Text("回复 @\(reply)").font(.system(size: 12)).foregroundStyle(Theme.textDim)
+                                    Text(t("moments.repliedTo", ["name": reply])).font(.system(size: 12)).foregroundStyle(Theme.textDim)
                                 }
                                 if let content = c.content, !content.isEmpty {
                                     Text(content).font(.system(size: 15)).foregroundStyle(Theme.text)
@@ -602,12 +603,12 @@ struct MomentDetailView: View {
                             .background(Circle().fill(showSticker ? Theme.bubbleMine : Theme.bg3))
                     }
                     .buttonStyle(.plain)
-                    TextField("", text: $input, prompt: Text("说点什么…").foregroundColor(Theme.textSub))
+                    TextField("", text: $input, prompt: Text(t("moments.saySomething")).foregroundColor(Theme.textSub))
                         .focused($inputFocused)
                         .padding(.horizontal, 14).padding(.vertical, 10)
                         .background(Capsule().fill(Theme.bg3))
                         .foregroundStyle(Theme.text)
-                    Button("发送") { send() }
+                    Button(t("common.send")) { send() }
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(canSend ? Theme.accent : Theme.textDim)
                         .disabled(!canSend)
@@ -621,7 +622,7 @@ struct MomentDetailView: View {
             .onChange(of: inputFocused) { f in if f { showSticker = false } }
         }
         .fullBg()
-        .navigationTitle("动态详情")
+        .navigationTitle(t("moments.detailTitle"))
         .navigationBarTitleDisplayMode(.inline)
         .compatNavBarBackground(Theme.bg)
         .fullScreenCover(item: $chatTarget) { t in
@@ -684,7 +685,7 @@ struct PublishView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         HStack(spacing: 12) {
-                            ForEach([("image", "图文"), ("video", "视频")], id: \.0) { k, label in
+                            ForEach([("image", t("publish.modePhoto")), ("video", t("publish.modeVideo"))], id: \.0) { k, label in
                                 Button {
                                     mode = k
                                 } label: {
@@ -733,7 +734,7 @@ struct PublishView: View {
                                         }
                                     }) {
                                         VStack {
-                                            Text(uploading ? "上传中…" : "+")
+                                            Text(uploading ? t("channel.uploading") : "+")
                                                 .font(uploading ? .system(size: 12) : .system(size: 30, weight: .light))
                                                 .foregroundStyle(Theme.textSub)
                                         }
@@ -767,14 +768,14 @@ struct PublishView: View {
                                                 }
                                             }
                                         } catch {
-                                            toastMsg = "视频上传失败：\(error.localizedDescription)"
+                                            toastMsg = t("publish.videoUploadFailed", ["err": error.localizedDescription])
                                         }
                                         uploading = false
                                         uploadProgress = 0
                                     }
                                 }) {
                                     VStack(spacing: 8) {
-                                        Text(uploading ? "上传中…" : "选择视频")
+                                        Text(uploading ? t("channel.uploading") : t("publish.chooseVideo"))
                                             .font(.system(size: 14)).foregroundStyle(Theme.textSub)
                                     }
                                     .frame(maxWidth: .infinity).frame(height: 180)
@@ -802,16 +803,16 @@ struct PublishView: View {
                         }
 
                         VStack(alignment: .leading, spacing: 0) {
-                            CompatVerticalTextField(text: $content, prompt: Text("分享此刻的想法…").foregroundColor(Theme.textSub), lineRange: 5 ... 10)
+                            CompatVerticalTextField(text: $content, prompt: Text(t("publish.thoughtsPlaceholder")).foregroundColor(Theme.textSub), lineRange: 5 ... 10)
                                 .foregroundStyle(Theme.text)
                                 .padding(14)
                         }
                         .background(RoundedRectangle(cornerRadius: 12).fill(Theme.bg2))
 
                         HStack {
-                            Text("所在城市").font(.system(size: 14)).foregroundStyle(Theme.textSub)
+                            Text(t("publish.cityLabel")).font(.system(size: 14)).foregroundStyle(Theme.textSub)
                             Spacer()
-                            Button(city.isEmpty ? "定位获取" : city) {
+                            Button(city.isEmpty ? t("publish.locateGet") : city) {
                                 CityLocator.shared.detectWithLocation { name, loc in
                                     DispatchQueue.main.async {
                                         if let name { city = name }
@@ -831,20 +832,20 @@ struct PublishView: View {
                     VStack(spacing: 6) {
                         ProgressView(value: uploadProgress)
                             .tint(Theme.accent)
-                        Text("上传中 \(Int(uploadProgress * 100))%")
+                        Text(t("publish.uploadingPct", ["n": Int(uploadProgress * 100)]))
                             .font(.system(size: 12)).foregroundStyle(Theme.textSub)
                     }
                     .padding(.horizontal, 16).padding(.bottom, 6)
                 }
-                AccentButton(title: publishing ? "发布中…" : "发布", enabled: canPublish) { publish() }
+                AccentButton(title: publishing ? t("publish.posting") : t("publish.submit"), enabled: canPublish) { publish() }
                     .padding(.horizontal, 16).padding(.bottom, 10)
             }
             .fullBg()
-            .navigationTitle("发布")
+            .navigationTitle(t("publish.post"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("取消") { dismiss() }.foregroundStyle(Theme.textSub)
+                    Button(t("common.cancel")) { dismiss() }.foregroundStyle(Theme.textSub)
                 }
             }
             .toast($toastMsg)

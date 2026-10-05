@@ -19,7 +19,7 @@ struct CallOverlay: View {
                 ZStack {
                     Color.black.opacity(0.55).ignoresSafeArea()
                     VStack(spacing: 16) {
-                        Text("提示")
+                        Text(t("common.tip"))
                             .font(.system(size: 17, weight: .semibold))
                             .foregroundStyle(Theme.text)
                         Text(alert)
@@ -30,7 +30,7 @@ struct CallOverlay: View {
                         Button {
                             manager.alertMsg = nil
                         } label: {
-                            Text("知道了")
+                            Text(t("common.gotIt"))
                                 .font(.system(size: 15, weight: .semibold))
                                 .foregroundStyle(.white)
                                 .frame(maxWidth: .infinity)
@@ -73,11 +73,11 @@ struct CallOverlay: View {
             case let .outgoing(_, _, type):
                 VStack {
                     Spacer().frame(height: 110)
-                    peerHeader(status: type == 2 ? "正在等待对方接受视频通话邀请…" : "正在等待对方接受语音通话邀请…")
+                    peerHeader(status: type == 2 ? t("call.waitingVideo") : t("call.waitingVoice"))
                     Spacer()
                     HStack {
                         Spacer()
-                        circleButton(icon: "phone.down.fill", label: "取消", bg: Color(red: 0.98, green: 0.27, blue: 0.27)) {
+                        circleButton(icon: "phone.down.fill", label: t("common.cancel"), bg: Color(red: 0.98, green: 0.27, blue: 0.27)) {
                             manager.hangup()
                         }
                         Spacer()
@@ -87,15 +87,15 @@ struct CallOverlay: View {
             case let .incoming(_, _, _, type):
                 VStack {
                     Spacer().frame(height: 110)
-                    peerHeader(status: type == 2 ? "邀请你进行视频通话" : "邀请你进行语音通话")
+                    peerHeader(status: type == 2 ? t("call.invitedVideo") : t("call.invitedVoice"))
                     Spacer()
                     HStack {
                         Spacer()
-                        circleButton(icon: "phone.down.fill", label: "拒绝", bg: Color(red: 0.98, green: 0.27, blue: 0.27)) {
+                        circleButton(icon: "phone.down.fill", label: t("call.decline"), bg: Color(red: 0.98, green: 0.27, blue: 0.27)) {
                             manager.reject()
                         }
                         Spacer()
-                        circleButton(icon: "phone.fill", label: "接听", bg: Color(red: 0.05, green: 0.78, blue: 0.42)) {
+                        circleButton(icon: "phone.fill", label: t("call.answer"), bg: Color(red: 0.05, green: 0.78, blue: 0.42)) {
                             requestPermissions(video: type == 2) { manager.accept() }
                         }
                         Spacer()
@@ -121,17 +121,17 @@ struct CallOverlay: View {
             Spacer()
             HStack {
                 Spacer()
-                circleButton(icon: manager.muted ? "mic.slash.fill" : "mic.fill", label: "静音",
+                circleButton(icon: manager.muted ? "mic.slash.fill" : "mic.fill", label: t("call.mute"),
                              bg: manager.muted ? .white : Color.white.opacity(0.2),
                              fg: manager.muted ? .black : .white) {
                     manager.toggleMute()
                 }
                 Spacer()
-                circleButton(icon: "phone.down.fill", label: "挂断", bg: Color(red: 0.98, green: 0.27, blue: 0.27)) {
+                circleButton(icon: "phone.down.fill", label: t("call.hangUp"), bg: Color(red: 0.98, green: 0.27, blue: 0.27)) {
                     manager.hangup()
                 }
                 Spacer()
-                circleButton(icon: manager.speakerOn ? "speaker.wave.3.fill" : "speaker.fill", label: "免提",
+                circleButton(icon: manager.speakerOn ? "speaker.wave.3.fill" : "speaker.fill", label: t("call.speaker"),
                              bg: manager.speakerOn ? .white : Color.white.opacity(0.2),
                              fg: manager.speakerOn ? .black : .white) {
                     manager.toggleSpeaker()
@@ -195,7 +195,7 @@ struct CallOverlay: View {
                                 .padding(5)
                             }
                             .overlay(alignment: .bottom) {
-                                Text("双击切换").font(.system(size: 9)).foregroundStyle(.white.opacity(0.7))
+                                Text(t("call.doubleTapSwap")).font(.system(size: 9)).foregroundStyle(.white.opacity(0.7))
                                     .padding(.horizontal, 5).padding(.vertical, 1)
                                     .background(RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.35)))
                                     .padding(.bottom, 5)
@@ -226,23 +226,23 @@ struct CallOverlay: View {
     private var videoControls: some View {
         HStack {
             Spacer()
-            circleButton(icon: manager.muted ? "mic.slash.fill" : "mic.fill", label: "静音",
+            circleButton(icon: manager.muted ? "mic.slash.fill" : "mic.fill", label: t("call.mute"),
                          bg: manager.muted ? .white : Color.white.opacity(0.25),
                          fg: manager.muted ? .black : .white) {
                 manager.toggleMute()
             }
             Spacer()
-            circleButton(icon: manager.cameraOff ? "video.slash.fill" : "video.fill", label: "摄像头",
+            circleButton(icon: manager.cameraOff ? "video.slash.fill" : "video.fill", label: t("call.camera"),
                          bg: manager.cameraOff ? .white : Color.white.opacity(0.25),
                          fg: manager.cameraOff ? .black : .white) {
                 manager.toggleCameraOff()
             }
             Spacer()
-            circleButton(icon: "phone.down.fill", label: "挂断", bg: Color(red: 0.98, green: 0.27, blue: 0.27)) {
+            circleButton(icon: "phone.down.fill", label: t("call.hangUp"), bg: Color(red: 0.98, green: 0.27, blue: 0.27)) {
                 manager.hangup()
             }
             Spacer()
-            circleButton(icon: "arrow.triangle.2.circlepath.camera.fill", label: "翻转",
+            circleButton(icon: "arrow.triangle.2.circlepath.camera.fill", label: t("call.flip"),
                          bg: Color.white.opacity(0.25)) {
                 manager.switchCamera()
             }
@@ -260,7 +260,7 @@ struct CallOverlay: View {
     private func peerHeader(status: String) -> some View {
         VStack(spacing: 14) {
             AvatarView(url: manager.peerAvatar, size: 96)
-            Text(manager.peerName.isEmpty ? "对方" : manager.peerName)
+            Text(manager.peerName.isEmpty ? t("call.peer") : manager.peerName)
                 .font(.system(size: 22, weight: .semibold)).foregroundStyle(.white)
             Text(status)
                 .font(.system(size: 14)).foregroundStyle(.white.opacity(0.6))
@@ -295,13 +295,13 @@ func startCallWithPermissions(calleeId: String, type: Int, name: String = "", av
 private func requestPermissions(video: Bool, onGranted: @escaping () -> Void) {
     AVCaptureDevice.requestAccess(for: .audio) { audioOk in
         guard audioOk else {
-            DispatchQueue.main.async { CallManager.shared.errorMsg = "需要麦克风权限，请在系统设置中开启" }
+            DispatchQueue.main.async { CallManager.shared.errorMsg = t("qr.micDenied") }
             return
         }
         if video {
             AVCaptureDevice.requestAccess(for: .video) { videoOk in
                 guard videoOk else {
-                    DispatchQueue.main.async { CallManager.shared.errorMsg = "需要摄像头权限，请在系统设置中开启" }
+                    DispatchQueue.main.async { CallManager.shared.errorMsg = t("call.cameraDenied") }
                     return
                 }
                 DispatchQueue.main.async(execute: onGranted)
@@ -318,7 +318,9 @@ struct CallRateView: View {
     @State private var scores: [Double] = Array(repeating: 80, count: 5)
     @State private var busy = false
 
-    private let dims = ["真实度", "配合度", "腿型", "曲线", "肤质"]
+    private var dims: [String] {
+        [t("call.rate.real"), t("call.rate.coop"), t("call.rate.legs"), t("call.rate.curves"), t("call.rate.skin")]
+    }
 
     var body: some View {
         ZStack {
@@ -326,10 +328,10 @@ struct CallRateView: View {
             VStack(spacing: 0) {
                 Spacer().frame(height: 70)
                 AvatarView(url: pending.peerAvatar, size: 72)
-                Text(pending.peerName.isEmpty ? "对方" : pending.peerName)
+                Text(pending.peerName.isEmpty ? t("call.peer") : pending.peerName)
                     .font(.system(size: 18, weight: .semibold)).foregroundStyle(.white)
                     .padding(.top, 10)
-                Text("本次视频通话体验如何？")
+                Text(t("call.rate.title"))
                     .font(.system(size: 13)).foregroundStyle(.white.opacity(0.6))
                     .padding(.top, 4)
 
@@ -372,7 +374,7 @@ struct CallRateView: View {
                         CallManager.shared.openUserHome = pending.peerId
                     }
                 } label: {
-                    Text(busy ? "提交中…" : "提交评分")
+                    Text(busy ? t("call.rate.submitting") : t("call.rate.submit"))
                         .font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
                         .frame(maxWidth: .infinity).padding(.vertical, 13)
                         .background(Capsule().fill(Theme.accent))
@@ -384,7 +386,7 @@ struct CallRateView: View {
                     // 跳过评分同样留在女方个人主页
                     CallManager.shared.openUserHome = pending.peerId
                 } label: {
-                    Text("跳过")
+                    Text(t("call.rate.skip"))
                         .font(.system(size: 14)).foregroundStyle(.white.opacity(0.5))
                         .padding(8)
                 }

@@ -15,7 +15,7 @@ struct TikTokView: View {
             if items.isEmpty {
                 VStack {
                     Spacer()
-                    Text("暂无视频动态").font(.system(size: 14)).foregroundStyle(.white.opacity(0.6))
+                    Text(t("tiktok.empty")).font(.system(size: 14)).foregroundStyle(.white.opacity(0.6))
                     Spacer()
                 }
                 .frame(maxWidth: .infinity)
@@ -129,7 +129,7 @@ private struct TikTokPage: View {
                                 VStack(spacing: 4) {
                                     Image(systemName: "video.fill").font(.system(size: 26))
                                         .foregroundStyle(peerOnline ? .white : .white.opacity(0.35))
-                                    Text(peerOnline ? "视频通话" : "对方离线").font(.system(size: 11))
+                                    Text(peerOnline ? t("tiktok.videoCall") : t("tiktok.peerOffline")).font(.system(size: 11))
                                         .foregroundStyle(peerOnline ? .white : .white.opacity(0.35))
                                 }
                             }

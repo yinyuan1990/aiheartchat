@@ -26,7 +26,8 @@ struct InviteCardView: View {
 
     private var isFemale: Bool { state.user?.gender == 2 }
     private var shareText: String {
-        isFemale ? "我在心之音等你，来和我聊聊：" : "我在心之音，想请你来聊聊，你的时间在这里每一分钟都算钱："
+        let app = t("app.name")
+        return isFemale ? t("invite.shareTextFemale", ["app": app]) : t("invite.shareTextMale", ["app": app])
     }
 
     var body: some View {
@@ -36,12 +37,12 @@ struct InviteCardView: View {
                     VStack(spacing: 14) {
                         card(info)
                         HStack(spacing: 10) {
-                            stat("\(info.clicks30d ?? 0)", "30 天内被打开")
-                            stat("\(info.invited ?? 0)", "成功邀请")
+                            stat("\(info.clicks30d ?? 0)", t("invite.opened30d"))
+                            stat("\(info.invited ?? 0)", t("invite.invited"))
                         }
                         if let recent = info.recent, !recent.isEmpty {
                             VStack(alignment: .leading, spacing: 0) {
-                                Text("通过我加入的人").font(.system(size: 12)).foregroundStyle(Theme.textSub)
+                                Text(t("invite.joinedViaMe")).font(.system(size: 12)).foregroundStyle(Theme.textSub)
                                     .padding(.top, 6).padding(.bottom, 4)
                                 ForEach(recent) { u in
                                     HStack(spacing: 12) {
@@ -61,11 +62,11 @@ struct InviteCardView: View {
             } else if let error {
                 EmptyHint(text: error)
             } else {
-                EmptyHint(text: "加载中…")
+                EmptyHint(text: t("common.loading"))
             }
         }
         .fullBg()
-        .navigationTitle("我的邀请名片")
+        .navigationTitle(t("me.inviteCard"))
         .navigationBarTitleDisplayMode(.inline)
         .compatNavBarBackground(Theme.bg)
         .toast($toastMsg)
@@ -81,15 +82,13 @@ struct InviteCardView: View {
             HStack(spacing: 12) {
                 AvatarView(url: state.user?.avatar ?? "", size: 52)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("心之音 · 专属名片").font(.system(size: 11)).foregroundStyle(Theme.textSub)
+                    Text(t("invite.cardLabel", ["app": t("app.name")])).font(.system(size: 11)).foregroundStyle(Theme.textSub)
                     Text(state.user?.nickname ?? "").font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.text)
-                    Text("邀请码 \(info.code)").font(.system(size: 11)).foregroundStyle(Theme.textDim)
+                    Text(t("invite.code", ["code": info.code])).font(.system(size: 11)).foregroundStyle(Theme.textDim)
                 }
                 Spacer()
             }
-            Text(isFemale
-                 ? "发给男生：他打开网页能看到你的照片和评分，下载后自动打开你的主页，第一条消息就会到你这里。"
-                 : "发给女生：她打开网页能看到你的名片，下载后自动和你成为好友。")
+            Text(isFemale ? t("invite.descFemaleIos") : t("invite.descMaleIos"))
                 .font(.system(size: 12)).foregroundStyle(Theme.textSub).lineSpacing(4)
                 .padding(.top, 14)
 
@@ -109,13 +108,13 @@ struct InviteCardView: View {
 
             Button {
                 UIPasteboard.general.string = info.link
-                toastMsg = "链接已复制"
+                toastMsg = t("invite.linkCopied")
             } label: {
                 HStack {
                     Text(info.link.replacingOccurrences(of: "https://", with: ""))
                         .font(.system(size: 13)).foregroundStyle(Theme.text).lineLimit(1)
                     Spacer()
-                    Text("复制").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.accent)
+                    Text(t("common.copy")).font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.accent)
                 }
                 .padding(.horizontal, 12).padding(.vertical, 10)
                 .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bg3))
@@ -127,10 +126,10 @@ struct InviteCardView: View {
                 Button {
                     if let qr {
                         UIImageWriteToSavedPhotosAlbum(qr, nil, nil, nil)
-                        toastMsg = "已保存到相册"
+                        toastMsg = t("qr.savedToGallery")
                     }
                 } label: {
-                    Text("保存二维码").font(.system(size: 14)).foregroundStyle(Theme.text)
+                    Text(t("qr.save")).font(.system(size: 14)).foregroundStyle(Theme.text)
                         .frame(maxWidth: .infinity).frame(height: 44)
                         .background(Capsule().fill(Theme.bg3))
                 }
@@ -138,7 +137,7 @@ struct InviteCardView: View {
                 Button {
                     ShareSheet.present([shareText + info.link])
                 } label: {
-                    Text("分享链接").font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
+                    Text(t("invite.shareLink")).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
                         .frame(maxWidth: .infinity).frame(height: 44)
                         .background(Capsule().fill(Theme.accent))
                 }

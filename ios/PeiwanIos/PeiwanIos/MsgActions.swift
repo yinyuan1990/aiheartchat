@@ -10,14 +10,14 @@ let FORWARDABLE: Set<String> = ["text", "image", "video", "audio", "location", "
 func msgSnippet(_ type: String, _ content: String) -> String {
     switch type {
     case "text": return String(content.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ").prefix(60))
-    case "image": return "[图片]"
-    case "video": return "[视频]"
-    case "audio": return "[语音]"
-    case "sticker": return "[表情]"
-    case "location": return "[位置]"
-    case "gift": return "[礼物]"
-    case "transfer", "callout", "payreq", "perp": return ChainCards.preview(type, content) ?? "[消息]"
-    default: return type.hasPrefix("call") ? "[通话]" : "[消息]"
+    case "image": return t("msg.snippet.image")
+    case "video": return t("msg.snippet.video")
+    case "audio": return t("msg.snippet.audio")
+    case "sticker": return t("msg.snippet.sticker")
+    case "location": return t("msg.snippet.location")
+    case "gift": return t("msg.snippet.gift")
+    case "transfer", "callout", "payreq", "perp": return ChainCards.preview(type, content) ?? t("msg.snippet.message")
+    default: return type.hasPrefix("call") ? t("msg.snippet.call") : t("msg.snippet.message")
     }
 }
 
@@ -90,8 +90,8 @@ struct InAppLinks: ViewModifier {
                 target = LinkTarget(url: url)
                 return .handled
             })
-            .fullScreenCover(item: $target) { t in
-                WebPreviewSheet(url: t.url, title: t.url.host ?? "网页")
+            .fullScreenCover(item: $target) { lt in
+                WebPreviewSheet(url: lt.url, title: lt.url.host ?? t("web.page"))
             }
     }
 }
@@ -131,8 +131,9 @@ struct ReadInfo: Codable {
 private func fmtReadAt(_ iso: String?) -> String {
     guard let d = parseIsoDate(iso) else { return "" }
     let f = DateFormatter()
-    f.dateFormat = "M月d日 HH:mm"
-    return f.string(from: d) + " "
+    f.dateFormat = "HH:mm"
+    let c = Calendar.current.dateComponents([.month, .day], from: d)
+    return t("msg.readDate", ["m": c.month ?? 0, "d": c.day ?? 0, "time": f.string(from: d)])
 }
 
 private struct MenuEntry {
@@ -171,7 +172,7 @@ struct MsgMenuOverlay: View {
                                 Spacer()
                                 Image(systemName: e.icon).font(.system(size: 15))
                             }
-                            .foregroundStyle(e.label == "删除" ? Color.red : Theme.text)
+                            .foregroundStyle(e.icon == "trash" ? Color.red : Theme.text)
                             .padding(.horizontal, 16).padding(.vertical, 12)
                             .contentShape(Rectangle())
                         }
@@ -193,14 +194,14 @@ struct MsgMenuOverlay: View {
         func add(_ label: String, _ icon: String, _ fn: (() -> Void)?) {
             if let fn { out.append(MenuEntry(label: label, icon: icon, fn: fn)) }
         }
-        add("回复", "arrowshape.turn.up.left", actions.onReply)
-        add("拷贝", "doc.on.doc", actions.onCopy)
-        add("保存", "square.and.arrow.down", actions.onSave)
-        add(pinned ? "取消置顶" : "置顶", pinned ? "pin.slash" : "pin", actions.onPin)
-        add("转发", "arrowshape.turn.up.right", actions.onForward)
-        add("举报", "exclamationmark.bubble", actions.onReport)
-        add("删除", "trash", actions.onDelete)
-        add("选择", "checkmark.circle", actions.onSelect)
+        add(t("msg.reply"), "arrowshape.turn.up.left", actions.onReply)
+        add(t("msg.copy"), "doc.on.doc", actions.onCopy)
+        add(t("common.save"), "square.and.arrow.down", actions.onSave)
+        add(pinned ? t("msg.unpin") : t("msg.pin"), pinned ? "pin.slash" : "pin", actions.onPin)
+        add(t("msg.forward"), "arrowshape.turn.up.right", actions.onForward)
+        add(t("common.report"), "exclamationmark.bubble", actions.onReport)
+        add(t("common.delete"), "trash", actions.onDelete)
+        add(t("msg.select"), "checkmark.circle", actions.onSelect)
         return out
     }
 
@@ -240,9 +241,12 @@ struct MsgMenuOverlay: View {
     private var readLine: some View {
         if let r = info {
             let n = r.count ?? 0
+            let readAt = fmtReadAt(r.readAt)
+            let readText = readAt.isEmpty ? t("msg.read") : t("msg.readAt", ["time": readAt])
+            let groupText = n > 0 ? "\(t("msg.readByN", ["n": n])) \(showReaders ? "⌃" : "›")" : t("msg.readByNone")
             let line: String = convType == 1
-                ? (r.read == true ? "✓✓ \(fmtReadAt(r.readAt))已读" : "✓ 未读")
-                : (n > 0 ? "✓✓ \(n) 人已读 \(showReaders ? "⌃" : "›")" : "✓✓ 还没人读")
+                ? (r.read == true ? "✓✓ \(readText)" : "✓ \(t("msg.unread"))")
+                : "✓✓ \(groupText)"
             Text(line).font(.system(size: 13)).foregroundStyle(Theme.textSub)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16).padding(.vertical, 9)
@@ -310,7 +314,7 @@ struct ReplyQuote: View {
             }
             VStack(alignment: .leading, spacing: 1) {
                 if deleted {
-                    Text("原消息已删除").font(.system(size: 12)).foregroundStyle(Theme.textSub)
+                    Text(t("msg.originalDeleted")).font(.system(size: 12)).foregroundStyle(Theme.textSub)
                 } else {
                     Text(r.senderNickname ?? "").font(.system(size: 12, weight: .semibold)).foregroundStyle(botBlue).lineLimit(1)
                     Text(r.type == "text" ? (r.content ?? "") : msgSnippet(r.type ?? "", ""))
@@ -338,7 +342,7 @@ struct ReplyBar: View {
         HStack(spacing: 10) {
             Image(systemName: "arrowshape.turn.up.left.fill").font(.system(size: 15)).foregroundStyle(botBlue)
             VStack(alignment: .leading, spacing: 1) {
-                Text("回复 \(nickname)").font(.system(size: 13, weight: .semibold)).foregroundStyle(botBlue).lineLimit(1)
+                Text(t("msg.replyTo", ["name": nickname])).font(.system(size: 13, weight: .semibold)).foregroundStyle(botBlue).lineLimit(1)
                 Text(snippet).font(.system(size: 12)).foregroundStyle(Theme.textSub).lineLimit(1)
             }
             Spacer(minLength: 0)
@@ -381,7 +385,7 @@ struct PinBar: View {
                 }
                 .frame(height: 32)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("置顶消息\(pins.count > 1 ? " #\(cur + 1)" : "")")
+                    Text(t("msg.pinnedMessage") + (pins.count > 1 ? " #\(cur + 1)" : ""))
                         .font(.system(size: 13, weight: .semibold)).foregroundStyle(botBlue)
                     Text(p.type == "text" ? (p.content ?? "") : msgSnippet(p.type ?? "", ""))
                         .font(.system(size: 12)).foregroundStyle(Theme.textSub).lineLimit(1)
@@ -406,6 +410,19 @@ struct PinBar: View {
 
 private let REPORT_REASONS = ["垃圾广告", "色情低俗", "诈骗", "辱骂骚扰", "违法违规", "其他"]
 
+/// REPORT_REASONS 是发给后端的值，这里只换显示文字
+private func reportReasonLabel(_ r: String) -> String {
+    switch r {
+    case "垃圾广告": return t("msg.report.spam")
+    case "色情低俗": return t("msg.report.porn")
+    case "诈骗": return t("msg.report.fraud")
+    case "辱骂骚扰": return t("msg.report.abuse")
+    case "违法违规": return t("msg.report.illegal")
+    case "其他": return t("msg.report.other")
+    default: return r
+    }
+}
+
 struct ReportSheet: View {
     let msgId: String
     let onDone: (String) -> Void
@@ -417,9 +434,9 @@ struct ReportSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("举报这条消息").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
+                Text(t("msg.reportTitle")).font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
                 Spacer()
-                Button("取消") { dismiss() }.font(.system(size: 14)).foregroundStyle(Theme.textSub)
+                Button(t("common.cancel")) { dismiss() }.font(.system(size: 14)).foregroundStyle(Theme.textSub)
             }
             .padding(16)
             if !other {
@@ -427,7 +444,7 @@ struct ReportSheet: View {
                     Button {
                         if r == "其他" { other = true } else { submit(r) }
                     } label: {
-                        Text(r).font(.system(size: 15)).foregroundStyle(Theme.text)
+                        Text(reportReasonLabel(r)).font(.system(size: 15)).foregroundStyle(Theme.text)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 16).padding(.vertical, 11)
                             .contentShape(Rectangle())
@@ -435,7 +452,7 @@ struct ReportSheet: View {
                     .buttonStyle(.plain)
                 }
             } else {
-                TextField("说说是什么问题", text: $text)
+                TextField(t("msg.reportPlaceholder"), text: $text)
                     .foregroundStyle(Theme.text)
                     .padding(12)
                     .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bg3))
@@ -444,7 +461,7 @@ struct ReportSheet: View {
                 Button {
                     submit("其他：" + String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200)))
                 } label: {
-                    Text("提交").font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
+                    Text(t("common.submit")).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
                         .frame(maxWidth: .infinity).padding(.vertical, 11)
                         .background(Capsule().fill(empty ? Theme.textDim : Theme.accent))
                 }
@@ -465,7 +482,7 @@ struct ReportSheet: View {
             let tip: String
             do {
                 let r: ReportResp = try await Api.request("/im/messages/\(msgId)/report", method: "POST", body: ["reason": reason])
-                tip = r.duplicated == true ? "已经举报过了，我们会尽快处理" : "已举报，我们会尽快处理"
+                tip = r.duplicated == true ? t("msg.reportDuplicated") : t("msg.reported")
             } catch {
                 tip = error.localizedDescription
             }
@@ -503,18 +520,19 @@ struct ForwardSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Button("取消") { dismiss() }.font(.system(size: 14)).foregroundStyle(Theme.textSub)
+                Button(t("common.cancel")) { dismiss() }.font(.system(size: 14)).foregroundStyle(Theme.textSub)
                 Spacer()
-                Text(ids.count > 1 ? "转发 \(ids.count) 条消息到…" : "转发到…")
+                Text(ids.count > 1 ? t("msg.forwardNTo", ["n": ids.count]) : t("msg.forwardTo"))
                     .font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
                 Spacer()
-                Button(busy ? "发送中" : (picked.isEmpty ? "发送" : "发送(\(picked.count))")) { send() }
+                let sendLabel = picked.isEmpty ? t("common.send") : t("msg.sendCount", ["n": picked.count])
+                Button(busy ? t("msg.sendingShort") : sendLabel) { send() }
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(picked.isEmpty || busy ? Theme.textDim : Theme.accent)
                     .disabled(picked.isEmpty || busy)
             }
             .padding(16)
-            TextField("搜索", text: $q)
+            TextField(t("common.search"), text: $q)
                 .foregroundStyle(Theme.text)
                 .padding(.horizontal, 12).padding(.vertical, 9)
                 .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bg3))
@@ -566,7 +584,7 @@ struct ForwardSheet: View {
                     "targets": targets,
                 ])
                 let failed = r.results.filter { !$0.ok }
-                tip = failed.isEmpty ? "已转发" : "\(failed.count) 个会话转发失败：\(failed[0].error ?? "")"
+                tip = failed.isEmpty ? t("msg.forwarded") : t("msg.forwardPartialFail", ["n": failed.count, "error": failed[0].error ?? ""])
             } catch {
                 tip = error.localizedDescription
             }
@@ -580,12 +598,18 @@ struct ForwardSheet: View {
 // MARK: - 保存到相册
 
 func saveMediaToPhotos(type: String, url: String) async -> String {
-    guard let u = URL(string: Api.fullUrl(url)) else { return "保存失败" }
+    let key = await saveMediaToPhotosKey(type: type, url: url)
+    return t(key)
+}
+
+/// 返回提示文字的 i18n key
+private func saveMediaToPhotosKey(type: String, url: String) async -> String {
+    guard let u = URL(string: Api.fullUrl(url)) else { return "msg.saveFailed" }
     let status: PHAuthorizationStatus = await withCheckedContinuation { cont in
         PHPhotoLibrary.requestAuthorization(for: .addOnly) { cont.resume(returning: $0) }
     }
-    guard status == .authorized || status == .limited else { return "没有相册权限，请在设置里允许" }
-    guard let res = try? await URLSession.shared.data(from: u) else { return "下载失败" }
+    guard status == .authorized || status == .limited else { return "msg.noPhotoPermission" }
+    guard let res = try? await URLSession.shared.data(from: u) else { return "msg.downloadFailed" }
     let isVideo = type == "video"
     let file = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString + (isVideo ? ".mp4" : ".jpg"))
@@ -599,9 +623,9 @@ func saveMediaToPhotos(type: String, url: String) async -> String {
             }
         }
         try? FileManager.default.removeItem(at: file)
-        return "已保存到相册"
+        return "msg.savedToGallery"
     } catch {
         try? FileManager.default.removeItem(at: file)
-        return "保存失败"
+        return "msg.saveFailed"
     }
 }

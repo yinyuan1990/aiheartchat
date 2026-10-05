@@ -119,7 +119,7 @@ enum Api {
         var req = URLRequest(url: URL(string: baseURL + "/api/upload/\(kind)")!)
         req.httpMethod = "POST"
         if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
-        req.setValue(I18n.shared.lang, forHTTPHeaderField: "Accept-Language")
+        req.setValue(I18nStore.shared.lang, forHTTPHeaderField: "Accept-Language")
         let boundary = "B-\(UUID().uuidString)"
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         var body = Data()
@@ -157,12 +157,14 @@ enum Api {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         // 服务端按这个语言返回报错 / 配置项文字
-        req.setValue(I18n.shared.lang, forHTTPHeaderField: "Accept-Language")
+        req.setValue(I18nStore.shared.lang, forHTTPHeaderField: "Accept-Language")
         if let body { req.httpBody = try JSONSerialization.data(withJSONObject: body) }
-        let (data, _) = try await URLSession.shared.data(for: req)
+        let (raw, _) = try await URLSession.shared.data(for: req)
+        // 币群名 / 群公告等服务端生成的中文换成当前语言
+        let data = I18nStore.shared.localizeServerJSON(raw)
         let envelope = try JSONDecoder().decode(Envelope<T>.self, from: data)
         guard envelope.code == 0 else { throw ApiError(code: envelope.code, msg: envelope.msg) }
-        guard let value = envelope.data else { throw ApiError(code: -1, msg: "空数据") }
+        guard let value = envelope.data else { throw ApiError(code: -1, msg: t("common.emptyData")) }
         return value
     }
 

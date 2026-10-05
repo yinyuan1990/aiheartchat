@@ -59,11 +59,11 @@ struct AttachSheet: View {
             )
             .ignoresSafeArea()
         }
-        .alert("无法使用相机", isPresented: $showCamDenied) {
-            Button("去设置") { openAppSettings() }
-            Button("取消", role: .cancel) {}
+        .alert(t("attach.cameraUnavailable"), isPresented: $showCamDenied) {
+            Button(t("attach.goSettings")) { openAppSettings() }
+            Button(t("common.cancel"), role: .cancel) {}
         } message: {
-            Text("请在系统设置中允许「心之音」访问相机")
+            Text(t("attach.cameraDeniedApp", ["app": t("app.name")]))
         }
     }
 
@@ -74,12 +74,12 @@ struct AttachSheet: View {
             Menu {
                 ForEach(lib.albums) { a in
                     Button { lib.select(a) } label: {
-                        if a.id == lib.current.id { Label(a.title, systemImage: "checkmark") } else { Text(a.title) }
+                        if a.id == lib.current.id { Label(albumTitle(a), systemImage: "checkmark") } else { Text(albumTitle(a)) }
                     }
                 }
             } label: {
                 HStack(spacing: 4) {
-                    Text(lib.current.title).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.text)
+                    Text(albumTitle(lib.current)).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.text)
                     Image(systemName: "chevron.down").font(.system(size: 12, weight: .bold)).foregroundStyle(Theme.textSub)
                 }
             }
@@ -95,13 +95,18 @@ struct AttachSheet: View {
                 .buttonStyle(.plain)
                 Spacer()
                 if lib.status == .limited {
-                    Button("管理") { presentLimitedPicker() }
+                    Button(t("attach.manage")) { presentLimitedPicker() }
                         .font(.system(size: 15)).foregroundStyle(Theme.accent)
                 }
             }
         }
         .padding(.horizontal, 14)
         .padding(.top, 18).padding(.bottom, 10)
+    }
+
+    private func albumTitle(_ a: AttachAlbum) -> String {
+        if a.id == AttachAlbum.recent.id { return t("attach.recents") }
+        return a.title.isEmpty ? t("attach.album") : a.title
     }
 
     // MARK: - 网格
@@ -136,18 +141,18 @@ struct AttachSheet: View {
         VStack(spacing: 12) {
             Image(systemName: "photo.on.rectangle.angled")
                 .font(.system(size: 36)).foregroundStyle(Theme.textDim)
-            Text("允许访问相册后，可以在这里直接选图发送")
+            Text(t("attach.deniedTip"))
                 .font(.system(size: 14)).foregroundStyle(Theme.textSub)
                 .multilineTextAlignment(.center)
             HStack(spacing: 12) {
-                Button("去设置") { openAppSettings() }
+                Button(t("attach.goSettings")) { openAppSettings() }
                     .font(.system(size: 14, weight: .medium)).foregroundStyle(.white)
                     .padding(.horizontal, 18).frame(height: 36)
                     .background(Capsule().fill(Theme.accent))
                 CompatPhotoPicker(kind: .images, maxCount: attachMaxPick, onPicked: { datas in
                     onSendDatas(datas, caption)
                 }) {
-                    Text("从系统相册选择")
+                    Text(t("attach.systemPicker"))
                         .font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.text)
                         .padding(.horizontal, 18).frame(height: 36)
                         .background(Capsule().fill(Theme.bg3))
@@ -167,15 +172,15 @@ struct AttachSheet: View {
     }
 
     private var tabs: [Tab] {
-        var t = [Tab(id: "album", icon: "photo.fill", label: "相册", action: nil)]
-        if isSingle { t.append(Tab(id: "gift", icon: "gift.fill", label: "礼物", action: .gift)) }
-        if canTransfer { t.append(Tab(id: "transfer", icon: "arrow.left.arrow.right", label: "转账", action: .transfer)) }
-        t.append(Tab(id: "location", icon: "location.fill", label: "位置", action: .location))
+        var list = [Tab(id: "album", icon: "photo.fill", label: t("attach.album"), action: nil)]
+        if isSingle { list.append(Tab(id: "gift", icon: "gift.fill", label: t("attach.gift"), action: .gift)) }
+        if canTransfer { list.append(Tab(id: "transfer", icon: "arrow.left.arrow.right", label: t("attach.transfer"), action: .transfer)) }
+        list.append(Tab(id: "location", icon: "location.fill", label: t("attach.location"), action: .location))
         if isSingle {
-            t.append(Tab(id: "voice", icon: "phone.fill", label: "语音通话", action: .voiceCall))
-            if canVideoCall { t.append(Tab(id: "video", icon: "video.fill", label: "视频通话", action: .videoCall)) }
+            list.append(Tab(id: "voice", icon: "phone.fill", label: t("attach.voiceCall"), action: .voiceCall))
+            if canVideoCall { list.append(Tab(id: "video", icon: "video.fill", label: t("attach.videoCall"), action: .videoCall)) }
         }
-        return t
+        return list
     }
 
     private var tabBar: some View {
@@ -205,7 +210,7 @@ struct AttachSheet: View {
 
     private var captionBar: some View {
         HStack(spacing: 10) {
-            TextField("", text: $caption, prompt: Text("添加说明…").foregroundColor(Theme.textDim))
+            TextField("", text: $caption, prompt: Text(t("attach.captionHint")).foregroundColor(Theme.textDim))
                 .font(.system(size: 15)).foregroundStyle(Theme.text)
                 .padding(.horizontal, 16).frame(height: 44)
                 .background(Capsule().fill(.ultraThinMaterial))
@@ -240,7 +245,7 @@ struct AttachSheet: View {
         if let i = selection.firstIndex(of: id) {
             selection.remove(at: i)
         } else if selection.count >= attachMaxPick {
-            toastMsg = "最多选择 \(attachMaxPick) 张"
+            toastMsg = t("attach.maxPick", ["n": attachMaxPick])
         } else {
             selection.append(id)
         }
@@ -257,11 +262,11 @@ struct AttachSheet: View {
 
     private func openCamera() {
         guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
-            toastMsg = "当前设备不支持拍照"
+            toastMsg = t("attach.noCamera")
             return
         }
         if call.phase != .idle {
-            toastMsg = "通话中无法拍照"
+            toastMsg = t("attach.inCallNoCamera")
             return
         }
         switch AVCaptureDevice.authorizationStatus(for: .video) {
@@ -304,7 +309,7 @@ struct AttachAlbum: Identifiable {
     let title: String
     let collection: PHAssetCollection?
 
-    static let recent = AttachAlbum(id: "recent", title: "最近项目", collection: nil)
+    static let recent = AttachAlbum(id: "recent", title: "", collection: nil)
 }
 
 final class PhotoLibraryModel: NSObject, ObservableObject, PHPhotoLibraryChangeObserver {
@@ -369,7 +374,7 @@ final class PhotoLibraryModel: NSObject, ObservableObject, PHPhotoLibraryChangeO
             func add(_ result: PHFetchResult<PHAssetCollection>) {
                 result.enumerateObjects { c, _, _ in
                     guard PHAsset.fetchAssets(in: c, options: PhotoLibraryModel.imageOptions).count > 0 else { return }
-                    list.append(AttachAlbum(id: c.localIdentifier, title: c.localizedTitle ?? "相册", collection: c))
+                    list.append(AttachAlbum(id: c.localIdentifier, title: c.localizedTitle ?? "", collection: c))
                 }
             }
             for sub: PHAssetCollectionSubtype in [.smartAlbumFavorites, .smartAlbumSelfPortraits, .smartAlbumScreenshots, .smartAlbumLivePhotos] {

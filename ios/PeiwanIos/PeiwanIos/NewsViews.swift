@@ -48,7 +48,7 @@ struct QuotesSectionView: View {
     var body: some View {
         Group {
             if loaded, items.isEmpty {
-                EmptyHint(text: "今天的励志话正在路上…")
+                EmptyHint(text: t("news.quoteEmpty"))
             } else {
                 TabView(selection: $page) {
                     ForEach(Array(items.enumerated()), id: \.element.id) { i, q in
@@ -177,7 +177,7 @@ private struct QuotePageView: View {
                         .tracking(3)
                         .foregroundStyle(Theme.textSub)
                     if q.day == today {
-                        Text("今日")
+                        Text(t("news.today"))
                             .font(.system(size: 11))
                             .tracking(2)
                             .foregroundStyle(Theme.accent)
@@ -198,7 +198,7 @@ struct NewsListView: View {
     var body: some View {
         NewsSectionView()
             .fullBg()
-            .navigationTitle("花边新闻")
+            .navigationTitle(t("news.title"))
             .navigationBarTitleDisplayMode(.inline)
     }
 }
@@ -214,7 +214,7 @@ struct NewsSectionView: View {
     var body: some View {
         Group {
             if loaded, items.isEmpty {
-                EmptyHint(text: "暂无内容\n稍后再来看看")
+                EmptyHint(text: t("news.emptyLines"))
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
@@ -228,7 +228,7 @@ struct NewsSectionView: View {
                             }
                         }
                         if hasMore {
-                            Text("加载中…")
+                            Text(t("common.loading"))
                                 .font(.system(size: 12)).foregroundStyle(Theme.textDim)
                                 .padding(14)
                                 .onAppear { Task { await loadMore() } }
@@ -327,7 +327,7 @@ struct NewsDetailView: View {
                                 .padding(.top, 14)
                         }
                         if let u = a.sourceUrl, let url = URL(string: u), !u.isEmpty {
-                            Link("查看原文 ›", destination: url)
+                            Link(t("news.viewSource"), destination: url)
                                 .font(.system(size: 13))
                                 .foregroundStyle(Theme.accent)
                                 .padding(.top, 10)
@@ -337,11 +337,11 @@ struct NewsDetailView: View {
                     .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 40)
                 }
             } else {
-                EmptyHint(text: "加载中…")
+                EmptyHint(text: t("common.loading"))
             }
         }
         .fullBg()
-        .navigationTitle("热点")
+        .navigationTitle(t("news.hot"))
         .navigationBarTitleDisplayMode(.inline)
         .task {
             article = try? await Api.request("/news/\(newsId)")

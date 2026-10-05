@@ -15,14 +15,19 @@ struct VoiceRoomSheet: View {
         inRoom ? manager.members : (manager.roomPreview[groupId] ?? [])
     }
     private var isFull: Bool { roomMembers.count >= manager.maxMembers }
+    private var joinButtonTitle: String {
+        if manager.joining { return t("group.joining") }
+        if isFull { return t("voiceRoom.full") }
+        return roomMembers.isEmpty ? t("voiceRoom.start") : t("voiceRoom.join")
+    }
 
     var body: some View {
         VStack(spacing: 18) {
             Capsule().fill(Theme.bg3).frame(width: 36, height: 4).padding(.top, 10)
 
             VStack(spacing: 4) {
-                Text("语音房").font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.text)
-                Text("\(groupName) · \(roomMembers.count)/\(manager.maxMembers) 人")
+                Text(t("chat.menu.voiceRoom")).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.text)
+                Text(groupName + " · " + t("voiceRoom.occupancy", ["n": roomMembers.count, "max": manager.maxMembers]))
                     .font(.system(size: 12)).foregroundStyle(Theme.textSub)
             }
 
@@ -54,7 +59,7 @@ struct VoiceRoomSheet: View {
                                     .overlay(Circle().stroke(Theme.bg2, lineWidth: 1.5))
                             }
                         }
-                        Text(m.id == state.user?.id ? "我" : (m.nickname ?? ""))
+                        Text(m.id == state.user?.id ? t("voiceRoom.me") : (m.nickname ?? ""))
                             .font(.system(size: 11))
                             .foregroundStyle(speaking ? Color(red: 0.13, green: 0.78, blue: 0.35) : Theme.textSub)
                             .lineLimit(1)
@@ -64,7 +69,7 @@ struct VoiceRoomSheet: View {
                     VStack(spacing: 6) {
                         Circle().fill(Theme.bg3).frame(width: 56, height: 56)
                             .overlay(Image(systemName: "plus").font(.system(size: 18)).foregroundStyle(Theme.textDim))
-                        Text("空位").font(.system(size: 11)).foregroundStyle(Theme.textDim)
+                        Text(t("voiceRoom.emptySeat")).font(.system(size: 11)).foregroundStyle(Theme.textDim)
                     }
                 }
             }
@@ -77,7 +82,7 @@ struct VoiceRoomSheet: View {
                     Button {
                         manager.toggleMute()
                     } label: {
-                        Label(manager.muted ? "已静音" : "静音", systemImage: manager.muted ? "mic.slash.fill" : "mic.fill")
+                        Label(manager.muted ? t("voiceRoom.muted") : t("voiceRoom.mute"), systemImage: manager.muted ? "mic.slash.fill" : "mic.fill")
                             .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(manager.muted ? .white : Theme.text)
                             .frame(maxWidth: .infinity)
@@ -88,7 +93,7 @@ struct VoiceRoomSheet: View {
                     Button {
                         manager.leave()
                     } label: {
-                        Text("退出语音房")
+                        Text(t("voiceRoom.leave"))
                             .font(.system(size: 14, weight: .medium)).foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 13)
@@ -102,7 +107,7 @@ struct VoiceRoomSheet: View {
                     Button {
                         showShare = true
                     } label: {
-                        Label("分享二维码邀请好友", systemImage: "qrcode")
+                        Label(t("voiceRoom.shareQr"), systemImage: "qrcode")
                             .font(.system(size: 13)).foregroundStyle(Theme.accent)
                     }
                     .buttonStyle(.plain)
@@ -110,15 +115,16 @@ struct VoiceRoomSheet: View {
                 }
             } else {
                 AccentButton(
-                    title: manager.joining ? "加入中…" : (isFull ? "房间已满" : (roomMembers.isEmpty ? "开启语音房（仅群主）" : "加入语音房")),
+                    title: joinButtonTitle,
                     enabled: !manager.joining && !isFull
                 ) {
+                    let micDenied = t("qr.micDenied")
                     AVCaptureDevice.requestAccess(for: .audio) { ok in
                         DispatchQueue.main.async {
                             if ok {
                                 VoiceRoomManager.shared.join(groupId: groupId)
                             } else {
-                                VoiceRoomManager.shared.toastMsg = "需要麦克风权限，请在系统设置中开启"
+                                VoiceRoomManager.shared.toastMsg = micDenied
                             }
                         }
                     }
@@ -126,7 +132,7 @@ struct VoiceRoomSheet: View {
                 .padding(.horizontal, 20)
             }
 
-            Text(inRoom ? "退出面板不会挂断，可回聊天页继续说话" : "加入后房内成员可实时语音")
+            Text(inRoom ? t("voiceRoom.hintInRoomIos") : t("voiceRoom.hintOutRoom"))
                 .font(.system(size: 11)).foregroundStyle(Theme.textDim)
                 .padding(.bottom, 16)
         }
@@ -205,10 +211,10 @@ struct VoiceRoomShareView: View {
                 Button {
                     if let img = renderCardImage() {
                         UIImageWriteToSavedPhotosAlbum(img, nil, nil, nil)
-                        toastMsg = "已保存到相册"
+                        toastMsg = t("qr.savedToGallery")
                     }
                 } label: {
-                    Label("保存图片", systemImage: "square.and.arrow.down")
+                    Label(t("voiceRoom.saveImage"), systemImage: "square.and.arrow.down")
                         .font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.text)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 13)
@@ -220,7 +226,7 @@ struct VoiceRoomShareView: View {
                         ShareSheet.present([img])
                     }
                 } label: {
-                    Label("分享发送", systemImage: "paperplane.fill")
+                    Label(t("voiceRoom.shareSend"), systemImage: "paperplane.fill")
                         .font(.system(size: 14, weight: .medium)).foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 13)
@@ -256,14 +262,14 @@ struct VoiceRoomShareView: View {
             HStack(spacing: 5) {
                 Image(systemName: "waveform")
                     .font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
-                Text("语音房")
+                Text(t("chat.menu.voiceRoom"))
                     .font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
             }
             .padding(.horizontal, 12).padding(.vertical, 7)
             .background(Capsule().fill(Color(red: 0.13, green: 0.72, blue: 0.32)))
 
             // 标题
-            Text("\(groupName) 的语音房")
+            Text(t("voiceRoom.cardTitle", ["name": groupName]))
                 .font(.system(size: 24, weight: .bold))
                 .foregroundStyle(.black)
                 .lineLimit(2)
@@ -282,20 +288,20 @@ struct VoiceRoomShareView: View {
                 Text(ownerName.isEmpty ? groupName : ownerName)
                     .font(.system(size: 14, weight: .medium)).foregroundStyle(.black)
                     .lineLimit(1)
-                Text("群主")
+                Text(t("voiceRoom.owner"))
                     .font(.system(size: 11)).foregroundStyle(Color(white: 0.45))
             }
 
             // 加入条件 / 收听人数
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("加入条件").font(.system(size: 12)).foregroundStyle(Color(white: 0.55))
-                    Text("扫码即入").font(.system(size: 17, weight: .semibold)).foregroundStyle(.black)
+                    Text(t("voiceRoom.joinCondition")).font(.system(size: 12)).foregroundStyle(Color(white: 0.55))
+                    Text(t("voiceRoom.scanToJoinShort")).font(.system(size: 17, weight: .semibold)).foregroundStyle(.black)
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 5) {
-                    Text("语音房").font(.system(size: 12)).foregroundStyle(Color(white: 0.55))
-                    Text("\(max(listeners, 1)) 人收听").font(.system(size: 17, weight: .semibold)).foregroundStyle(.black)
+                    Text(t("chat.menu.voiceRoom")).font(.system(size: 12)).foregroundStyle(Color(white: 0.55))
+                    Text(t("voiceRoom.listenersIos", ["n": max(listeners, 1)])).font(.system(size: 17, weight: .semibold)).foregroundStyle(.black)
                 }
             }
             .padding(.top, 2)
@@ -305,8 +311,8 @@ struct VoiceRoomShareView: View {
             // 底部：品牌 + 二维码
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("心之音").font(.system(size: 19, weight: .bold)).foregroundStyle(.black)
-                    Text("扫一扫，加入语音房").font(.system(size: 12)).foregroundStyle(Color(white: 0.55))
+                    Text(t("app.name")).font(.system(size: 19, weight: .bold)).foregroundStyle(.black)
+                    Text(t("voiceRoom.scanToJoin")).font(.system(size: 12)).foregroundStyle(Color(white: 0.55))
                 }
                 Spacer()
                 if let qrImage {

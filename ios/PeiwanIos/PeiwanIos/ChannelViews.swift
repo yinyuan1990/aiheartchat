@@ -137,7 +137,7 @@ private struct ChannelPostCard: View {
         if isMemberMsg { return t == "image" || t == "video" }
         return t == "image" || t == "video" || t == "sticker" || !(p.markup?.inlineKeyboard ?? []).isEmpty
     }
-    private var bubbleTime: String { pending ? "发送中…" : fmtTime(p.createdAt) }
+    private var bubbleTime: String { pending ? t("channel.sending") : fmtTime(p.createdAt) }
 
     @ViewBuilder var body: some View {
         if isMemberMsg {
@@ -158,7 +158,7 @@ private struct ChannelPostCard: View {
                     .frame(maxWidth: innerW - 80, alignment: .leading)
                 Spacer(minLength: 8)
                 if canDelete && !pending {
-                    Button("删除", action: onDelete)
+                    Button(t("common.delete"), action: onDelete)
                         .font(.system(size: 12)).foregroundStyle(Theme.textDim)
                         .buttonStyle(.plain)
                 }
@@ -175,7 +175,7 @@ private struct ChannelPostCard: View {
                 reactionRows
                 Spacer(minLength: 0)
                 if pending {
-                    Text("发送中…").font(.system(size: 11)).foregroundStyle(Theme.textDim)
+                    Text(t("channel.sending")).font(.system(size: 11)).foregroundStyle(Theme.textDim)
                 } else {
                     HStack(spacing: 3) {
                         Image(systemName: "eye").font(.system(size: 10))
@@ -212,7 +212,7 @@ private struct ChannelPostCard: View {
                 Button(action: onComments) {
                     HStack(spacing: 6) {
                         Image(systemName: "bubble.left").font(.system(size: 13))
-                        Text((p.commentCount ?? 0) > 0 ? "\(p.commentCount ?? 0) 条评论" : "评论").font(.system(size: 13))
+                        Text((p.commentCount ?? 0) > 0 ? t("channel.commentsN", ["n": p.commentCount ?? 0]) : t("channel.comments")).font(.system(size: 13))
                         Spacer()
                         Image(systemName: "chevron.right").font(.system(size: 12)).foregroundStyle(Theme.textDim)
                     }
@@ -250,7 +250,7 @@ private struct ChannelPostCard: View {
             if let s = StickerPayload.parse(content) {
                 StickerImageView(p: s, size: s.isGif ? 220 : 140).padding(.leading, 12).padding(.top, 10)
             } else {
-                Text("[表情]").font(.system(size: 15)).foregroundStyle(Theme.text).padding(.horizontal, 12).padding(.top, 8)
+                Text(t("channel.stickerPlaceholder")).font(.system(size: 15)).foregroundStyle(Theme.text).padding(.horizontal, 12).padding(.top, 8)
             }
         case "audio":
             audioRow
@@ -308,7 +308,7 @@ private struct ChannelPostCard: View {
         .contextMenu {
             if canDelete && !pending {
                 Button(role: .destructive, action: onDelete) {
-                    Label("删除", systemImage: "trash")
+                    Label(t("common.delete"), systemImage: "trash")
                 }
             }
         }
@@ -352,7 +352,7 @@ private struct ChannelPostCard: View {
 
     private var locationRow: some View {
         let obj = parseJsonObject(content)
-        let name = obj?["name"] as? String ?? "位置"
+        let name = obj?["name"] as? String ?? t("channel.location")
         let lat = obj?["lat"] as? Double
         let lng = obj?["lng"] as? Double
         return Button {
@@ -412,7 +412,7 @@ struct ChannelView: View {
             if let c = ch {
                 content(c)
             } else {
-                EmptyHint(text: loadError.isEmpty ? "加载中…" : loadError)
+                EmptyHint(text: loadError.isEmpty ? t("common.loading") : loadError)
             }
         }
         .fullBg()
@@ -452,11 +452,11 @@ struct ChannelView: View {
         .fullScreenCover(item: $media) { t in
             MediaViewerView(groups: t.groups, initialGroup: t.group, initialIndex: t.index) { media = nil }
         }
-        .alert("删除这条帖子？", isPresented: $showDelete) {
-            Button("删除", role: .destructive) { if let p = deleteTarget { deletePost(p) } }
-            Button("取消", role: .cancel) {}
+        .alert(t("channel.deletePostTitle"), isPresented: $showDelete) {
+            Button(t("common.delete"), role: .destructive) { if let p = deleteTarget { deletePost(p) } }
+            Button(t("common.cancel"), role: .cancel) {}
         } message: {
-            Text("评论和表情回应会一起删除")
+            Text(t("channel.deletePostMsg"))
         }
         .routePush($route)
         .task { await load() }
@@ -469,20 +469,20 @@ struct ChannelView: View {
     }
 
     private func payPost(_ p: ChannelPost) {
-        if let path = ChainCards.payreqPath(p.content ?? "", msgId: p.id, name: p.senderNickname ?? "频道") { route = .chainWalletPath(path) }
+        if let path = ChainCards.payreqPath(p.content ?? "", msgId: p.id, name: p.senderNickname ?? t("channel.title")) { route = .chainWalletPath(path) }
     }
 
     /// 付了频道里的收款消息：转账卡片私聊发给收款人（服务端按 req 决定）
     private func onWalletResult(_ json: String) {
         let r = ChainCards.obj(json)
         guard r["kind"] as? String == "transfer", r["req"] != nil else { return }
-        toastMsg = "转账成功，正在核对链上交易…"
+        toastMsg = t("chat.transfer.verifying")
         Task { @MainActor in
             do {
                 _ = try await ChainCards.postTransfer(targetId: "", resultJson: json)
-                toastMsg = "已到账，转账卡片发到了和对方的私聊"
+                toastMsg = t("channel.transferDone")
             } catch {
-                toastMsg = "转账卡片没发出去：\(error.localizedDescription)（钱已经转了，可以在钱包里查）"
+                toastMsg = t("chat.transfer.cardFailed", ["msg": error.localizedDescription])
             }
         }
     }
@@ -492,9 +492,9 @@ struct ChannelView: View {
             HStack(spacing: 8) {
                 AvatarView(url: ch?.avatar, size: 32)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(ch?.name ?? "频道").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
+                    Text(ch?.name ?? t("channel.title")).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
                     if let c = ch {
-                        Text("\(fmtCount(c.subscribers ?? 0)) 位订阅者").font(.system(size: 11)).foregroundStyle(Theme.textSub)
+                        Text(t("channel.subscribers", ["n": fmtCount(c.subscribers ?? 0)])).font(.system(size: 11)).foregroundStyle(Theme.textSub)
                     }
                 }
             }
@@ -509,12 +509,12 @@ struct ChannelView: View {
                     LazyVStack(spacing: 10) {
                         if hasMore && !posts.isEmpty {
                             Button { loadMore(proxy) } label: {
-                                Text("查看更早的帖子").font(.system(size: 12)).foregroundStyle(Theme.textSub).padding(10)
+                                Text(t("channel.olderPosts")).font(.system(size: 12)).foregroundStyle(Theme.textSub).padding(10)
                             }
                             .buttonStyle(.plain)
                         }
                         if posts.isEmpty {
-                            Text(c.sendable ? "发第一条帖子吧，订阅者都会收到" : "频道还没有发帖")
+                            Text(c.sendable ? t("channel.emptyCanPost") : t("channel.emptyNoPosts"))
                                 .font(.system(size: 14)).foregroundStyle(Theme.textSub)
                                 .padding(.top, 80)
                         }
@@ -550,7 +550,7 @@ struct ChannelView: View {
         if c.sendable {
             VStack(spacing: 0) {
                 HStack(alignment: .bottom, spacing: 8) {
-                    CompatVerticalTextField(text: $input, prompt: Text(c.canPost == true ? "发帖…" : "发消息…").foregroundColor(Theme.textDim), lineRange: 1...6)
+                    CompatVerticalTextField(text: $input, prompt: Text(c.canPost == true ? t("channel.postHint") : t("channel.msgHint")).foregroundColor(Theme.textDim), lineRange: 1...6)
                         .focused($inputFocused)
                         .foregroundStyle(Theme.text)
                         .padding(.horizontal, 14).padding(.vertical, 9)
@@ -578,7 +578,7 @@ struct ChannelView: View {
                             sendRaw("text", input.trimmingCharacters(in: .whitespacesAndNewlines))
                             input = ""
                         } label: {
-                            Text("发送").font(.system(size: 14)).foregroundStyle(.white)
+                            Text(t("common.send")).font(.system(size: 14)).foregroundStyle(.white)
                                 .padding(.horizontal, 16).frame(height: 40)
                                 .background(Capsule().fill(Theme.accent))
                         }
@@ -603,9 +603,9 @@ struct ChannelView: View {
             } label: {
                 Group {
                     if c.isMember != true {
-                        Text("订阅").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.accent)
+                        Text(t("channel.subscribe")).font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.accent)
                     } else {
-                        Text(c.muted == true ? "取消静音" : "静音").font(.system(size: 15)).foregroundStyle(Theme.text)
+                        Text(c.muted == true ? t("channel.unmute") : t("channel.mute")).font(.system(size: 15)).foregroundStyle(Theme.text)
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -632,7 +632,7 @@ struct ChannelView: View {
                 WsClient.shared.markRead(conversationId: conv, msgId: last.id)
             }
         } catch {
-            loadError = (error as? ApiError)?.msg ?? "频道不存在"
+            loadError = (error as? ApiError)?.msg ?? t("channel.notFound")
         }
         WsClient.shared.connect()
         removeListener = WsClient.shared.addListener { frame in handleFrame(frame) }
@@ -665,7 +665,7 @@ struct ChannelView: View {
             let tempId = frameStr(frame["tempId"])
             guard let idx = posts.firstIndex(where: { $0.pending == true && $0.tempId == tempId }) else { return }
             posts.remove(at: idx)
-            toastMsg = frame["msg"] as? String ?? "发送失败"
+            toastMsg = frame["msg"] as? String ?? t("channel.sendFailed")
         case "channel_stats":
             guard let data, frameStr(data["conversationId"]) == conv, let id = frameStr(data["msgId"]),
                   let idx = posts.firstIndex(where: { $0.id == id }) else { return }
@@ -758,7 +758,7 @@ struct ChannelView: View {
         }
         let text = caption.trimmingCharacters(in: .whitespacesAndNewlines)
         if !text.isEmpty { sendRaw("text", text) }
-        if failed > 0 { toastMsg = "\(failed) 张图片发送失败" }
+        if failed > 0 { toastMsg = t("chat.imagesFailed", ["n": failed]) }
     }
 
     private func handleAttach(_ action: AttachAction) {
@@ -864,7 +864,7 @@ private struct MemberPostToggle: View {
 
     var body: some View {
         Toggle(isOn: Binding(get: { isOn }, set: { onChange($0) })) {
-            Text("订阅者可发消息").font(.system(size: 15)).foregroundStyle(Theme.text)
+            Text(t("channel.memberPost")).font(.system(size: 15)).foregroundStyle(Theme.text)
         }
         .tint(Theme.accent)
         .padding(.vertical, 8)
@@ -886,7 +886,7 @@ private struct ChannelInfoSheet: View {
     @State private var toastMsg: String?
 
     private var owner: Bool { ch.role == "owner" }
-    private var retentionTip: String { "消息保留 \(ch.retentionDays ?? 0) 天，超过自动删除" }
+    private var retentionTip: String { t("channel.retentionTip", ["n": ch.retentionDays ?? 0]) }
 
     var body: some View {
         ScrollView {
@@ -898,7 +898,7 @@ private struct ChannelInfoSheet: View {
                             if let url = try? await Api.upload("image", data: data, filename: "c.jpg", mime: "image/jpeg") {
                                 save(["avatar": url])
                             } else {
-                                toastMsg = "上传失败"
+                                toastMsg = t("channel.uploadFailed")
                             }
                         }
                     }) {
@@ -909,13 +909,13 @@ private struct ChannelInfoSheet: View {
                 }
 
                 if editing {
-                    TextField("", text: $name, prompt: Text("频道名称").foregroundColor(Theme.textDim))
+                    TextField("", text: $name, prompt: Text(t("channel.name")).foregroundColor(Theme.textDim))
                         .foregroundStyle(Theme.text)
                         .padding(12)
                         .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bg2))
                         .padding(.top, 14)
                         .onChange(of: name) { v in if v.count > 50 { name = String(v.prefix(50)) } }
-                    CompatVerticalTextField(text: $desc, prompt: Text("频道简介").foregroundColor(Theme.textDim), lineRange: 3...6)
+                    CompatVerticalTextField(text: $desc, prompt: Text(t("channel.desc")).foregroundColor(Theme.textDim), lineRange: 3...6)
                         .foregroundStyle(Theme.text)
                         .padding(12)
                         .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bg2))
@@ -923,14 +923,14 @@ private struct ChannelInfoSheet: View {
                         .onChange(of: desc) { v in if v.count > 500 { desc = String(v.prefix(500)) } }
                     HStack(spacing: 20) {
                         Spacer()
-                        Button("取消") { editing = false }.font(.system(size: 14)).foregroundStyle(Theme.textSub)
-                        Button("保存") { save(["name": name, "description": desc]) }
+                        Button(t("common.cancel")) { editing = false }.font(.system(size: 14)).foregroundStyle(Theme.textSub)
+                        Button(t("common.save")) { save(["name": name, "description": desc]) }
                             .font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.accent)
                     }
                     .padding(.top, 14)
                 } else {
                     Text(ch.name ?? "").font(.system(size: 18, weight: .bold)).foregroundStyle(Theme.text).padding(.top, 10)
-                    Text("\(fmtCount(ch.subscribers ?? 0)) 位订阅者 · 频道主 \(ch.owner?.nickname ?? "")")
+                    Text(t("channel.subscribersOwner", ["n": fmtCount(ch.subscribers ?? 0), "name": ch.owner?.nickname ?? ""]))
                         .font(.system(size: 12)).foregroundStyle(Theme.textSub).padding(.top, 4)
                     if let d = ch.description, !d.isEmpty {
                         Text(d).font(.system(size: 14)).foregroundStyle(Theme.text).lineSpacing(5)
@@ -942,23 +942,23 @@ private struct ChannelInfoSheet: View {
                     }
                     Rectangle().fill(Theme.line).frame(height: 1).padding(.top, 16)
                     if ch.canPost == true {
-                        menuRow("编辑频道资料") { name = ch.name ?? ""; desc = ch.description ?? ""; editing = true }
+                        menuRow(t("channel.editInfo")) { name = ch.name ?? ""; desc = ch.description ?? ""; editing = true }
                         MemberPostToggle(isOn: ch.memberPost == true) { save(["memberPost": $0]) }
                     }
                     if ch.isMember == true {
-                        menuRow("分享频道（二维码 / 邀请码）") { showShare = true }
+                        menuRow(t("channel.shareMenu")) { showShare = true }
                     }
                     if owner {
-                        menuRow("机器人（自动发帖）") { showBots = true }
+                        menuRow(t("channel.botsMenu")) { showBots = true }
                     }
                     if ch.isMember == true && !owner {
-                        menuRow(ch.muted == true ? "取消静音" : "静音") { toggleMute() }
+                        menuRow(ch.muted == true ? t("channel.unmute") : t("channel.mute")) { toggleMute() }
                     }
                     if owner {
-                        menuRow("清空所有消息", color: Theme.danger) { confirmClear = true }
+                        menuRow(t("channel.clearAll"), color: Theme.danger) { confirmClear = true }
                     }
                     if ch.isMember == true {
-                        menuRow(owner ? "删除频道" : "退订", color: Theme.danger) { confirmLeave = true }
+                        menuRow(owner ? t("channel.delete") : t("channel.unsubscribe"), color: Theme.danger) { confirmLeave = true }
                     }
                 }
             }
@@ -972,17 +972,17 @@ private struct ChannelInfoSheet: View {
         .sheet(isPresented: $showBots) {
             AddBotSheet(groupId: ch.id, channel: true)
         }
-        .alert(owner ? "删除频道？" : "退订频道？", isPresented: $confirmLeave) {
-            Button(owner ? "删除" : "退订", role: .destructive) { leave() }
-            Button("取消", role: .cancel) {}
+        .alert(owner ? t("channel.deleteTitle") : t("channel.unsubscribeTitle"), isPresented: $confirmLeave) {
+            Button(owner ? t("common.delete") : t("channel.unsubscribe"), role: .destructive) { leave() }
+            Button(t("common.cancel"), role: .cancel) {}
         } message: {
-            Text(owner ? "删除后所有订阅者都看不到它" : "退订后不再收到这个频道的帖子")
+            Text(owner ? t("channel.deleteMsg") : t("channel.unsubscribeMsg"))
         }
-        .alert("清空所有消息？", isPresented: $confirmClear) {
-            Button("清空", role: .destructive) { clearAll() }
-            Button("取消", role: .cancel) {}
+        .alert(t("channel.clearAllTitle"), isPresented: $confirmClear) {
+            Button(t("chat.clear"), role: .destructive) { clearAll() }
+            Button(t("common.cancel"), role: .cancel) {}
         } message: {
-            Text("评论、表情回应和图片 / 视频 / 语音文件会一起永久删除，无法恢复")
+            Text(t("channel.clearAllMsg"))
         }
     }
 
@@ -990,7 +990,7 @@ private struct ChannelInfoSheet: View {
         Task {
             do {
                 let r: ClearResp = try await Api.request("/im/channel/\(ch.id)/clear", method: "POST")
-                toastMsg = (r.deleted ?? 0) > 0 ? "已清空 \(r.deleted ?? 0) 条消息" : "频道里没有消息"
+                toastMsg = (r.deleted ?? 0) > 0 ? t("channel.clearedN", ["n": r.deleted ?? 0]) : t("channel.noMessages")
             } catch {
                 toastMsg = error.localizedDescription
             }
@@ -1066,12 +1066,17 @@ struct ChannelCommentsView: View {
         !sending && (!input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || sticker != nil)
     }
 
+    private var commentPrompt: String {
+        guard let r = replyTo else { return t("channel.commentPlaceholder") }
+        return t("channel.replyPlaceholder", ["name": r.user?.nickname ?? ""])
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             Group {
                 if let items = list {
                     if items.isEmpty {
-                        EmptyHint(text: "还没有评论，来抢沙发")
+                        EmptyHint(text: t("channel.noComments"))
                     } else {
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 0) {
@@ -1082,7 +1087,7 @@ struct ChannelCommentsView: View {
                         }
                     }
                 } else {
-                    EmptyHint(text: "加载中…")
+                    EmptyHint(text: t("common.loading"))
                 }
             }
             .contentShape(Rectangle())
@@ -1092,9 +1097,9 @@ struct ChannelCommentsView: View {
                 HStack(spacing: 10) {
                     if let s = sticker { PendingStickerChip(p: s) { sticker = nil } }
                     if let r = replyTo {
-                        Text("回复 @\(r.user?.nickname ?? "")").font(.system(size: 12)).foregroundStyle(Theme.accent)
+                        Text(t("channel.replyTo", ["name": r.user?.nickname ?? ""])).font(.system(size: 12)).foregroundStyle(Theme.accent)
                         Spacer()
-                        Button("取消") { replyTo = nil }.font(.system(size: 12)).foregroundStyle(Theme.textSub)
+                        Button(t("common.cancel")) { replyTo = nil }.font(.system(size: 12)).foregroundStyle(Theme.textSub)
                     } else {
                         Spacer()
                     }
@@ -1115,7 +1120,7 @@ struct ChannelCommentsView: View {
                     .buttonStyle(.plain)
                     CompatVerticalTextField(
                         text: $input,
-                        prompt: Text(replyTo != nil ? "回复 @\(replyTo?.user?.nickname ?? "")" : "说点什么…").foregroundColor(Theme.textSub),
+                        prompt: Text(commentPrompt).foregroundColor(Theme.textSub),
                         lineRange: 1...4
                     )
                     .focused($inputFocused)
@@ -1123,7 +1128,7 @@ struct ChannelCommentsView: View {
                     .background(RoundedRectangle(cornerRadius: 20).fill(Theme.bg3))
                     .foregroundStyle(Theme.text)
                     .onChange(of: input) { v in if v.count > 500 { input = String(v.prefix(500)) } }
-                    Button(sending ? "发送中" : "发送") { send() }
+                    Button(sending ? t("channel.sendingShort") : t("common.send")) { send() }
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(canSend ? Theme.accent : Theme.textDim)
                         .disabled(!canSend)
@@ -1137,12 +1142,12 @@ struct ChannelCommentsView: View {
             .onChange(of: inputFocused) { f in if f { showSticker = false } }
         }
         .fullBg()
-        .navigationTitle(list.map { "\($0.count) 条评论" } ?? "评论")
+        .navigationTitle(list.map { t("channel.commentsN", ["n": $0.count]) } ?? t("channel.comments"))
         .navigationBarTitleDisplayMode(.inline)
         .compatNavBarBackground(Theme.bg)
-        .alert("删除这条评论？", isPresented: $showDelete) {
-            Button("删除", role: .destructive) { if let c = deleteTarget { remove(c) } }
-            Button("取消", role: .cancel) {}
+        .alert(t("channel.deleteCommentConfirm"), isPresented: $showDelete) {
+            Button(t("common.delete"), role: .destructive) { if let c = deleteTarget { remove(c) } }
+            Button(t("common.cancel"), role: .cancel) {}
         }
         .toast($toastMsg)
         .routePush($route)
@@ -1157,14 +1162,14 @@ struct ChannelCommentsView: View {
             .buttonStyle(.plain)
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 8) {
-                    Text(c.user?.nickname ?? "用户").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
+                    Text(c.user?.nickname ?? t("treehole.user")).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
                     Text(fmtTime(c.createdAt)).font(.system(size: 11)).foregroundStyle(Theme.textDim)
                     Spacer(minLength: 0)
-                    Button("回复") { replyTo = c; inputFocused = true }
+                    Button(t("channel.reply")) { replyTo = c; inputFocused = true }
                         .font(.system(size: 12)).foregroundStyle(Theme.accent)
                         .buttonStyle(.plain)
                     if c.user?.id == state.user?.id || canAdmin {
-                        Button("删除") { deleteTarget = c; showDelete = true }
+                        Button(t("common.delete")) { deleteTarget = c; showDelete = true }
                             .font(.system(size: 12)).foregroundStyle(Theme.textDim)
                             .buttonStyle(.plain)
                     }
@@ -1252,18 +1257,18 @@ struct CreateChannelView: View {
 
     private var createHint: String {
         memberPost
-            ? "所有订阅者都能在频道里发帖，你可以删除任何人的帖子。创建后也能在频道资料里修改。"
-            : "只有你能发帖，订阅者可以看、点表情、评论。创建后也能在频道资料里修改。"
+            ? t("channel.memberPostOnCaption")
+            : t("channel.memberPostOffCaption")
     }
-    private var avatarTip: String { avatar.isEmpty ? "设置频道头像" : "更换头像" }
+    private var avatarTip: String { avatar.isEmpty ? t("channel.setAvatar") : t("channel.changeAvatar") }
     @State private var quota: ChannelQuota?
     private var left: Int? { quota.map { max(0, $0.limit - $0.owned) } }
     private var quotaText: String {
         guard let q = quota else { return "" }
-        if left == 0 { return "已达到创建上限（最多 \(q.limit) 个频道）" }
-        return "还能创建 \(left ?? 0) 个频道（共 \(q.limit) 个）"
+        if left == 0 { return t("channel.quotaFull", ["n": q.limit]) }
+        return t("channel.quotaLeft", ["left": left ?? 0, "n": q.limit])
     }
-    private var submitTitle: String { busy ? "请稍候…" : "创建频道" }
+    private var submitTitle: String { busy ? t("channel.pleaseWait") : t("channel.createSubmit") }
     private static let groupBg = Color(red: 0.949, green: 0.949, blue: 0.969)
     @State private var busy = false
     @State private var toastMsg: String?
@@ -1275,7 +1280,7 @@ struct CreateChannelView: View {
             VStack(alignment: .leading, spacing: 0) {
                 avatarPicker
                 fieldsGroup
-                caption("简介会显示在频道资料页，告诉别人这个频道发什么。")
+                caption(t("channel.descCaption"))
                 memberPostGroup
                 caption(createHint)
                 if quota != nil {
@@ -1293,7 +1298,7 @@ struct CreateChannelView: View {
         }
         .task { quota = try? await Api.request("/im/channel/quota") }
         .background(Self.groupBg.ignoresSafeArea())
-        .navigationTitle("新建频道")
+        .navigationTitle(t("channel.newTitle"))
         .navigationBarTitleDisplayMode(.inline)
         .compatNavBarBackground(Theme.bg)
         .toast($toastMsg)
@@ -1320,7 +1325,7 @@ struct CreateChannelView: View {
                 avatarInner
                 if busy {
                     Circle().fill(Color.black.opacity(0.45))
-                    Text("上传中…").font(.system(size: 12)).foregroundStyle(Color.white)
+                    Text(t("channel.uploading")).font(.system(size: 12)).foregroundStyle(Color.white)
                 }
             }
             .frame(width: 88, height: 88)
@@ -1348,14 +1353,14 @@ struct CreateChannelView: View {
     private var fieldsGroup: some View {
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: 8) {
-                TextField("", text: $name, prompt: Text("频道名称").foregroundColor(Theme.textDim))
+                TextField("", text: $name, prompt: Text(t("channel.namePlaceholder")).foregroundColor(Theme.textDim))
                     .font(.system(size: 16)).foregroundStyle(Theme.text)
                 counter(name.count, 50)
             }
             .padding(.horizontal, 16).padding(.vertical, 14)
             Rectangle().fill(Theme.line).frame(height: 0.5).padding(.leading, 16)
             HStack(alignment: .top, spacing: 8) {
-                CompatVerticalTextField(text: $desc, prompt: Text("简介（可选）").foregroundColor(Theme.textDim), lineRange: 3...6)
+                CompatVerticalTextField(text: $desc, prompt: Text(t("channel.descOptional")).foregroundColor(Theme.textDim), lineRange: 3...6)
                     .font(.system(size: 16)).foregroundStyle(Theme.text)
                 counter(desc.count, 500)
             }
@@ -1379,7 +1384,7 @@ struct CreateChannelView: View {
                 .frame(width: 30, height: 30)
                 .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.204, green: 0.78, blue: 0.349)))
             Toggle(isOn: $memberPost) {
-                Text("订阅者可发消息").font(.system(size: 16)).foregroundStyle(Theme.text)
+                Text(t("channel.memberPost")).font(.system(size: 16)).foregroundStyle(Theme.text)
             }
             .tint(Theme.accent)
         }
@@ -1399,7 +1404,7 @@ struct CreateChannelView: View {
             if let url = try? await Api.upload("image", data: data, filename: "c.jpg", mime: "image/jpeg") {
                 avatar = url
             } else {
-                toastMsg = "上传失败"
+                toastMsg = t("channel.uploadFailed")
             }
             busy = false
         }
@@ -1439,7 +1444,7 @@ struct ChannelsView: View {
         VStack(spacing: 0) {
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").font(.system(size: 14)).foregroundStyle(Theme.textSub)
-                TextField("", text: $q, prompt: Text("搜索频道").foregroundColor(Theme.textSub))
+                TextField("", text: $q, prompt: Text(t("channel.searchPlaceholder")).foregroundColor(Theme.textSub))
                     .font(.system(size: 14)).foregroundStyle(Theme.text)
                     .autocorrectionDisabled()
             }
@@ -1449,7 +1454,7 @@ struct ChannelsView: View {
 
             if let items = list {
                 if items.isEmpty {
-                    EmptyHint(text: q.trimmingCharacters(in: .whitespaces).isEmpty ? "还没有频道，创建第一个吧" : "没有找到相关频道")
+                    EmptyHint(text: q.trimmingCharacters(in: .whitespaces).isEmpty ? t("channel.emptyList") : t("channel.noResults"))
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 0) {
@@ -1458,16 +1463,16 @@ struct ChannelsView: View {
                     }
                 }
             } else {
-                EmptyHint(text: "加载中…")
+                EmptyHint(text: t("common.loading"))
             }
         }
         .fullBg()
-        .navigationTitle("发现频道")
+        .navigationTitle(t("channel.discover"))
         .navigationBarTitleDisplayMode(.inline)
         .compatNavBarBackground(Theme.bg)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button("创建") { route = .createChannel }
+                Button(t("channel.createShort")) { route = .createChannel }
                     .font(.system(size: 14)).foregroundStyle(Theme.accent)
             }
         }
@@ -1487,17 +1492,17 @@ struct ChannelsView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
                         Text(c.name ?? "").font(.system(size: 16, weight: .medium)).foregroundStyle(Theme.text).lineLimit(1)
-                        Text("\(fmtCount(c.subscribers ?? 0)) 订阅").font(.system(size: 11)).foregroundStyle(Theme.textDim).fixedSize()
+                        Text(t("channel.subscribersShort", ["n": fmtCount(c.subscribers ?? 0)])).font(.system(size: 11)).foregroundStyle(Theme.textDim).fixedSize()
                     }
                     let d = c.description ?? ""
-                    Text(d.isEmpty ? "频道主 \(c.ownerNickname ?? "")" : d)
+                    Text(d.isEmpty ? t("channel.ownerBy", ["name": c.ownerNickname ?? ""]) : d)
                         .font(.system(size: 13)).foregroundStyle(Theme.textSub).lineLimit(1)
                 }
                 Spacer(minLength: 0)
                 Button {
                     if c.isMember == true { route = .channel(c.id) } else { subscribe(c) }
                 } label: {
-                    Text(c.isMember == true ? "已订阅" : "订阅")
+                    Text(c.isMember == true ? t("channel.subscribed") : t("channel.subscribe"))
                         .font(.system(size: 12))
                         .foregroundStyle(c.isMember == true ? Theme.textSub : .white)
                         .padding(.horizontal, 14).padding(.vertical, 6)
