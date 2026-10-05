@@ -54,7 +54,7 @@ final class WsClient: NSObject {
         task = nil
         manualClose = false
         let wsBase = Api.baseURL.replacingOccurrences(of: "http", with: "ws")
-        guard let url = URL(string: "\(wsBase)/ws?token=\(token)") else { return }
+        guard let url = URL(string: "\(wsBase)/ws?token=\(token)&lang=\(I18nStore.shared.lang)") else { return }
         task = URLSession.shared.webSocketTask(with: url)
         task?.resume()
         receiveLoop()

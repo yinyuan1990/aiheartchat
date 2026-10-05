@@ -1,4 +1,5 @@
 import { getToken } from './api';
+import { lang } from './i18n';
 
 export interface MessagePayload {
   id: string;
@@ -51,7 +52,7 @@ class WsManager {
     if (!token || (this.ws && this.ws.readyState <= WebSocket.OPEN)) return;
     this.manualClose = false;
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    this.ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`);
+    this.ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}&lang=${lang()}`);
 
     this.ws.onopen = () => {
       this.heartbeat = window.setInterval(() => this.raw({ op: 'ping' }), 25000);

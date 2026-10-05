@@ -68,7 +68,7 @@ object WsClient {
         val token = Api.token ?: return
         if (ws != null) return
         manualClose = false
-        val url = Api.BASE_URL.replaceFirst("http", "ws") + "/ws?token=$token"
+        val url = Api.BASE_URL.replaceFirst("http", "ws") + "/ws?token=$token&lang=${com.wh.peiwana.i18n.I18n.lang}"
         ws = client.newWebSocket(
             Request.Builder().url(url).build(),
             object : WebSocketListener() {

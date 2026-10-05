@@ -11,11 +11,14 @@ import { ConnectionRegistry } from './connection.registry';
 import { ImService } from './im.service';
 import { PerpWatchService } from './perp-watch.service';
 import { ReadFrame, SendFrame } from './im.types';
+import { langOf, translate } from '../i18n/translate';
 
 @WebSocketGateway({ path: '/ws', maxPayload: 128 * 1024 })
 export class ImGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private readonly logger = new Logger('ImGateway');
   private readonly socketUser = new WeakMap<WebSocket, bigint>();
+  /** 连接时 ?lang= 带上来的界面语言，错误帧按它翻译（null = 中文） */
+  private readonly socketLang = new WeakMap<WebSocket, string | null>();
   /** 每连接帧率窗口：秒级时间戳 + 该秒内帧数 */
   private readonly frameRate = new WeakMap<WebSocket, { sec: number; count: number }>();
 
@@ -50,6 +53,7 @@ export class ImGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
 
     this.socketUser.set(ws, userId);
+    this.socketLang.set(ws, langOf(url.searchParams.get('lang') ?? undefined));
     await this.registry.register(userId, ws);
 
     ws.on('message', (raw: Buffer) => this.onFrame(ws, userId, raw));
@@ -122,7 +126,7 @@ export class ImGateway implements OnGatewayConnection, OnGatewayDisconnect {
         }
       }
     } catch (e: any) {
-      ws.send(JSON.stringify({ op: 'error', tempId: frame?.tempId, msg: e?.message ?? '操作失败' }));
+      ws.send(JSON.stringify({ op: 'error', tempId: frame?.tempId, msg: translate(e?.message ?? '操作失败', this.socketLang.get(ws) ?? null) }));
     }
   }
 }

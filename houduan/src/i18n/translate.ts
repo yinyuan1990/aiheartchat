@@ -1,4 +1,4 @@
-import { EN } from './en';
+import { DATA_EN, EN } from './en';
 
 /**
  * 服务端报错多语言：service 里照旧写中文（throw new BadRequestException('群不存在')），
@@ -28,6 +28,26 @@ function patternsOf(lang: string) {
 export function langOf(header: string | string[] | undefined): string | null {
   const first = (Array.isArray(header) ? header[0] : header ?? '').split(',')[0].trim().toLowerCase().split('-')[0];
   return first && first !== 'zh' && DICTS[first] ? first : null;
+}
+
+const DATA: Record<string, Dict> = { en: DATA_EN };
+const DATA_FIELDS = new Set(['name', 'title', 'desc', 'label', 'giftName']);
+
+/** 接口返回值里后台配置的中文（礼物名、大厅卡片）换成对应语言；只看 DATA_FIELDS 字段、整串匹配，别的原样返回 */
+export function localizeData<T>(data: T, lang: string | null): T {
+  const dict = lang ? DATA[lang] : undefined;
+  if (!dict) return data;
+  const walk = (v: unknown, field?: string): unknown => {
+    if (typeof v === 'string') return field && DATA_FIELDS.has(field) ? (dict[v] ?? v) : v;
+    if (Array.isArray(v)) return v.map((x) => walk(x, field));
+    if (v && typeof v === 'object' && Object.getPrototypeOf(v) === Object.prototype) {
+      const out: Record<string, unknown> = {};
+      for (const [k, x] of Object.entries(v)) out[k] = walk(x, k);
+      return out;
+    }
+    return v;
+  };
+  return walk(data) as T;
 }
 
 export function translate(msg: string, lang: string | null): string {

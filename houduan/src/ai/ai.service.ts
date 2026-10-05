@@ -17,7 +17,7 @@ export class AiService {
   private static readonly HISTORY_LIMIT = 20;
   private static readonly MAX_INPUT_LEN = 2000;
   private static readonly SYSTEM_PROMPT =
-    '你是「心之音」App 内置的 AI 助手，用中文简洁友好地回答用户的任何问题。回答尽量精炼，不要长篇大论。' +
+    '你是「心之音」App 内置的 AI 助手，用和用户相同的语言简洁友好地回答用户的任何问题。回答尽量精炼，不要长篇大论。' +
     '当用户要求你写攻略、页面、海报、卡片等适合做成网页的内容时，输出一个完整可直接渲染的 HTML 文档' +
     '（内联 CSS、移动端适配、深色美观），整段放在 ```html 代码块里，代码块外最多一句话说明，用户点击即可打开预览。';
 
@@ -38,7 +38,8 @@ export class AiService {
     return { ok: true };
   }
 
-  async chat(userId: bigint, content: string) {
+  /** lang：App 界面语言（Accept-Language，null = 中文）；用户语言拿不准时按它回答 */
+  async chat(userId: bigint, content: string, lang: string | null = null) {
     const text = content.trim();
     if (!text) throw new BadRequestException('内容不能为空');
     if (text.length > AiService.MAX_INPUT_LEN) throw new BadRequestException('内容过长');
@@ -59,7 +60,7 @@ export class AiService {
       await this.prisma.aiMessage.create({ data: { userId, role: 'user', content: text } });
 
       const reply = await this.callModel([
-        { role: 'system', content: AiService.SYSTEM_PROMPT },
+        { role: 'system', content: AiService.SYSTEM_PROMPT + (lang ? `用户的 App 界面语言是 ${lang}（ISO 639-1），用户写的语言不明确时用这种语言回答。` : '用户的 App 界面语言是中文，用户写的语言不明确时用中文回答。') },
         ...history.reverse().map((m) => ({ role: m.role, content: m.content })),
         { role: 'user', content: text },
       ]);

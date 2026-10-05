@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, UseGuards } from '@nestjs/common';
+import { langOf } from '../i18n/translate';
 import { IsString, MaxLength } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/current-user.decorator';
@@ -21,8 +22,8 @@ export class AiController {
   }
 
   @Post('chat')
-  chat(@CurrentUser() userId: bigint, @Body() dto: AiChatDto) {
-    return this.ai.chat(userId, dto.content);
+  chat(@CurrentUser() userId: bigint, @Body() dto: AiChatDto, @Headers('accept-language') acceptLang?: string) {
+    return this.ai.chat(userId, dto.content, langOf(acceptLang));
   }
 
   @Post('clear')
