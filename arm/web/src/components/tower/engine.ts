@@ -140,7 +140,7 @@ export class TowerEngine {
       const font = new FontFace("wenxue", "url(/tower/wenxue.woff)");
       void font.load().then((f) => document.fonts.add(f)).catch(() => {});
     } catch { /* no FontFace: falls back to Arial */ }
-    this.dpr = this.capture ? 1 : Math.min(window.devicePixelRatio || 1, 2);
+    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(host);
     this.resize();
