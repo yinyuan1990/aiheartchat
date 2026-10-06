@@ -32,8 +32,8 @@ struct MeView: View {
     private var content: some View {
         // 优先用全局状态：编辑资料保存后（state.user 已更新）立即生效
         if let u = state.user ?? me {
-            ScrollView {
-                VStack(spacing: 0) {
+            // 头部（头像到积分余额）固定不动，下面的功能分组单独滚动
+            VStack(spacing: 0) {
                     // 头部
                     VStack(alignment: .leading, spacing: 0) {
                         HStack(alignment: .top, spacing: 16) {
@@ -118,45 +118,80 @@ struct MeView: View {
                     .padding(EdgeInsets(top: 28, leading: 20, bottom: 16, trailing: 20))
                     .background(LinearGradient(colors: [Theme.accent.opacity(0.14), Theme.bg], startPoint: .top, endPoint: .bottom))
 
-                    // 男方专属：视频通话默认是否开启自己画面（默认关闭；女方无此设置）
-                    if u.gender == 1 {
-                        VStack(spacing: 0) {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(t("me.camDefault")).font(.system(size: 15)).foregroundStyle(Theme.text)
-                                    Text(t("me.camDefaultSub")).font(.system(size: 11)).foregroundStyle(Theme.textDim)
-                                }
-                                Spacer()
-                                Toggle("", isOn: $camDefaultOn)
-                                    .labelsHidden()
-                                    .tint(Theme.accent)
-                                    .onChange(of: camDefaultOn) { v in
-                                        UserDefaults.standard.set(v, forKey: "camDefaultOn")
-                                    }
-                            }
-                            .padding(.horizontal, 16).padding(.vertical, 10)
-                            Rectangle().fill(Theme.line).frame(height: 1)
-                        }
+                    Rectangle().fill(Theme.line).frame(height: 1)
+                    ScrollView {
+                        menuGroups(u).padding(.bottom, 24)
                     }
-                    // 菜单
-                    menuRow(t("me.editProfile"), .editProfile)
-                    // 专属邀请网页（链接 + 二维码）：女生发给男生 / 男生发给女生，下载后自动归因到我
-                    if !state.reviewMode { menuRow(t("me.inviteCard"), .inviteCard) }
-                    menuRow(t("me.myMoments"), .myMoments)
-                    // 关注的人动态（原主页「关注」tab 移到这里）
-                    menuRow(t("me.followMoments"), .followMoments)
-                    menuRow(u.gender == 2 ? t("me.myTasksGuide") : t("me.myTasks"), .taskMine)
-                    menuRow(t("me.gifts"), .giftsReceived)
-                    menuRow(t("me.bots"), .bots)
-                    // 链上钱包：App Store 非中国区 + 后台开关（或本机已有钱包）
-                    if chainWalletVisible { menuRow(t("me.chainWallet"), .chainWallet) }
-                    // 搭子认证已合并实名认证（申请时提交姓名+身份证，审核通过即实名）
-                    if !u.isGuide { menuRow(t("me.guideApply"), .guideApply) }
-                    languageRow
-                }
+                    .background(Theme.bg2)
             }
         } else {
             EmptyHint(text: t("common.loading"))
+        }
+    }
+
+    /// 功能分组：我的内容 / 同城搭子 / 工具 / 设置
+    private func menuGroups(_ u: UserProfile) -> some View {
+        VStack(spacing: 0) {
+            meGroup(t("me.group.content")) {
+                menuRow(t("me.myMoments"), .myMoments, first: true)
+                // 关注的人动态（原主页「关注」tab 移到这里）
+                menuRow(t("me.followMoments"), .followMoments)
+                menuRow(t("me.gifts"), .giftsReceived)
+            }
+            meGroup(t("me.group.buddy")) {
+                menuRow(u.gender == 2 ? t("me.myTasksGuide") : t("me.myTasks"), .taskMine, first: true)
+                // 搭子认证已合并实名认证（申请时提交姓名+身份证，审核通过即实名）
+                if !u.isGuide { menuRow(t("me.guideApply"), .guideApply) }
+            }
+            meGroup(t("me.group.tools")) {
+                // 链上钱包：App Store 非中国区 + 后台开关（或本机已有钱包）
+                if chainWalletVisible { menuRow(t("me.chainWallet"), .chainWallet, first: true) }
+                menuRow(t("me.bots"), .bots, first: !chainWalletVisible)
+                // 专属邀请网页（链接 + 二维码）：女生发给男生 / 男生发给女生，下载后自动归因到我
+                if !state.reviewMode { menuRow(t("me.inviteCard"), .inviteCard) }
+            }
+            meGroup(t("me.group.settings")) {
+                menuRow(t("me.editProfile"), .editProfile, first: true)
+                languageRow
+                // 男方专属：视频通话默认是否开启自己画面（默认关闭；女方无此设置）
+                if u.gender == 1 { camRow }
+            }
+        }
+    }
+
+    /// 小标题 + 白色圆角卡片
+    private func meGroup<C: View>(_ title: String, @ViewBuilder _ rows: () -> C) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.system(size: 12)).foregroundStyle(Theme.textSub).padding(.leading, 6)
+            VStack(spacing: 0) { rows() }
+                .background(Theme.bg)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+        }
+        .padding(.horizontal, 16).padding(.top, 16)
+    }
+
+    /// 卡片里行与行之间的分隔线（左边缩进，第一行上面不画）
+    private var rowDivider: some View {
+        Rectangle().fill(Theme.line).frame(height: 0.5).padding(.leading, 16)
+    }
+
+    private var camRow: some View {
+        VStack(spacing: 0) {
+            rowDivider
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(t("me.camDefault")).font(.system(size: 15)).foregroundStyle(Theme.text)
+                    Text(t("me.camDefaultSub")).font(.system(size: 11)).foregroundStyle(Theme.textDim)
+                }
+                Spacer()
+                Toggle("", isOn: $camDefaultOn)
+                    .labelsHidden()
+                    .tint(Theme.accent)
+                    .onChange(of: camDefaultOn) { v in
+                        UserDefaults.standard.set(v, forKey: "camDefaultOn")
+                    }
+            }
+            .padding(.horizontal, 16).padding(.vertical, 10)
         }
     }
 
@@ -168,14 +203,14 @@ struct MeView: View {
             showLanguage = true
         } label: {
             VStack(spacing: 0) {
+                rowDivider
                 HStack {
                     Text(t("lang.title")).font(.system(size: 15)).foregroundStyle(Theme.text)
                     Spacer()
                     Text(current).font(.system(size: 14)).foregroundStyle(Theme.textSub)
                     Text("›").font(.system(size: 18)).foregroundStyle(Theme.textDim)
                 }
-                .padding(.horizontal, 16).padding(.vertical, 15)
-                Rectangle().fill(Theme.line).frame(height: 1)
+                .padding(.horizontal, 16).padding(.vertical, 14)
             }
             .contentShape(Rectangle())
         }
@@ -188,16 +223,16 @@ struct MeView: View {
         }
     }
 
-    private func menuRow(_ label: String, _ route: Route) -> some View {
+    private func menuRow(_ label: String, _ route: Route, first: Bool = false) -> some View {
         RouteLink(route) {
             VStack(spacing: 0) {
+                if !first { rowDivider }
                 HStack {
                     Text(label).font(.system(size: 15)).foregroundStyle(Theme.text)
                     Spacer()
                     Text("›").font(.system(size: 18)).foregroundStyle(Theme.textDim)
                 }
-                .padding(.horizontal, 16).padding(.vertical, 15)
-                Rectangle().fill(Theme.line).frame(height: 1)
+                .padding(.horizontal, 16).padding(.vertical, 14)
             }
             // 让整行（含空白区域）都可点击
             .contentShape(Rectangle())

@@ -38,8 +38,9 @@ fun MeScreen(modifier: Modifier = Modifier, initialUser: UserProfile?, onNav: (S
     val startScan = rememberQrScan(onNav)
     val u = me ?: return
 
-    LazyColumn(modifier = modifier.fillMaxSize()) {
-        item {
+    // 头部（头像到积分余额）固定不动，下面的功能分组单独滚动
+    Column(modifier = modifier.fillMaxSize()) {
+        run {
             Column(modifier = Modifier.background(Brush.verticalGradient(listOf(Accent.copy(alpha = 0.14f), Bg))).padding(20.dp, 28.dp, 20.dp, 16.dp)) {
                 Row(verticalAlignment = Alignment.Top) {
                     Avatar(u.avatar, 76)
@@ -95,57 +96,78 @@ fun MeScreen(modifier: Modifier = Modifier, initialUser: UserProfile?, onNav: (S
                 }
             }
         }
-        val rows = buildList {
-            add(t("me.editProfile") to "edit-profile")
-            // 专属邀请网页（链接 + 二维码）：女生发给男生 / 男生发给女生，下载后自动归因到我
-            add(t("me.inviteCard") to "invite-card")
-            add(t("me.myMoments") to "my-moments")
-            // 关注的人动态（原主页「关注」tab 移到这里）
-            add(t("me.followMoments") to "follow-moments")
-            add((if (u.gender == 2) t("me.myTasksGuide") else t("me.myTasks")) to "task/mine")
-            add(t("me.gifts") to "gifts-received")
-            add(t("me.bots") to "bots")
-            if (chainWalletVisible(ctx, u)) add(t("me.chainWallet") to "chain-wallet")
-            // 搭子认证已合并实名认证（申请时提交姓名+身份证，审核通过即实名）
-            if (!u.isGuide) add(t("me.guideApply") to "guide-apply")
-        }
-        items(rows) { (label, route) ->
-            Row(modifier = Modifier.fillMaxWidth().clickable { onNav(route) }.padding(16.dp, 15.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(label, color = TextMain, fontSize = 15.sp, modifier = Modifier.weight(1f))
-                Text("›", color = TextDim, fontSize = 18.sp)
-            }
-            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Line))
-        }
-        item {
-            var picking by remember { mutableStateOf(false) }
-            val current = if (I18n.choice == I18n.SYSTEM) t("lang.system") else I18n.languages.firstOrNull { it.first == I18n.choice }?.second.orEmpty()
-            Row(modifier = Modifier.fillMaxWidth().clickable { picking = true }.padding(16.dp, 15.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(t("lang.title"), color = TextMain, fontSize = 15.sp, modifier = Modifier.weight(1f))
-                Text(current, color = TextSub, fontSize = 14.sp)
-                Text("  ›", color = TextDim, fontSize = 18.sp)
-            }
-            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Line))
-            if (picking) LanguageDialog { picking = false }
-        }
-        // 男方专属：视频通话默认是否开启自己画面（默认关闭；女方无此设置）
-        if (u.gender == 1) {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
+
+        var picking by remember { mutableStateOf(false) }
+        if (picking) LanguageDialog { picking = false }
+        val langName = if (I18n.choice == I18n.SYSTEM) t("lang.system") else I18n.languages.firstOrNull { it.first == I18n.choice }?.second.orEmpty()
+        val walletOk = chainWalletVisible(ctx, u)
+        LazyColumn(Modifier.weight(1f).fillMaxWidth().background(Bg2), contentPadding = PaddingValues(bottom = 24.dp)) {
             item {
-                var camOn by remember { mutableStateOf(Api.camDefaultOn) }
-                Row(modifier = Modifier.fillMaxWidth().padding(16.dp, 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(t("me.camDefault"), color = TextMain, fontSize = 15.sp)
-                        Text(t("me.camDefaultSub"), color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
-                    }
-                    androidx.compose.material3.Switch(
-                        checked = camOn,
-                        onCheckedChange = { camOn = it; Api.camDefaultOn = it },
-                        colors = androidx.compose.material3.SwitchDefaults.colors(checkedTrackColor = Accent),
-                    )
+                MeGroup(t("me.group.content")) {
+                    MeRow(t("me.myMoments")) { onNav("my-moments") }
+                    // 关注的人动态（原主页「关注」tab 移到这里）
+                    MeRow(t("me.followMoments")) { onNav("follow-moments") }
+                    MeRow(t("me.gifts"), last = true) { onNav("gifts-received") }
                 }
-                Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Line))
+            }
+            item {
+                MeGroup(t("me.group.buddy")) {
+                    MeRow(if (u.gender == 2) t("me.myTasksGuide") else t("me.myTasks"), last = u.isGuide) { onNav("task/mine") }
+                    // 搭子认证已合并实名认证（申请时提交姓名+身份证，审核通过即实名）
+                    if (!u.isGuide) MeRow(t("me.guideApply"), last = true) { onNav("guide-apply") }
+                }
+            }
+            item {
+                MeGroup(t("me.group.tools")) {
+                    if (walletOk) MeRow(t("me.chainWallet")) { onNav("chain-wallet") }
+                    MeRow(t("me.bots")) { onNav("bots") }
+                    // 专属邀请网页（链接 + 二维码）：女生发给男生 / 男生发给女生，下载后自动归因到我
+                    MeRow(t("me.inviteCard"), last = true) { onNav("invite-card") }
+                }
+            }
+            item {
+                MeGroup(t("me.group.settings")) {
+                    MeRow(t("me.editProfile")) { onNav("edit-profile") }
+                    MeRow(t("lang.title"), value = langName, last = u.gender != 1) { picking = true }
+                    // 男方专属：视频通话默认是否开启自己画面（默认关闭；女方无此设置）
+                    if (u.gender == 1) {
+                        var camOn by remember { mutableStateOf(Api.camDefaultOn) }
+                        Row(modifier = Modifier.fillMaxWidth().padding(16.dp, 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(t("me.camDefault"), color = TextMain, fontSize = 15.sp)
+                                Text(t("me.camDefaultSub"), color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
+                            }
+                            androidx.compose.material3.Switch(
+                                checked = camOn,
+                                onCheckedChange = { camOn = it; Api.camDefaultOn = it },
+                                colors = androidx.compose.material3.SwitchDefaults.colors(checkedTrackColor = Accent),
+                            )
+                        }
+                    }
+                }
             }
         }
     }
+}
+
+/** 「我的」页一个功能分组：小标题 + 白色圆角卡片 */
+@Composable
+private fun MeGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp)) {
+        Text(title, color = TextSub, fontSize = 12.sp, modifier = Modifier.padding(start = 6.dp, bottom = 6.dp))
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Bg), content = content)
+    }
+}
+
+@Composable
+private fun MeRow(label: String, value: String? = null, last: Boolean = false, onClick: () -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(16.dp, 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = TextMain, fontSize = 15.sp, modifier = Modifier.weight(1f))
+        if (value != null) Text(value, color = TextSub, fontSize = 14.sp, modifier = Modifier.padding(end = 6.dp))
+        Text("›", color = TextDim, fontSize = 18.sp)
+    }
+    if (!last) Box(Modifier.fillMaxWidth().padding(start = 16.dp).height(0.5.dp).background(Line))
 }
 
 /** 语言选择：跟随系统 + 打包进来的每种语言（名字用各自的语言写） */

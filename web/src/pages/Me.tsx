@@ -25,9 +25,10 @@ export function MePage() {
   const langName = choice === SYSTEM ? t('lang.system') : languages.find((l) => l.code === choice)?.name ?? choice;
 
   return (
-    <div className="no-scrollbar" style={{ overflowY: 'auto', height: '100%' }}>
+    // 头部（头像到积分余额）固定不动，下面的功能分组单独滚动
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* 顶部渐变背景 */}
-      <div style={{ background: 'linear-gradient(180deg, rgba(254,44,85,0.14), transparent 85%)', padding: '28px 20px 0' }}>
+      <div style={{ background: 'linear-gradient(180deg, rgba(254,44,85,0.14), transparent 85%)', padding: '28px 20px 0', flexShrink: 0 }}>
         <div className="row" style={{ gap: 16, alignItems: 'flex-start' }}>
           <div className="avatar" style={{ width: 76, height: 76, border: '2px solid rgba(0,0,0,0.08)' }}>
             {me.avatar ? <img src={me.avatar} alt="" /> : null}
@@ -104,26 +105,34 @@ export function MePage() {
         </div>
       </div>
 
-      {/* 菜单分组 */}
-      <div className="card" style={{ margin: '14px 16px 0', padding: '4px 0' }}>
-        <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/edit-profile')}>{t('me.editProfile')}</div>
-        <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/invite-card')}>{t('me.inviteCard')}</div>
-        <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/my-moments')}>{t('me.myMoments')}</div>
-        <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/follow-moments')}>{t('me.followMoments')}</div>
-        <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/task/mine')}>{me.gender === 2 ? t('me.myTasksGuide') : t('me.myTasks')}</div>
-        <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/gifts-received')}>{t('me.gifts')}</div>
-        <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/bots')}>{t('me.bots')}</div>
-        <div className="list-row" style={{ border: 'none', display: 'flex' }} onClick={() => setPicking(true)}>
-          <span style={{ flex: 1 }}>{t('lang.title')}</span>
-          <span className="muted" style={{ fontSize: 14, marginRight: 6 }}>{langName}</span>
+      {/* 功能分组：我的内容 / 同城搭子 / 工具 / 设置 */}
+      <div className="me-groups no-scrollbar">
+        <div className="me-group-title">{t('me.group.content')}</div>
+        <div className="me-group">
+          <div className="list-row" onClick={() => nav('/my-moments')}>{t('me.myMoments')}</div>
+          <div className="list-row" onClick={() => nav('/follow-moments')}>{t('me.followMoments')}</div>
+          <div className="list-row" onClick={() => nav('/gifts-received')}>{t('me.gifts')}</div>
+        </div>
+        <div className="me-group-title">{t('me.group.buddy')}</div>
+        <div className="me-group">
+          <div className="list-row" onClick={() => nav('/task/mine')}>{me.gender === 2 ? t('me.myTasksGuide') : t('me.myTasks')}</div>
+          {/* 搭子认证已合并实名认证（申请时提交姓名+身份证，审核通过即实名） */}
+          {!me.isGuide && <div className="list-row" onClick={() => nav('/guide-apply')}>{t('me.guideApply')}</div>}
+        </div>
+        <div className="me-group-title">{t('me.group.tools')}</div>
+        <div className="me-group">
+          <div className="list-row" onClick={() => nav('/bots')}>{t('me.bots')}</div>
+          <div className="list-row" onClick={() => nav('/invite-card')}>{t('me.inviteCard')}</div>
+        </div>
+        <div className="me-group-title">{t('me.group.settings')}</div>
+        <div className="me-group">
+          <div className="list-row" onClick={() => nav('/edit-profile')}>{t('me.editProfile')}</div>
+          <div className="list-row" onClick={() => setPicking(true)}>
+            <span style={{ flex: 1 }}>{t('lang.title')}</span>
+            <span className="muted" style={{ fontSize: 14, marginRight: 6 }}>{langName}</span>
+          </div>
         </div>
       </div>
-      {/* 搭子认证已合并实名认证（申请时提交姓名+身份证，审核通过即实名） */}
-      {!me.isGuide && (
-        <div className="card" style={{ margin: '10px 16px 24px', padding: '4px 0' }}>
-          <div className="list-row" style={{ border: 'none' }} onClick={() => nav('/guide-apply')}>{t('me.guideApply')}</div>
-        </div>
-      )}
 
       {/* 扫一扫：邀请名片 → 私聊；群邀请码 → 加群；收款码 → 提示 */}
       {scanning && <ScanFlow onClose={() => setScanning(false)} />}

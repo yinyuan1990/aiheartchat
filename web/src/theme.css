@@ -170,6 +170,12 @@ textarea.input { resize: none; min-height: 90px; }
   border-bottom: 1px solid var(--line); cursor: pointer; font-size: 15px;
 }
 .list-row::after { content: "›"; margin-left: auto; color: var(--text-3); font-size: 18px; }
+/* 「我的」页功能分组：灰底上的白色圆角卡片，行间分隔线左边缩进 */
+.me-groups { flex: 1; min-height: 0; overflow-y: auto; background: var(--bg-card); border-top: 1px solid var(--line); padding-bottom: 24px; }
+.me-group-title { font-size: 12px; color: var(--text-2); margin: 16px 22px 6px; }
+.me-group { margin: 0 16px; background: var(--bg); border-radius: 14px; overflow: hidden; }
+.me-group .list-row { border-bottom: none; height: 50px; position: relative; }
+.me-group .list-row + .list-row::before { content: ""; position: absolute; left: 16px; right: 0; top: 0; height: 1px; background: var(--line); transform: scaleY(0.5); }
 
 /* 动态九宫格 */
 .grid-photos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 10px; }

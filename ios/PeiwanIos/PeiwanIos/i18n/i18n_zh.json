@@ -2547,5 +2547,9 @@
   "chat.voice.keyboard": "切换到键盘",
   "attach.voice": "语音",
   "chat.myLocation": "我的位置",
-  "chat.locating": "正在定位…"
+  "chat.locating": "正在定位…",
+  "me.group.content": "我的内容",
+  "me.group.buddy": "同城搭子",
+  "me.group.tools": "工具",
+  "me.group.settings": "设置"
 }

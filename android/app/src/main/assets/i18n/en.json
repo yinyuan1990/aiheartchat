@@ -2547,5 +2547,9 @@
   "chat.voice.keyboard": "Keyboard",
   "attach.voice": "Voice",
   "chat.myLocation": "My location",
-  "chat.locating": "Locating…"
+  "chat.locating": "Locating…",
+  "me.group.content": "My content",
+  "me.group.buddy": "Local buddy",
+  "me.group.tools": "Tools",
+  "me.group.settings": "Settings"
 }
