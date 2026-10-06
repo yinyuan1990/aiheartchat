@@ -1,0 +1,468 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0 }
+html, body { width: 1080px; height: 1920px; overflow: hidden; background: #050508; font-family: "Microsoft YaHei", "Segoe UI", sans-serif; color: #fff }
+.bg { position: absolute; inset: 0; overflow: hidden; background: radial-gradient(ellipse at 50% 0%, #1a0b16 0%, #07060b 55%, #040407 100%) }
+.blob { position: absolute; border-radius: 50%; filter: blur(120px); opacity: .42 }
+.b1 { width: 900px; height: 900px; background: #fe2c55; left: -380px; top: -260px; animation: drift1 15s ease-in-out infinite alternate }
+.b2 { width: 960px; height: 960px; background: #6d3bff; right: -460px; bottom: 80px; animation: drift2 18s ease-in-out infinite alternate }
+.b3 { width: 560px; height: 560px; background: #f7b955; left: 300px; top: 980px; opacity: .2; animation: drift1 12s ease-in-out infinite alternate-reverse }
+@keyframes drift1 { to { transform: translate(280px, 380px) scale(1.18) } }
+@keyframes drift2 { to { transform: translate(-260px, -480px) scale(.88) } }
+.rays { position: absolute; left: 50%; top: -400px; width: 2400px; height: 2400px; margin-left: -1200px; opacity: .06;
+  background: repeating-conic-gradient(from 0deg, #fff 0deg 2deg, transparent 2deg 15deg); animation: spin 90s linear infinite;
+  -webkit-mask-image: radial-gradient(circle, #000 0%, transparent 60%); mask-image: radial-gradient(circle, #000 0%, transparent 60%) }
+@keyframes spin { to { transform: rotate(360deg) } }
+.pt { position: absolute; width: 4px; height: 4px; border-radius: 50%; background: #ffd7e2; box-shadow: 0 0 10px #ff8fb0; animation: floatup linear infinite }
+@keyframes floatup { from { transform: translateY(0); opacity: 0 } 15% { opacity: .8 } 85% { opacity: .8 } to { transform: translateY(-1000px); opacity: 0 } }
+
+.scene { position: absolute; inset: 0; display: none }
+.center { position: absolute; left: 0; right: 0; text-align: center }
+.rise { animation: rise .9s cubic-bezier(.2,.8,.2,1) both; animation-delay: var(--d, 0s) }
+.pop { animation: pop .8s cubic-bezier(.2,.8,.2,1) both; animation-delay: var(--d, 0s) }
+.slideL { animation: slideL .8s cubic-bezier(.2,.8,.2,1) both; animation-delay: var(--d, 0s) }
+.slideR { animation: slideR .8s cubic-bezier(.2,.8,.2,1) both; animation-delay: var(--d, 0s) }
+@keyframes rise { from { opacity: 0; transform: translateY(70px) } to { opacity: 1; transform: none } }
+@keyframes pop { 0% { opacity: 0; transform: scale(.4) } 60% { opacity: 1; transform: scale(1.07) } 100% { opacity: 1; transform: scale(1) } }
+@keyframes slideL { from { opacity: 0; transform: translateX(-120px) } to { opacity: 1; transform: none } }
+@keyframes slideR { from { opacity: 0; transform: translateX(120px) } to { opacity: 1; transform: none } }
+.grad { background: linear-gradient(90deg, #ff4d7d, #ffb36b 55%, #ffe3a3); -webkit-background-clip: text; background-clip: text; color: transparent }
+.gold { background: linear-gradient(180deg, #fff6dd, #f2c46b 60%, #b88934); -webkit-background-clip: text; background-clip: text; color: transparent }
+.en { font-family: "Segoe UI", sans-serif; letter-spacing: 8px; color: rgba(255,255,255,.55); font-weight: 600 }
+
+/* scene header */
+.kicker { position: absolute; left: 0; right: 0; top: 150px; text-align: center; font: 700 30px "Segoe UI"; letter-spacing: 12px; color: #ff6f93 }
+.kicker b { color: #fff; font-weight: 800 }
+.h1 { position: absolute; left: 0; right: 0; top: 205px; text-align: center; font-size: 92px; font-weight: 900; letter-spacing: 4px }
+.h1en { position: absolute; left: 0; right: 0; top: 335px; text-align: center; font-size: 28px }
+
+/* phone */
+.phone { position: absolute; left: 250px; top: 440px; width: 580px; height: 1276px; border-radius: 76px; padding: 10px;
+  background: linear-gradient(145deg, #5a5a66, #15151b 30%, #0b0b10 70%, #3c3c46);
+  box-shadow: 0 60px 140px rgba(0,0,0,.7), 0 0 0 2px rgba(255,255,255,.08), 0 0 120px rgba(254,44,85,.22) }
+.phone::before { content: ""; position: absolute; right: -6px; top: 300px; width: 6px; height: 120px; border-radius: 0 4px 4px 0; background: #2a2a33 }
+.screen { position: relative; width: 560px; height: 1256px; border-radius: 66px; overflow: hidden; background: #000 }
+.layer { position: absolute; inset: 0; overflow: hidden; will-change: transform }
+.layer .sb { height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 6px 44px 0 52px; font: 700 21px "Segoe UI" }
+.layer .sb .ic { display: flex; gap: 8px; align-items: center }
+.layer .sb .bat { width: 34px; height: 16px; border: 2px solid currentColor; border-radius: 5px; padding: 2px; opacity: .9 }
+.layer .sb .bat i { display: block; width: 70%; height: 100%; background: currentColor; border-radius: 2px }
+.layer .body { position: absolute; left: 0; top: 44px; width: 560px; height: 1212px; overflow: hidden }
+.layer .body img { width: 560px; height: 1212px; display: block; transform-origin: 0 0 }
+.glare { position: absolute; inset: 0; border-radius: 66px; pointer-events: none; background: linear-gradient(120deg, rgba(255,255,255,.12), transparent 28%, transparent 70%, rgba(255,255,255,.05)) }
+.hl { position: absolute; border: 4px solid #ff4d7d; border-radius: 18px; box-shadow: 0 0 0 9999px rgba(0,0,0,.35), 0 0 40px rgba(255,77,125,.9); opacity: 0 }
+.tap { position: absolute; width: 90px; height: 90px; margin: -45px 0 0 -45px; border-radius: 50%; border: 6px solid #fff; opacity: 0; box-shadow: 0 0 30px #fff }
+
+/* feature chips around the phone */
+.chip { position: absolute; display: flex; align-items: center; gap: 18px; padding: 22px 30px; border-radius: 28px;
+  background: rgba(22,18,30,.72); border: 2px solid rgba(255,255,255,.14); backdrop-filter: blur(18px);
+  box-shadow: 0 24px 60px rgba(0,0,0,.55); font-size: 34px; font-weight: 800; white-space: nowrap }
+.chip .ico { width: 62px; height: 62px; border-radius: 18px; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #ff4d7d, #8b3dff); flex-shrink: 0 }
+.chip .ico svg { width: 36px; height: 36px }
+.chip small { display: block; font: 600 20px "Segoe UI"; color: rgba(255,255,255,.55); letter-spacing: 1px; margin-top: 2px }
+
+/* call screen (demo) */
+.call { position: absolute; inset: 0; background: #0b0b10; overflow: hidden }
+.call .remote { position: absolute; inset: -60px; background-size: cover; background-position: center; filter: blur(22px) saturate(1.2) brightness(.8) }
+.call .face { position: absolute; left: 50%; top: 300px; width: 300px; height: 300px; margin-left: -150px; border-radius: 50%; background-size: cover; box-shadow: 0 0 0 10px rgba(255,255,255,.12), 0 30px 80px rgba(0,0,0,.6) }
+.call .name { position: absolute; left: 0; right: 0; top: 640px; text-align: center; font-size: 48px; font-weight: 800 }
+.call .timer { position: absolute; left: 0; right: 0; top: 712px; text-align: center; font: 600 30px "Segoe UI"; color: rgba(255,255,255,.75) }
+.call .self { position: absolute; right: 30px; top: 90px; width: 150px; height: 220px; border-radius: 24px; background-size: cover; border: 3px solid rgba(255,255,255,.4); box-shadow: 0 10px 30px rgba(0,0,0,.5) }
+.call .bill { position: absolute; left: 30px; top: 90px; padding: 12px 20px; border-radius: 18px; background: rgba(0,0,0,.45); font-size: 24px; line-height: 1.5 }
+.call .bill b { color: #ffd36e; font: 800 30px "Segoe UI" }
+.call .btns { position: absolute; left: 0; right: 0; bottom: 120px; display: flex; justify-content: center; gap: 44px }
+.call .btns span { width: 104px; height: 104px; border-radius: 50%; background: rgba(255,255,255,.18); display: flex; align-items: center; justify-content: center }
+.call .btns span svg { width: 50px; height: 50px }
+.call .btns .end { background: #ff3b4e }
+.call .gift { position: absolute; font-size: 72px; left: 440px; bottom: 230px; opacity: 0 }
+
+/* flywheel */
+.node { position: absolute; width: 330px; height: 178px; margin-left: -165px; margin-top: -89px; border-radius: 32px; background: rgba(14,10,22,.92); border: 3px solid rgba(255,255,255,.18);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center }
+.node .nt { font-size: 42px; font-weight: 900 }
+.node .ns { font-size: 26px; color: #ffb36b; font-weight: 700; margin-top: 6px }
+.draw { stroke-dashoffset: 2136; animation: draw 2.4s cubic-bezier(.4,0,.2,1) forwards; animation-delay: var(--d, 0s) }
+@keyframes draw { to { stroke-dashoffset: 0 } }
+.rev { display: inline-flex; align-items: center; gap: 10px; padding: 14px 26px; margin: 0 8px; border-radius: 40px; border: 2px solid rgba(247,185,85,.6); background: rgba(247,185,85,.1); font-size: 30px; font-weight: 800; color: #ffe3a3 }
+
+/* logo seal */
+.seal { display: inline-flex; align-items: center; justify-content: center; border-radius: 28%; background: linear-gradient(145deg, #ff5a7e, #fe2c55 45%, #c3123b); color: #fff; font-weight: 900;
+  box-shadow: 0 0 0 4px rgba(255,255,255,.12), 0 30px 90px rgba(254,44,85,.6), inset 0 6px 0 rgba(255,255,255,.25) }
+.orb { position: absolute; width: 132px; height: 132px; margin: -66px 0 0 -66px; border-radius: 40px; display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,.07); border: 2px solid rgba(255,255,255,.18); backdrop-filter: blur(10px); box-shadow: 0 20px 50px rgba(0,0,0,.5) }
+.orb svg { width: 64px; height: 64px }
+
+#brand { position: absolute; left: 52px; top: 58px; display: none; align-items: center; gap: 16px; font-size: 36px; font-weight: 900; opacity: .92 }
+#brand .seal { width: 60px; height: 60px; font-size: 34px; box-shadow: 0 8px 30px rgba(254,44,85,.5) }
+#brand span { font: 600 22px "Segoe UI"; letter-spacing: 3px; color: rgba(255,255,255,.55); margin-left: 4px }
+#sub { position: absolute; left: 60px; right: 60px; bottom: 96px; text-align: center }
+#sub span { display: inline-block; background: rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.1); border-radius: 20px; padding: 12px 32px; font-size: 44px; font-weight: 700; color: #fff; text-shadow: 0 2px 6px #000 }
+#sweep { position: absolute; top: -200px; bottom: -200px; width: 260px; background: linear-gradient(90deg, transparent, rgba(255,210,225,.2), transparent); transform: skewX(-18deg); opacity: 0; pointer-events: none }
+#progress { position: absolute; left: 0; bottom: 0; height: 6px; background: linear-gradient(90deg, #fe2c55, #f7b955) }
+</style>
+</head>
+<body>
+<div class="bg" id="bg">
+  <div class="rays"></div>
+  <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+</div>
+
+<!-- s0 intro -->
+<section class="scene" id="s0">
+  <div id="orbs" style="position:absolute;inset:0"></div>
+  <div class="center" style="top:560px">
+    <div class="seal pop" style="width:280px;height:280px;font-size:170px">心</div>
+    <div class="rise" style="--d:.35s;font-size:190px;font-weight:900;letter-spacing:24px;margin-top:60px;line-height:1.1">心之音</div>
+    <div class="rise en" style="--d:.6s;font-size:44px;margin-top:18px;letter-spacing:22px">HEARTCHAT</div>
+    <div class="rise" data-at="社交" style="font-size:52px;font-weight:800;margin-top:90px;letter-spacing:6px">社交 <span style="color:#ff4d7d">·</span> 娱乐 <span style="color:#ff4d7d">·</span> <span class="grad">Web3</span></div>
+    <div class="rise" data-at="商业闭环" style="margin-top:34px;font-size:40px;color:rgba(255,255,255,.75)">一个 App，一个完整的 <b class="gold" style="font-size:48px">商业闭环</b></div>
+  </div>
+</section>
+
+<!-- s1 chat -->
+<section class="scene" id="s1">
+  <div class="kicker rise">01 · <b>CHAT</b></div>
+  <div class="h1 rise" style="--d:.1s">即时<span class="grad">聊天</span></div>
+  <div class="h1en en rise" style="--d:.2s">MESSAGES · ALBUMS · VOICE</div>
+  <div class="phone pop" style="--d:.15s"><div class="screen" data-screens="s1"></div></div>
+  <div class="chip slideL" data-at="相册" style="left:40px;top:930px"><span class="ico" data-icon="image"></span><div>相册拼版<small>ALBUMS</small></div></div>
+  <div class="chip slideR" data-at="语音" style="right:40px;top:1180px"><span class="ico" data-icon="mic"></span><div>语音消息<small>VOICE</small></div></div>
+  <div class="chip slideL" data-at="已读" style="left:60px;top:1450px"><span class="ico" data-icon="check"></span><div>已读回执<small>READ RECEIPTS</small></div></div>
+</section>
+
+<!-- s2 group -->
+<section class="scene" id="s2">
+  <div class="kicker rise">02 · <b>GROUPS</b></div>
+  <div class="h1 rise" style="--d:.1s"><span class="grad">群聊</span>社区</div>
+  <div class="h1en en rise" style="--d:.2s">GROUPS · COIN CHATS · VOICE ROOMS</div>
+  <div class="phone pop" style="--d:.15s"><div class="screen" data-screens="s2"></div></div>
+  <div class="chip slideR" data-at="兴趣群" style="right:40px;top:760px"><span class="ico" data-icon="users"></span><div>兴趣群<small>GROUPS</small></div></div>
+  <div class="chip slideL" data-at="币种讨论群" style="left:40px;top:1060px"><span class="ico" data-icon="coin"></span><div>币种讨论群<small>COIN CHATS</small></div></div>
+  <div class="chip slideR" data-at="语音房" style="right:50px;top:1380px"><span class="ico" data-icon="headset"></span><div>语音房<small>VOICE ROOMS</small></div></div>
+</section>
+
+<!-- s3 video -->
+<section class="scene" id="s3">
+  <div class="kicker rise">03 · <b>VIDEO</b></div>
+  <div class="h1 rise" style="--d:.1s">一对一<span class="grad">视频</span></div>
+  <div class="h1en en rise" style="--d:.2s">1-ON-1 HD VIDEO · PAY PER MINUTE</div>
+  <div class="phone pop" style="--d:.15s"><div class="screen" data-screens="s3"></div></div>
+  <div class="chip slideL" data-at="按分钟计费" style="left:40px;top:900px"><span class="ico" data-icon="clock"></span><div>按分钟计费<small>PAY PER MINUTE</small></div></div>
+  <div class="chip slideR" data-at="主播自主定价" style="right:40px;top:1170px"><span class="ico" data-icon="tag"></span><div>主播自主定价<small>CREATOR PRICING</small></div></div>
+  <div class="chip slideL" data-at="平台按分钟抽成" style="left:50px;top:1440px"><span class="ico" data-icon="pie"></span><div>平台分钟抽成<small>PLATFORM FEE</small></div></div>
+</section>
+
+<!-- s4 wallet -->
+<section class="scene" id="s4">
+  <div class="kicker rise">04 · <b>WALLET</b></div>
+  <div class="h1 rise" style="--d:.1s"><span class="grad">Web3</span> 钱包</div>
+  <div class="h1en en rise" style="--d:.2s">SELF-CUSTODY · MULTI-CHAIN · ON-CHAIN PERPS</div>
+  <div class="phone pop" style="--d:.15s"><div class="screen" data-screens="s4"></div></div>
+  <div class="chip slideL" data-at="自托管" style="left:40px;top:760px"><span class="ico" data-icon="key"></span><div>私钥自持<small>SELF-CUSTODY</small></div></div>
+  <div class="chip slideR" data-at="多条公链" style="right:40px;top:990px"><span class="ico" data-icon="chain"></span><div>多链资产 · 行情<small>MULTI-CHAIN</small></div></div>
+  <div class="chip slideL" data-at="一键兑换" style="left:50px;top:1230px"><span class="ico" data-icon="swap"></span><div>一键兑换<small>SWAP</small></div></div>
+  <div class="chip slideR" data-at="链上合约" style="right:50px;top:1470px"><span class="ico" data-icon="chart"></span><div>链上合约<small>PERPS</small></div></div>
+</section>
+
+<!-- s5 games -->
+<section class="scene" id="s5">
+  <div class="kicker rise">05 · <b>GAMES</b></div>
+  <div class="h1 rise" style="--d:.1s">玩<span class="grad">游戏</span>赚币</div>
+  <div class="h1en en rise" style="--d:.2s">PLAY · EARN $BOAT · WITHDRAW &amp; TRADE</div>
+  <div class="phone pop" style="--d:.15s"><div class="screen" data-screens="s5"></div></div>
+  <div class="chip slideL" data-at="快艇" style="left:40px;top:800px"><span class="ico" data-icon="game"></span><div>4 款小游戏<small>4 GAMES</small></div></div>
+  <div class="chip slideR" data-at="赢到的" style="right:40px;top:1120px"><span class="ico" data-icon="coin"></span><div>赢 $BOAT<small>PLAY TO EARN</small></div></div>
+  <div class="chip slideL" data-at="可以提现" style="left:50px;top:1420px"><span class="ico" data-icon="swap"></span><div>可提现 · 可交易<small>WITHDRAW · TRADE</small></div></div>
+</section>
+
+<!-- s6 callouts -->
+<section class="scene" id="s6">
+  <div class="kicker rise">06 · <b>CALLS</b></div>
+  <div class="h1 rise" style="--d:.1s">一键<span class="grad">喊单</span></div>
+  <div class="h1en en rise" style="--d:.2s">CALL IT IN CHAT · FRIENDS FOLLOW IN ONE TAP</div>
+  <div class="phone pop" style="--d:.15s"><div class="screen" data-screens="s6"></div></div>
+  <div class="chip slideL" data-at="一键喊单" style="left:40px;top:780px"><span class="ico" data-icon="mega"></span><div>喊单到群<small>CALL TO CHAT</small></div></div>
+  <div class="chip slideR" data-at="行情实时" style="right:40px;top:1060px"><span class="ico" data-icon="chart"></span><div>实时行情<small>LIVE PRICE</small></div></div>
+  <div class="chip slideL" data-at="跟单" style="left:50px;top:1400px"><span class="ico" data-icon="follow"></span><div>一键跟单<small>COPY IN ONE TAP</small></div></div>
+</section>
+
+<!-- s7 the loop -->
+<section class="scene" id="s7">
+  <div class="kicker rise">THE <b>LOOP</b></div>
+  <div class="h1 rise" style="--d:.1s">商业<span class="gold">闭环</span></div>
+  <svg width="1080" height="1080" style="position:absolute;top:440px;left:0">
+    <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4d7d"/><stop offset=".55" stop-color="#ffb36b"/><stop offset="1" stop-color="#8b3dff"/></linearGradient></defs>
+    <circle cx="540" cy="540" r="340" fill="none" stroke="rgba(255,255,255,.07)" stroke-width="22"/>
+    <circle class="draw" data-at="社交带来" cx="540" cy="540" r="340" fill="none" stroke="url(#lg)" stroke-width="10" stroke-linecap="round" stroke-dasharray="2136" transform="rotate(-90 540 540)"/>
+    <circle id="dot" cx="540" cy="200" r="22" fill="#fff" style="filter:drop-shadow(0 0 18px #fff)"/>
+  </svg>
+  <div class="center pop" data-at="社交带来" style="top:880px"><div class="seal" style="width:150px;height:150px;font-size:92px">心</div><div style="font-size:30px;color:rgba(255,255,255,.7);margin-top:18px;letter-spacing:4px">心之音</div></div>
+  <div class="node pop" data-at="社交带来" style="left:540px;top:640px"><div class="nt">聊天 · 群聊</div><div class="ns">流量 Traffic</div></div>
+  <div class="node pop" data-at="视频和礼物" style="left:863px;top:875px"><div class="nt">一对一视频</div><div class="ns">收入 Revenue</div></div>
+  <div class="node pop" data-at="钱包承接" style="left:740px;top:1255px"><div class="nt">Web3 钱包</div><div class="ns">资产 Assets</div></div>
+  <div class="node pop" data-at="游戏和喊单" style="left:340px;top:1255px"><div class="nt">游戏 · 喊单</div><div class="ns">交易 Volume</div></div>
+  <div class="node pop" data-at="交易又把" style="left:217px;top:875px"><div class="nt">回到社交</div><div class="ns">留存 Retention</div></div>
+  <div class="center rise" data-at="这就是" style="top:1530px"><span class="rev">视频分钟抽成</span><span class="rev">礼物积分</span><span class="rev">BOAT 池费回购</span></div>
+</section>
+
+<!-- s8 outro -->
+<section class="scene" id="s8">
+  <div class="center" style="top:430px">
+    <div class="seal pop" style="width:240px;height:240px;font-size:146px">心</div>
+    <div class="rise" style="--d:.3s;font-size:170px;font-weight:900;letter-spacing:22px;margin-top:50px;line-height:1.1">心之音</div>
+    <div class="rise en" style="--d:.5s;font-size:40px;letter-spacing:20px;margin-top:10px">HEARTCHAT</div>
+    <div class="rise" data-at="遇见有趣" style="margin-top:80px;font-size:56px;font-weight:800">遇见有趣的人</div>
+    <div class="rise" data-at="也遇见" style="margin-top:20px;font-size:56px;font-weight:800">也遇见<span class="grad">更大的世界</span></div>
+    <div class="rise" style="--d:1.6s;margin-top:80px;font-size:34px;color:rgba(255,255,255,.7);letter-spacing:4px">聊天 · 群聊 · 视频 · 钱包 · 游戏 · 喊单</div>
+    <div class="rise" style="--d:2s;margin-top:50px;display:inline-block;padding:20px 54px;border-radius:60px;background:linear-gradient(90deg,#fe2c55,#ff7a59);font:800 56px 'Segoe UI';box-shadow:0 20px 60px rgba(254,44,85,.5)">app.yyheart.com</div>
+  </div>
+  <div class="center rise" style="--d:2.4s;top:1720px;font-size:24px;color:rgba(255,255,255,.45);line-height:1.6">画面为产品实拍与功能演示 · 加密资产价格波动大，不构成投资建议</div>
+</section>
+
+<div id="brand"><span class="seal">心</span>心之音<span>HEARTCHAT</span></div>
+<div id="sub"><span></span></div>
+<div id="sweep"></div>
+<div id="progress"></div>
+
+<script src="out/timeline.js"></script>
+<script>
+const TL = window.TL;
+const $ = (id) => document.getElementById(id);
+const clamp = (x) => Math.max(0, Math.min(1, x));
+const ease = (x) => 1 - Math.pow(1 - clamp(x), 3);
+const easeIO = (x) => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2 };
+const scene = (id) => TL.scenes.find((s) => s.id === id);
+const at = (sc, word) => { const i = sc.text.indexOf(word); return i >= 0 ? sc.vo + sc.ct[i] : 0 };
+
+const SVG = {
+  image: '<rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 8"/>',
+  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/>',
+  check: '<path d="M2 13l4 4L16 7M10 17l1 0L22 7"/>',
+  users: '<circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-4 3-6 7-6s7 2 7 6"/><circle cx="17" cy="9" r="2.5"/><path d="M17 14c3 0 5 2 5 5"/>',
+  coin: '<circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.5-1-1.6-1.5-3-1.5-1.8 0-3 .9-3 2s1 1.7 3 2 3 1 3 2.1-1.3 2-3 2c-1.5 0-2.6-.6-3-1.6M12 6v2M12 16v2"/>',
+  headset: '<path d="M4 14v-2a8 8 0 0116 0v2"/><rect x="3" y="14" width="4" height="6" rx="2"/><rect x="17" y="14" width="4" height="6" rx="2"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  tag: '<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.5"/>',
+  pie: '<path d="M12 3v9h9a9 9 0 10-9-9z"/><path d="M15 2.5A9 9 0 0121.5 9H15z"/>',
+  key: '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M15 8l2 2"/>',
+  chain: '<path d="M10 14a4 4 0 005.6 0l3-3a4 4 0 00-5.6-5.6l-1 1"/><path d="M14 10a4 4 0 00-5.6 0l-3 3a4 4 0 005.6 5.6l1-1"/>',
+  swap: '<path d="M4 8h14l-3-3M20 16H6l3 3"/>',
+  chart: '<path d="M3 20h18"/><path d="M5 15l4-5 4 3 6-8"/>',
+  game: '<rect x="2" y="7" width="20" height="11" rx="5"/><path d="M7 10v5M4.5 12.5h5"/><circle cx="16" cy="11.5" r="1"/><circle cx="18.5" cy="14" r="1"/>',
+  mega: '<path d="M3 10v4h3l7 5V5L6 10z"/><path d="M17 8a5 5 0 010 8"/>',
+  follow: '<path d="M5 12h12M13 6l6 6-6 6"/>',
+  video: '<rect x="2" y="6" width="14" height="12" rx="3"/><path d="M16 10l6-3v10l-6-3"/>',
+  wallet: '<rect x="2" y="5" width="20" height="15" rx="3"/><path d="M16 12h3M2 9h20"/>',
+  phoneOff: '<path d="M3 12c5-5 13-5 18 0l-2.5 2.5-3-1.5v-2.5c-2-1-5-1-7 0V13l-3 1.5z"/>',
+  camera: '<rect x="2" y="6" width="14" height="12" rx="3"/><path d="M16 10l6-3v10l-6-3"/>',
+  gift: '<rect x="3" y="9" width="18" height="12" rx="2"/><path d="M12 9v12M3 13h18M12 9C10 4 6 5 7 8M12 9c2-5 6-4 5-1"/>',
+};
+const icon = (k, color = "#fff", w = 2) => `<svg viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${SVG[k]}</svg>`;
+document.querySelectorAll("[data-icon]").forEach((n) => (n.innerHTML = icon(n.dataset.icon)));
+
+// background particles
+let seed = 11;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+for (let i = 0; i < 50; i++) {
+  const p = document.createElement("div");
+  p.className = "pt";
+  p.style.left = rnd() * 1080 + "px";
+  p.style.top = 800 + rnd() * 1200 + "px";
+  p.style.animationDuration = 6 + rnd() * 8 + "s";
+  p.style.animationDelay = -rnd() * 12 + "s";
+  const s = 2 + rnd() * 5; p.style.width = p.style.height = s + "px";
+  $("bg").appendChild(p);
+}
+
+// intro: six feature icons orbit the seal
+const ORBS = ["image", "users", "video", "wallet", "game", "mega"].map((k) => {
+  const o = document.createElement("div");
+  o.className = "orb";
+  o.innerHTML = icon(k);
+  $("orbs").appendChild(o);
+  return o;
+});
+
+// keyword timing: elements with data-at come in when the voice says that word
+for (const sc of TL.scenes) {
+  $(sc.id).querySelectorAll("[data-at]").forEach((n) => {
+    const i = sc.text.indexOf(n.dataset.at);
+    const d = i >= 0 ? sc.vo + sc.ct[i] - 0.15 : 0;
+    n.style.setProperty("--d", d.toFixed(2) + "s");
+  });
+}
+
+// ---- phone screens: real screenshots (assets/*.png), game clips (assets/clips/<name>/0001.jpg…) or the call demo
+const SB = { "chat-single": "#fff", "chat-list": "#fff", "chat-group": "#fff", "video-price": "#fff", games: "#fdfdfd", "wallet-boat": "#f3f3f3", "wallet-coin": "#000", "wallet-home": "#f4f4f4", "wallet-market": "#f3f3f3", "wallet-perp": "#f3f3f3", "wallet-swap": "#f3f3f3", call: "#0b0b10", race: "#000", shoot: "#000", tower: "#000" };
+const SCREENS = {
+  s1: [{ img: "chat-single" }],
+  s2: [{ img: "chat-list" }, { word: "兴趣群", img: "chat-group" }],
+  s3: [{ call: true }, { word: "主播自主", img: "video-price", hl: [22, 500, 516, 104] }],
+  s4: [{ img: "wallet-home" }, { word: "多条公链", img: "wallet-market" }, { word: "行情", img: "wallet-coin", delay: 0.5 }, { word: "一键兑换", img: "wallet-swap" }, { word: "链上合约", img: "wallet-perp" }],
+  s5: [{ img: "games" }, { word: "赛车", clip: "race" }, { word: "射击", clip: "shoot" }, { word: "盖楼", clip: "tower" }, { word: "可以提现", img: "wallet-boat" }],
+  s6: [{ img: "chat-group", zoom: { word: "一键喊单", cx: 251, cy: 488, s: 1.6 }, tap: { word: "群友点开", x: 360, y: 556 } }, { word: "群友点开", img: "wallet-boat", delay: 0.45 }, { word: "合约仓位", img: "wallet-perp" }],
+};
+const statusBar = (bg) => {
+  const dark = bg === "#000" || bg === "#0b0b10";
+  return `<div class="sb" style="background:${bg};color:${dark ? "#fff" : "#111"}"><span>9:41</span><span class="ic">
+    <svg width="30" height="18" viewBox="0 0 30 18"><rect x="0" y="12" width="5" height="6" rx="1" fill="currentColor"/><rect x="8" y="8" width="5" height="10" rx="1" fill="currentColor"/><rect x="16" y="4" width="5" height="14" rx="1" fill="currentColor"/><rect x="24" y="0" width="5" height="18" rx="1" fill="currentColor"/></svg>
+    <span class="bat"><i></i></span></span></div>`;
+};
+const avatar = (k) => `url(assets/src/avatar-${k}.png)`;
+document.querySelectorAll("[data-screens]").forEach((scr) => {
+  const sid = scr.dataset.screens;
+  const sc = scene(sid);
+  scr._layers = SCREENS[sid].map((d, i) => {
+    const key = d.call ? "call" : d.clip ?? d.img;
+    const el = document.createElement("div");
+    el.className = "layer";
+    el.style.zIndex = i;
+    let body = "";
+    if (d.call) {
+      body = `<div class="call"><div class="remote" style="background-image:${avatar("a")}"></div><div class="face" style="background-image:${avatar("a")}"></div>
+        <div class="name">林小鹿</div><div class="timer">00:00</div><div class="self" style="background-image:${avatar("b")}"></div>
+        <div class="bill">视频计费<br><b>5</b> 积分 / 分钟</div><div class="gift">🎁</div>
+        <div class="btns"><span>${icon("mic")}</span><span class="end">${icon("phoneOff", "#fff", 2.2)}</span><span>${icon("camera")}</span><span>${icon("gift")}</span></div></div>`;
+    } else {
+      body = `<img src="${d.clip ? `assets/clips/${d.clip}/0001.jpg` : `assets/${d.img}.png`}">`;
+    }
+    el.innerHTML = statusBar(SB[key]) + `<div class="body">${body}</div>` + (d.hl ? `<div class="hl" style="left:${d.hl[0]}px;top:${d.hl[1] + 44}px;width:${d.hl[2]}px;height:${d.hl[3]}px"></div>` : "") + (d.tap ? `<div class="tap"></div>` : "");
+    scr.appendChild(el);
+    return { ...d, el, img: el.querySelector(".body img"), t: (d.word ? at(sc, d.word) : 0) + (d.delay ?? 0) - (d.word ? 0.2 : 0) };
+  });
+  const g = document.createElement("div");
+  g.className = "glare";
+  g.style.zIndex = 99;
+  scr.appendChild(g);
+});
+
+const pending = [];
+const setSrc = (img, src) => {
+  if (!img || img.getAttribute("src") === src) return;
+  img.src = src;
+  pending.push(img.decode().catch(() => {}));
+};
+const pad4 = (n) => String(n).padStart(4, "0");
+
+function drawScreens(scr, lt) {
+  const L = scr._layers;
+  L.forEach((d, i) => {
+    const p = i === 0 ? 1 : ease((lt - d.t) / 0.45);
+    const next = L[i + 1];
+    const q = next ? ease((lt - next.t) / 0.45) : 0;
+    const on = i === 0 || lt >= d.t;
+    d.el.style.display = on && q < 1 ? "block" : "none";
+    if (!on) return;
+    d.el.style.transform = `translateX(${(1 - p) * 100 - q * 28}%)`;
+    d.el.style.filter = q > 0 ? `brightness(${1 - q * 0.45})` : "none";
+    const local = lt - d.t;
+    if (d.clip) {
+      const n = TL.clips[d.clip] || 1;
+      setSrc(d.img, `assets/clips/${d.clip}/${pad4(1 + Math.max(0, Math.min(n - 1, Math.floor(local * 30))))}.jpg`);
+    }
+    if (d.call) {
+      const secs = Math.floor(12 + Math.max(0, local) * 1.6);
+      d.el.querySelector(".timer").textContent = `通话中 00:${String(secs).padStart(2, "0")}`;
+      const gift = d.el.querySelector(".gift"), gu = (local - 1.6) / 1.4;
+      gift.style.opacity = gu > 0 && gu < 1 ? Math.sin(Math.PI * gu) : 0;
+      gift.style.transform = `translate(${-gu * 90}px, ${-gu * 330}px) scale(${1 + gu * 0.7})`;
+    }
+    if (d.hl) {
+      const h = d.el.querySelector(".hl"), u = clamp((local - 0.5) / 0.4);
+      h.style.opacity = u;
+      h.style.transform = `scale(${1.08 - 0.08 * ease(u)})`;
+    }
+    // zoom: the card's centre glides to the middle of the screen while it grows (image origin is its top-left)
+    let zs = 1, px = 0, py = 0;
+    if (d.zoom) {
+      const z = d.zoom, k = easeIO((lt - (at(scene(scr.dataset.screens), z.word) - 0.2)) / 0.7);
+      zs = 1 + (z.s - 1) * k;
+      px = z.cx + (280 - z.cx) * k - zs * z.cx;
+      py = z.cy + (560 - z.cy) * k - zs * z.cy;
+      d.img.style.transform = `translate(${px}px, ${py}px) scale(${zs})`;
+    }
+    if (d.tap) {
+      const t0 = at(scene(scr.dataset.screens), d.tap.word) - 0.1, u = (lt - t0) / 0.45;
+      const tp = d.el.querySelector(".tap");
+      tp.style.left = px + zs * d.tap.x + "px";
+      tp.style.top = 44 + py + zs * d.tap.y + "px";
+      tp.style.opacity = u > 0 && u < 1 ? 1 - u : 0;
+      tp.style.transform = `scale(${0.4 + u * 1.2})`;
+    }
+  });
+}
+
+const hooks = {
+  s0(lt) {
+    const app = ease((lt - 0.5) / 1.2);
+    ORBS.forEach((o, k) => {
+      const a = (k * 60 - 90 + lt * 10) * Math.PI / 180, R = 380 * app;
+      o.style.left = 540 + R * Math.cos(a) + "px";
+      o.style.top = 700 + R * Math.sin(a) * 0.92 + "px";
+      o.style.opacity = app * clamp((lt - 0.5 - k * 0.12) / 0.4);
+      o.style.transform = `scale(${0.5 + 0.5 * app})`;
+    });
+  },
+  s7(lt, sc) {
+    const W = ["社交带来", "视频和礼物", "钱包承接", "游戏和喊单", "交易又把"];
+    const T = W.map((w) => at(sc, w));
+    // the dot arrives at each node as the voice names it; "带回社交" brings it back to the top, "这就是" lights all
+    const A = [-90, -18, 54, 126, 198, 270];
+    const stops = [...T, at(sc, "带回社交")];
+    const done = at(sc, "这就是");
+    let ang = A[0];
+    for (let i = 1; i < stops.length; i++) {
+      const s = Math.max(stops[i - 1], stops[i] - 0.8);
+      if (lt >= s) ang = A[i - 1] + (A[i] - A[i - 1]) * easeIO((lt - s) / (stops[i] - s));
+    }
+    if (lt > done) { const u = lt - done; ang = 270 + u * (120 + 60 * u); }
+    const r = ang * Math.PI / 180;
+    $("dot").setAttribute("cx", 540 + 340 * Math.cos(r));
+    $("dot").setAttribute("cy", 540 + 340 * Math.sin(r));
+    $("dot").style.opacity = lt < T[0] ? 0 : 1;
+    document.querySelectorAll("#s7 .node").forEach((n, i) => {
+      const diff = Math.abs((((ang - A[i]) % 360) + 540) % 360 - 180);
+      const on = lt > done || (lt >= T[i] - 0.1 && diff < 26);
+      n.style.borderColor = on ? "#ff4d7d" : "rgba(255,255,255,.18)";
+      n.style.boxShadow = on ? "0 0 60px rgba(255,77,125,.8)" : "none";
+    });
+  },
+};
+
+function seek(t) {
+  pending.length = 0;
+  document.querySelectorAll(".bg").forEach((b) => b.getAnimations({ subtree: true }).forEach((a) => { a.pause(); a.currentTime = t * 1000 }));
+  let cur = null;
+  for (const sc of TL.scenes) {
+    const el = $(sc.id), lt = t - sc.start;
+    const on = lt >= 0 && lt < sc.dur;
+    el.style.display = on ? "block" : "none";
+    if (!on) continue;
+    cur = sc;
+    el.getAnimations({ subtree: true }).forEach((a) => { a.pause(); a.currentTime = lt * 1000 });
+    const fin = clamp(lt / 0.35), fout = sc.last ? 1 : clamp((sc.dur - lt) / 0.35);
+    el.style.opacity = Math.min(fin, fout);
+    el.style.transform = `scale(${1 + 0.04 * (1 - ease(lt / 0.7))})`;
+    el.querySelectorAll("[data-screens]").forEach((s) => drawScreens(s, lt));
+    // the phone drifts a little so the shot never sits still
+    el.querySelectorAll(".phone").forEach((p) => (p.style.translate = `0 ${Math.sin(lt * 0.9) * 8}px`));
+    if (hooks[sc.id]) hooks[sc.id](lt, sc);
+    const sw = lt / 0.7;
+    $("sweep").style.opacity = sw < 1 && sc.start > 0 ? 1 : 0;
+    $("sweep").style.left = -400 + 1700 * sw + "px";
+  }
+  $("brand").style.display = cur && !["s0", "s8"].includes(cur.id) ? "flex" : "none";
+  const sub = TL.subs.find((s) => t >= s.t0 && t < s.t1);
+  $("sub").firstElementChild.textContent = sub ? sub.text : "";
+  $("sub").style.display = sub ? "block" : "none";
+  $("progress").style.width = (t / TL.total) * 100 + "%";
+  return Promise.all(pending).then(() => new Promise((r) => requestAnimationFrame(() => r(true))));
+}
+window.seek = seek;
+seek(0);
+</script>
+</body>
+</html>
