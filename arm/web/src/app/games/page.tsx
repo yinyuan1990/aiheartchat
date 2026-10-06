@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { GamesExplore } from "@/components/games/games-explore";
 
 const title = "Games · 游戏探索";
-const description = "Small games on Arc: earn $BOAT with the speedboat, the race car or the neon shooter, or try Sell the Top. 在 Arc 上玩小游戏：快艇、赛车、霓虹射击赚 $BOAT。";
+const description = "Small games on Arc: earn $BOAT with the speedboat, the race car, the neon shooter or the tower crane, or try Sell the Top. 在 Arc 上玩小游戏：快艇、赛车、霓虹射击、盖楼赚 $BOAT。";
 
 export const metadata: Metadata = {
   title,
