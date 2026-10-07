@@ -139,6 +139,56 @@ export class ShootAudio {
     this.tone("sine", 700, 300, 0.12, 0.04);
   }
 
+  /** the blade-swish that goes with a fruit splitting in half */
+  slice() {
+    this.burst(0.09, "bandpass", 2200, 7000, 0.16, 2.5);
+    this.tone("sine", 2400, 900, 0.07, 0.03);
+  }
+
+  /** picked up a weapon capsule: a bright rising arpeggio */
+  pickup() {
+    [0, 4, 7, 12, 16].forEach((s, i) => this.tone("triangle", 660 * 2 ** (s / 12), 660 * 2 ** (s / 12), 0.12, 0.09, i * 0.04));
+    this.burst(0.25, "highpass", 3000, 9000, 0.12, 0.8, 0.05);
+  }
+
+  /** screen-clearing bomb: deep boom, long rumble, a sparkly tail */
+  bomb() {
+    this.tone("sine", 90, 22, 1.4, 1);
+    this.burst(1.6, "lowpass", 3000, 60, 1, 0.6);
+    this.burst(1.2, "bandpass", 2400, 300, 0.4, 0.8, 0.08);
+    for (let i = 0; i < 8; i++) this.tone("sine", 1500 + i * 220, 2600 + i * 200, 0.08, 0.05, 0.15 + i * 0.05);
+  }
+
+  /** laser beam tick: a short buzzy zap, repeated while the beam is on */
+  laserZap() {
+    this.tone("sawtooth", 220, 180, 0.07, 0.035);
+    this.burst(0.05, "bandpass", 4200, 3000, 0.04, 6);
+  }
+
+  missile() {
+    this.burst(0.18, "bandpass", 900, 2400, 0.1, 2);
+  }
+
+  /** a missile goes off */
+  boom() {
+    this.burst(0.3, "lowpass", 2600, 150, 0.35, 0.8);
+    this.tone("sine", 130, 40, 0.25, 0.35);
+  }
+
+  /** several kills at once: a fanfare that gets bigger with the level (1–4) */
+  multiKill(level: number) {
+    const base = 523 * 2 ** ((level - 1) * 2 / 12);
+    const steps = [0, 4, 7, 12, 16, 19].slice(0, 3 + level);
+    steps.forEach((s, i) => this.tone("square", base * 2 ** (s / 12), base * 2 ** (s / 12), 0.14, 0.07, i * 0.045));
+    this.burst(0.3, "highpass", 4000, 9000, 0.1 + level * 0.03, 0.7, 0.1);
+  }
+
+  /** combo 40: fever starts */
+  fever() {
+    [0, 3, 7, 10, 12, 15, 19, 24].forEach((s, i) => this.tone("sawtooth", 330 * 2 ** (s / 12), 330 * 2 ** (s / 12), 0.12, 0.06, i * 0.05));
+    this.tone("sine", 110, 55, 0.6, 0.5);
+  }
+
   die() {
     this.tone("sine", 160, 25, 1.2, 1);
     this.burst(1.2, "lowpass", 4000, 80, 1, 0.7);
@@ -173,7 +223,10 @@ export class ShootAudio {
 
 /** Calls the engine makes on ShootAudio, recorded with game time so a capture can be scored afterwards. */
 export type AudioLog = [number, string, unknown[]][];
-const LOGGED = new Set(["shot", "hit", "kill", "splat", "levelUp", "comboBreak", "enemyShot", "die", "start", "setEnabled"]);
+const LOGGED = new Set([
+  "shot", "hit", "kill", "splat", "levelUp", "comboBreak", "enemyShot", "die", "start", "setEnabled",
+  "slice", "pickup", "bomb", "laserZap", "missile", "boom", "multiKill", "fever",
+]);
 
 /** Wraps a ShootAudio so the listed calls are logged (at clock()) instead of played. */
 export function recordingAudio(real: ShootAudio, log: AudioLog, clock: () => number): ShootAudio {

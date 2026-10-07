@@ -45,7 +45,7 @@ export function GamesExplore() {
         <GameCard href="/race" icon={<Car className="size-6" />} title={zh ? "极速跨海" : "Bridge Rush"} tag="$BOAT"
           desc={zh ? "跨海大桥上从黄昏开到深夜：变道躲车、跳过路障、冲跳台飞过车流，后面还有逆行卡车。规则和快艇一样，同一个 BOAT 余额。" : "Sunset to midnight on a sea bridge: weave through traffic, hop barriers, fly off ramps, dodge wrong-way trucks. Same rules and BOAT balance as the speedboat."} />
         <GameCard href="/shoot" icon={<Crosshair className="size-6" />} title={zh ? "霓虹打击" : "Neon Strike"} tag="$BOAT"
-          desc={zh ? "霓虹射击：飞船自动开火，走位躲弹，打爆霓虹怪和卡通水果，连杀叠倍率最高 ×3。每 10 分得 1 枚，单局最多 300，越往后敌人越密、子弹越多。" : "Neon shooter: auto-fire, dodge, pop neon shapes and cartoon fruit, chain kills for up to ×3. 1 BOAT per 10 points up to 300 a run; enemies and bullets keep piling on."} />
+          desc={zh ? "霓虹射击：飞船自动开火，走位躲弹，一枪把 15 种卡通水果切成两半。捡散弹、激光、追踪导弹、全屏炸弹，连击 40 进入狂热，连杀叠倍率最高 ×3。每 10 分得 1 枚，单局最多 300。" : "Neon shooter: auto-fire, dodge, slice 15 kinds of cartoon fruit in half. Grab spread, laser, homing missiles and screen bombs; combo 40 starts a fever, chain kills for up to ×3. 1 BOAT per 10 points up to 300 a run."} />
         <GameCard href="/tower" icon={<Building2 className="size-6" />} title={zh ? "来啊盖楼啊" : "Tower Building"} tag="$BOAT"
           desc={zh ? "一根手指就能玩：吊钩左右摆，点一下放下楼块。叠稳 25 分，正中「完美」加倍，连续完美越加越多；掉 3 块结束。每 10 分得 1 枚，单局最多 300。" : "One-tap stacking: the crane swings, tap to drop the floor. 25 points a floor, more for a dead-centre Perfect and more again in a row; three falls and you're out. 1 BOAT per 10 points, up to 300 a run."} />
         <GameCard href="/game" icon={<Mountain className="size-6" />} title={zh ? "卖在山顶" : "Sell the Top"} tag={zh ? "免费" : "Free"}

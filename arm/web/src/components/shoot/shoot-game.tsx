@@ -196,7 +196,7 @@ export default function ShootGame() {
         <div className="absolute inset-0 flex flex-col items-center justify-end gap-4 bg-gradient-to-t from-black/70 via-black/10 to-transparent pb-16 text-center">
           <h1 className="text-4xl font-black italic tracking-tight text-cyan-200 drop-shadow-[0_0_18px_rgba(56,232,255,0.7)] sm:text-6xl">{zh ? "霓虹打击" : "Neon Strike"}</h1>
           <p className="max-w-sm px-4 text-base font-medium opacity-95 drop-shadow">
-            {zh ? "飞船自动开火，你只管走位。霓虹怪里混着卡通水果，打爆会溅出各自颜色的果汁，西瓜还会吐瓜子。连续击杀叠连击，倍率最高 ×3。碰到敌人或子弹就结束，越往后越难。" : "Your ship fires on its own: just move. Cartoon fruit flies in with the neon shapes and bursts in its own juice; watermelons spit seeds. Chain kills for up to ×3 points. One touch ends it, and it keeps getting harder."}
+            {zh ? "飞船自动开火，你只管走位。15 种卡通水果混在霓虹怪里，一枪切成两半、果汁溅满屏。打爆精英、大水果、金苹果会掉武器胶囊：散弹、激光、追踪导弹、穿透速射、全屏炸弹。连击叠倍率最高 ×3，连击 40 进入狂热。碰到敌人或子弹就结束，越往后越难。" : "Your ship fires on its own: just move. 15 kinds of cartoon fruit fly in with the neon shapes, split in half and splash juice across the screen. Elites, big fruit and golden apples drop weapon capsules: spread, laser, homing missiles, pierce, screen bomb. Chain kills for up to ×3; combo 40 starts a fever. One touch ends it, and it keeps getting harder."}
           </p>
           {live && (
             <div className="pointer-events-auto w-full max-w-xs rounded-2xl bg-black/50 px-4 py-3 text-sm backdrop-blur">
@@ -222,7 +222,7 @@ export default function ShootGame() {
           <Button size="lg" className="h-14 rounded-full px-10 text-lg font-bold" onClick={start} disabled={starting}>
             {starting && <Loader2 className="mr-1 size-5 animate-spin" />}{goLabel}
           </Button>
-          <p className="max-w-md px-4 text-xs opacity-80">{zh ? "手机：按住屏幕任意位置拖动 · 电脑：鼠标移动，或 ← → ↑ ↓ / WASD · 连击 15 以上双管齐射" : "Phone: drag anywhere · Desktop: move the mouse, or arrows / WASD · Combo 15+ fires twin shots"}</p>
+          <p className="max-w-md px-4 text-xs opacity-80">{zh ? "手机：按住屏幕任意位置拖动 · 电脑：鼠标移动，或 ← → ↑ ↓ / WASD · 飞过胶囊即拾取 · 连击 15 双管、30 三管" : "Phone: drag anywhere · Desktop: move the mouse, or arrows / WASD · Fly into a capsule to grab it · Combo 15 twin, 30 triple shots"}</p>
         </div>
       )}
 

@@ -143,7 +143,7 @@ export function createGrid() {
   const mat = new THREE.ShaderMaterial({
     depthWrite: false,
     depthTest: false,
-    uniforms: { uWaves: { value: waves }, uTime: { value: 0 } },
+    uniforms: { uWaves: { value: waves }, uTime: { value: 0 }, uFever: { value: 0 } },
     vertexShader: /* glsl */ `
       varying vec2 vP;
       void main() {
@@ -153,6 +153,8 @@ export function createGrid() {
     fragmentShader: /* glsl */ `
       uniform vec4 uWaves[8];
       uniform float uTime;
+      /** 0..1: fever mode, the lines become a moving rainbow */
+      uniform float uFever;
       varying vec2 vP;
       float gridLine(vec2 p, float step, float w) {
         vec2 g = abs(fract(p / step + 0.5) - 0.5) * step;
@@ -175,6 +177,9 @@ export function createGrid() {
         float major = gridLine(p + vec2(0.0, uTime * 6.0), 160.0, 1.0);
         vec3 bg = vec3(0.016, 0.018, 0.04);
         vec3 lineC = mix(vec3(0.09, 0.11, 0.24), vec3(0.16, 0.18, 0.38), major);
+        vec3 rainbow = 0.5 + 0.5 * cos(6.2831 * (uTime * 0.35 + p.y / 700.0 + p.x / 1400.0 + vec3(0.0, 0.33, 0.67)));
+        lineC = mix(lineC, rainbow * (0.35 + 0.25 * major), uFever);
+        bg = mix(bg, vec3(0.04, 0.02, 0.07), uFever);
         vec3 c = bg + lineC * max(minor * 0.7, major) * (1.0 + bright * 3.0);
         gl_FragColor = vec4(c, 1.0);
       }`,

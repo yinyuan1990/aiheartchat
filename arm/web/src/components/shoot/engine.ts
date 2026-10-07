@@ -5,7 +5,7 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { ShootAudio, recordingAudio, renderLog, type AudioLog } from "./audio";
 import { Batch, createGrid, mix, rgba, withA, type Rgba } from "./gfx";
 import { allFx, type Fx, type FxKey } from "./fx";
-import { FRUITS, FRUIT_DEFS, SMALL_FRUITS, drawFruit, isFruit, type Fruit } from "./fruit";
+import { BIG_FRUITS, FRUITS, FRUIT_DEFS, SMALL_FRUITS, drawFruit, drawHalf, isFruit, type Fruit } from "./fruit";
 
 export type Phase = "ready" | "playing" | "over";
 
@@ -23,6 +23,35 @@ const FIRE_DT = 0.11;
 const BULLET_V = 950;
 const COMBO_WINDOW = 2.2;
 const TWIN_COMBO = 15;
+const TRIPLE_COMBO = 30;
+/** every 40 combo: fever (rainbow grid and bullets, faster fire) for FEVER_TIME seconds */
+const FEVER_COMBO = 40;
+const FEVER_TIME = 8;
+const WEAPON_TIME = 10;
+/** kills this close together count as one multi-kill */
+const MULTI_WINDOW = 0.4;
+
+/** Weapon capsules drop from kills; a pickup lasts WEAPON_TIME (bomb goes off at once). They only change how fast
+ *  things die — every kill still scores its budgeted points, so the indexer's cap is unaffected. */
+export const WEAPONS = ["spread", "laser", "missile", "pierce", "bomb"] as const;
+export type Weapon = (typeof WEAPONS)[number];
+const WEAPON_C: Record<Weapon, Rgba> = {
+  spread: rgba("#ff9a1f"), laser: rgba("#6ef3ff"), missile: rgba("#ff5a3d"), pierce: rgba("#c08bff"), bomb: rgba("#ff3b8a"),
+};
+/** [中文名, English, 胶囊上的字（中文）, 胶囊上的字（英文）] */
+const WEAPON_NAMES: Record<Weapon, [string, string, string, string]> = {
+  spread: ["散弹", "SPREAD", "散", "S"],
+  laser: ["激光", "LASER", "光", "L"],
+  missile: ["追踪导弹", "MISSILES", "弹", "M"],
+  pierce: ["穿透速射", "PIERCE", "穿", "P"],
+  bomb: ["全屏炸弹", "BOMB", "爆", "B"],
+};
+const MULTI_TEXT: [number, string, string, string][] = [
+  [3, "三连切!", "TRIPLE!", "#9dffb0"],
+  [5, "爆汁!!", "JUICY!!", "#ffe14d"],
+  [8, "果汁狂欢!!", "FRUIT FRENZY!!", "#ff8ad8"],
+  [12, "无双!!!", "UNSTOPPABLE!!!", "#7cf7ff"],
+];
 
 /** Enemies are only spawned while their summed base points stay under this (the indexer checks the same formula ×
  *  MAX_MULT against the run's wall-clock time, so keep the two in step: arm/indexer/src/boat.ts `shootBudget`). */
@@ -43,6 +72,11 @@ const KINDS = {
   })),
 } as Record<Kind, KindDef>;
 const pickFruit = () => SMALL_FRUITS[Math.floor(Math.random() * SMALL_FRUITS.length)];
+const pickBig = () => BIG_FRUITS[Math.floor(Math.random() * BIG_FRUITS.length)];
+const pickWeapon = (noBomb = false): Weapon => {
+  const list = noBomb ? WEAPONS.filter((w) => w !== "bomb") : WEAPONS;
+  return list[Math.floor(Math.random() * list.length)];
+};
 
 type Enemy = {
   kind: Kind;
@@ -63,9 +97,29 @@ type Enemy = {
   px: number; py: number;
 };
 type Planned = { kind: Kind; at: number; x0: number; x1: number; y1: number; arc: number; hover: number; dive?: boolean };
-type Bullet = { x: number; y: number; vx: number; vy: number; life: number; seed?: boolean };
-/** kind 0 spark streak, 1 shard, 2 flash, 3 juice drop, 4 seed. g = gravity */
-type Particle = { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; c: Rgba; kind: 0 | 1 | 2 | 3 | 4; rot: number; vr: number; drag: number; g?: number };
+/** c = the bullet's colour (weapon / fever rainbow); pierce = enemies it can still go through; missile = homing */
+type Bullet = {
+  x: number; y: number; vx: number; vy: number; life: number; seed?: boolean;
+  c?: Rgba; pierce?: number; hitList?: Enemy[]; missile?: boolean; target?: Enemy | null;
+};
+/** kind 0 spark streak, 1 shard, 2 flash, 3 juice drop, 4 seed, 5 fruit half (f, side), 6 star. g = gravity */
+type Particle = {
+  x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; c: Rgba;
+  kind: 0 | 1 | 2 | 3 | 4 | 5 | 6; rot: number; vr: number; drag: number; g?: number; f?: Fruit; side?: 1 | -1;
+};
+/** a weapon capsule drifting down; fly into it to pick it up */
+type Capsule = { w: Weapon; x: number; y: number; t: number };
+/** the white blade line across a fruit as it splits */
+type Slash = { x: number; y: number; a: number; len: number; life: number; max: number; c: Rgba };
+/** juice splashed onto the screen glass (CSS px), dripping down */
+type Splash = {
+  x: number; y: number; r: number; c: string; life: number; max: number;
+  drips: { dx: number; len: number; v: number; w: number }[];
+  /** splatter droplets round the edge: offset (in r) and size */
+  dots: [number, number, number][];
+};
+/** big centre text: multi-kills, pickups, fever */
+type Banner = { text: string; life: number; max: number; color: string; size: number; y: number };
 /** juice splat left on the floor, drifting down with the grid */
 type Stain = { x: number; y: number; blobs: [number, number, number][]; c: Rgba; life: number; max: number };
 type Text = { x: number; y: number; vy: number; text: string; life: number; max: number; size: number; color: string; glow: string };
@@ -79,6 +133,19 @@ const paleHex = (hex: string) => {
   return `rgb(${ch((n >> 16) & 255)},${ch((n >> 8) & 255)},${ch(n & 255)})`;
 };
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+/** a bright saturated colour at hue h (0..1): the fever rainbow */
+const hueRgb = (h: number): Rgba => {
+  const f = (n: number) => { const k = (n + h * 12) % 12; return 0.62 - 0.38 * Math.max(-1, Math.min(k - 3, 9 - k, 1)); };
+  return [f(0), f(8), f(4), 1];
+};
+const rgbHex = (c: Rgba) => `rgb(${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.round(c[2] * 255)})`;
+/** distance from (px, py) to the segment a→b: swept hit tests for fast or curving bullets */
+const segDist = (px: number, py: number, ax: number, ay: number, bx: number, by: number) => {
+  const dx = bx - ax, dy = by - ay;
+  const l2 = dx * dx + dy * dy;
+  const t = l2 ? clamp(((px - ax) * dx + (py - ay) * dy) / l2, 0, 1) : 0;
+  return Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
+};
 const WHITE: Rgba = [1, 1, 1, 1];
 const SHIP_C = rgba("#38e8ff");
 const BULLET_C = rgba("#ffd84a");
@@ -135,6 +202,22 @@ export class ShootEngine {
   private texts: Text[] = [];
   private waves: Wave[] = [];
   private stains: Stain[] = [];
+  private capsules: Capsule[] = [];
+  private slashes: Slash[] = [];
+  private splashes: Splash[] = [];
+  private banners: Banner[] = [];
+  private weapon: Weapon | null = null;
+  private weaponT = 0;
+  private fever = 0;
+  private nextFever = FEVER_COMBO;
+  private recentKills: number[] = [];
+  private multiShown = 0;
+  /** game time of the last capsule drop: a long dry spell forces the next one */
+  private lastDrop = 0;
+  private laserT = 0;
+  private missileT = 0;
+  private hitSoundAt = -1;
+  private bombing = false;
   private spent = 0;
   private plan: { cost: number; enemies: Planned[] } | null = null;
   private nextWave = 0;
@@ -211,7 +294,14 @@ export class ShootEngine {
     if (this.capture) {
       (window as unknown as { __shoot: unknown }).__shoot = {
         step: (n = 1) => { for (let i = 0; i < n; i++) this.tick(1 / 60); this.render(); },
-        info: () => ({ phase: this.phase, score: this.score, gt: this.gt, wall: this.wall, combo: this.combo, enemies: this.enemies.length, kills: this.kills, hits: this.hits, spent: this.spent, budget: spawnBudget(this.gt) }),
+        info: () => ({
+          phase: this.phase, score: this.score, gt: this.gt, wall: this.wall, combo: this.combo, enemies: this.enemies.length, kills: this.kills, hits: this.hits,
+          spent: this.spent, budget: spawnBudget(this.gt), weapon: this.weapon, weaponT: this.weaponT, fever: this.fever, capsules: this.capsules.length, particles: this.particles.length,
+        }),
+        /** drop a capsule right on the ship (picked up next frame) */
+        give: (w: Weapon) => this.capsules.push({ w, x: this.sx, y: this.sy, t: 1 }),
+        /** jump the combo (e.g. to 39 so the next kill starts fever) */
+        combo: (n: number) => { this.combo = n; this.comboT = COMBO_WINDOW; },
         start: () => this.hooks.onRequestStart(),
         fx: (k: FxKey, on: boolean) => this.setFx(k, on),
         time: () => this.wall,
@@ -236,11 +326,18 @@ export class ShootEngine {
     this.audio.unlock();
     if (this.phase === "playing") return;
     this.enemies = []; this.queue = []; this.bullets = []; this.ebullets = []; this.particles = []; this.texts = []; this.waves = []; this.stains = [];
+    this.capsules = []; this.slashes = []; this.splashes = []; this.banners = []; this.recentKills = [];
+    // local only: ?weapon=laser keeps that weapon on for the whole run (judging each one)
+    const forced = this.local ? this.params.get("weapon") as Weapon | null : null;
+    this.weapon = forced && (WEAPONS as readonly string[]).includes(forced) && forced !== "bomb" ? forced : null;
+    this.weaponT = this.weapon ? Infinity : 0;
+    this.fever = 0; this.nextFever = FEVER_COMBO; this.multiShown = 0; this.laserT = 0; this.missileT = 0;
     this.gt = this.local ? Number(this.params.get("t")) || 0 : 0;
     this.spent = this.gt > 0 ? spawnBudget(this.gt) - 40 : 0;
     this.plan = null;
     this.nextWave = this.gt + 0.6;
     this.lastElite = -99;
+    this.lastDrop = this.gt;
     this.score = 0; this.scoreShown = 0; this.combo = 0; this.comboT = 0; this.kills = 0; this.breakT = 9;
     this.sx = 0; this.sy = this.homeY(); this.tx = 0; this.ty = this.sy; this.svx = 0;
     this.fireT = 0.25; this.dyingT = -1; this.freeze = 0; this.trauma = 0;
@@ -381,15 +478,7 @@ export class ShootEngine {
       this.svx = (nx - this.sx) / Math.max(dt, 1e-4);
       this.sx = nx;
       this.sy += (this.ty - this.sy) * k;
-      this.fireT -= dt;
-      if (this.fireT <= 0) {
-        this.fireT += FIRE_DT;
-        const twin = this.combo >= TWIN_COMBO;
-        for (const off of twin ? [-7, 7] : [0]) this.bullets.push({ x: this.sx + off, y: this.sy + 16, vx: 0, vy: BULLET_V, life: 1.2 });
-        this.recoil = 1;
-        this.muzzle = 0.05;
-        this.audio.shot(twin);
-      }
+      this.fireWeapons(dt);
     } else if (!playing) {
       // idle on the title screen: drift a little
       this.sx = Math.sin(this.wall * 0.7) * 30;
@@ -402,7 +491,11 @@ export class ShootEngine {
     if (playing) this.director();
     this.updateEnemies(dt, alive);
     this.updateBullets(dt, alive);
+    this.updateCapsules(dt, alive);
     this.updateFx(dt);
+    if (this.fever > 0) this.fever = Math.max(0, this.fever - dt);
+    const fu = this.grid.uniforms.uFever;
+    fu.value += ((this.fever > 0 && this.fx.glow ? 1 : 0) - fu.value) * Math.min(1, dt * 3);
 
     // combo timer
     if (this.combo > 0) {
@@ -424,14 +517,171 @@ export class ShootEngine {
     }
   }
 
+  // ---------------------------------------------------------------- weapons
+
+  /** bullet colour right now: a cycling rainbow in fever, otherwise the weapon's colour */
+  private bulletColor(w: Weapon | null): Rgba {
+    if (this.fever > 0) return hueRgb((this.wall * 0.9 + Math.random() * 0.12) % 1);
+    return w ? WEAPON_C[w] : BULLET_C;
+  }
+
+  private gunLevel() { return this.combo >= TRIPLE_COMBO ? 3 : this.combo >= TWIN_COMBO ? 2 : 1; }
+
+  private fireWeapons(dt: number) {
+    const w = this.weapon;
+    const rate = this.fever > 0 ? 0.62 : 1;
+    if (w === "laser") { this.laserTick(dt); return; }
+    if (w === "missile") {
+      this.missileT -= dt;
+      if (this.missileT <= 0) {
+        this.missileT += 0.32 * rate;
+        for (const s of [-1, 1]) this.bullets.push({ x: this.sx + s * 12, y: this.sy + 4, vx: s * 260, vy: 160, life: 3, missile: true, target: null, c: WEAPON_C.missile });
+        this.audio.missile();
+      }
+    }
+    this.fireT -= dt;
+    if (this.fireT > 0) return;
+    this.fireT += FIRE_DT * rate * (w === "pierce" ? 0.55 : 1);
+    const c = this.bulletColor(w);
+    const level = this.gunLevel();
+    if (w === "spread") {
+      for (const a of [-0.34, -0.17, 0, 0.17, 0.34]) this.bullets.push({ x: this.sx, y: this.sy + 16, vx: Math.sin(a) * BULLET_V, vy: Math.cos(a) * BULLET_V, life: 1.2, c });
+    } else {
+      const offs = level === 3 ? [-11, 0, 11] : level === 2 ? [-7, 7] : [0];
+      for (const off of offs) {
+        const a = off * 0.006;
+        const v = BULLET_V * (w === "pierce" ? 1.15 : 1);
+        this.bullets.push({ x: this.sx + off, y: this.sy + 16, vx: Math.sin(a) * v, vy: Math.cos(a) * v, life: 1.2, c, ...(w === "pierce" ? { pierce: 3, hitList: [] } : {}) });
+      }
+    }
+    this.recoil = 1;
+    this.muzzle = 0.05;
+    this.audio.shot(level > 1 || !!w);
+  }
+
+  /** the beam cuts everything in a column above the ship, ticking damage */
+  private laserTick(dt: number) {
+    this.laserT -= dt;
+    if (this.laserT > 0) return;
+    this.laserT += 0.09;
+    this.audio.laserZap();
+    for (const e of [...this.enemies]) {
+      if (e.hp <= 0) continue;
+      const k = KINDS[e.kind];
+      const ex = e.x + e.ox, ey = e.y + e.oy;
+      if (ey < this.sy || ey > this.hh + k.r || Math.abs(ex - this.sx) > 10 + k.r) continue;
+      this.hitEnemy(e, { x: this.sx, y: ey - k.r, vx: 0, vy: 1, life: 0 }, { dmg: Math.round(rand(24, 32) * (this.fever > 0 ? 1.4 : 1)), quiet: true });
+    }
+  }
+
+  private pickUp(c: Capsule) {
+    const name = WEAPON_NAMES[c.w];
+    const col = WEAPON_C[c.w];
+    this.audio.pickup();
+    this.addBanner(this.zh ? `${name[0]}!` : `${name[1]}!`, rgbHex(col), 40, 0.15);
+    if (this.fx.wave) this.waves.push({ x: this.sx, y: this.sy, r: 10, max: 110, life: 0, maxLife: 0.4, w: 5, c: mix(WHITE, col, 0.5), grid: 0.6 });
+    if (this.fx.particles) for (let i = 0; i < 26; i++) {
+      const a = rand(0, Math.PI * 2), sp = rand(120, 420);
+      this.particles.push({ x: this.sx, y: this.sy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.3, 0.6), max: 0.6, size: rand(4, 7), c: mix(WHITE, col, rand(0.3, 0.9)), kind: 6, rot: rand(0, 6), vr: rand(-10, 10), drag: 3 });
+    }
+    if (c.w === "bomb") { this.bomb(); return; }
+    // the same weapon again adds time; a different one replaces it
+    this.weaponT = this.weapon === c.w ? Math.min(20, this.weaponT + WEAPON_TIME) : WEAPON_TIME;
+    this.weapon = c.w;
+    this.laserT = 0; this.missileT = 0;
+  }
+
+  /** clears the screen: every enemy takes a huge hit, enemy bullets turn into sparkles, juice everywhere */
+  private bomb() {
+    this.audio.bomb();
+    this.hitStop(0.12, true);
+    this.addTrauma(1);
+    if (this.fx.particles) this.particles.push({ x: this.sx, y: this.sy, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 420, c: withA(mix(WHITE, WEAPON_C.bomb, 0.3), 0.9), kind: 2, rot: 0, vr: 0, drag: 0 });
+    if (this.fx.wave) {
+      this.waves.push({ x: this.sx, y: this.sy, r: 20, max: 700, life: 0, maxLife: 0.9, w: 12, c: mix(WHITE, WEAPON_C.bomb, 0.4), grid: 2.2 });
+      this.waves.push({ x: this.sx, y: this.sy, r: 10, max: 480, life: -0.1, maxLife: 0.8, w: 6, c: rgba("#ffe14d"), grid: 1.2 });
+    }
+    for (const b of this.ebullets) {
+      if (this.fx.particles) this.particles.push({ x: b.x, y: b.y, vx: rand(-60, 60), vy: rand(40, 160), life: 0.6, max: 0.6, size: 5, c: rgba("#ffe14d"), kind: 6, rot: 0, vr: rand(-8, 8), drag: 2 });
+    }
+    this.ebullets = [];
+    this.bombing = true;
+    for (const e of [...this.enemies]) {
+      if (e.y + e.oy > this.hh + 10) continue;
+      this.hitEnemy(e, { x: e.x, y: e.y, vx: 0, vy: 1, life: 0 }, { dmg: 420, quiet: true });
+    }
+    this.bombing = false;
+    for (let i = 0; i < 4; i++) this.addSplash(rgbHex(FRUIT_DEFS[pickFruit()].juice), true);
+  }
+
+  /** maybe drop a capsule where something died */
+  private maybeDrop(e: Enemy, ex: number, ey: number) {
+    if (this.lab || this.weaponDropBlocked()) return;
+    const big = e.kind === "elite" || e.kind === "golden";
+    const chance = big ? 1 : BIG_FRUITS.includes(e.kind as Fruit) ? 0.4 : e.kind === "hex" ? 0.08 : 0.03;
+    // a long dry spell (no drop for 22 s) forces one
+    const due = this.gt - this.lastDrop > 22;
+    if (!big && !due && Math.random() > chance) return;
+    this.lastDrop = this.gt;
+    // bombs are rarer: one pick in 8
+    const w = Math.random() < 0.125 ? "bomb" : pickWeapon(true);
+    this.capsules.push({ w, x: clamp(ex, -HALF_W + 20, HALF_W - 20), y: ey, t: 0 });
+  }
+
+  private weaponDropBlocked() { return this.capsules.length >= 2 || this.dyingT >= 0; }
+
+  private updateCapsules(dt: number, alive: boolean) {
+    for (let i = this.capsules.length - 1; i >= 0; i--) {
+      const c = this.capsules[i];
+      c.t += dt;
+      // pops up a little, then drifts down with a sway
+      c.y += (c.t < 0.35 ? 140 * (1 - c.t / 0.35) : -70) * dt;
+      c.x = clamp(c.x + Math.sin(c.t * 3) * 30 * dt, -HALF_W + 16, HALF_W - 16);
+      if (alive && Math.hypot(c.x - this.sx, c.y - this.sy) < 26) { this.capsules.splice(i, 1); this.pickUp(c); continue; }
+      if (c.y < -this.hh - 30) this.capsules.splice(i, 1);
+    }
+    if (this.weapon && this.weaponT !== Infinity) {
+      this.weaponT -= dt;
+      if (this.weaponT <= 0) { this.weapon = null; this.weaponT = 0; }
+    }
+  }
+
+  private addBanner(text: string, color: string, size: number, y = 0.3) {
+    this.banners.push({ text, color, size, life: 1.1, max: 1.1, y });
+    if (this.banners.length > 4) this.banners.shift();
+  }
+
+  /** juice on the screen glass; big = a bigger blob with more drips */
+  private addSplash(color: string, big: boolean) {
+    if (!this.fx.particles) return;
+    const drips = Array.from({ length: big ? 4 : 2 }, () => ({ dx: rand(-0.65, 0.65), len: 0, v: rand(14, 42), w: rand(0.06, 0.12) }));
+    const fl = this.toScreen(-HALF_W, 0)[0], fr = this.toScreen(HALF_W, 0)[0];
+    const dots = Array.from({ length: big ? 9 : 6 }, (): [number, number, number] => {
+      const a = rand(0, Math.PI * 2), d = rand(1.05, 1.6);
+      return [Math.cos(a) * d, Math.sin(a) * d, rand(0.06, 0.18)];
+    });
+    this.splashes.push({ x: rand(fl + 30, fr - 30), y: rand(this.cssH * 0.12, this.cssH * 0.7), r: big ? rand(34, 58) : rand(20, 34), c: color, life: 2.4, max: 2.4, drips, dots });
+    if (this.splashes.length > 8) this.splashes.shift();
+  }
+
   // ---------------------------------------------------------------- spawning
 
   /** Plans one wave at a time; it is only released once its points fit under spawnBudget(gt). */
   private director() {
     const t = this.gt;
     if (this.lab) {
-      const spots: Partial<Record<Kind, [number, number]>> = this.params.get("lab") === "fruit"
-        ? { apple: [-120, 110], orange: [-40, 110], lemon: [40, 110], grape: [120, 110], strawberry: [-110, 30], kiwi: [-30, 30], melon: [80, 30] }
+      const labMode = this.params.get("lab");
+      // ?lab=power: a capsule of each kind keeps dropping above the ship
+      if (labMode === "power" && this.capsules.length === 0) {
+        const w = WEAPONS[Math.floor(t / 4) % WEAPONS.length];
+        this.capsules.push({ w, x: Number(this.params.get("aim")) || 0, y: this.homeY() + 160, t: 0.35 });
+      }
+      const spots: Partial<Record<Kind, [number, number]>> = labMode === "fruit"
+        ? {
+          apple: [-130, 150], orange: [-65, 150], lemon: [0, 150], grape: [65, 150], strawberry: [130, 150],
+          kiwi: [-130, 85], banana: [-65, 85], cherry: [0, 85], peach: [65, 85], blueberry: [130, 85],
+          dragonfruit: [-120, 15], melon: [-50, 15], pineapple: [25, 15], coconut: [90, 15], golden: [150, 15],
+        }
         : { dart: [-110, 40], hex: [0, 70], elite: [110, 40] };
       for (const kind of Object.keys(spots) as Kind[]) {
         if (this.enemies.some((e) => e.kind === kind) || t < (this.labRespawn[kind] ?? 0)) continue;
@@ -514,12 +764,15 @@ export class ShootEngine {
       const y1 = top - rand(170, 280);
       for (let i = 0; i < n; i++) {
         const x1 = (i - (n - 1) / 2) * Math.min(50, 300 / n);
-        list.push({ kind: pickFruit(), at: i * 0.14, x0: -side * 200, x1, y1: y1 + Math.sin(i * 1.3) * 18, arc: side * 40, hover: hover() + i * 0.12 });
+        // now and then a golden apple hides in the basket (always drops a weapon)
+        const kind: Kind = i === 1 && Math.random() < 0.12 ? "golden" : pickFruit();
+        list.push({ kind, at: i * 0.14, x0: -side * 200, x1, y1: y1 + Math.sin(i * 1.3) * 18, arc: side * 40, hover: hover() + i * 0.12 });
       }
     } else if (type === "melon") {
+      // the big ones: watermelon, pineapple, coconut
       const n = t > 60 ? 2 : 1;
       const y1 = top - rand(190, 270);
-      for (let i = 0; i < n; i++) list.push({ kind: "melon", at: i * 0.3, x0: (i - (n - 1) / 2) * 120, x1: (i - (n - 1) / 2) * 120, y1, arc: side * 30, hover: hover() + 3 });
+      for (let i = 0; i < n; i++) list.push({ kind: pickBig(), at: i * 0.3, x0: (i - (n - 1) / 2) * 120, x1: (i - (n - 1) / 2) * 120, y1, arc: side * 30, hover: hover() + 3 });
       for (let i = 0; i < 3; i++) list.push({ kind: pickFruit(), at: 0.4 + i * 0.15, x0: (i - 1) * 70, x1: (i - 1) * 70, y1: y1 + 70, arc: 0, hover: hover() });
     } else {
       const y1 = top - rand(200, 270);
@@ -635,18 +888,28 @@ export class ShootEngine {
   private updateBullets(dt: number, alive: boolean) {
     for (let i = this.bullets.length - 1; i >= 0; i--) {
       const b = this.bullets[i];
+      if (b.missile) this.steerMissile(b, dt);
+      const ox = b.x, oy = b.y;
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
       let hit: Enemy | null = null;
       for (const e of this.enemies) {
-        if (e.hp <= 0) continue;
+        if (e.hp <= 0 || b.hitList?.includes(e)) continue;
         const r = KINDS[e.kind].r + 4;
         const ex = e.x + e.ox, ey = e.y + e.oy;
         // swept along this frame's travel so fast bullets can't skip a dart
-        const dy = clamp(ey, b.y - b.vy * dt, b.y) - ey;
-        if (Math.abs(b.x - ex) < r && Math.abs(dy) < r && Math.hypot(b.x - ex, dy) < r) { hit = e; break; }
+        if (Math.abs(b.x - ex) > r + Math.abs(b.vx * dt) || segDist(ex, ey, ox, oy, b.x, b.y) >= r) continue;
+        hit = e;
+        break;
       }
-      if (hit) { this.hitEnemy(hit, b); this.bullets.splice(i, 1); continue; }
-      if (b.life <= 0 || b.y > this.hh + 30) this.bullets.splice(i, 1);
+      if (hit) {
+        if (b.missile) { this.explode(b.x, b.y); this.bullets.splice(i, 1); continue; }
+        this.hitEnemy(hit, b);
+        if (b.pierce && b.pierce > 0) { b.pierce--; b.hitList!.push(hit); continue; }
+        this.bullets.splice(i, 1);
+        continue;
+      }
+      if (b.missile && b.life <= 0) { this.explode(b.x, b.y); this.bullets.splice(i, 1); continue; }
+      if (b.life <= 0 || b.y > this.hh + 30 || Math.abs(b.x) > this.viewW / 2 + 30 || b.y < -this.hh - 40) this.bullets.splice(i, 1);
     }
     for (let i = this.ebullets.length - 1; i >= 0; i--) {
       const b = this.ebullets[i];
@@ -656,10 +919,56 @@ export class ShootEngine {
     }
   }
 
-  private hitEnemy(e: Enemy, b: Bullet) {
+  /** homing: turn toward the nearest live enemy ahead, speeding up; a smoke-and-fire trail */
+  private steerMissile(b: Bullet, dt: number) {
+    if (!b.target || b.target.hp <= 0 || !this.enemies.includes(b.target)) {
+      let best: Enemy | null = null, bd = Infinity;
+      for (const e of this.enemies) {
+        const ex = e.x + e.ox, ey = e.y + e.oy;
+        if (ey < b.y - 40 || ey > this.hh) continue;
+        const d = Math.hypot(ex - b.x, ey - b.y);
+        if (d < bd) { bd = d; best = e; }
+      }
+      b.target = best;
+    }
+    const sp = Math.min(760, Math.hypot(b.vx, b.vy) + 900 * dt);
+    let a = Math.atan2(b.vy, b.vx);
+    const t = b.target;
+    const want = t ? Math.atan2(t.y + t.oy - b.y, t.x + t.ox - b.x) : Math.PI / 2;
+    let d = want - a;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    a += clamp(d, -7 * dt, 7 * dt);
+    b.vx = Math.cos(a) * sp; b.vy = Math.sin(a) * sp;
+    if (this.fx.trail && Math.random() < 0.7) {
+      this.particles.push({ x: b.x, y: b.y, vx: -b.vx * 0.08 + rand(-20, 20), vy: -b.vy * 0.08 + rand(-20, 20), life: rand(0.18, 0.32), max: 0.32, size: rand(3, 5), c: Math.random() < 0.5 ? withA(rgba("#ffd27a"), 0.8) : withA(WEAPON_C.missile, 0.7), kind: 2, rot: 0, vr: 0, drag: 3 });
+    }
+  }
+
+  /** a missile goes off: area damage, fireball, small shockwave */
+  private explode(x: number, y: number) {
+    this.audio.boom();
+    this.addTrauma(0.18);
+    for (const e of [...this.enemies]) {
+      const ex = e.x + e.ox, ey = e.y + e.oy;
+      if (e.hp > 0 && Math.hypot(ex - x, ey - y) < 48 + KINDS[e.kind].r) this.hitEnemy(e, { x, y, vx: ex - x, vy: ey - y + 1, life: 0 }, { dmg: Math.round(rand(40, 55)), quiet: true });
+    }
+    if (this.fx.particles) {
+      this.particles.push({ x, y, vx: 0, vy: 0, life: 0.14, max: 0.14, size: 70, c: withA(rgba("#ffcf6a"), 0.85), kind: 2, rot: 0, vr: 0, drag: 0 });
+      for (let i = 0; i < 16; i++) {
+        const a = rand(0, Math.PI * 2), sp = rand(150, 460);
+        this.particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.15, 0.35), max: 0.35, size: 2.4, c: mix(WHITE, WEAPON_C.missile, rand(0.2, 0.8)), kind: 0, rot: 0, vr: 0, drag: 4 });
+      }
+    }
+    if (this.fx.wave) this.waves.push({ x, y, r: 6, max: 70, life: 0, maxLife: 0.3, w: 3.5, c: mix(WHITE, WEAPON_C.missile, 0.4), grid: 0.5 });
+  }
+
+  /** opts.dmg overrides the gun's damage roll; quiet = laser / missile / bomb hits: lighter effects, no hit stop */
+  private hitEnemy(e: Enemy, b: Bullet, opts: { dmg?: number; quiet?: boolean } = {}) {
     const k = KINDS[e.kind];
-    const crit = Math.random() < 0.15;
-    const dmg = Math.round(rand(18, 26.99) * (crit ? 2.5 : 1));
+    const quiet = !!opts.quiet;
+    const crit = Math.random() < (quiet ? 0.1 : 0.15);
+    const dmg = opts.dmg !== undefined ? Math.round(opts.dmg * (crit ? 1.8 : 1)) : Math.round(rand(18, 26.99) * (crit ? 2.5 : 1));
     e.hp -= dmg;
     this.hits++;
     const ex = e.x + e.ox, ey = e.y + e.oy;
@@ -673,14 +982,15 @@ export class ShootEngine {
     if (this.fx.particles) {
       const hx = b.x, hy = ey - k.r * 0.7;
       // sparks: bullet yellow off the neon shapes, the fruit's juice off fruit
-      const spark = fruit ? fruit.juice : BULLET_C;
-      for (let i = 0; i < (crit ? 16 : 9); i++) {
+      const spark = fruit ? fruit.juice : b.c ?? BULLET_C;
+      const many = quiet ? 0.45 : 1;
+      for (let i = 0; i < (crit ? 16 : 9) * many; i++) {
         const a = -Math.PI / 2 + rand(-1.3, 1.3);
         const sp = rand(260, crit ? 760 : 560);
         this.particles.push({ x: hx, y: hy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.14, 0.32), max: 0.32, size: crit ? 2.8 : 2.3, c: mix(WHITE, spark, rand(0.3, 0.9)), kind: 0, rot: 0, vr: 0, drag: 6 });
       }
       if (fruit) {
-        for (let i = 0; i < (crit ? 9 : 5); i++) {
+        for (let i = 0; i < (crit ? 9 : 5) * many; i++) {
           const a = -Math.PI / 2 + rand(-1.1, 1.1), sp = rand(120, 320);
           this.particles.push({ x: hx, y: hy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.35, 0.6), max: 0.6, size: rand(2, 3.6), c: fruit.juice, kind: 3, rot: 0, vr: 0, drag: 1.5, g: 700 });
         }
@@ -692,18 +1002,37 @@ export class ShootEngine {
       }
       this.particles.push({ x: hx, y: hy, vx: 0, vy: 0, life: 0.07, max: 0.07, size: crit ? 18 : 11, c: withA(spark, 0.8), kind: 2, rot: 0, vr: 0, drag: 0 });
     }
-    if (e.hp <= 0) { this.kill(e, crit); return; }
-    this.hitStop(crit ? 0.06 : 0.04);
-    this.addTrauma(crit ? 0.14 : dmg / 450);
-    this.audio.hit(crit, !!fruit);
+    if (e.hp <= 0) { this.kill(e, crit, quiet); return; }
+    if (!quiet) this.hitStop(crit ? 0.06 : 0.04);
+    this.addTrauma(quiet ? 0.03 : crit ? 0.14 : dmg / 450);
+    // a laser / spread volley would otherwise stack dozens of hit sounds
+    if (this.wall - this.hitSoundAt > (quiet ? 0.07 : 0.025)) { this.hitSoundAt = this.wall; this.audio.hit(crit, !!fruit); }
   }
 
   /** a fruit bursts: juice drops in its colour, chunks of skin and flesh, seeds, and a splat on the floor */
   private fruitBurst(f: Fruit, ex: number, ey: number) {
     const d = FRUIT_DEFS[f];
-    const big = f === "melon";
+    const big = BIG_FRUITS.includes(f);
     const s = big ? 1.6 : 1;
+    const cut = rand(-0.7, 0.7);
+    if (this.fx.trail) {
+      this.slashes.push({ x: ex, y: ey, a: cut, len: d.r * 3.4 * s, life: 0.16, max: 0.16, c: mix(WHITE, d.juice, 0.2) });
+      if (this.slashes.length > 12) this.slashes.shift();
+      if (!this.bombing) this.audio.slice();
+    }
     if (this.fx.particles) {
+      // split in two, Fruit Ninja style: the halves fly apart from the cut and spin away
+      for (const side of [1, -1] as const) {
+        const nx = -Math.sin(cut) * side, ny = Math.cos(cut) * side;
+        const sp = rand(110, 170) * (big ? 1.2 : 1);
+        this.particles.push({ x: ex + nx * 3, y: ey + ny * 3, vx: nx * sp + rand(-30, 30), vy: ny * sp + 160, life: 1.1, max: 1.1, size: 0, c: WHITE, kind: 5, rot: cut, vr: side * rand(3, 7), drag: 0.4, g: 820, f, side });
+      }
+      if (f === "golden") for (let i = 0; i < 22; i++) {
+        const a = rand(0, Math.PI * 2), sp = rand(120, 480);
+        this.particles.push({ x: ex, y: ey, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.5, 0.9), max: 0.9, size: rand(5, 9), c: mix(WHITE, d.juice, rand(0.2, 0.8)), kind: 6, rot: rand(0, 6), vr: rand(-8, 8), drag: 2 });
+      }
+      // juice on the screen: always for the big ones and the golden apple, sometimes in fever or a long streak
+      if (big || f === "golden" || (this.fever > 0 && Math.random() < 0.25) || (this.combo >= 20 && Math.random() < 0.08)) this.addSplash(d.juiceHex, big);
       for (let i = 0; i < (big ? 46 : 26); i++) {
         const a = rand(0, Math.PI * 2), sp = rand(90, 380) * s;
         this.particles.push({ x: ex, y: ey, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp + 80, life: rand(0.5, 0.95), max: 0.95, size: rand(2.4, 5.5) * (big ? 1.2 : 1), c: i % 4 ? d.juice : mix(d.juice, WHITE, 0.45), kind: 3, rot: 0, vr: 0, drag: 1.4, g: 650 });
@@ -732,7 +1061,7 @@ export class ShootEngine {
     }
   }
 
-  private kill(e: Enemy, crit: boolean) {
+  private kill(e: Enemy, crit: boolean, quiet = false) {
     const k = KINDS[e.kind];
     const big = e.kind === "elite";
     const ex = e.x + e.ox, ey = e.y + e.oy;
@@ -751,16 +1080,27 @@ export class ShootEngine {
       const col = fruit ? FRUIT_DEFS[fruit].juiceHex : "#fff3a0";
       this.addText(ex + 18, ey + k.r + 18, `+${pts}`, fruit ? 16 : 14, col, fruit ? col : "rgba(255,200,40,0.8)", 0.7);
       if (mult > before) { this.multPop = 0; this.audio.levelUp(mult); }
+      this.multiKill();
+      // every 40 combo: fever
+      if (this.combo >= this.nextFever) {
+        this.nextFever += FEVER_COMBO;
+        this.fever = FEVER_TIME;
+        this.audio.fever();
+        this.addBanner(this.zh ? "狂热模式!" : "FEVER!", "#ff7ae0", 46, 0.42);
+      }
     }
-    const melon = e.kind === "melon";
-    this.hitStop(big ? 0.16 : melon ? 0.11 : crit ? 0.09 : 0.065, true);
-    this.addTrauma(big ? 0.75 : melon ? 0.45 : e.kind === "hex" ? 0.32 : 0.22);
+    this.maybeDrop(e, ex, ey);
+    const heavy = big || BIG_FRUITS.includes(e.kind as Fruit);
+    // a bomb kills a screenful at once: one hit stop and a few sounds, not one per enemy
+    if (!this.bombing) this.hitStop(big ? 0.16 : heavy ? 0.11 : quiet ? 0.03 : crit ? 0.09 : 0.065, !quiet || heavy);
+    this.addTrauma(big ? 0.75 : heavy ? 0.45 : e.kind === "hex" ? 0.32 : quiet ? 0.12 : 0.22);
+    const sound = !this.bombing || Math.random() < 0.3;
     if (fruit) {
-      this.audio.splat(this.combo, melon);
+      if (sound) this.audio.splat(this.combo, heavy);
       this.fruitBurst(fruit, ex, ey);
       return;
     }
-    this.audio.kill(this.combo, big);
+    if (sound) this.audio.kill(this.combo, big);
     if (this.fx.particles) {
       const n = big ? 60 : e.kind === "hex" ? 30 : 20;
       for (let i = 0; i < n; i++) {
@@ -779,6 +1119,22 @@ export class ShootEngine {
     }
   }
 
+  /** kills within MULTI_WINDOW of each other: TRIPLE / JUICY / FRENZY / UNSTOPPABLE, each level shown once per burst */
+  private multiKill() {
+    const now = this.wall;
+    this.recentKills.push(now);
+    while (this.recentKills.length && now - this.recentKills[0] > MULTI_WINDOW) this.recentKills.shift();
+    if (this.recentKills.length === 1) this.multiShown = 0;
+    const n = this.recentKills.length;
+    let level = 0;
+    for (let i = 0; i < MULTI_TEXT.length; i++) if (n >= MULTI_TEXT[i][0]) level = i + 1;
+    if (level <= this.multiShown) return;
+    this.multiShown = level;
+    const [, zh, en, col] = MULTI_TEXT[level - 1];
+    this.addBanner(this.zh ? zh : en, col, 34 + level * 6, 0.3);
+    this.audio.multiKill(level);
+  }
+
   private die() {
     if (this.dyingT >= 0 || this.lab) return;
     this.dyingT = 0;
@@ -795,6 +1151,7 @@ export class ShootEngine {
     if (this.fx.wave) this.waves.push({ x: this.sx, y: this.sy, r: 10, max: 320, life: 0, maxLife: 0.9, w: 8, c: mix(WHITE, SHIP_C, 0.4), grid: 1.6 });
     if (this.combo >= 5) { this.breakT = 0; this.breakN = this.combo; }
     this.combo = 0;
+    this.weapon = null; this.weaponT = 0; this.fever = 0;
   }
 
   private updateFx(dt: number) {
@@ -827,6 +1184,21 @@ export class ShootEngine {
       s.y -= 6 * dt;
       if (s.life <= 0) this.stains.splice(i, 1);
     }
+    for (let i = this.slashes.length - 1; i >= 0; i--) {
+      this.slashes[i].life -= dt;
+      if (this.slashes[i].life <= 0) this.slashes.splice(i, 1);
+    }
+    for (let i = this.splashes.length - 1; i >= 0; i--) {
+      const s = this.splashes[i];
+      s.life -= dt;
+      // drips run down the glass, slowing as they go
+      for (const d of s.drips) d.len += d.v * dt * (0.4 + s.life / s.max);
+      if (s.life <= 0) this.splashes.splice(i, 1);
+    }
+    for (let i = this.banners.length - 1; i >= 0; i--) {
+      this.banners[i].life -= dt;
+      if (this.banners[i].life <= 0) this.banners.splice(i, 1);
+    }
   }
 
   /** juice = the fruit's colour: crits take it in full, normal hits a pale tint of it */
@@ -852,6 +1224,8 @@ export class ShootEngine {
       const s = Math.abs(ex - this.sx) + (ey - this.sy) * 0.25 + (e.kind === "elite" ? -60 : 0);
       if (s < best) { best = s; aim = ex; }
     }
+    // a capsule coming down near the ship beats any target
+    for (const c of this.capsules) if (c.y > this.sy - 10 && c.y < this.sy + 260) { aim = c.x; break; }
     const threats: { x: number; y: number; vx: number; vy: number; r: number }[] = [];
     for (const b of this.ebullets) threats.push({ x: b.x, y: b.y, vx: b.vx, vy: b.vy, r: 6 });
     for (const e of this.enemies) {
@@ -972,14 +1346,46 @@ export class ShootEngine {
       S.polyFill(b.x, b.y, 2.2, 8, 0, 1, 1, WHITE);
     }
 
-    // player bullets
+    // weapon capsules: a spinning hexagon in the weapon's colour (the letter goes on the text layer)
+    for (const c of this.capsules) {
+      const col = WEAPON_C[c.w];
+      const pulse = 1 + Math.sin(this.wall * 8 + c.t) * 0.08;
+      if (glowOn) G.dot(c.x, c.y, 36 * pulse, withA(col, 0.35));
+      S.polyFill(c.x, c.y, 15 * pulse, 6, c.t * 1.5, 1, 1, withA(mix([0, 0, 0, 1], col, 0.3), 0.92));
+      G.polyOutline(c.x, c.y, 15 * pulse, 6, c.t * 1.5, 1, 1, 2.6, col);
+      G.ring(c.x, c.y, 21 + Math.sin(this.wall * 5) * 2, 1.6, withA(col, 0.6));
+    }
+
+    // laser beam: wide soft glow, a coloured body, a white-hot core, light running up it
     const trail = this.fx.trail;
+    if (this.weapon === "laser" && this.phase === "playing" && this.dyingT < 0) {
+      const lc = this.fever > 0 ? hueRgb((this.wall * 0.9) % 1) : WEAPON_C.laser;
+      const fl = 1 + Math.sin(this.wall * 60) * 0.12 + Math.random() * 0.1;
+      const y0 = this.sy + 18, y1 = this.hh + 30;
+      if (glowOn) G.line(this.sx, y0, this.sx, y1, 34 * fl, withA(lc, 0.12));
+      G.line(this.sx, y0, this.sx, y1, 14 * fl, withA(lc, 0.6));
+      G.line(this.sx, y0, this.sx, y1, 5 * fl, withA(WHITE, 0.95));
+      G.dot(this.sx, y0, 26 * fl, withA(lc, 0.85));
+      if (trail) for (let i = 0; i < 6; i++) G.dot(this.sx, y0 + ((this.wall * 900 + i * 120) % (y1 - y0)), 12, withA(WHITE, 0.35));
+    }
+
+    // player bullets (pierce shots get a longer tail; missiles a small hot body)
     for (const b of this.bullets) {
+      const c = b.c ?? BULLET_C;
+      const l = Math.hypot(b.vx, b.vy) || 1, ux = b.vx / l, uy = b.vy / l;
+      if (b.missile) {
+        if (glowOn) G.dot(b.x, b.y, 15, withA(c, 0.4));
+        G.streak(b.x - ux * 5, b.y - uy * 5, ux, uy, 9, 3.6, withA(c, 0.95));
+        G.streak(b.x, b.y, ux, uy, 5, 2.2, WHITE);
+        continue;
+      }
       if (trail) {
-        G.line(b.x, b.y - 46, b.x, b.y, 3.2, withA(BULLET_C, 0), withA(BULLET_C, 0.85));
-        G.streak(b.x, b.y, 0, 1, 11, 4.5, withA(BULLET_C, 1));
-        G.streak(b.x, b.y, 0, 1, 7, 2.2, WHITE);
-        if (glowOn) G.dot(b.x, b.y, 16, withA(BULLET_C, 0.22));
+        const pierce = b.pierce !== undefined;
+        const tl = pierce ? 70 : 46;
+        G.line(b.x - ux * tl, b.y - uy * tl, b.x, b.y, pierce ? 4.6 : 3.2, withA(c, 0), withA(c, 0.85));
+        G.streak(b.x, b.y, ux, uy, pierce ? 14 : 11, 4.5, withA(c, 1));
+        G.streak(b.x, b.y, ux, uy, 7, 2.2, WHITE);
+        if (glowOn) G.dot(b.x, b.y, 16, withA(c, 0.22));
       } else {
         S.polyFill(b.x, b.y, 2.4, 8, 0, 1, 1, WHITE);
       }
@@ -1000,9 +1406,25 @@ export class ShootEngine {
         C.polyFill(p.x - sz * 0.3, p.y + sz * 0.3, sz * 0.32, 6, 0, 1, 1, [1, 1, 1, 0.6 * a]);
       } else if (p.kind === 4) {
         C.polyFill(p.x, p.y, p.size, 8, p.rot, 1.6, 1, withA(p.c, Math.min(1, a * 1.5)));
+      } else if (p.kind === 5) {
+        drawHalf(C, p.f!, p.x, p.y, p.rot, p.side!, Math.min(1, a * 1.5));
+      } else if (p.kind === 6) {
+        // four-point twinkle
+        const cs = Math.cos(p.rot), sn = Math.sin(p.rot), sz = p.size * (0.5 + 0.5 * a);
+        G.streak(p.x, p.y, cs, sn, sz, sz * 0.22, withA(p.c, a));
+        G.streak(p.x, p.y, -sn, cs, sz, sz * 0.22, withA(p.c, a));
       } else {
         G.dot(p.x, p.y, p.size * (1.4 - a * 0.4), withA(p.c, a));
       }
+    }
+
+    // blade slashes across sliced fruit
+    for (const s of this.slashes) {
+      const u = 1 - s.life / s.max;
+      const dx = Math.cos(s.a), dy = Math.sin(s.a);
+      const L = s.len * (0.55 + u * 0.6);
+      G.line(s.x - dx * L, s.y - dy * L, s.x + dx * L, s.y + dy * L, 8 * (1 - u) + 1, withA(s.c, 0.5 * (1 - u)));
+      G.line(s.x - dx * L, s.y - dy * L, s.x + dx * L, s.y + dy * L, 2.6 * (1 - u) + 0.6, withA(WHITE, 1 - u));
     }
 
     // ship
@@ -1024,10 +1446,10 @@ export class ShootEngine {
       if (glowOn) G.dot(this.sx, this.sy, 40, withA(SHIP_C, 0.14));
       S.tri(ax, ay, bx, by, cx, cy, withA(mix([0, 0, 0, 1], SHIP_C, 0.2), 0.85));
       G.line(ax, ay, bx, by, 2.8, SHIP_C); G.line(bx, by, cx, cy, 2.8, SHIP_C); G.line(cx, cy, ax, ay, 2.8, SHIP_C);
-      if (trail && this.muzzle > 0) {
+      if (trail && this.muzzle > 0 && this.weapon !== "laser") {
         const m = this.muzzle / 0.05;
-        const twin = this.combo >= TWIN_COMBO;
-        for (const off of twin ? [-7, 7] : [0]) {
+        const level = this.gunLevel();
+        for (const off of this.weapon === "spread" ? [0] : level === 3 ? [-11, 0, 11] : level === 2 ? [-7, 7] : [0]) {
           const mx = this.sx + off, my = this.sy + 20;
           G.dot(mx, my, 18 * m + 6, withA(rgba("#fff1b0"), 0.9));
           G.streak(mx, my + 6, 0, 1, 14 * m, 2.5, WHITE);
@@ -1058,9 +1480,47 @@ export class ShootEngine {
     const font = (px: number) => `italic 900 ${px}px ui-sans-serif, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif`;
     const glowOn = this.fx.glow;
     const pxPerUnit = this.cssW / this.viewW;
+
+    // juice splashed onto the screen glass: a blob, drips running down, a glassy highlight
+    for (const s of this.splashes) {
+      const u = s.life / s.max;
+      const a = Math.min(1, u * 1.8) * 0.4;
+      const r = s.r * (1 + (1 - u) * 0.08);
+      g.globalAlpha = a;
+      g.fillStyle = s.c;
+      // one path, one fill: overlapping parts don't stack up darker
+      g.beginPath();
+      g.arc(s.x, s.y, r, 0, Math.PI * 2);
+      for (const [dx, dy, dr] of s.dots) {
+        g.moveTo(s.x + dx * r + dr * r, s.y + dy * r);
+        g.arc(s.x + dx * r, s.y + dy * r, dr * r, 0, Math.PI * 2);
+      }
+      for (const d of s.drips) {
+        // each drip leaves from the blob's lower edge, a thin trail with a round drop at the end
+        const x = s.x + d.dx * r, w = r * d.w;
+        const y0 = s.y + Math.sqrt(1 - d.dx * d.dx) * r * 0.85;
+        const y1 = y0 + d.len;
+        g.rect(x - w * 0.55, s.y, w * 1.1, y1 - s.y);
+        g.moveTo(x + w, y1);
+        g.arc(x, y1, w, 0, Math.PI * 2);
+      }
+      g.fill();
+      g.globalAlpha = a * 0.9;
+      g.fillStyle = "rgba(255,255,255,0.55)";
+      g.beginPath(); g.arc(s.x - r * 0.38, s.y - r * 0.38, r * 0.17, 0, Math.PI * 2); g.fill();
+    }
+    g.globalAlpha = 1;
+
     g.textAlign = "center";
     g.textBaseline = "middle";
     g.lineJoin = "round";
+    // the letter on each weapon capsule
+    for (const c of this.capsules) {
+      const [x, y] = this.toScreen(c.x, c.y);
+      g.font = `900 ${Math.round(15 * Math.min(1.3, Math.max(0.8, pxPerUnit)))}px ui-sans-serif, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif`;
+      g.fillStyle = "#fff";
+      g.fillText(WEAPON_NAMES[c.w][this.zh ? 2 : 3], x, y + 1);
+    }
     for (const t of this.texts) {
       const age = t.max - t.life;
       const pop = age < 0.09 ? 1.7 - (age / 0.09) * 0.7 : 1;
@@ -1093,6 +1553,58 @@ export class ShootEngine {
     if (glowOn) { g.shadowColor = "rgba(120,220,255,0.8)"; g.shadowBlur = 14; }
     g.fillText(Math.round(this.scoreShown).toLocaleString("en-US"), cx + ox, 100 + oy);
     g.shadowBlur = 0;
+
+    // active weapon and the time left on it, bottom left of the field
+    if (this.weapon) {
+      const col = rgbHex(WEAPON_C[this.weapon]);
+      const x = fieldL + 14 + ox, y = this.cssH - 46 + oy;
+      g.textAlign = "left";
+      g.font = font(18);
+      g.lineWidth = 4;
+      g.strokeStyle = "rgba(10,6,20,0.85)";
+      const name = WEAPON_NAMES[this.weapon][this.zh ? 0 : 1];
+      g.strokeText(name, x, y);
+      if (glowOn) { g.shadowColor = col; g.shadowBlur = 12; }
+      g.fillStyle = col;
+      g.fillText(name, x, y);
+      g.shadowBlur = 0;
+      if (this.weaponT !== Infinity) {
+        const f = clamp(this.weaponT / WEAPON_TIME, 0, 1), bw = 110;
+        g.fillStyle = "rgba(255,255,255,0.15)";
+        g.fillRect(x, y + 14, bw, 5);
+        g.fillStyle = this.weaponT < 2.5 && Math.sin(this.wall * 20) > 0 ? "#fff" : col;
+        g.fillRect(x, y + 14, bw * f, 5);
+      }
+    }
+
+    // fever: a pulsing rainbow frame round the field
+    if (this.fever > 0 && glowOn) {
+      g.strokeStyle = rgbHex(hueRgb((this.wall * 0.6) % 1));
+      g.globalAlpha = (0.4 + 0.25 * Math.sin(this.wall * 10)) * Math.min(1, this.fever);
+      g.lineWidth = 10;
+      g.strokeRect(fieldL + 5 + ox, 5 + oy, fieldR - fieldL - 10, this.cssH - 10);
+      g.globalAlpha = 1;
+    }
+
+    // centre banners: multi-kills, pickups, fever (pop in, drift up, fade)
+    this.banners.forEach((b, i) => {
+      const age = b.max - b.life;
+      const pop = age < 0.12 ? 0.4 + (age / 0.12) * 0.95 : age < 0.22 ? 1.35 - ((age - 0.12) / 0.1) * 0.35 : 1;
+      g.save();
+      g.globalAlpha = Math.min(1, b.life / 0.35);
+      g.translate(cx + ox, this.cssH * (b.y + i * 0.07) + oy - age * 24);
+      g.rotate(-0.06);
+      g.scale(pop, pop);
+      g.textAlign = "center";
+      g.font = font(b.size);
+      g.lineWidth = Math.max(4, b.size * 0.15);
+      g.strokeStyle = "rgba(10,6,20,0.85)";
+      g.strokeText(b.text, 0, 0);
+      if (glowOn) { g.shadowColor = b.color; g.shadowBlur = b.size * 0.6; }
+      g.fillStyle = b.color;
+      g.fillText(b.text, 0, 0);
+      g.restore();
+    });
 
     if (!this.fx.combo) return;
     const right = fieldR - 14 + ox;
