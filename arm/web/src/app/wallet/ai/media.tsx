@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowSquareOut, CheckCircle, CircleNotch, DownloadSimple, FilmStrip, Image as ImageIcon, MagnifyingGlass, MusicNotes, SpeakerHigh, Waveform, ChatCircleDots } from "@phosphor-icons/react";
+import { ArrowSquareOut, CheckCircle, CircleNotch, DownloadSimple, FilmStrip, Image as ImageIcon, MagnifyingGlass, MusicNotes, PencilSimple, SpeakerHigh, Waveform, ChatCircleDots, X } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { explorerTx } from "@/lib/wallet/chains";
 import { t } from "@/lib/wallet/i18n";
-import { AI_CHAIN, mediaSrc, usd6, videoDurations, type ChatMsg, type ChatStore, type MediaKind, type MediaModel, type MediaVoice, type Mode } from "@/lib/wallet/x402";
+import { AI_CHAIN, mediaSrc, refSrc, usd6, videoDurations, type ChatMsg, type ChatStore, type MediaKind, type MediaModel, type MediaVoice, type Mode } from "@/lib/wallet/x402";
 
 export const MODES: Mode[] = ["chat", "image", "video", "speech", "music", "sfx"];
 export const MODE_ICON = { chat: ChatCircleDots, image: ImageIcon, video: FilmStrip, speech: SpeakerHigh, music: MusicNotes, sfx: Waveform } as const;
@@ -110,13 +110,13 @@ export function OptionsBar({ kind, model, opts, voices, onOpts, onVoice }: { kin
   return <div className="no-scrollbar mt-2 flex gap-1.5 overflow-x-auto">{chips}</div>;
 }
 
-/** request body for /x402/gen/:kind */
-export function mediaBody(kind: MediaKind, model: string, prompt: string, m: MediaModel | undefined, opts: ChatStore["opts"]): object {
+/** request body for /x402/gen/:kind; `ref` is a reference image (image → image, image → video) */
+export function mediaBody(kind: MediaKind, model: string, prompt: string, m: MediaModel | undefined, opts: ChatStore["opts"], ref?: string | null): object {
   if (kind === "image") {
     const size = pickSize(m, opts.size);
-    return size ? { model, prompt, size } : { model, prompt };
+    return { model, prompt, ...(ref ? { image: ref } : {}), ...(size ? { size } : {}) };
   }
-  if (kind === "video") return { model, prompt, duration_seconds: pickSec(m, opts.sec) };
+  if (kind === "video") return { model, prompt, ...(ref ? { image_url: ref } : {}), duration_seconds: pickSec(m, opts.sec) };
   if (kind === "speech") return { model, input: prompt, voice: opts.voice ?? "sarah" };
   if (kind === "music") return { model, prompt, instrumental: opts.instrumental !== false };
   return opts.sfxSec ? { model, text: prompt, duration_seconds: opts.sfxSec } : { model, text: prompt };
@@ -133,7 +133,7 @@ function Elapsed({ since }: { since: number }) {
 }
 
 /** an assistant message carrying generated files (or a video still being made) */
-export function MediaBubble({ m }: { m: ChatMsg }) {
+export function MediaBubble({ m, onUse }: { m: ChatMsg; onUse?: (url: string, as: "image" | "video") => void }) {
   const urls = m.urls ?? [];
   if (!urls.length && m.job && !m.error) {
     return (
@@ -156,10 +156,24 @@ export function MediaBubble({ m }: { m: ChatMsg }) {
           const src = mediaSrc(u);
           if (m.kind === "image")
             return (
-              <a key={u} href={src} target="_blank" rel="noreferrer" className="block w-[78%] overflow-hidden rounded-[20px] rounded-bl-md bg-muted ring-1 ring-border/60">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={src} alt="" loading="lazy" className="block h-auto w-full" />
-              </a>
+              <div key={u} className="w-[78%]">
+                <a href={src} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-[20px] rounded-bl-md bg-muted ring-1 ring-border/60">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={src} alt="" loading="lazy" className="block h-auto w-full" />
+                </a>
+                {onUse && (
+                  <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+                    <button type="button" onClick={() => onUse(u, "image")} className="flex h-8 items-center justify-center gap-1 rounded-xl bg-card text-[12px] font-semibold ring-1 ring-border/60 transition active:scale-95">
+                      <PencilSimple size={13} />
+                      {t("cw.aichat.useEdit")}
+                    </button>
+                    <button type="button" onClick={() => onUse(u, "video")} className="flex h-8 items-center justify-center gap-1 rounded-xl bg-card text-[12px] font-semibold ring-1 ring-border/60 transition active:scale-95">
+                      <FilmStrip size={13} />
+                      {t("cw.aichat.useVideo")}
+                    </button>
+                  </div>
+                )}
+              </div>
             );
           if (m.kind === "video") return <Video key={u} src={src} />;
           return (
@@ -208,21 +222,49 @@ function Footer({ m }: { m: ChatMsg }) {
   );
 }
 
-/** small tag above a media prompt so the timeline reads 「图片 · …」 */
-export function KindTag({ kind }: { kind: MediaKind }) {
+/** small tag above a media prompt so the timeline reads 「图片 · …」, with its reference image if any */
+export function KindTag({ kind, refImg }: { kind: MediaKind; refImg?: string }) {
   const Icon = MODE_ICON[kind];
   return (
-    <span className="mb-0.5 flex items-center justify-end gap-1 text-[11px] text-muted-foreground">
-      <Icon size={12} />
-      {t(`cw.aichat.mode.${kind}`)}
-    </span>
+    <>
+      <span className="mb-0.5 flex items-center justify-end gap-1 text-[11px] text-muted-foreground">
+        <Icon size={12} />
+        {t(`cw.aichat.mode.${kind}`)}
+        {refImg && ` · ${t(kind === "video" ? "cw.aichat.refVideo" : "cw.aichat.refImage")}`}
+      </span>
+      {refImg && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={refSrc(refImg)} alt="" className="mb-1 size-20 rounded-2xl object-cover ring-1 ring-border/60" />
+      )}
+    </>
   );
 }
 
-export function MediaModelSheet({ models, loading, current, opts, onPick }: { models: MediaModel[]; loading: boolean; current?: string; opts: ChatStore["opts"]; onPick: (id: string) => void }) {
+/** the reference image waiting above the composer */
+export function RefChip({ src, kind, uploading, onClear }: { src: string | null; kind: MediaKind; uploading: boolean; onClear: () => void }) {
+  return (
+    <div className="mb-1.5 flex items-center gap-2 rounded-2xl bg-card p-1.5 pr-3 ring-1 ring-border/60">
+      <span className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {src && <img src={src} alt="" className="size-full object-cover" />}
+        {uploading && <CircleNotch size={18} className="absolute animate-spin text-primary" />}
+      </span>
+      <span className="min-w-0 flex-1 text-[12px] leading-4">
+        <span className="block font-semibold">{t(kind === "video" ? "cw.aichat.refVideo" : "cw.aichat.refImage")}</span>
+        <span className="block text-muted-foreground">{uploading ? t("cw.aichat.uploading") : t(kind === "video" ? "cw.aichat.refVideoHint" : "cw.aichat.refImageHint")}</span>
+      </span>
+      <button type="button" aria-label={t("cw.aichat.refRemove")} onClick={onClear} className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted transition active:scale-90">
+        <X size={14} />
+      </button>
+    </div>
+  );
+}
+
+export function MediaModelSheet({ models, loading, current, opts, note, onPick }: { models: MediaModel[]; loading: boolean; current?: string; opts: ChatStore["opts"]; note?: string; onPick: (id: string) => void }) {
   return (
     <div>
       <div className="mb-2 text-center text-[17px] font-semibold">{t("cw.aichat.pickModel")}</div>
+      {note && <p className="mb-2 px-1 text-center text-[12px] text-muted-foreground">{note}</p>}
       {loading && <div className="py-10 text-center text-[13px] text-muted-foreground">…</div>}
       <ul>
         {[...models]

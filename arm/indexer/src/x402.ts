@@ -263,6 +263,39 @@ export async function x402Media(): Promise<{ models: MediaModel[]; voices: Media
 }
 
 const MEDIA_PATH: Record<MediaKind, string> = { image: "/images/generations", video: "/videos/generations", speech: "/audio/speech", music: "/audio/generations", sfx: "/audio/sound-effects" };
+
+/**
+ * Reference images (image → image, image → video) come from two places only: our own uploads (/api/uploads/…, see
+ * api.ts) or a file BlockRun generated earlier. Video takes a public URL; image2image only takes a data URI, which
+ * is built here (and cached) so the quote and the paid retry carry the same bytes.
+ */
+const UPLOAD_RE = /^\/api\/uploads\/([a-f0-9]{32}\.(png|jpg|webp))$/;
+const BR_MEDIA = `${ORIGIN}/api/media/`;
+const PUBLIC_BASE = process.env.PUBLIC_BASE_URL || `https://${(process.env.PUBLIC_DOMAINS ?? "arm.yyheart.com").split(",")[0].trim()}`;
+const isRef = (v: unknown): v is string => typeof v === "string" && (UPLOAD_RE.test(v) || (v.startsWith(BR_MEDIA) && MEDIA_FILE_RE.test(v.slice(BR_MEDIA.length)) && /\.(png|jpe?g|webp)$/i.test(v)));
+const refUrl = (ref: string) => (ref.startsWith("/") ? `${PUBLIC_BASE}${ref}` : ref);
+const MIME: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp" };
+const dataUris = new Map<string, string>();
+async function refDataUri(ref: string): Promise<string> {
+  const hit = dataUris.get(ref);
+  if (hit) return hit;
+  const ext = ref.split(".").pop()!.toLowerCase();
+  let buf: Buffer;
+  const up = UPLOAD_RE.exec(ref);
+  if (up) {
+    const { readFile } = await import("node:fs/promises");
+    buf = await readFile(`${process.env.UPLOAD_DIR ?? "./uploads"}/${up[1]}`);
+  } else {
+    const r = await fetch(ref, { signal: AbortSignal.timeout(30_000) });
+    if (!r.ok) throw new Error(`reference image ${r.status}`);
+    buf = Buffer.from(await r.arrayBuffer());
+  }
+  if (buf.length > 8 * 1024 * 1024) throw new Error("reference image too large");
+  const uri = `data:${MIME[ext] ?? "image/png"};base64,${buf.toString("base64")}`;
+  if (dataUris.size > 40) dataUris.delete(dataUris.keys().next().value!);
+  dataUris.set(ref, uri);
+  return uri;
+}
 const MEDIA_TIMEOUT: Record<MediaKind, number> = { image: 240_000, video: 90_000, speech: 120_000, music: 330_000, sfx: 120_000 };
 const text = (v: unknown, max: number) => (typeof v === "string" && v.trim() && v.length <= max ? v.trim() : null);
 
@@ -291,12 +324,18 @@ function cleanMedia(kind: MediaKind, raw: unknown): object | string {
   if (!prompt) return "bad prompt";
   if (kind === "image") {
     if (b.size != null && (typeof b.size !== "string" || !/^\d{3,4}x\d{3,4}$/.test(b.size))) return "bad size";
-    return b.size ? { model, prompt, size: b.size, n: 1 } : { model, prompt, n: 1 };
+    if (b.image != null && !isRef(b.image)) return "bad reference image";
+    const body: Record<string, unknown> = { model, prompt };
+    if (b.image) body.image = b.image;
+    if (b.size) body.size = b.size;
+    body.n = 1;
+    return body;
   }
   if (kind === "video") {
     const d = Number(b.duration_seconds);
     if (!Number.isInteger(d) || d < 1 || d > 30) return "bad duration";
-    return { model, prompt, duration_seconds: d };
+    if (b.image_url != null && !isRef(b.image_url)) return "bad reference image";
+    return b.image_url ? { model, prompt, image_url: refUrl(b.image_url as string), duration_seconds: d } : { model, prompt, duration_seconds: d };
   }
   const instrumental = b.instrumental !== false;
   const lyrics = instrumental ? null : text(b.lyrics, 3_000);
@@ -309,7 +348,17 @@ export async function x402Generate(kind: MediaKind, raw: unknown, payment: strin
   const body = cleanMedia(kind, raw);
   if (typeof body === "string") return { status: 400, json: { error: body } };
   if (badPayment(payment)) return { status: 400, json: { error: "bad payment header" } };
-  return handoff(upstream(`${UPSTREAM}${MEDIA_PATH[kind]}`, { method: "POST", body, payment, timeoutMs: MEDIA_TIMEOUT[kind] }));
+  let path = MEDIA_PATH[kind];
+  const ref = (body as { image?: string }).image;
+  if (kind === "image" && ref) {
+    path = "/images/image2image";
+    try {
+      (body as { image?: string }).image = await refDataUri(ref);
+    } catch (e) {
+      return { status: 400, json: { error: (e as Error).message } };
+    }
+  }
+  return handoff(upstream(`${UPSTREAM}${path}`, { method: "POST", body, payment, timeoutMs: MEDIA_TIMEOUT[kind] }));
 }
 
 /** BlockRun's own async jobs (video, slow images / music): poll with the SAME payment header; it settles on completion. */

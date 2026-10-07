@@ -2691,5 +2691,18 @@
   "cw.aichat.genLost": "等太久没有结果，任务已放弃（没完成就不会扣钱）",
   "cw.aichat.save": "保存",
   "cw.aichat.videoNoPlay": "这里播放不了这个视频，点这里用系统播放器打开",
-  "cw.aichat.searchVoice": "搜索音色"
+  "cw.aichat.searchVoice": "搜索音色",
+  "cw.aichat.refAdd": "添加参考图",
+  "cw.aichat.refRemove": "移除参考图",
+  "cw.aichat.refImage": "参考图 · 改图",
+  "cw.aichat.refVideo": "参考图 · 让它动起来",
+  "cw.aichat.refImageHint": "说说要怎么改这张图",
+  "cw.aichat.refVideoHint": "视频从这张图开始",
+  "cw.aichat.uploading": "上传中…",
+  "cw.aichat.uploadFailed": "图片上传失败",
+  "cw.aichat.ph.imageEdit": "比如：改成水彩风 / 换成夜景 / 加一顶帽子",
+  "cw.aichat.ph.videoRef": "说说图里要怎么动，镜头怎么走…",
+  "cw.aichat.useEdit": "改图",
+  "cw.aichat.useVideo": "做成视频",
+  "cw.aichat.editOnly": "改图只支持下面这几个模型"
 }

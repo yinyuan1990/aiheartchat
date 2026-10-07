@@ -3,17 +3,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatUnits } from "viem";
-import { ArrowSquareOut, CaretDown, CheckCircle, CircleNotch, GearSix, MagnifyingGlass, PaperPlaneRight, ShieldCheck, Sparkle, Trash, Warning } from "@phosphor-icons/react";
+import { ArrowSquareOut, CaretDown, CheckCircle, CircleNotch, GearSix, ImageSquare, MagnifyingGlass, PaperPlaneRight, ShieldCheck, Sparkle, Trash, Warning } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { TokenAvatar } from "@/components/shared";
 import { cn } from "@/lib/utils";
 import { USDC_LOGO } from "@/lib/wallet/assets";
 import { explorerTx } from "@/lib/wallet/chains";
 import { t } from "@/lib/wallet/i18n";
-import { AI_CHAIN, AI_MAX_TOKENS, DEFAULT_MEDIA, FEATURED, aiChat, aiGenerate, loadChat, perM, pollJob, saveChat, useAiMedia, useAiModels, useAiUsdc, usd6, type AiModel, type ChatMsg, type ChatStore, type MediaKind, type MediaResult, type Mode } from "@/lib/wallet/x402";
+import { AI_CHAIN, AI_MAX_TOKENS, DEFAULT_EDIT, DEFAULT_MEDIA, EDIT_MODELS, FEATURED, aiChat, aiGenerate, loadChat, perM, pollJob, refSrc, saveChat, uploadRef, useAiMedia, useAiModels, useAiUsdc, usd6, type AiModel, type ChatMsg, type ChatStore, type MediaKind, type MediaResult, type Mode } from "@/lib/wallet/x402";
 import { useVault } from "@/components/wallet/wallet-context";
 import { BottomSheet, ChainGlyph, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
-import { KindTag, MediaBubble, MediaModelSheet, ModeTabs, OptionsBar, VoiceSheet, mediaBody, mediaPriceLabel } from "./media";
+import { KindTag, MediaBubble, MediaModelSheet, ModeTabs, OptionsBar, RefChip, VoiceSheet, mediaBody, mediaPriceLabel } from "./media";
 
 /** auto-pay limits in micro-USDC; 0 = confirm every paid message */
 const CAPS = [0n, 10_000n, 50_000n, 200_000n, 1_000_000n];
@@ -53,8 +53,31 @@ export default function AiChatPage() {
   const mode: Mode = store?.mode ?? "chat";
   const kind = mode === "chat" ? null : mode;
   const model = models.data?.find((m) => m.id === store?.model);
-  const mediaId = kind ? (store?.picks[kind] ?? DEFAULT_MEDIA[kind]) : null;
+  // reference image for image → image / image → video: our upload path or a BlockRun file URL
+  const [ref, setRef] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const withRef = !!ref && (kind === "image" || kind === "video");
+  const editing = withRef && kind === "image";
+  const mediaId = kind ? (editing ? (store?.picks.edit ?? DEFAULT_EDIT) : (store?.picks[kind] ?? DEFAULT_MEDIA[kind])) : null;
   const mediaModel = media.data?.models.find((m) => m.id === mediaId);
+  const pickFile = async (f?: File) => {
+    if (!f) return;
+    setUploading(true);
+    setRef(null);
+    try {
+      setRef(await uploadRef(f));
+    } catch (e) {
+      toast.error((e as Error).message || t("cw.aichat.uploadFailed"));
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+  const takeRef = (url: string, as: "image" | "video") => {
+    setRef(url);
+    update((s) => ({ ...s, mode: as }));
+  };
   const [busy, setBusy] = useState(false);
   const [input, setInput] = useState("");
   const [sheet, setSheet] = useState<null | "models" | "settings" | "voices">(null);
@@ -102,14 +125,16 @@ export default function AiChatPage() {
 
   const sendMedia = async (k: MediaKind, q: string) => {
     if (!store || !mediaId) return;
-    const mine: ChatMsg = { role: "user", content: q, kind: k, at: Date.now() };
+    const r0 = withRef ? ref : null;
+    const mine: ChatMsg = { role: "user", content: q, kind: k, ...(r0 ? { ref: r0 } : {}), at: Date.now() };
     update((s) => ({ ...s, messages: [...s.messages, mine] }));
     setBusy(true);
     const at = mine.at + 1;
     let parked = false;
     try {
-      const r = await aiGenerate(account, k, mediaBody(k, mediaId, q, mediaModel, store.opts), BigInt(store.autoCap), confirm, (job) => {
+      const r = await aiGenerate(account, k, mediaBody(k, mediaId, q, mediaModel, store.opts, r0), BigInt(store.autoCap), confirm, (job) => {
         parked = true;
+        setRef(null);
         resumed.current.add(at);
         update((s) => ({ ...s, messages: [...s.messages, { role: "assistant", content: "", kind: k, model: mediaId, cost: job.cost, job, at }] }));
         setBusy(false);
@@ -120,6 +145,7 @@ export default function AiChatPage() {
         return;
       }
       if (!parked) update((s) => ({ ...s, messages: [...s.messages, { role: "assistant", content: "", kind: k, model: mediaId, at }] }));
+      setRef(null);
       finish(at, r);
     } catch (e) {
       if (!parked) update((s) => ({ ...s, messages: [...s.messages, { role: "assistant", content: "", kind: k, at }] }));
@@ -221,7 +247,7 @@ export default function AiChatPage() {
             </div>
           </div>
         )}
-        {store?.messages.map((m, i) => <Bubble key={`${m.at}-${i}`} m={m} />)}
+        {store?.messages.map((m, i) => <Bubble key={`${m.at}-${i}`} m={m} onUse={takeRef} />)}
         {busy && (
           <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
             <span className="flex items-center gap-2 rounded-[20px] rounded-bl-md bg-card px-4 py-3 ring-1 ring-border/60">
@@ -238,7 +264,16 @@ export default function AiChatPage() {
           <ShieldCheck size={12} className="text-up" />
           {t("cw.aichat.spent", { v: usd6(store?.spent ?? "0") })} · {cap === 0n ? t("cw.aichat.autoPayOff") : t("cw.aichat.autoPay", { v: usd6(cap) })}
         </button>
-        <div className="flex items-end gap-2 rounded-[22px] bg-card p-1.5 pl-4 ring-1 ring-border/70">
+        {(kind === "image" || kind === "video") && (ref || uploading) && <RefChip src={ref ? refSrc(ref) : null} kind={kind} uploading={uploading} onClear={() => setRef(null)} />}
+        <div className={cn("flex items-end gap-2 rounded-[22px] bg-card p-1.5 ring-1 ring-border/70", kind === "image" || kind === "video" ? "pl-1.5" : "pl-4")}>
+          {(kind === "image" || kind === "video") && (
+            <>
+              <button type="button" aria-label={t("cw.aichat.refAdd")} disabled={uploading || busy} onClick={() => fileRef.current?.click()} className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-foreground transition active:scale-90 disabled:opacity-40">
+                <ImageSquare size={19} />
+              </button>
+              <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => void pickFile(e.target.files?.[0])} />
+            </>
+          )}
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -249,7 +284,7 @@ export default function AiChatPage() {
               }
             }}
             rows={1}
-            placeholder={kind ? t(`cw.aichat.ph.${kind}`) : t("cw.aichat.placeholder")}
+            placeholder={withRef ? t(kind === "video" ? "cw.aichat.ph.videoRef" : "cw.aichat.ph.imageEdit") : kind ? t(`cw.aichat.ph.${kind}`) : t("cw.aichat.placeholder")}
             className="max-h-32 min-h-[36px] flex-1 resize-none bg-transparent py-2 text-[15px] leading-5 outline-none"
           />
           <button
@@ -268,12 +303,13 @@ export default function AiChatPage() {
         {sheet === "models" &&
           (kind ? (
             <MediaModelSheet
-              models={(media.data?.models ?? []).filter((m) => m.kind === kind)}
+              models={(media.data?.models ?? []).filter((m) => m.kind === kind && (!editing || EDIT_MODELS.includes(m.id)))}
               loading={media.isLoading}
               current={mediaId ?? undefined}
               opts={store?.opts ?? {}}
+              note={editing ? t("cw.aichat.editOnly") : undefined}
               onPick={(id) => {
-                update((s) => ({ ...s, picks: { ...s.picks, [kind]: id } }));
+                update((s) => ({ ...s, picks: { ...s.picks, [editing ? "edit" : kind]: id } }));
                 setSheet(null);
               }}
             />
@@ -390,16 +426,16 @@ function Intro({ n, mode, onPick }: { n?: number; mode: Mode; onPick: (key: stri
   );
 }
 
-function Bubble({ m }: { m: ChatMsg }) {
+function Bubble({ m, onUse }: { m: ChatMsg; onUse: (url: string, as: "image" | "video") => void }) {
   if (m.role === "user") {
     return (
       <div className="flex flex-col items-end">
-        {m.kind && <KindTag kind={m.kind} />}
+        {m.kind && <KindTag kind={m.kind} refImg={m.ref} />}
         <div className="max-w-[85%] rounded-[20px] rounded-br-md bg-primary px-4 py-2.5 text-[15px] leading-6 break-words whitespace-pre-wrap text-primary-foreground">{m.content}</div>
       </div>
     );
   }
-  if (m.kind && !m.error) return <MediaBubble m={m} />;
+  if (m.kind && !m.error) return <MediaBubble m={m} onUse={onUse} />;
   const paid = m.cost && m.cost !== "0";
   return (
     <div className="flex flex-col items-start">

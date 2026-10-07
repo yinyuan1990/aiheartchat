@@ -35,12 +35,32 @@ export function useAiModels() {
   });
 }
 
+/**
+ * Localhost-only promo recording (?demo=1, kept for the tab): media requests replay files BlockRun really generated
+ * in our tests, at their real prices, with the same confirm sheet — nothing is signed or paid.
+ */
+export const aiDemo = () => {
+  if (typeof window === "undefined" || window.location.hostname !== "localhost") return false;
+  if (new URLSearchParams(window.location.search).get("demo") === "1") sessionStorage.setItem("arm-ai-demo", "1");
+  return sessionStorage.getItem("arm-ai-demo") === "1";
+};
+const DEMO_BALANCE = 25_000_000n;
+const DEMO_MEDIA: Record<"image" | "edit" | "video" | "speech" | "music" | "sfx", { url: string; cost: bigint; ms: number }> = {
+  image: { url: "https://blockrun.ai/api/media/media/images/2026/10/07/e28d04ac-8f50-4a11-a5fe-7d3077da4a8c.png", cost: 22_001n, ms: 2600 },
+  edit: { url: "https://blockrun.ai/api/media/media/images/2026/10/07/ee1705dd-e20b-4a14-bc70-c73a4b0f9eec.png", cost: 22_001n, ms: 3200 },
+  video: { url: "https://blockrun.ai/api/media/media/videos/2026/10/07/gen-vid-1791380953-hAJTqXEIQqNPX47a2YIS-faa5c743.mp4", cost: 252_000n, ms: 5200 },
+  speech: { url: "https://blockrun.ai/api/media/media/audios/2026/10/07/Gfa0Gygw2C33ZPVQsJS5-bb5af3b8.mp3", cost: 2_313n, ms: 1500 },
+  music: { url: "https://blockrun.ai/api/media/media/audios/2026/10/07/Gfa0Gygw2C33ZPVQsJS5-bb5af3b8.mp3", cost: 158_500n, ms: 3000 },
+  sfx: { url: "https://blockrun.ai/api/media/media/audios/2026/10/07/Gfa0Gygw2C33ZPVQsJS5-bb5af3b8.mp3", cost: 53_501n, ms: 2000 },
+};
+
 export function useAiUsdc(user?: string) {
+  const demo = aiDemo();
   return useQuery({
-    queryKey: ["wallet", "x402-usdc", user],
+    queryKey: ["wallet", "x402-usdc", user, demo],
     enabled: !!user,
     refetchInterval: 30_000,
-    queryFn: () => publicClientFor(AI_CHAIN).readContract({ address: BASE_USDC, abi: erc20Abi, functionName: "balanceOf", args: [user as Address] }),
+    queryFn: () => (demo ? DEMO_BALANCE : publicClientFor(AI_CHAIN).readContract({ address: BASE_USDC, abi: erc20Abi, functionName: "balanceOf", args: [user as Address] })),
   });
 }
 
@@ -53,6 +73,8 @@ export type ChatMsg = {
   content: string;
   /** set on media prompts and results; chat history sent to the model skips these */
   kind?: MediaKind;
+  /** reference image of a media prompt: our upload path or a BlockRun file URL */
+  ref?: string;
   urls?: string[];
   job?: PendingJob;
   model?: string;
@@ -210,6 +232,45 @@ export const DEFAULT_MEDIA: Record<MediaKind, string> = {
   music: "minimax/music-2.5+",
   sfx: "elevenlabs/sound-effects",
 };
+/** the image models BlockRun can edit with (image2image); the rest only generate from text */
+export const EDIT_MODELS = ["openai/gpt-image-1", "google/nano-banana", "openai/gpt-image-2", "google/nano-banana-2", "google/nano-banana-pro", "openai/gpt-image-2.5-sunburst"];
+/** ~$0.022 an edit, under the default auto-pay cap */
+export const DEFAULT_EDIT = "openai/gpt-image-1";
+
+/**
+ * Upload a reference image through the existing /api/upload (1 MB cap): downscaled to 1280px JPEG on the device
+ * first. Returns the host-relative path the relay accepts as a reference.
+ */
+export async function uploadRef(file: File): Promise<string> {
+  // an <img> honours EXIF rotation of phone photos on every engine we support
+  const src = URL.createObjectURL(file);
+  const bmp = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(t("cw.aichat.uploadFailed")));
+    img.src = src;
+  }).finally(() => setTimeout(() => URL.revokeObjectURL(src), 0));
+  const scale = Math.min(1, 1280 / Math.max(bmp.naturalWidth, bmp.naturalHeight));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bmp.naturalWidth * scale);
+  canvas.height = Math.round(bmp.naturalHeight * scale);
+  canvas.getContext("2d")!.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+  let blob: Blob | null = null;
+  for (const q of [0.88, 0.75, 0.6]) {
+    blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/jpeg", q));
+    if (blob && blob.size < 950_000) break;
+  }
+  if (!blob) throw new Error(t("cw.aichat.uploadFailed"));
+  const fd = new FormData();
+  fd.append("file", blob, "ref.jpg");
+  const r = await fetch(`${API_BASE}/upload`, { method: "POST", body: fd });
+  const j = (await r.json().catch(() => ({}))) as { url?: string; error?: string };
+  if (!r.ok || !j.url) throw new Error(j.error || t("cw.aichat.uploadFailed"));
+  return j.url;
+}
+/** where to show a reference image from */
+export const refSrc = (ref: string) => (ref.startsWith("/api/") ? `${API_BASE}${ref.slice(4)}` : mediaSrc(ref));
+
 /** Sora only takes 4 / 8 / 12s; the others any whole second up to their max */
 export const videoDurations = (m?: MediaModel) => (m?.id.startsWith("azure/sora") ? [4, 8, 12] : [5, 8, 10, 15].filter((s) => s <= (m?.maxSec ?? 10)));
 
@@ -230,6 +291,10 @@ const done = (j: Job & Completion, cost: bigint): MediaResult => {
  * amount already approved.
  */
 export async function pollJob(account: () => LocalAccount, job: PendingJob, onSig?: (sig: string) => void, alive: () => boolean = () => true): Promise<MediaResult> {
+  if (job.poll === "demo") {
+    await new Promise((r) => setTimeout(r, Math.max(0, DEMO_MEDIA.video.ms - (Date.now() - job.since))));
+    return { urls: [DEMO_MEDIA.video.url], cost: BigInt(job.cost), tx: null };
+  }
   let sig = job.sig;
   let resigns = 2;
   let errors = 0;
@@ -273,6 +338,17 @@ export async function aiGenerate(
   confirm: (amount: bigint) => Promise<boolean>,
   onJob: (job: PendingJob) => void,
 ): Promise<MediaResult | null> {
+  if (aiDemo()) {
+    const d = DEMO_MEDIA[kind === "image" && "image" in body ? "edit" : kind];
+    if (d.cost > autoCap && !(await confirm(d.cost))) return null;
+    if (kind === "video") {
+      const job = { poll: "demo", sig: "", cost: d.cost.toString(), since: Date.now() };
+      onJob(job);
+      return pollJob(account, job);
+    }
+    await new Promise((r) => setTimeout(r, d.ms));
+    return { urls: [d.url], cost: d.cost, tx: null };
+  }
   const path = `/x402/gen/${kind}`;
   let res = await call(path, body);
   if (res.status !== 402) throw new Error(errText(res.json, res.status));
@@ -293,7 +369,8 @@ export async function aiGenerate(
 
 /** Conversation + spend, kept on this device per wallet address. */
 export type MediaOpts = { size?: string; sec?: number; voice?: string; instrumental?: boolean; sfxSec?: number };
-export type ChatStore = { model: string; messages: ChatMsg[]; spent: string; autoCap: string; mode: Mode; picks: Partial<Record<MediaKind, string>>; opts: MediaOpts };
+/** `picks.edit` is the image model used when a reference image is attached */
+export type ChatStore = { model: string; messages: ChatMsg[]; spent: string; autoCap: string; mode: Mode; picks: Partial<Record<MediaKind | "edit", string>>; opts: MediaOpts };
 const storeKey = (addr: string) => `arm-aichat:${addr.toLowerCase()}`;
 export const DEFAULT_CAP = 50_000n;
 export function loadChat(addr: string): ChatStore {

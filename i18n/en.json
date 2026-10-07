@@ -2691,5 +2691,18 @@
   "cw.aichat.genLost": "Gave up waiting for the job (it's only charged if it finishes)",
   "cw.aichat.save": "Save",
   "cw.aichat.videoNoPlay": "This video can't play here — tap to open it in the system player",
-  "cw.aichat.searchVoice": "Search voices"
+  "cw.aichat.searchVoice": "Search voices",
+  "cw.aichat.refAdd": "Add a reference image",
+  "cw.aichat.refRemove": "Remove the reference image",
+  "cw.aichat.refImage": "Reference · edit",
+  "cw.aichat.refVideo": "Reference · animate",
+  "cw.aichat.refImageHint": "Say how to change this image",
+  "cw.aichat.refVideoHint": "The video starts from this image",
+  "cw.aichat.uploading": "Uploading…",
+  "cw.aichat.uploadFailed": "Couldn't upload the image",
+  "cw.aichat.ph.imageEdit": "e.g. make it watercolor / turn it into night / add a hat",
+  "cw.aichat.ph.videoRef": "Describe how it moves and how the camera goes…",
+  "cw.aichat.useEdit": "Edit",
+  "cw.aichat.useVideo": "Animate",
+  "cw.aichat.editOnly": "Only these models can edit an image"
 }
