@@ -298,10 +298,12 @@ export class ShootEngine {
           phase: this.phase, score: this.score, gt: this.gt, wall: this.wall, combo: this.combo, enemies: this.enemies.length, kills: this.kills, hits: this.hits,
           spent: this.spent, budget: spawnBudget(this.gt), weapon: this.weapon, weaponT: this.weaponT, fever: this.fever, capsules: this.capsules.length, particles: this.particles.length,
         }),
-        /** drop a capsule right on the ship (picked up next frame) */
-        give: (w: Weapon) => this.capsules.push({ w, x: this.sx, y: this.sy, t: 1 }),
+        /** pick up a weapon right now, as if the ship had flown into its capsule */
+        give: (w: Weapon) => this.pickUp({ w, x: this.sx, y: this.sy, t: 1 }),
         /** jump the combo (e.g. to 39 so the next kill starts fever) */
         combo: (n: number) => { this.combo = n; this.comboT = COMBO_WINDOW; },
+        /** the combo that starts the next fever (a big number holds it off while scripting a video) */
+        feverAt: (n: number) => { this.nextFever = n; },
         start: () => this.hooks.onRequestStart(),
         fx: (k: FxKey, on: boolean) => this.setFx(k, on),
         time: () => this.wall,
