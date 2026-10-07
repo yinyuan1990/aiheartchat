@@ -2704,5 +2704,9 @@
   "cw.aichat.ph.videoRef": "说说图里要怎么动，镜头怎么走…",
   "cw.aichat.useEdit": "改图",
   "cw.aichat.useVideo": "做成视频",
-  "cw.aichat.editOnly": "改图只支持下面这几个模型"
+  "cw.aichat.editOnly": "改图只支持下面这几个模型",
+  "cw.aichat.clearTitle": "清空「{m}」的记录？",
+  "cw.aichat.clearDesc": "只删这台设备上的记录，其他类型不受影响；已付的费用不会退回。",
+  "cw.aichat.clearDescVideo": "只删这台设备上的记录，其他类型不受影响。还在生成的视频会停止等待，没生成完就不会扣钱。",
+  "cw.aichat.clearOk": "清空"
 }

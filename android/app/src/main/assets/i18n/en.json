@@ -2704,5 +2704,9 @@
   "cw.aichat.ph.videoRef": "Describe how it moves and how the camera goes…",
   "cw.aichat.useEdit": "Edit",
   "cw.aichat.useVideo": "Animate",
-  "cw.aichat.editOnly": "Only these models can edit an image"
+  "cw.aichat.editOnly": "Only these models can edit an image",
+  "cw.aichat.clearTitle": "Clear the {m} conversation?",
+  "cw.aichat.clearDesc": "Only this device's history for this tab is removed; other tabs stay. Payments already made aren't refunded.",
+  "cw.aichat.clearDescVideo": "Only this device's history for this tab is removed; other tabs stay. Videos still rendering stop being tracked — they're only charged if they finish.",
+  "cw.aichat.clearOk": "Clear"
 }

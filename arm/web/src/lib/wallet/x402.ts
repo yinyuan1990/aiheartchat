@@ -383,7 +383,14 @@ export function loadChat(addr: string): ChatStore {
 }
 export function saveChat(addr: string, s: ChatStore) {
   try {
-    localStorage.setItem(storeKey(addr), JSON.stringify({ ...s, messages: s.messages.slice(-80) }));
+    // the last 60 of each mode's conversation, in their original order
+    const seen: Record<string, number> = {};
+    const keep = s.messages
+      .slice()
+      .reverse()
+      .filter((m) => (seen[m.kind ?? "chat"] = (seen[m.kind ?? "chat"] ?? 0) + 1) <= 60)
+      .reverse();
+    localStorage.setItem(storeKey(addr), JSON.stringify({ ...s, messages: keep }));
   } catch {}
 }
 

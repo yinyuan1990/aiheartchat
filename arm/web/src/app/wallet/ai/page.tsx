@@ -78,15 +78,20 @@ export default function AiChatPage() {
     setRef(url);
     update((s) => ({ ...s, mode: as }));
   };
-  const [busy, setBusy] = useState(false);
+  // each mode is its own conversation: chat messages have no `kind`, media ones carry theirs
+  const inMode = (m: ChatMsg, md: Mode = mode) => (md === "chat" ? !m.kind : m.kind === md);
+  const shown = useMemo(() => (store?.messages ?? []).filter((m) => inMode(m)), [store, mode]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [busyModes, setBusyModes] = useState<Mode[]>([]);
+  const busy = busyModes.includes(mode);
+  const setBusy = (md: Mode, on: boolean) => setBusyModes((b) => (on ? [...b.filter((x) => x !== md), md] : b.filter((x) => x !== md)));
   const [input, setInput] = useState("");
-  const [sheet, setSheet] = useState<null | "models" | "settings" | "voices">(null);
+  const [sheet, setSheet] = useState<null | "models" | "settings" | "voices" | "clear">(null);
   const [ask, setAsk] = useState<{ amount: bigint; resolve: (ok: boolean) => void } | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
-  const count = store?.messages.length ?? 0;
+  const count = shown.length;
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
-  }, [count, busy]);
+  }, [count, busy, mode]);
 
   const answer = (ok: boolean) => {
     ask?.resolve(ok);
@@ -128,7 +133,7 @@ export default function AiChatPage() {
     const r0 = withRef ? ref : null;
     const mine: ChatMsg = { role: "user", content: q, kind: k, ...(r0 ? { ref: r0 } : {}), at: Date.now() };
     update((s) => ({ ...s, messages: [...s.messages, mine] }));
-    setBusy(true);
+    setBusy(k, true);
     const at = mine.at + 1;
     let parked = false;
     try {
@@ -137,7 +142,7 @@ export default function AiChatPage() {
         setRef(null);
         resumed.current.add(at);
         update((s) => ({ ...s, messages: [...s.messages, { role: "assistant", content: "", kind: k, model: mediaId, cost: job.cost, job, at }] }));
-        setBusy(false);
+        setBusy(k, false);
       });
       if (!r) {
         update((s) => ({ ...s, messages: s.messages.filter((m) => m !== mine) }));
@@ -151,7 +156,7 @@ export default function AiChatPage() {
       if (!parked) update((s) => ({ ...s, messages: [...s.messages, { role: "assistant", content: "", kind: k, at }] }));
       fail(at, e);
     } finally {
-      if (!parked) setBusy(false);
+      if (!parked) setBusy(k, false);
     }
   };
 
@@ -163,7 +168,7 @@ export default function AiChatPage() {
     const mine: ChatMsg = { role: "user", content: q, at: Date.now() };
     const history = [...store.messages.filter((m) => !m.error && !m.kind), mine].slice(-HISTORY).map(({ role, content }) => ({ role, content }));
     update((s) => ({ ...s, messages: [...s.messages, mine] }));
-    setBusy(true);
+    setBusy("chat", true);
     try {
       const r = await aiChat(account, store.model, history, BigInt(store.autoCap), confirm);
       if (!r) {
@@ -181,7 +186,7 @@ export default function AiChatPage() {
       const msg = (e as Error).message;
       update((s) => ({ ...s, messages: [...s.messages, { role: "assistant", content: msg === "locked" ? t("cw.aichat.locked") : msg || t("cw.aichat.failed"), error: true, at: Date.now() }] }));
     } finally {
-      setBusy(false);
+      setBusy("chat", false);
     }
   };
 
@@ -222,6 +227,9 @@ export default function AiChatPage() {
             </span>
             <CaretDown size={14} className="shrink-0 text-muted-foreground" />
           </button>
+          <button type="button" aria-label={t("cw.aichat.clear")} disabled={!count} onClick={() => setSheet("clear")} className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-card ring-1 ring-border/60 transition active:scale-95 disabled:opacity-35">
+            <Trash size={19} />
+          </button>
           <button type="button" aria-label={t("cw.aichat.settings")} onClick={() => setSheet("settings")} className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-card ring-1 ring-border/60 transition active:scale-95">
             <GearSix size={19} />
           </button>
@@ -247,7 +255,7 @@ export default function AiChatPage() {
             </div>
           </div>
         )}
-        {store?.messages.map((m, i) => <Bubble key={`${m.at}-${i}`} m={m} onUse={takeRef} />)}
+        {shown.map((m, i) => <Bubble key={`${m.at}-${i}`} m={m} onUse={takeRef} />)}
         {busy && (
           <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
             <span className="flex items-center gap-2 rounded-[20px] rounded-bl-md bg-card px-4 py-3 ring-1 ring-border/60">
@@ -355,24 +363,34 @@ export default function AiChatPage() {
             </button>
           ))}
         </div>
-        <button
-          type="button"
-          disabled={!count}
-          onClick={() => {
-            update((s) => ({ ...s, messages: [] }));
-            setSheet(null);
-            toast.success(t("cw.aichat.cleared"));
-          }}
-          className="mt-5 flex h-12 w-full items-center justify-center gap-1.5 rounded-2xl bg-muted text-[14px] font-semibold text-down disabled:opacity-40"
-        >
-          <Trash size={16} />
-          {t("cw.aichat.clear")}
-        </button>
-        <p className="mt-4 text-center text-[11px] leading-4 text-muted-foreground">
+        <p className="mt-5 text-center text-[11px] leading-4 text-muted-foreground">
           {t("cw.aichat.poweredBy")}
           <br />
           {t("cw.aichat.risk")}
         </p>
+      </BottomSheet>
+
+      <BottomSheet open={sheet === "clear"} onClose={() => setSheet(null)}>
+        <div className="text-center text-[17px] font-semibold">{t("cw.aichat.clearTitle", { m: t(`cw.aichat.mode.${mode}`) })}</div>
+        <p className="mt-2 text-center text-[13px] leading-5 text-muted-foreground">{t(mode === "video" ? "cw.aichat.clearDescVideo" : "cw.aichat.clearDesc")}</p>
+        <div className="mt-5 grid grid-cols-2 gap-2">
+          <button type="button" onClick={() => setSheet(null)} className="h-14 rounded-2xl bg-muted text-[16px] font-semibold">
+            {t("common.cancel")}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              update((s) => ({ ...s, messages: s.messages.filter((m) => !inMode(m)) }));
+              setSheet(null);
+              toast.success(t("cw.aichat.cleared"));
+            }}
+            className="flex h-14 items-center justify-center gap-1.5 rounded-2xl text-[16px] font-semibold text-white"
+            style={{ background: "#e5484d" }}
+          >
+            <Trash size={17} />
+            {t("cw.aichat.clearOk")}
+          </button>
+        </div>
       </BottomSheet>
 
       <BottomSheet open={!!ask} onClose={() => answer(false)}>

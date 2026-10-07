@@ -222,20 +222,18 @@ function Footer({ m }: { m: ChatMsg }) {
   );
 }
 
-/** small tag above a media prompt so the timeline reads 「图片 · …」, with its reference image if any */
+/** the reference image a media prompt was sent with (each mode is its own conversation, so no mode label) */
 export function KindTag({ kind, refImg }: { kind: MediaKind; refImg?: string }) {
+  if (!refImg) return null;
   const Icon = MODE_ICON[kind];
   return (
     <>
       <span className="mb-0.5 flex items-center justify-end gap-1 text-[11px] text-muted-foreground">
         <Icon size={12} />
-        {t(`cw.aichat.mode.${kind}`)}
-        {refImg && ` · ${t(kind === "video" ? "cw.aichat.refVideo" : "cw.aichat.refImage")}`}
+        {t(kind === "video" ? "cw.aichat.refVideo" : "cw.aichat.refImage")}
       </span>
-      {refImg && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={refSrc(refImg)} alt="" className="mb-1 size-20 rounded-2xl object-cover ring-1 ring-border/60" />
-      )}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={refSrc(refImg)} alt="" className="mb-1 size-20 rounded-2xl object-cover ring-1 ring-border/60" />
     </>
   );
 }
