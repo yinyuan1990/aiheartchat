@@ -5,8 +5,10 @@
  * signature is passed through untouched. The request body is rebuilt from validated fields the same way every time,
  * so the unpaid quote and the paid retry carry identical bodies (the quote depends on it).
  */
+import { randomUUID } from "node:crypto";
 
-const UPSTREAM = "https://blockrun.ai/api/v1";
+const ORIGIN = "https://blockrun.ai";
+const UPSTREAM = `${ORIGIN}/api/v1`;
 
 export type X402Model = {
   id: string;
@@ -61,17 +63,17 @@ export async function x402Models(): Promise<X402Model[]> {
 
 // per-IP budget: free models cost us nothing but BlockRun may throttle this server's IP for everyone
 const WINDOW_MS = 60_000;
-const PER_WINDOW = 30;
 const hits = new Map<string, { at: number; n: number }>();
-function allow(ip: string): boolean {
+/** `key` is ip + bucket: calls (quote + paid retry) get 30 a minute, job / relay polls 120 */
+function allow(key: string, perWindow = 30): boolean {
   const now = Date.now();
-  const h = hits.get(ip);
+  const h = hits.get(key);
   if (!h || now - h.at > WINDOW_MS) {
-    hits.set(ip, { at: now, n: 1 });
+    hits.set(key, { at: now, n: 1 });
     if (hits.size > 20_000) for (const [k, v] of hits) if (now - v.at > WINDOW_MS) hits.delete(k);
     return true;
   }
-  return ++h.n <= PER_WINDOW;
+  return ++h.n <= perWindow;
 }
 
 const MODEL_RE = /^[a-z0-9][\w.\-]*\/[\w.\-:+]+$/i;
@@ -113,21 +115,24 @@ const decodeB64Json = (v: string | null): Record<string, unknown> | null => {
   }
 };
 
+export type Relayed = { status: number; json: unknown };
+const badPayment = (p: string | undefined) => p != null && (p.length > 8_000 || !/^[A-Za-z0-9+/=]+$/.test(p));
+
 /**
- * One chat completion. Without `payment` BlockRun answers free models directly and quotes paid ones with a 402
- * (body: x402Version / accepts / price; `resource` added from the PAYMENT-REQUIRED header). With `payment` (the
- * base64 x402 payload) it verifies, runs and settles; the settlement receipt comes back as `_payment`.
+ * One call to BlockRun. Without `payment` paid routes answer 402 (body: x402Version / accepts / price; `resource`
+ * added from the PAYMENT-REQUIRED header). With `payment` (the base64 x402 payload) BlockRun verifies, runs and
+ * settles; the settlement receipt comes back as `_payment`. 202 (async jobs) passes through with its `poll_url`.
  */
-export async function x402Chat(raw: unknown, payment: string | undefined, ip: string): Promise<{ status: number; json: unknown }> {
-  if (!allow(ip)) return { status: 429, json: { error: "too many requests" } };
-  const body = cleanBody(raw);
-  if (typeof body === "string") return { status: 400, json: { error: body } };
-  if (payment != null && (payment.length > 8_000 || !/^[A-Za-z0-9+/=]+$/.test(payment))) return { status: 400, json: { error: "bad payment header" } };
-  const headers: Record<string, string> = { "content-type": "application/json" };
-  if (payment) headers["PAYMENT-SIGNATURE"] = payment;
+async function upstream(url: string, init: { method: "GET" | "POST"; body?: object; payment?: string; timeoutMs: number }): Promise<Relayed> {
+  const headers: Record<string, string> = {};
+  if (init.body) headers["content-type"] = "application/json";
+  if (init.payment) {
+    headers["PAYMENT-SIGNATURE"] = init.payment;
+    headers["X-PAYMENT"] = init.payment;
+  }
   let r: Response;
   try {
-    r = await fetch(`${UPSTREAM}/chat/completions`, { method: "POST", headers, body: JSON.stringify(body), signal: AbortSignal.timeout(130_000) });
+    r = await fetch(url, { method: init.method, headers, body: init.body ? JSON.stringify(init.body) : undefined, signal: AbortSignal.timeout(init.timeoutMs) });
   } catch (e) {
     return { status: 502, json: { error: `blockrun unreachable: ${(e as Error).message}` } };
   }
@@ -138,7 +143,199 @@ export async function x402Chat(raw: unknown, payment: string | undefined, ip: st
     return { status: 402, json: { ...json, resource: json.resource ?? req?.resource ?? null } };
   }
   if (r.ok) {
-    return { status: 200, json: { ...json, _payment: decodeB64Json(r.headers.get("payment-response")), _settled: r.headers.get("x-payment-settled") !== "false", _served: r.headers.get("x-served-model") } };
+    return { status: r.status, json: { ...json, _payment: decodeB64Json(r.headers.get("payment-response")), _settled: r.headers.get("x-payment-settled") !== "false", _served: r.headers.get("x-served-model") } };
   }
   return { status: r.status >= 500 ? 502 : r.status, json };
+}
+
+/**
+ * nginx cuts /api/ requests at 60s, but music and long answers take longer (and the paid call can't be redone).
+ * A call still running after HANDOFF_MS is parked under a random id and answered 202 `{ relay: id }`; the wallet
+ * then waits on GET /api/x402/relay/:id, which long-polls until the parked call finishes.
+ */
+const HANDOFF_MS = 45_000;
+const parked = new Map<string, { at: number; p: Promise<Relayed>; v?: Relayed }>();
+const sleep = (ms: number) => new Promise<null>((r) => setTimeout(() => r(null), ms));
+async function handoff(p: Promise<Relayed>): Promise<Relayed> {
+  const v = await Promise.race([p, sleep(HANDOFF_MS)]);
+  if (v) return v;
+  const now = Date.now();
+  for (const [k, j] of parked) if (now - j.at > 20 * 60_000) parked.delete(k);
+  const id = randomUUID();
+  const job: { at: number; p: Promise<Relayed>; v?: Relayed } = { at: now, p };
+  void p.then((x) => (job.v = x));
+  parked.set(id, job);
+  return { status: 202, json: { relay: id } };
+}
+export async function x402Relay(id: string, ip: string): Promise<Relayed> {
+  if (!allow(`${ip}:poll`, 120)) return { status: 429, json: { error: "too many requests" } };
+  const job = parked.get(id);
+  if (!job) return { status: 404, json: { error: "unknown or expired relay id" } };
+  const v = job.v ?? (await Promise.race([job.p, sleep(25_000)]));
+  return v ?? { status: 202, json: { relay: id } };
+}
+
+/** One chat completion; see `upstream` for the payment round. */
+export async function x402Chat(raw: unknown, payment: string | undefined, ip: string): Promise<Relayed> {
+  if (!allow(ip)) return { status: 429, json: { error: "too many requests" } };
+  const body = cleanBody(raw);
+  if (typeof body === "string") return { status: 400, json: { error: body } };
+  if (badPayment(payment)) return { status: 400, json: { error: "bad payment header" } };
+  return handoff(upstream(`${UPSTREAM}/chat/completions`, { method: "POST", body, payment, timeoutMs: 170_000 }));
+}
+
+// ---------- media: image / video / speech / music / sound effects ----------
+
+export type MediaKind = "image" | "video" | "speech" | "music" | "sfx";
+export type MediaModel = {
+  id: string;
+  kind: MediaKind;
+  name: string;
+  owner: string;
+  desc: string;
+  /** USD before BlockRun's 5% margin, per `unit` */
+  price: number;
+  unit: "image" | "second" | "1k" | "track" | "call";
+  /** image: "WxH" with its own price */
+  sizes?: { size: string; price: number }[];
+  defSec?: number;
+  maxSec?: number;
+};
+export type MediaVoice = { id: string; name: string; desc: string; gender: string; accent: string };
+
+const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+const str = (v: unknown, d = "") => (typeof v === "string" ? v : d);
+const getJson = async (path: string) => {
+  const r = await fetch(`${UPSTREAM}${path}`, { signal: AbortSignal.timeout(12_000) });
+  if (!r.ok) throw new Error(`blockrun ${path} ${r.status}`);
+  return ((await r.json()) as { data?: Record<string, unknown>[] }).data ?? [];
+};
+const base = (m: Record<string, unknown>, kind: MediaKind) => ({
+  id: str(m.id),
+  kind,
+  name: str(m.name, str(m.id)),
+  owner: str(m.owned_by, str(m.id).split("/")[0]),
+  desc: str(m.description).slice(0, 200),
+});
+
+let mediaCache: { at: number; v: { models: MediaModel[]; voices: MediaVoice[] } } | null = null;
+export async function x402Media(): Promise<{ models: MediaModel[]; voices: MediaVoice[] }> {
+  if (mediaCache && Date.now() - mediaCache.at < 10 * 60_000) return mediaCache.v;
+  try {
+    const [images, videos, music, all, voices] = await Promise.all([getJson("/images/models"), getJson("/video/models"), getJson("/audio/models"), getJson("/models"), getJson("/audio/voices")]);
+    const models: MediaModel[] = [];
+    for (const m of images) {
+      const p = (m.pricing ?? {}) as Record<string, unknown>;
+      const sizes = (Array.isArray(p.sizes) ? (p.sizes as Record<string, unknown>[]) : []).flatMap((s) => (num(s.width) && num(s.height) && num(s.price) != null ? [{ size: `${s.width}x${s.height}`, price: num(s.price)! }] : []));
+      const price = num(p.per_image);
+      if (m.available !== false && price != null) models.push({ ...base(m, "image"), price, unit: "image", sizes: sizes.length ? sizes : [{ size: "1024x1024", price }] });
+    }
+    for (const m of videos) {
+      const p = (m.pricing ?? {}) as Record<string, unknown>;
+      const price = num(p.per_second);
+      if (m.available !== false && price != null) models.push({ ...base(m, "video"), price, unit: "second", defSec: num(p.default_duration_seconds) ?? 5, maxSec: num(p.max_duration_seconds) ?? 10 });
+    }
+    for (const m of music) {
+      const price = num(((m.pricing ?? {}) as Record<string, unknown>).per_track);
+      if (m.available !== false && price != null) models.push({ ...base(m, "music"), price, unit: "track" });
+    }
+    for (const m of all) {
+      const cats = Array.isArray(m.categories) ? (m.categories as string[]) : [];
+      const p = (m.pricing ?? {}) as Record<string, unknown>;
+      if (m.available === false) continue;
+      // ElevenLabs voices only: the voice picker below lists ElevenLabs voices
+      if (cats.includes("tts") && str(m.id).startsWith("elevenlabs/") && num(p.per_1k_chars) != null) models.push({ ...base(m, "speech"), price: num(p.per_1k_chars)!, unit: "1k" });
+      if (cats.includes("sound_effect") && num(p.per_generation) != null) models.push({ ...base(m, "sfx"), price: num(p.per_generation)!, unit: "call" });
+    }
+    const vs: MediaVoice[] = voices.flatMap((v) => {
+      const id = str(v.alias) || str(v.voice_id);
+      const [name, desc = ""] = str(v.name, id).split(" - ");
+      const l = (v.labels ?? {}) as Record<string, unknown>;
+      return id ? [{ id, name, desc, gender: str(l.gender), accent: str(l.accent) }] : [];
+    });
+    if (!models.length) throw new Error("blockrun: no media models");
+    mediaCache = { at: Date.now(), v: { models, voices: vs } };
+    return mediaCache.v;
+  } catch (e) {
+    if (mediaCache) return mediaCache.v;
+    throw e;
+  }
+}
+
+const MEDIA_PATH: Record<MediaKind, string> = { image: "/images/generations", video: "/videos/generations", speech: "/audio/speech", music: "/audio/generations", sfx: "/audio/sound-effects" };
+const MEDIA_TIMEOUT: Record<MediaKind, number> = { image: 240_000, video: 90_000, speech: 120_000, music: 330_000, sfx: 120_000 };
+const text = (v: unknown, max: number) => (typeof v === "string" && v.trim() && v.length <= max ? v.trim() : null);
+
+function cleanMedia(kind: MediaKind, raw: unknown): object | string {
+  const b = (raw ?? {}) as Record<string, unknown>;
+  const model = typeof b.model === "string" && MODEL_RE.test(b.model) ? b.model : null;
+  if (kind === "sfx") {
+    const t = text(b.text, 1_000);
+    if (!t) return "bad text";
+    const body: Record<string, unknown> = { model: model ?? "elevenlabs/sound-effects", text: t };
+    if (b.duration_seconds != null) {
+      const d = Number(b.duration_seconds);
+      if (!Number.isFinite(d) || d < 0.5 || d > 22) return "bad duration";
+      body.duration_seconds = d;
+    }
+    return body;
+  }
+  if (!model) return "bad model";
+  if (kind === "speech") {
+    const input = text(b.input, 5_000);
+    if (!input) return "bad input";
+    if (typeof b.voice !== "string" || !/^[\w-]{2,40}$/.test(b.voice)) return "bad voice";
+    return { model, input, voice: b.voice, response_format: "mp3" };
+  }
+  const prompt = text(b.prompt, kind === "image" ? 4_000 : 2_000);
+  if (!prompt) return "bad prompt";
+  if (kind === "image") {
+    if (b.size != null && (typeof b.size !== "string" || !/^\d{3,4}x\d{3,4}$/.test(b.size))) return "bad size";
+    return b.size ? { model, prompt, size: b.size, n: 1 } : { model, prompt, n: 1 };
+  }
+  if (kind === "video") {
+    const d = Number(b.duration_seconds);
+    if (!Number.isInteger(d) || d < 1 || d > 30) return "bad duration";
+    return { model, prompt, duration_seconds: d };
+  }
+  const instrumental = b.instrumental !== false;
+  const lyrics = instrumental ? null : text(b.lyrics, 3_000);
+  return lyrics ? { model, prompt, instrumental, lyrics } : { model, prompt, instrumental };
+}
+
+export const isMediaKind = (k: string): k is MediaKind => k in MEDIA_PATH;
+export async function x402Generate(kind: MediaKind, raw: unknown, payment: string | undefined, ip: string): Promise<Relayed> {
+  if (!allow(ip)) return { status: 429, json: { error: "too many requests" } };
+  const body = cleanMedia(kind, raw);
+  if (typeof body === "string") return { status: 400, json: { error: body } };
+  if (badPayment(payment)) return { status: 400, json: { error: "bad payment header" } };
+  return handoff(upstream(`${UPSTREAM}${MEDIA_PATH[kind]}`, { method: "POST", body, payment, timeoutMs: MEDIA_TIMEOUT[kind] }));
+}
+
+/** BlockRun's own async jobs (video, slow images / music): poll with the SAME payment header; it settles on completion. */
+const POLL_RE = /^\/api\/v1\/(videos|images|audio)\/generations\/[\w-]{1,400}(\?[\w\-.%=&]{0,800})?$/;
+export async function x402Job(pollUrl: string | undefined, payment: string | undefined, ip: string): Promise<Relayed> {
+  if (!allow(`${ip}:poll`, 120)) return { status: 429, json: { error: "too many requests" } };
+  if (!pollUrl || !POLL_RE.test(pollUrl)) return { status: 400, json: { error: "bad poll url" } };
+  if (badPayment(payment)) return { status: 400, json: { error: "bad payment header" } };
+  return upstream(`${ORIGIN}${pollUrl}`, { method: "GET", payment, timeoutMs: 40_000 });
+}
+
+/** Generated files live under blockrun.ai/api/media/…, which mainland users can't always reach: stream them through. */
+const MEDIA_FILE_RE = /^media\/[a-z]+\/\d{4}\/\d{2}\/\d{2}\/[\w\-.]{1,200}$/;
+export async function x402MediaFile(path: string, range: string | undefined): Promise<Response> {
+  if (!MEDIA_FILE_RE.test(path)) return new Response("bad path", { status: 400 });
+  let r: Response;
+  try {
+    r = await fetch(`${ORIGIN}/api/media/${path}`, { headers: range ? { range } : {}, signal: AbortSignal.timeout(60_000) });
+  } catch {
+    return new Response("upstream unreachable", { status: 502 });
+  }
+  const headers = new Headers();
+  for (const h of ["content-type", "content-length", "content-range", "accept-ranges", "etag", "last-modified"]) {
+    const v = r.headers.get(h);
+    if (v) headers.set(h, v);
+  }
+  if (r.ok) headers.set("cache-control", "public, max-age=604800, immutable");
+  return new Response(r.body, { status: r.status, headers });
 }

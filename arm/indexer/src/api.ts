@@ -34,7 +34,7 @@ import { calloutCaller, calloutCallers, calloutFeed, pinCaller } from "./callout
 import { isMint, pumpCandles, pumpCoin, pumpHolders, pumpList, pumpTrades } from "./pump.js";
 import { isEvmAddr, isMarketChain, kyberBuild, kyberQuote, marketCandles, marketList, marketPrices, marketSearch, marketToken, marketTrades, type MarketPrice } from "./markets.js";
 import { earnPositions, earnVaults } from "./earn.js";
-import { x402Chat, x402Models } from "./x402.js";
+import { isMediaKind, x402Chat, x402Generate, x402Job, x402Media, x402MediaFile, x402Models, x402Relay } from "./x402.js";
 
 export const app = new Hono();
 // paged list endpoints report the full row count in X-Total-Count; expose it so the browser can read it
@@ -856,6 +856,26 @@ app.post("/api/x402/chat", async (c) => {
   const r = await x402Chat(await c.req.json().catch(() => null), c.req.header("x-payment-signature"), clientIp(c) || "?");
   return c.json(r.json as object, r.status as 200);
 });
+// image / video / speech / music / sound effects, same payment round as chat
+app.get("/api/x402/media-models", async (c) => {
+  const r = await mktRoute(x402Media);
+  return r.ok ? c.json(r.v) : c.json({ error: r.error }, r.status);
+});
+app.post("/api/x402/gen/:kind", async (c) => {
+  const kind = c.req.param("kind");
+  if (!isMediaKind(kind)) return c.json({ error: "unknown kind" }, 400);
+  const r = await x402Generate(kind, await c.req.json().catch(() => null), c.req.header("x-payment-signature"), clientIp(c) || "?");
+  return c.json(r.json as object, r.status as 200);
+});
+app.get("/api/x402/job", async (c) => {
+  const r = await x402Job(c.req.query("u"), c.req.header("x-payment-signature"), clientIp(c) || "?");
+  return c.json(r.json as object, r.status as 200);
+});
+app.get("/api/x402/relay/:id", async (c) => {
+  const r = await x402Relay(c.req.param("id"), clientIp(c) || "?");
+  return c.json(r.json as object, r.status as 200);
+});
+app.get("/api/x402/media/*", (c) => x402MediaFile(c.req.path.slice("/api/x402/media/".length), c.req.header("range")));
 
 // Perp radar (10.2): Hyperliquid funding / OI dashboard + whale positions and liquidation map.
 // 「AI 合约」 relays (hl.ts): Hyperliquid info / signed exchange actions, and the user's own LLM key (never stored)
