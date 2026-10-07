@@ -34,6 +34,7 @@ import { calloutCaller, calloutCallers, calloutFeed, pinCaller } from "./callout
 import { isMint, pumpCandles, pumpCoin, pumpHolders, pumpList, pumpTrades } from "./pump.js";
 import { isEvmAddr, isMarketChain, kyberBuild, kyberQuote, marketCandles, marketList, marketPrices, marketSearch, marketToken, marketTrades, type MarketPrice } from "./markets.js";
 import { earnPositions, earnVaults } from "./earn.js";
+import { x402Chat, x402Models } from "./x402.js";
 
 export const app = new Hono();
 // paged list endpoints report the full row count in X-Total-Count; expose it so the browser can read it
@@ -844,6 +845,16 @@ app.get("/api/earn/positions/:user", async (c) => {
   if (!isEvmAddr(user)) return c.json({ error: "bad address" }, 400);
   const r = await mktRoute(() => earnPositions(getAddress(user)));
   return r.ok ? c.json(r.v) : c.json({ error: r.error }, r.status);
+});
+
+// 「AI 模型」(x402.ts): BlockRun chat models paid per call in Base USDC; the wallet signs, this only relays
+app.get("/api/x402/models", async (c) => {
+  const r = await mktRoute(x402Models);
+  return r.ok ? c.json(r.v) : c.json({ error: r.error }, r.status);
+});
+app.post("/api/x402/chat", async (c) => {
+  const r = await x402Chat(await c.req.json().catch(() => null), c.req.header("x-payment-signature"), clientIp(c) || "?");
+  return c.json(r.json as object, r.status as 200);
 });
 
 // Perp radar (10.2): Hyperliquid funding / OI dashboard + whale positions and liquidation map.

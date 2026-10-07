@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { formatUnits } from "viem";
-import { ArrowDown, ArrowUp, ArrowsLeftRight, CaretDown, CaretRight, CheckCircle, Copy, Eye, EyeSlash, GasPump, Key, PencilSimple, Plus, ArrowSquareOut, Scan, Trash, Wallet as WalletIcon } from "@phosphor-icons/react";
+import { ArrowDown, ArrowUp, ArrowsLeftRight, CaretDown, CaretRight, CheckCircle, Copy, Eye, EyeSlash, GasPump, Key, PencilSimple, Plus, ArrowSquareOut, Scan, Sparkle, Trash, Wallet as WalletIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { TokenAvatar, WalletDot } from "@/components/shared";
 import { useWallet } from "@/lib/api";
@@ -288,25 +288,40 @@ export default function WalletHome() {
   );
 }
 
-/** Entry to 「USDC 生息」(Morpho vaults on Base), shown on every chain. */
+/** Entries to 「USDC 生息」(Morpho vaults on Base) and 「AI 模型」(BlockRun, paid in Base USDC), shown on every chain. */
 function EarnBanner() {
   const rates = useVaultRates();
   const best = Math.max(0, ...(rates.data ?? []).map((r) => r.netApy ?? 0));
   return (
-    <Link href="/wallet/earn" className="mx-4 mt-3 flex items-center gap-3 rounded-[20px] bg-card px-4 py-3 ring-1 ring-border/70 transition active:scale-[0.99]">
-      <span className="relative shrink-0">
-        <TokenAvatar symbol="USDC" seed="base-usdc" logo={USDC_LOGO} size={38} className="rounded-full" />
-        <span className="absolute -right-0.5 -bottom-0.5">
-          <ChainGlyph chain={EARN_CHAIN} size={16} />
+    <div className="mx-4 mt-3 divide-y divide-border/60 overflow-hidden rounded-[20px] bg-card ring-1 ring-border/70">
+      <Link href="/wallet/earn" className="flex items-center gap-3 px-4 py-3 transition active:bg-muted">
+        <span className="relative shrink-0">
+          <TokenAvatar symbol="USDC" seed="base-usdc" logo={USDC_LOGO} size={38} className="rounded-full" />
+          <span className="absolute -right-0.5 -bottom-0.5">
+            <ChainGlyph chain={EARN_CHAIN} size={16} />
+          </span>
         </span>
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-[15px] font-semibold">{t("cw.earn.title")}</span>
-        <span className="block truncate text-[12px] text-muted-foreground">{t("cw.earn.homeDesc")}</span>
-      </span>
-      {best > 0 && <span className="shrink-0 rounded-full bg-up/10 px-2.5 py-1 font-mono text-[12px] font-semibold text-up">{t("cw.earn.homeApy", { v: `${(best * 100).toFixed(2)}%` })}</span>}
-      <CaretRight size={15} className="shrink-0 text-muted-foreground" />
-    </Link>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px] font-semibold">{t("cw.earn.title")}</span>
+          <span className="block truncate text-[12px] text-muted-foreground">{t("cw.earn.homeDesc")}</span>
+        </span>
+        {best > 0 && <span className="shrink-0 rounded-full bg-up/10 px-2.5 py-1 font-mono text-[12px] font-semibold text-up">{t("cw.earn.homeApy", { v: `${(best * 100).toFixed(2)}%` })}</span>}
+        <CaretRight size={15} className="shrink-0 text-muted-foreground" />
+      </Link>
+      <Link href="/wallet/ai" className="flex items-center gap-3 px-4 py-3 transition active:bg-muted">
+        <span className="flex size-[38px] shrink-0 items-center justify-center rounded-full text-white" style={{ background: "linear-gradient(145deg, #4b2bd6, #0052ff)" }}>
+          <Sparkle size={20} weight="fill" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px] font-semibold">{t("cw.aichat.title")}</span>
+          <span className="block truncate text-[12px] text-muted-foreground">{t("cw.aichat.homeDesc")}</span>
+        </span>
+        <span className="shrink-0 rounded-full px-2.5 py-1 text-[12px] font-semibold" style={{ background: "rgba(75,43,214,0.1)", color: "#4b2bd6" }}>
+          {t("cw.aichat.homeBadge")}
+        </span>
+        <CaretRight size={15} className="shrink-0 text-muted-foreground" />
+      </Link>
+    </div>
   );
 }
 
