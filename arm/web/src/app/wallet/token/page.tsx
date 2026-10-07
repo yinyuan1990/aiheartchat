@@ -27,7 +27,9 @@ import { costBasis, useStar, useViewers } from "@/lib/wallet/positions";
 import { BottomNav, BottomSheet, ChainGlyph, ChainPill, Num, Pct, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
 
 const AI_GRADIENT = "linear-gradient(90deg, #7c3aed, #2563eb)";
-import { MARKET_CHAINS, isMarketChain, useMarketList, type MarketChainKey, type MarketTab } from "@/lib/wallet/market";
+import { MARKET_CHAINS, isMarketChain, useMarketList, useMarketPrices, type MarketChainKey, type MarketTab } from "@/lib/wallet/market";
+import { STOCKS, stockName } from "@/lib/wallet/stocks";
+import { StockNotice } from "@/components/wallet/stocks";
 
 export default function TokenRoute() {
   return (
@@ -44,13 +46,16 @@ function TokenRouteInner() {
 
 /* ───────────── list ───────────── */
 
-type Market = "arm" | "pump" | MarketChainKey;
+type Market = "arm" | "pump" | "stocks" | MarketChainKey;
 const MARKET_KEY = "arm.wallet.market";
-const MARKETS: { key: Market; chain: string; label: string; sub: string }[] = [
+/** `label` is shown as is; `labelKey` is translated at render time */
+const MARKETS: { key: Market; chain: string; label: string; labelKey?: string; sub: string }[] = [
   { key: "arm", chain: "arc", label: "Arm", sub: "cw.token.marketArmSub" },
   { key: "pump", chain: "sol", label: "pump", sub: "cw.token.marketPumpSub" },
+  { key: "stocks", chain: "bsc", label: "", labelKey: "cw.stocks.market", sub: "cw.stocks.marketSub" },
   ...MARKET_CHAINS.map((k) => ({ key: k, chain: k, label: chainByKey(k).name, sub: "cw.token.marketDexSub" })),
 ];
+const marketLabel = (m: (typeof MARKETS)[number]) => (m.labelKey ? t(m.labelKey) : m.label);
 const isMarket = (m: string | null): m is Market => !!m && MARKETS.some((x) => x.key === m);
 const marketOfChain = (chainKey: string): Market => (chainKey === "sol" ? "pump" : isMarketChain(chainKey) ? chainKey : "arm");
 
@@ -85,11 +90,11 @@ function Markets() {
             <Link href="/wallet/perp" style={{ background: AI_GRADIENT }} className="flex h-9 items-center gap-1 rounded-full px-3 text-[13px] font-semibold whitespace-nowrap text-white">
               {t("cw.token.aiPerps")}
             </Link>
-            <ChainPill chain={{ ...chainByKey(info.chain), name: info.label }} onClick={() => setPicker(true)} />
+            <ChainPill chain={{ ...chainByKey(info.chain), name: marketLabel(info) }} onClick={() => setPicker(true)} />
           </>
         }
       />
-      {cur === "pump" ? <PumpList /> : cur === "arm" ? <TokenList /> : <EvmList key={cur} chain={cur} />}
+      {cur === "pump" ? <PumpList /> : cur === "arm" ? <TokenList /> : cur === "stocks" ? <StockList /> : <EvmList key={cur} chain={cur} />}
       <BottomNav />
       <BottomSheet open={picker} onClose={() => setPicker(false)}>
         <div className="mb-2 text-[16px] font-semibold">{t("cw.token.chooseMarket")}</div>
@@ -99,7 +104,7 @@ function Markets() {
               <button type="button" onClick={() => pick(m.key)} className={cn("flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition active:bg-muted", cur === m.key && "bg-muted")}>
                 <ChainGlyph chain={chainByKey(m.chain)} size={30} />
                 <div className="min-w-0 flex-1">
-                  <div className="text-[15px] font-semibold">{m.label}</div>
+                  <div className="text-[15px] font-semibold">{marketLabel(m)}</div>
                   <div className="truncate text-[12px] text-muted-foreground">{t(m.sub)}</div>
                 </div>
                 {cur === m.key && <Check size={18} weight="bold" className="text-up" />}
@@ -183,6 +188,54 @@ function EvmList({ chain }: { chain: MarketChainKey }) {
         ))}
         {list.isError && <li className="py-10 text-center text-[13px] text-muted-foreground">{t("cw.token.marketUnavailable")}</li>}
         {!list.isLoading && !list.isError && rows.length === 0 && <li className="py-10 text-center text-[13px] text-muted-foreground">{t("cw.coin.notFound")}</li>}
+      </ul>
+    </>
+  );
+}
+
+/** 美股: the whitelisted bStocks, opened on the BNB Chain market page */
+function StockList() {
+  const [q, setQ] = useState("");
+  const prices = useMarketPrices("bsc", STOCKS.map((s) => s.address.toLowerCase()));
+  const rows = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    return STOCKS.filter((x) => !s || [x.ticker, x.symbol, x.name, x.zh].some((v) => v.toLowerCase().includes(s)) || x.address.toLowerCase() === s);
+  }, [q]);
+  return (
+    <>
+      <div className="px-4">
+        <div className="flex h-11 items-center gap-2 rounded-2xl bg-card px-3 ring-1 ring-border/60">
+          <MagnifyingGlass size={18} className="text-muted-foreground" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("cw.stocks.search")} className="flex-1 bg-transparent text-[15px] outline-none" />
+        </div>
+        <StockNotice className="mt-3" />
+      </div>
+      <ul className="mt-2 flex-1 divide-y divide-border/50 px-4">
+        {rows.map((s) => {
+          const p = prices.data?.[s.address.toLowerCase()];
+          return (
+            <li key={s.address}>
+              <Link href={`/wallet/market?chain=bsc&address=${s.address.toLowerCase()}`} className="-mx-2 flex items-center gap-3 rounded-2xl px-2 py-3 transition active:bg-muted">
+                <TokenAvatar symbol={s.ticker} seed={s.address} logo={tokenIcon("bsc", s.address.toLowerCase(), p?.image ?? null)} size={42} className="rounded-full" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate text-[15px] font-semibold">{s.ticker}</span>
+                    {s.etf && <span className="shrink-0 rounded-md bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">ETF</span>}
+                  </div>
+                  <div className="mt-0.5 truncate text-[12px] text-muted-foreground">
+                    {stockName(s)} · {s.symbol}
+                  </div>
+                </div>
+                <div className="text-right">
+                  {prices.isLoading ? <span className="inline-block h-4 w-14 animate-pulse rounded bg-muted" /> : <Num value={p?.priceUsd != null ? usd(p.priceUsd) : "—"} className="text-[14px] font-medium" />}
+                  <div>{p?.change24h != null ? <Pct value={p.change24h} className="text-[12px]" /> : <span className="text-[12px] text-muted-foreground">—</span>}</div>
+                </div>
+              </Link>
+            </li>
+          );
+        })}
+        {prices.isError && <li className="py-3 text-center text-[12px] text-muted-foreground">{t("cw.token.marketUnavailable")}</li>}
+        {rows.length === 0 && <li className="py-10 text-center text-[13px] text-muted-foreground">{t("cw.coin.notFound")}</li>}
       </ul>
     </>
   );

@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { TokenAvatar } from "@/components/shared";
 import { fmtNum, shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { chainByKey, explorerToken, explorerTx, nativeIcon, publicClientFor, type WalletChain } from "@/lib/wallet/chains";
+import { chainByKey, explorerToken, explorerTx, nativeIcon, publicClientFor, type StableToken, type WalletChain } from "@/lib/wallet/chains";
 import { copyText, shareText } from "@/lib/wallet/native";
 import { t } from "@/lib/wallet/i18n";
 import { tokenIcon } from "@/lib/wallet/assets";
@@ -19,6 +19,9 @@ import { costBasis, logFill, useFills, useStar, useViewers } from "@/lib/wallet/
 import { useVault } from "@/components/wallet/wallet-context";
 import { AboutCard, CoinChartPanel, CoinFrame, CoinHeader, CoinTabs, CoinTopBar, groupWorthy, HolderRows, MarkerSheet, PositionCard, StatsCard, TradeBar, TradeRows, allInterval, compactUsd, quickAmount, setQuickAmount, usd, useMarkers, type MarkTrade } from "@/components/wallet/coin";
 import { BottomSheet, PrimaryButton, TopBar } from "@/components/wallet/ui";
+import { StockNotice } from "@/components/wallet/stocks";
+import { stockName, stockOf } from "@/lib/wallet/stocks";
+import { USDT_LOGO } from "@/lib/wallet/assets";
 
 export default function MarketRoute() {
   return (
@@ -68,6 +71,7 @@ function useBalances(chain: WalletChain, token: string, me?: string) {
 
 function EvmCoin({ chainKey, address }: { chainKey: string; address: string }) {
   const chain = chainByKey(chainKey);
+  const stock = stockOf(chainKey, address);
   const { active } = useVault();
   const me = active?.address;
   const tq = useMarketToken(chainKey, address);
@@ -124,7 +128,8 @@ function EvmCoin({ chainKey, address }: { chainKey: string; address: string }) {
         group={groupWorthy({ mcapUsd: tk.mcapUsd ?? tk.fdvUsd })}
       />
       <div className="flex-1 pb-28">
-        <CoinHeader image={tokenIcon(chainKey, tk.address, tk.image)} seed={address} symbol={tk.symbol} name={tk.name} chain={chain} address={address} twitter={tk.socials.twitter} priceUsd={price} change={tk.changes.h24} holders={tk.holders} extra={<span className="truncate text-[12px]">{tk.dex}{tk.dexLabel ? ` ${tk.dexLabel}` : ""} · {tk.symbol}/{tk.quote.symbol}</span>} />
+        <CoinHeader image={tokenIcon(chainKey, tk.address, tk.image)} seed={address} symbol={tk.symbol} name={stock ? `${stockName(stock)} · ${stock.ticker}` : tk.name} chain={chain} address={address} twitter={tk.socials.twitter} priceUsd={price} change={tk.changes.h24} holders={tk.holders} extra={<span className="truncate text-[12px]">{tk.dex}{tk.dexLabel ? ` ${tk.dexLabel}` : ""} · {tk.symbol}/{tk.quote.symbol}</span>} />
+        {stock && <StockNotice className="mx-4 mt-3" />}
         <CoinChartPanel alertKey={`${chainKey}:${address}`} candles={chart} loading={candles.isLoading} interval={iv} onInterval={setIv} priceUsd={price} avg={knownCost != null && amount > 0 ? knownCost / amount : null} markers={mk.markers} onMarker={mk.onMarker} />
         {me && amount > 0 && price != null && <PositionCard valueUsd={amount * price} costUsd={knownCost} amount={amount} symbol={tk.symbol} supply={supply} avg={knownCost != null ? knownCost / amount : null} onShare={share} />}
         <StatsCard
@@ -219,6 +224,7 @@ function EvmCoin({ chainKey, address }: { chainKey: string; address: string }) {
             native={bal.data?.native ?? 0n}
             tokRaw={bal.data?.bal ?? 0n}
             decimals={decimals}
+            stable={stock ? chain.stables.find((s) => s.symbol === "USDT") : undefined}
             onDone={() => setSheet(null)}
           />
         )}
@@ -229,21 +235,42 @@ function EvmCoin({ chainKey, address }: { chainKey: string; address: string }) {
 
 const SLIPS = [1, 3, 5, 10] as const;
 const STEP_LABEL: Record<MarketStep, string> = { approving: "cw.market.stepApproveSell", building: "cw.coin.stepBuilding", swapping: "cw.coin.stepSwapping", confirming: "cw.coin.stepConfirming" };
+const STABLE_QUICK = ["10", "50", "100", "500"];
 
-function EvmTradeSheet({ chain, token, side, quick, onSide, native, tokRaw, decimals, onDone }: { chain: WalletChain; token: MarketToken; side: "buy" | "sell"; quick: boolean; onSide: (s: "buy" | "sell") => void; native: bigint; tokRaw: bigint; decimals: number; onDone: () => void }) {
+/**
+ * Buy / sell against the chain's native coin, or against `stable` (USDT for 美股) when given; the sheet then lets the
+ * user switch between the two and defaults to the stablecoin.
+ */
+function EvmTradeSheet({ chain, token, side, quick, onSide, native, tokRaw, decimals, stable, onDone }: { chain: WalletChain; token: MarketToken; side: "buy" | "sell"; quick: boolean; onSide: (s: "buy" | "sell") => void; native: bigint; tokRaw: bigint; decimals: number; stable?: StableToken; onDone: () => void }) {
   const { account, active } = useVault();
   const qc = useQueryClient();
   const buy = side === "buy";
   const nc = chain.chain.nativeCurrency;
-  const presets = QUICK[chain.key] ?? QUICK.eth;
-  const [amount, setAmount] = useState(buy ? (quick ? quickAmount(chain.key, presets[1]) : presets[1]) : "");
+  const [useStable, setUseStable] = useState(!!stable);
+  const viaStable = !!stable && useStable;
+  const base = viaStable ? { symbol: stable.symbol, address: stable.address as string, decimals: stable.decimals, logo: USDT_LOGO as string | undefined, seed: stable.address as string } : { symbol: nc.symbol, address: NATIVE as string, decimals: nc.decimals, logo: nativeIcon(chain), seed: `${chain.key}-native` };
+  const stableBal = useQuery({
+    queryKey: ["wallet", "mkt-stable", chain.key, stable?.address, active?.address],
+    enabled: !!stable && !!active,
+    refetchInterval: 10_000,
+    queryFn: () => publicClientFor(chain).readContract({ address: stable!.address, abi: erc20Abi, functionName: "balanceOf", args: [active!.address as Address] }),
+  });
+  const baseBal = viaStable ? (stableBal.data ?? 0n) : native;
+  const quickKey = viaStable ? `${chain.key}-${stable.symbol}` : chain.key;
+  const presetsFor = (s: boolean) => (s ? STABLE_QUICK : (QUICK[chain.key] ?? QUICK.eth));
+  const presets = presetsFor(viaStable);
+  const [amount, setAmount] = useState(buy ? (quick ? quickAmount(quickKey, presets[1]) : presets[1]) : "");
   const [slip, setSlip] = useState<(typeof SLIPS)[number]>(5);
   const [step, setStep] = useState<MarketStep | null>(null);
   const [err, setErr] = useState("");
+  const switchBase = (s: boolean) => {
+    setUseStable(s);
+    if (buy) setAmount(presetsFor(s)[1]);
+  };
 
   let amountIn = 0n;
   try {
-    amountIn = amount && Number(amount) > 0 ? parseUnits(amount, buy ? nc.decimals : decimals) : 0n;
+    amountIn = amount && Number(amount) > 0 ? parseUnits(amount, buy ? base.decimals : decimals) : 0n;
   } catch {
     amountIn = 0n;
   }
@@ -253,7 +280,7 @@ function EvmTradeSheet({ chain, token, side, quick, onSide, native, tokRaw, deci
     return () => clearTimeout(id);
   }, [amountIn]);
 
-  const [tin, tout] = buy ? [NATIVE, token.address] : [token.address, NATIVE];
+  const [tin, tout] = buy ? [base.address, token.address] : [token.address, base.address];
   const q = useQuery({
     queryKey: ["mkt", "quote", chain.key, tin, tout, debounced.toString()],
     enabled: debounced > 0n,
@@ -263,11 +290,13 @@ function EvmTradeSheet({ chain, token, side, quick, onSide, native, tokRaw, deci
   });
   const view = q.data && debounced === amountIn ? q.data : null;
   const reserve = parseUnits(GAS_RESERVE[chain.key] ?? "0.001", nc.decimals);
-  const insufficient = buy ? amountIn + reserve > native : amountIn > tokRaw;
-  const maxBuy = native > reserve ? native - reserve : 0n;
+  const insufficient = buy ? (viaStable ? amountIn > baseBal : amountIn + reserve > native) : amountIn > tokRaw;
+  // paying in USDT still needs a little of the native coin for the approve + swap gas
+  const lowGas = viaStable && native < reserve / 4n;
+  const maxBuy = viaStable ? baseBal : native > reserve ? native - reserve : 0n;
 
-  const outDec = buy ? decimals : nc.decimals;
-  const outSym = buy ? token.symbol : nc.symbol;
+  const outDec = buy ? decimals : base.decimals;
+  const outSym = buy ? token.symbol : base.symbol;
   const out = view ? BigInt(view.routeSummary.amountOut) : null;
   const minOut = out != null ? (out * BigInt(10_000 - slip * 100)) / 10_000n : null;
   const impact = view ? kyberImpact(view) : null;
@@ -276,7 +305,7 @@ function EvmTradeSheet({ chain, token, side, quick, onSide, native, tokRaw, deci
     if (!view || !active) return;
     setErr("");
     try {
-      if (quick && buy) setQuickAmount(chain.key, amount);
+      if (quick && buy) setQuickAmount(quickKey, amount);
       const hash = await executeKyberSwap(account(), chain, view, slip * 100, setStep);
       const tokens = Number(formatUnits(buy ? BigInt(view.routeSummary.amountOut) : amountIn, decimals));
       const usdValue = Number(buy ? view.routeSummary.amountInUsd : view.routeSummary.amountOutUsd);
@@ -303,23 +332,35 @@ function EvmTradeSheet({ chain, token, side, quick, onSide, native, tokRaw, deci
         ))}
       </div>
       {quick && buy && <p className="mt-2 text-center text-[12px] text-up">⚡ {t("cw.market.quickHint")}</p>}
+      {stable && (
+        <div className="mt-3 flex items-center justify-between px-1 text-[13px]">
+          <span className="text-muted-foreground">{buy ? t("cw.stocks.payWith") : t("cw.stocks.receiveIn")}</span>
+          <span className="flex gap-1">
+            {[true, false].map((s) => (
+              <button key={String(s)} type="button" disabled={!!step} onClick={() => switchBase(s)} className={cn("h-8 rounded-full px-3.5 text-[13px] font-semibold transition", useStable === s ? "bg-foreground text-background" : "bg-muted text-muted-foreground")}>
+                {s ? stable.symbol : nc.symbol}
+              </button>
+            ))}
+          </span>
+        </div>
+      )}
 
       <div className="mt-4 rounded-[20px] bg-muted/60 p-4">
         <div className="flex items-center justify-between text-[12px] text-muted-foreground">
           <span>{buy ? t("cw.coin.pay") : t("cw.coin.sellAmount")}</span>
-          <span className="font-mono">{t("cw.coin.balanceValue", { v: buy ? `${Number(formatUnits(native, nc.decimals)).toFixed(4)} ${nc.symbol}` : `${fmtNum(Number(formatUnits(tokRaw, decimals)), 2)} ${token.symbol}` })}</span>
+          <span className="font-mono">{t("cw.coin.balanceValue", { v: buy ? `${Number(formatUnits(baseBal, base.decimals)).toFixed(viaStable ? 2 : 4)} ${base.symbol}` : `${fmtNum(Number(formatUnits(tokRaw, decimals)), 2)} ${token.symbol}` })}</span>
         </div>
         <div className="mt-1 flex items-baseline gap-2">
           <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" className={cn("w-0 flex-1 bg-transparent font-mono text-[32px] font-semibold tracking-tight outline-none", insufficient && amountIn > 0n && "text-down")} />
           <span className="flex items-center gap-1.5 text-[15px] font-semibold">
-            <TokenAvatar symbol={buy ? nc.symbol : token.symbol} seed={buy ? `${chain.key}-native` : token.address} logo={buy ? nativeIcon(chain) : tokenIcon(chain.key, token.address, token.image)} size={22} className="rounded-full" />
-            {buy ? nc.symbol : token.symbol}
+            <TokenAvatar symbol={buy ? base.symbol : token.symbol} seed={buy ? base.seed : token.address} logo={buy ? base.logo : tokenIcon(chain.key, token.address, token.image)} size={22} className="rounded-full" />
+            {buy ? base.symbol : token.symbol}
           </span>
         </div>
         <div className="text-[12px] text-muted-foreground">{view ? `≈ ${usd(Number(view.routeSummary.amountInUsd))}` : " "}</div>
         <div className="mt-3 grid grid-cols-5 gap-2">
           {(buy
-            ? [...presets.map((v) => ({ v, l: v })), { v: formatUnits(maxBuy, nc.decimals), l: t("cw.coin.max") }]
+            ? [...presets.map((v) => ({ v, l: v })), { v: formatUnits(maxBuy, base.decimals), l: t("cw.coin.max") }]
             : [10, 25, 50, 75, 100].map((p) => ({ v: formatUnits((tokRaw * BigInt(p)) / 100n, decimals), l: p === 100 ? t("transfer.all") : `${p}%` }))
           ).map(({ v, l }) => (
             <button key={l} type="button" onClick={() => setAmount(v)} className={cn("h-9 rounded-xl text-[13px] font-semibold transition active:scale-95", amount === v ? "bg-foreground text-background" : "bg-card ring-1 ring-border")}>
@@ -361,22 +402,22 @@ function EvmTradeSheet({ chain, token, side, quick, onSide, native, tokRaw, deci
         </div>
         <div className="flex justify-between">
           <dt className="text-muted-foreground">{t("cw.coin.networkFee")}</dt>
-          <dd className="font-mono text-[12px] text-muted-foreground">{view?.routeSummary.gasUsd ? `≈ ${usd(Number(view.routeSummary.gasUsd))}` : "—"}{!buy ? ` · ${t("cw.market.sellNeedsApprove")}` : ""}</dd>
+          <dd className="font-mono text-[12px] text-muted-foreground">{view?.routeSummary.gasUsd ? `≈ ${usd(Number(view.routeSummary.gasUsd))}` : "—"}{!buy ? ` · ${t("cw.market.sellNeedsApprove")}` : viaStable ? ` · ${t("cw.stocks.buyNeedsApprove", { sym: base.symbol })}` : ""}</dd>
         </div>
       </dl>
 
       {q.isError && <p className="mt-2 text-[12px] text-down">{q.error instanceof MarketQuoteError ? q.error.message : t("cw.coin.quoteFailed")}</p>}
       {err && <p className="mt-2 text-[12px] break-words text-down">{err}</p>}
 
-      {insufficient && amountIn > 0n ? (
+      {(insufficient && amountIn > 0n) || lowGas ? (
         <Link href="/wallet/receive" className="mt-4 flex h-14 w-full items-center justify-center rounded-2xl bg-muted text-[16px] font-semibold">
-          {buy ? t("cw.coin.lowNativeDeposit", { sym: nc.symbol }) : t("transfer.insufficient")}
+          {lowGas || (buy && !viaStable) ? t("cw.coin.lowNativeDeposit", { sym: nc.symbol }) : buy ? t("cw.coin.lowBalanceDeposit") : t("transfer.insufficient")}
         </Link>
       ) : (
         <PrimaryButton tone={buy ? "up" : "down"} className={cn("mt-4", buy && "text-black")} disabled={!view || !!step} onClick={go}>
           <span className="flex items-center justify-center gap-1.5">
             {step ? <CircleNotch size={18} className="animate-spin" /> : <Lightning size={18} weight="fill" />}
-            {step ? t(STEP_LABEL[step]) : buy ? t("cw.coin.buySym", { sym: token.symbol }) : t("cw.coin.sellSym", { sym: token.symbol })}
+            {step ? t(step === "approving" && buy ? "cw.coin.stepApproveFirst" : STEP_LABEL[step]) : buy ? t("cw.coin.buySym", { sym: token.symbol }) : t("cw.coin.sellSym", { sym: token.symbol })}
           </span>
         </PrimaryButton>
       )}
