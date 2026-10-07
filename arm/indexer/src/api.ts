@@ -33,6 +33,7 @@ import { botControl, botGet, botStart, botUpdate } from "./aibot/bots.js";
 import { calloutCaller, calloutCallers, calloutFeed, pinCaller } from "./callouts.js";
 import { isMint, pumpCandles, pumpCoin, pumpHolders, pumpList, pumpTrades } from "./pump.js";
 import { isEvmAddr, isMarketChain, kyberBuild, kyberQuote, marketCandles, marketList, marketPrices, marketSearch, marketToken, marketTrades, type MarketPrice } from "./markets.js";
+import { earnPositions, earnVaults } from "./earn.js";
 
 export const app = new Hono();
 // paged list endpoints report the full row count in X-Total-Count; expose it so the browser can read it
@@ -831,6 +832,18 @@ app.get("/api/mkt/:chain/quote", async (c) => {
 app.post("/api/mkt/:chain/build", async (c) => {
   const r = await kyberBuild(c.req.param("chain"), await c.req.json().catch(() => null));
   return c.json(r.json as object, r.status as 200);
+});
+
+// 「USDC 生息」(earn.ts): Morpho vault rates on Base + a user's lifetime earnings there
+app.get("/api/earn/vaults", async (c) => {
+  const r = await mktRoute(earnVaults);
+  return r.ok ? c.json(r.v) : c.json({ error: r.error }, r.status);
+});
+app.get("/api/earn/positions/:user", async (c) => {
+  const user = c.req.param("user");
+  if (!isEvmAddr(user)) return c.json({ error: "bad address" }, 400);
+  const r = await mktRoute(() => earnPositions(getAddress(user)));
+  return r.ok ? c.json(r.v) : c.json({ error: r.error }, r.status);
 });
 
 // Perp radar (10.2): Hyperliquid funding / OI dashboard + whale positions and liquidation map.

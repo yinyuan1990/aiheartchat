@@ -118,6 +118,7 @@
   .bg-up\/80{background-color:rgb(var(--wc-up) / calc(var(--wa-up, 1) * 0.8))}
   .bg-white\/10{background-color:rgb(255 255 255 / 0.1)}
   .bg-white\/12{background-color:rgb(255 255 255 / 0.12)}
+  .bg-white\/15{background-color:rgb(255 255 255 / 0.15)}
   .bg-white\/30{background-color:rgb(255 255 255 / 0.3)}
   .bg-yellow-400\/90{background-color:rgb(250 200 0 / 0.9)}
   .bg-\[radial-gradient\(circle\,color-mix\(in_oklch\,var\(--up\)_10\%\,transparent\)\,transparent_70\%\)\]{background-image:radial-gradient(circle,rgb(var(--wc-up) / calc(var(--wa-up, 1) * 0.1)),transparent 70%)}
@@ -140,6 +141,7 @@
   .text-white\/55{color:rgb(255 255 255 / 0.55)}
   .text-white\/60{color:rgb(255 255 255 / 0.6)}
   .text-white\/70{color:rgb(255 255 255 / 0.7)}
+  .text-white\/75{color:rgb(255 255 255 / 0.75)}
   .text-white\/80{color:rgb(255 255 255 / 0.8)}
   .ring-border\/60{--tw-ring-color:rgb(var(--wc-border) / calc(var(--wa-border, 1) * 0.6))}
   .ring-border\/70{--tw-ring-color:rgb(var(--wc-border) / calc(var(--wa-border, 1) * 0.7))}

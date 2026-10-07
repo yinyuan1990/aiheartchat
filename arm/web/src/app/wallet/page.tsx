@@ -5,14 +5,15 @@ import { useRouter } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { formatUnits } from "viem";
-import { ArrowDown, ArrowUp, ArrowsLeftRight, CaretDown, CheckCircle, Copy, Eye, EyeSlash, GasPump, Key, PencilSimple, Plus, ArrowSquareOut, Scan, Trash, Wallet as WalletIcon } from "@phosphor-icons/react";
+import { ArrowDown, ArrowUp, ArrowsLeftRight, CaretDown, CaretRight, CheckCircle, Copy, Eye, EyeSlash, GasPump, Key, PencilSimple, Plus, ArrowSquareOut, Scan, Trash, Wallet as WalletIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { TokenAvatar, WalletDot } from "@/components/shared";
 import { useWallet } from "@/lib/api";
 import { fmtSmall, shortAddr, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { WALLET_CHAINS, explorerAddr, explorerTx, isEvm, isSolana, isTon, probeChainNode, probeNode, publicClientFor, rpcOf, useNodes, type WalletChain } from "@/lib/wallet/chains";
-import { absUrl, useAssets, type Asset } from "@/lib/wallet/assets";
+import { USDC_LOGO, absUrl, useAssets, type Asset } from "@/lib/wallet/assets";
+import { EARN_CHAIN, useVaultRates } from "@/lib/wallet/earn";
 import { copyText, hasFeature, scanQr } from "@/lib/wallet/native";
 import { t } from "@/lib/wallet/i18n";
 import { parsePayment, sendLinkOf } from "@/lib/wallet/scan";
@@ -136,6 +137,8 @@ export default function WalletHome() {
           </Link>
         ))}
       </section>
+
+      <EarnBanner />
 
       <section className="mt-4 flex-1 rounded-t-[28px] bg-card px-4 pt-4">
         <div className="flex items-center gap-5">
@@ -282,6 +285,28 @@ export default function WalletHome() {
 
       {!isSolana(chain) && <AddTokenSheet chain={chain} open={sheet === "add"} onClose={() => setSheet(null)} known={assets.flatMap((a) => (a.token ? [a.token] : a.trc20 ? [a.trc20] : a.jetton ? [a.jetton] : []))} />}
     </WalletFrame>
+  );
+}
+
+/** Entry to 「USDC 生息」(Morpho vaults on Base), shown on every chain. */
+function EarnBanner() {
+  const rates = useVaultRates();
+  const best = Math.max(0, ...(rates.data ?? []).map((r) => r.netApy ?? 0));
+  return (
+    <Link href="/wallet/earn" className="mx-4 mt-3 flex items-center gap-3 rounded-[20px] bg-card px-4 py-3 ring-1 ring-border/70 transition active:scale-[0.99]">
+      <span className="relative shrink-0">
+        <TokenAvatar symbol="USDC" seed="base-usdc" logo={USDC_LOGO} size={38} className="rounded-full" />
+        <span className="absolute -right-0.5 -bottom-0.5">
+          <ChainGlyph chain={EARN_CHAIN} size={16} />
+        </span>
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[15px] font-semibold">{t("cw.earn.title")}</span>
+        <span className="block truncate text-[12px] text-muted-foreground">{t("cw.earn.homeDesc")}</span>
+      </span>
+      {best > 0 && <span className="shrink-0 rounded-full bg-up/10 px-2.5 py-1 font-mono text-[12px] font-semibold text-up">{t("cw.earn.homeApy", { v: `${(best * 100).toFixed(2)}%` })}</span>}
+      <CaretRight size={15} className="shrink-0 text-muted-foreground" />
+    </Link>
   );
 }
 
