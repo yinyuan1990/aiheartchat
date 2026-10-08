@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { api } from '../api';
+import ListPager from '../components/ListPager.vue';
 
 /** 频道：用户自己开的频道，后台可查看帖子 / 评论、封禁频道、删帖、删评论 */
 interface Channel {
@@ -17,8 +18,21 @@ interface Comment {
   sticker: { url: string; thumb?: string } | null; replyToNickname: string; createdAt: string;
 }
 
+interface Page { list: Channel[]; total: number; page: number; size: number; counts: Record<string, number> }
+const CATS = [
+  { key: 'alive', label: '正常' },
+  { key: 'banned', label: '已封禁' },
+  { key: 'deleted', label: '频道主已删除' },
+  { key: 'all', label: '全部' },
+];
+
 const list = ref<Channel[]>([]);
 const q = ref('');
+const cat = ref('alive');
+const page = ref(1);
+const size = ref(20);
+const total = ref(0);
+const counts = ref<Record<string, number>>({});
 const current = ref<Channel | null>(null);
 const posts = ref<Post[]>([]);
 const openComments = ref<string | null>(null);
@@ -32,7 +46,30 @@ const retentionInput = ref('');
 const retentionSaved = ref(false);
 
 async function load() {
-  list.value = await api<Channel[]>(`/admin/channels${q.value.trim() ? `?q=${encodeURIComponent(q.value.trim())}` : ''}`);
+  const qs = new URLSearchParams({ cat: cat.value, page: String(page.value), size: String(size.value) });
+  if (q.value.trim()) qs.set('q', q.value.trim());
+  const r = await api<Page>(`/admin/channels?${qs}`);
+  // 封禁 / 解封后当前分类少了一条，页码可能越界：退回最后一页
+  if (!r.list.length && r.total > 0 && page.value > 1) {
+    page.value = Math.ceil(r.total / size.value);
+    return load();
+  }
+  list.value = r.list;
+  total.value = r.total;
+  counts.value = r.counts;
+}
+function search() {
+  page.value = 1;
+  load();
+}
+function pickCat(k: string) {
+  cat.value = k;
+  search();
+}
+function onPage(p: number, s: number) {
+  page.value = p;
+  size.value = s;
+  load();
 }
 interface Config { defaultLimit: number; retentionDays: number }
 function applyConfig(c: Config) {
@@ -78,7 +115,7 @@ async function toggleBan(c: Channel) {
   if (!confirm(ban ? `封禁频道「${c.name}」？订阅者将看不到它` : `解封频道「${c.name}」？`)) return;
   await api(`/admin/channels/${c.id}/status`, { method: 'POST', body: { banned: ban } });
   await load();
-  if (current.value?.id === c.id) current.value = list.value.find((x) => x.id === c.id) ?? null;
+  if (current.value?.id === c.id) current.value = list.value.find((x) => x.id === c.id) ?? { ...current.value, status: ban ? 2 : 0 };
 }
 async function deletePost(p: Post) {
   if (!confirm('删除这条帖子（连同表情回应和评论）？')) return;
@@ -139,10 +176,15 @@ onMounted(() => {
     </div>
     <div class="card">
       <div class="row" style="margin-bottom: 12px">
-        <div style="font-weight: 600">全部频道（{{ list.length }}）</div>
-        <input v-model="q" placeholder="搜频道名 / 简介" style="width: 200px" @keydown.enter="load" />
-        <button class="small ghost" @click="load">搜索 / 刷新</button>
+        <div style="font-weight: 600">频道</div>
+        <input v-model="q" placeholder="搜频道名 / 简介" style="width: 200px" data-testid="channel-search" @keydown.enter="search" />
+        <button class="small ghost" @click="search">搜索 / 刷新</button>
         <span class="muted">所有用户都能开频道（数量见上面的额度），频道主和管理员发帖，开了「订阅者可发消息」的频道订阅者也能发；订阅者可以表情回应和评论。封禁后订阅者的会话列表里不再显示，解封恢复</span>
+      </div>
+      <div class="cat-tabs">
+        <button v-for="c in CATS" :key="c.key" :class="{ ghost: cat !== c.key }" :data-testid="`channel-cat-${c.key}`" @click="pickCat(c.key)">
+          {{ c.label }}<span class="n">{{ counts[c.key] ?? 0 }}</span>
+        </button>
       </div>
       <table>
         <thead><tr><th></th><th style="min-width: 200px">频道</th><th>频道主</th><th>订阅</th><th>帖子</th><th>最近发帖</th><th>状态</th><th>操作</th></tr></thead>
@@ -168,9 +210,10 @@ onMounted(() => {
               </div>
             </td>
           </tr>
-          <tr v-if="list.length === 0"><td colspan="8" class="muted">还没有频道</td></tr>
+          <tr v-if="list.length === 0"><td colspan="8" class="muted">没有符合条件的频道</td></tr>
         </tbody>
       </table>
+      <ListPager :total="total" :page="page" :size="size" @change="onPage" />
     </div>
 
     <div v-if="current" class="card" style="margin-top: 16px">

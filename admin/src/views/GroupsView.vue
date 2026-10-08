@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { api } from '../api';
+import ListPager from '../components/ListPager.vue';
 
 /** 群聊：用户建的群 + 币群（钱包代币页的讨论群），后台可看消息、封禁、设置是否对用户显示 */
 interface Group {
@@ -15,30 +16,54 @@ interface Msg {
   sender: { id: string; nickname: string; shortId: string; avatar: string; isBot: boolean } | null;
 }
 
+interface Page { list: Group[]; total: number; page: number; size: number; counts: Record<string, number> }
+const CATS = [
+  { key: 'alive', label: '正常' },
+  { key: 'hidden', label: '已隐藏' },
+  { key: 'banned', label: '已封禁' },
+  { key: 'dissolved', label: '已解散' },
+  { key: 'all', label: '全部' },
+];
+
 const list = ref<Group[]>([]);
 const q = ref('');
-const kindFilter = ref<'all' | 'user' | 'coin'>('all');
-const showFilter = ref<'all' | 'visible' | 'hidden' | 'banned'>('all');
+const cat = ref('alive');
+const type = ref<'all' | 'user' | 'coin'>('all');
+const page = ref(1);
+const size = ref(20);
+const total = ref(0);
+const counts = ref<Record<string, number>>({});
 const current = ref<Group | null>(null);
 const msgs = ref<Msg[]>([]);
 const more = ref(false);
 const busy = ref<string | null>(null);
 
-const shown = computed(() =>
-  list.value.filter((g) => {
-    if (kindFilter.value === 'user' && g.coin) return false;
-    if (kindFilter.value === 'coin' && !g.coin) return false;
-    if (showFilter.value === 'visible' && !g.visible) return false;
-    if (showFilter.value === 'hidden' && g.visible) return false;
-    if (showFilter.value === 'banned' && g.status !== 2) return false;
-    return true;
-  }),
-);
-const hiddenCount = computed(() => list.value.filter((g) => !g.visible).length);
-
 async function load() {
-  list.value = await api<Group[]>(`/admin/groups${q.value.trim() ? `?q=${encodeURIComponent(q.value.trim())}` : ''}`);
+  const qs = new URLSearchParams({ cat: cat.value, type: type.value, page: String(page.value), size: String(size.value) });
+  if (q.value.trim()) qs.set('q', q.value.trim());
+  const r = await api<Page>(`/admin/groups?${qs}`);
+  // 删掉最后一页的最后几条后页码可能越界：退回最后一页
+  if (!r.list.length && r.total > 0 && page.value > 1) {
+    page.value = Math.ceil(r.total / size.value);
+    return load();
+  }
+  list.value = r.list;
+  total.value = r.total;
+  counts.value = r.counts;
   if (current.value) current.value = list.value.find((x) => x.id === current.value!.id) ?? current.value;
+}
+function search() {
+  page.value = 1;
+  load();
+}
+function pickCat(k: string) {
+  cat.value = k;
+  search();
+}
+function onPage(p: number, s: number) {
+  page.value = p;
+  size.value = s;
+  load();
 }
 async function open(g: Group) {
   current.value = g;
@@ -70,7 +95,7 @@ async function toggleVisible(g: Group) {
   busy.value = g.id;
   try {
     await api(`/admin/groups/${g.id}/visible`, { method: 'POST', body: { visible } });
-    g.visible = visible;
+    await load();
   } catch (e: any) {
     alert(e.message);
   } finally {
@@ -104,31 +129,30 @@ onMounted(load);
     <div class="page-title">群管理</div>
     <div class="card">
       <div class="row" style="margin-bottom: 12px; flex-wrap: wrap">
-        <div style="font-weight: 600">群聊（{{ shown.length }} / {{ list.length }}，已隐藏 {{ hiddenCount }}）</div>
-        <input v-model="q" placeholder="搜群名 / 群 ID / 群主 6 位 ID" style="width: 220px" data-testid="group-search" @keydown.enter="load" />
-        <button class="small ghost" @click="load">搜索 / 刷新</button>
-        <select v-model="kindFilter" data-testid="group-kind">
+        <div style="font-weight: 600">群聊</div>
+        <input v-model="q" placeholder="搜群名 / 群 ID / 群主 6 位 ID" style="width: 220px" data-testid="group-search" @keydown.enter="search" />
+        <button class="small ghost" @click="search">搜索 / 刷新</button>
+        <select v-model="type" data-testid="group-kind" @change="search">
           <option value="all">全部类型</option>
           <option value="user">用户建的群</option>
           <option value="coin">币群</option>
         </select>
-        <select v-model="showFilter" data-testid="group-show">
-          <option value="all">全部状态</option>
-          <option value="visible">显示中</option>
-          <option value="hidden">已隐藏</option>
-          <option value="banned">已封禁</option>
-        </select>
+      </div>
+      <div class="cat-tabs">
+        <button v-for="c in CATS" :key="c.key" :class="{ ghost: cat !== c.key }" :data-testid="`group-cat-${c.key}`" @click="pickCat(c.key)">
+          {{ c.label }}<span class="n">{{ counts[c.key] ?? 0 }}</span>
+        </button>
       </div>
       <p class="muted" style="margin-bottom: 12px">
-        「对用户显示」默认打开。关掉后这个群不出现在任何人的消息列表里（包括群成员），不推送、不算未读，发消息 / 搜群 / 扫码入群都会被拒；消息记录保留，重新打开即恢复。
-        币群（钱包代币页的讨论群）同样适用，隐藏后从代币页也进不去。列表最多显示最新的 200 个群，找老群请搜索。
+        「正常」= 没解散、没封禁的群（包括已隐藏的）。「对用户显示」默认打开，关掉后这个群不出现在任何人的消息列表里（包括群成员），不推送、不算未读，发消息 / 搜群 / 扫码入群都会被拒；消息记录保留，重新打开即恢复。
+        币群（钱包代币页的讨论群）同样适用，隐藏后从代币页也进不去。
       </p>
       <table>
         <thead>
           <tr><th></th><th style="min-width: 180px">群</th><th>群主</th><th>成员</th><th>消息</th><th>最近消息</th><th>创建</th><th>状态</th><th>对用户显示</th><th>操作</th></tr>
         </thead>
         <tbody>
-          <tr v-for="g in shown" :key="g.id" :style="current?.id === g.id ? 'background: rgba(254,44,85,0.06)' : ''" :data-testid="`group-row-${g.id}`">
+          <tr v-for="g in list" :key="g.id" :style="current?.id === g.id ? 'background: rgba(254,44,85,0.06)' : ''" :data-testid="`group-row-${g.id}`">
             <td>
               <img v-if="g.avatar" :src="g.avatar" style="width: 40px; height: 40px; border-radius: 20px; object-fit: cover" />
               <div v-else style="width: 40px; height: 40px; border-radius: 20px; background: #2a2a30"></div>
@@ -161,9 +185,10 @@ onMounted(load);
               </div>
             </td>
           </tr>
-          <tr v-if="shown.length === 0"><td colspan="10" class="muted">没有符合条件的群</td></tr>
+          <tr v-if="list.length === 0"><td colspan="10" class="muted">没有符合条件的群</td></tr>
         </tbody>
       </table>
+      <ListPager :total="total" :page="page" :size="size" @change="onPage" />
     </div>
 
     <div v-if="current" class="card">

@@ -98,8 +98,8 @@ export class AdminController {
 
   @Get('channels')
   @UseGuards(AdminGuard)
-  channelList(@Query('q') q?: string) {
-    return this.channels.adminList(q);
+  channelList(@Query('q') q?: string, @Query('cat') cat?: string, @Query('page') page?: string, @Query('size') size?: string) {
+    return this.channels.adminList({ q, cat, page: Number(page) || 1, size: Number(size) || 20 });
   }
 
   @Post('channels/:id/status')
@@ -136,8 +136,8 @@ export class AdminController {
 
   @Get('groups')
   @UseGuards(AdminGuard)
-  groupList(@Query('q') q?: string) {
-    return this.groups.adminList(q);
+  groupList(@Query('q') q?: string, @Query('cat') cat?: string, @Query('type') type?: string, @Query('page') page?: string, @Query('size') size?: string) {
+    return this.groups.adminList({ q, cat, type, page: Number(page) || 1, size: Number(size) || 20 });
   }
 
   @Post('groups/:id/status')

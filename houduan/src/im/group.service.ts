@@ -302,9 +302,12 @@ export class GroupService {
 
   // ---------- 后台：群聊管理（kind=1，频道在 ChannelService） ----------
 
-  /** 后台群列表：含已解散 / 已封禁 / 不显示的；q 搜群名、群 id 或群主 6 位 ID */
-  async adminList(q?: string) {
-    const kw = (q ?? '').trim().slice(0, 50);
+  /**
+   * 后台群列表（分页）：cat = alive 正常（含隐藏）/ hidden 已隐藏 / banned 已封禁 / dissolved 已解散 / all；
+   * type = user 用户建的 / coin 币群；q 搜群名、群 id 或群主 6 位 ID。counts 是当前搜索 + 类型下各分类的数量
+   */
+  async adminList(opts: { q?: string; cat?: string; type?: string; page?: number; size?: number }) {
+    const kw = (opts.q ?? '').trim().slice(0, 50);
     const or: any[] = [];
     if (kw) {
       or.push({ name: { contains: kw } });
@@ -312,11 +315,31 @@ export class GroupService {
       const owner = /^\d{6}$/.test(kw) ? await this.prisma.user.findFirst({ where: { shortId: kw }, select: { id: true } }) : null;
       if (owner) or.push({ ownerId: owner.id });
     }
-    const groups = await this.prisma.chatGroup.findMany({
-      where: { kind: 1, ...(or.length ? { OR: or } : {}) },
-      orderBy: { id: 'desc' },
-      take: 200,
-    });
+    const base: any = { kind: 1, ...(or.length ? { OR: or } : {}) };
+    if (opts.type === 'user' || opts.type === 'coin') {
+      const coinIds = (await this.prisma.coinGroup.findMany({ select: { groupId: true } })).map((c) => c.groupId);
+      base.id = opts.type === 'coin' ? { in: coinIds } : { notIn: coinIds };
+    }
+    const CATS: Record<string, any> = {
+      alive: { status: 0 },
+      hidden: { status: 0, visible: false },
+      banned: { status: 2 },
+      dissolved: { status: 1 },
+      all: {},
+    };
+    const cat = opts.cat && CATS[opts.cat] ? opts.cat : 'alive';
+    const size = Math.min(Math.max(Math.floor(opts.size ?? 20) || 20, 10), 100);
+    const page = Math.max(Math.floor(opts.page ?? 1) || 1, 1);
+    const where = { ...base, ...CATS[cat] };
+    const [total, counts, groups] = await Promise.all([
+      this.prisma.chatGroup.count({ where }),
+      Promise.all(Object.entries(CATS).map(async ([k, w]) => [k, await this.prisma.chatGroup.count({ where: { ...base, ...w } })] as const)).then(Object.fromEntries),
+      this.prisma.chatGroup.findMany({ where, orderBy: { id: 'desc' }, skip: (page - 1) * size, take: size }),
+    ]);
+    return { list: await this.adminRows(groups), total, page, size, counts };
+  }
+
+  private async adminRows(groups: Awaited<ReturnType<PrismaService['chatGroup']['findMany']>>) {
     if (!groups.length) return [];
     const ids = groups.map((g) => g.id);
     const [counts, owners, convs, coins] = await Promise.all([

@@ -492,14 +492,24 @@ export class ChannelService implements OnModuleInit {
 
   // ---------- 后台 ----------
 
-  /** 后台频道列表：含已封禁 / 已删除 */
-  async adminList(q?: string) {
-    const kw = (q ?? '').trim();
-    const groups = await this.prisma.chatGroup.findMany({
-      where: { kind: CHANNEL_KIND, ...(kw ? { OR: [{ name: { contains: kw } }, { notice: { contains: kw } }] } : {}) },
-      orderBy: { id: 'desc' },
-      take: 200,
-    });
+  /** 后台频道列表（分页）：cat = alive 正常 / banned 已封禁 / deleted 频道主已删除 / all；counts 是当前搜索下各分类的数量 */
+  async adminList(opts: { q?: string; cat?: string; page?: number; size?: number }) {
+    const kw = (opts.q ?? '').trim();
+    const base = { kind: CHANNEL_KIND, ...(kw ? { OR: [{ name: { contains: kw } }, { notice: { contains: kw } }] } : {}) };
+    const CATS: Record<string, { status?: number }> = { alive: { status: 0 }, banned: { status: 2 }, deleted: { status: 1 }, all: {} };
+    const cat = opts.cat && CATS[opts.cat] ? opts.cat : 'alive';
+    const size = Math.min(Math.max(Math.floor(opts.size ?? 20) || 20, 10), 100);
+    const page = Math.max(Math.floor(opts.page ?? 1) || 1, 1);
+    const where = { ...base, ...CATS[cat] };
+    const [total, counts, groups] = await Promise.all([
+      this.prisma.chatGroup.count({ where }),
+      Promise.all(Object.entries(CATS).map(async ([k, w]) => [k, await this.prisma.chatGroup.count({ where: { ...base, ...w } })] as const)).then(Object.fromEntries),
+      this.prisma.chatGroup.findMany({ where, orderBy: { id: 'desc' }, skip: (page - 1) * size, take: size }),
+    ]);
+    return { list: await this.adminRows(groups), total, page, size, counts };
+  }
+
+  private async adminRows(groups: Awaited<ReturnType<PrismaService['chatGroup']['findMany']>>) {
     if (!groups.length) return [];
     const ids = groups.map((g) => g.id);
     const [counts, owners, convs] = await Promise.all([

@@ -44,6 +44,12 @@ body {
 .sidebar .group-title .chevron.open { transform: rotate(90deg); }
 .sidebar .item.sub { padding: 9px 20px 9px 30px; }
 
+.cat-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.cat-tabs button { padding: 5px 14px; font-size: 13px; }
+.cat-tabs button.ghost .n { color: var(--text-2); }
+.cat-tabs .n { margin-left: 4px; opacity: 0.85; }
+.pager { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
+
 .topbar { display: none; }
 .sidebar-mask { display: none; }
 
