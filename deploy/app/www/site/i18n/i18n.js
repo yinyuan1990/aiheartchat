@@ -10,6 +10,8 @@
  *   data-i18n-attr="alt:key;content:key"  换属性
  *   data-lang-switch       放语言下拉的位置
  *   脚本里：SiteI18n.t('key', '中文原文', { n: 3 })，原文里用 {n} 占位
+ *   页面脚本用 SiteI18n.ready(fn) 包起来：第一次来的访客要先按 IP 定语言（异步），定了才能用 t()
+ * 语言：?lang= → 选过的 → 按 IP（后端 /api/geo，大陆 / 港澳台中文，其他英文，缓存 3 天）→ 浏览器语言。
  */
 (function () {
   var LANGS = [
@@ -18,6 +20,11 @@
   ];
   var SOURCE = 'zh';
   var STORE = 'site_lang';
+  // 没选过语言时按访客 IP 选（大陆 / 港澳台中文，其他英文），结果缓存 3 天；查不到再看浏览器语言
+  var GEO_API = 'https://api.yyheart.com/api/geo';
+  var GEO_STORE = 'site_geo';
+  var GEO_TTL = 3 * 86400000;
+  var GEO_WAIT = 1500;
 
   var me = document.currentScript;
   var base = me ? me.src.replace(/[^/]*$/, '') : '';
@@ -34,22 +41,45 @@
     var head = code.split(/[-_]/)[0];
     return info(head) ? head : '';
   }
-  function pick() {
+  /** 已经定了的语言：地址 ?lang=（会记住）→ 访客选过的 → 按 IP 查过的（缓存 3 天）；都没有返回 '' */
+  function fixedLang() {
     var q = '';
     try { q = norm(new URLSearchParams(location.search).get('lang')); } catch (e) {}
     if (q) { try { localStorage.setItem(STORE, q); } catch (e) {} return q; }
     var saved = '';
     try { saved = norm(localStorage.getItem(STORE)); } catch (e) {}
     if (saved) return saved;
+    try {
+      var g = JSON.parse(localStorage.getItem(GEO_STORE) || 'null');
+      if (g && Date.now() - g.at < GEO_TTL && norm(g.lang)) return norm(g.lang);
+    } catch (e) {}
+    return '';
+  }
+  function browserLang() {
     var list = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || ''];
     for (var i = 0; i < list.length; i++) { var c = norm(list[i]); if (c) return c; }
     return 'en';
   }
 
-  var lang = pick();
   var root = document.documentElement;
-  root.lang = info(lang).html;
-  root.setAttribute('data-lang', lang);
+  var fixed = fixedLang();
+  var lang = fixed || browserLang();
+  function setRootLang() {
+    root.lang = info(lang).html;
+    root.setAttribute('data-lang', lang);
+  }
+  setRootLang();
+
+  // 语言定下来、语言包也加载好之后才跑的回调（页面脚本用 SiteI18n.ready 包起来）
+  var isReady = false;
+  var readyFns = [];
+  function ready(fn) { if (isReady) fn(); else readyFns.push(fn); }
+  function markReady() {
+    isReady = true;
+    var fns = readyFns;
+    readyFns = [];
+    for (var i = 0; i < fns.length; i++) { try { fns[i](); } catch (e) { setTimeout(function () { throw e; }); } }
+  }
 
   var revealed = false;
   function reveal() {
@@ -75,10 +105,39 @@
     '.ls.float .ls-btn{background:rgba(10,10,12,0.6);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}' +
     '</style>');
 
-  if (lang !== SOURCE && page) {
+  if (fixed) {
+    // 语言已定：同步加载语言包，正文出来前译文已就位
+    if (lang !== SOURCE && page) {
+      root.classList.add('i18n-pending');
+      document.write('<script src="' + base + lang + '/' + page + '.js"><\/script>');
+      setTimeout(reveal, 3000);
+    }
+    markReady();
+  } else {
+    // 第一次来：先藏起正文，按 IP 定语言（最多等 GEO_WAIT），再按需加载语言包
     root.classList.add('i18n-pending');
-    document.write('<script src="' + base + lang + '/' + page + '.js"><\/script>');
-    setTimeout(reveal, 3000);
+    setTimeout(reveal, 4000);
+    var decided = false;
+    var decide = function (geoLang) {
+      // 接口晚到（已按浏览器语言显示了）也记下来，下次打开直接用
+      if (geoLang) { try { localStorage.setItem(GEO_STORE, JSON.stringify({ lang: geoLang, at: Date.now() })); } catch (e) {} }
+      if (decided) return;
+      decided = true;
+      if (geoLang) lang = geoLang;
+      setRootLang();
+      if (lang === SOURCE || !page) return markReady();
+      var s = document.createElement('script');
+      s.src = base + lang + '/' + page + '.js';
+      s.onload = s.onerror = markReady;
+      document.head.appendChild(s);
+    };
+    setTimeout(function () { decide(''); }, GEO_WAIT);
+    try {
+      fetch(GEO_API, { cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) { var d = j && j.data ? j.data : j; decide(norm(d && d.lang)); })
+        .catch(function () { decide(''); });
+    } catch (e) { decide(''); }
   }
 
   function fill(s, vars) {
@@ -171,10 +230,11 @@
     var open = document.querySelectorAll('.ls.open');
     for (var i = 0; i < open.length; i++) open[i].classList.remove('open');
   });
-  document.addEventListener('DOMContentLoaded', function () { apply(document); });
+  document.addEventListener('DOMContentLoaded', function () { ready(function () { apply(document); }); });
 
   window.SiteI18n = {
-    lang: lang,
+    get lang() { return lang; },
+    ready: ready,
     source: SOURCE,
     langs: LANGS,
     add: function (d) { for (var k in d) if (Object.prototype.hasOwnProperty.call(d, k)) dict[k] = d[k]; },

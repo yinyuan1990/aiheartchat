@@ -272,7 +272,10 @@
 <div class="wx" id="wx" onclick="this.classList.remove('on')"><div data-i18n="t.016"><b>↗</b>点右上角「…」<br />选择「在浏览器打开」即可下载<span>微信内无法直接安装 App</span></div></div>
 
 <script>
-(function () {
+// 第一次来的访客要先按 IP 定语言，定了再渲染
+SiteI18n.ready(function () {
+  // 先翻静态文字（标题等），下面 render 设的标题不会再被覆盖
+  SiteI18n.apply();
   var API = 'https://api.yyheart.com';
   var T = SiteI18n.t;
   var q = new URLSearchParams(location.search);
@@ -666,7 +669,7 @@
       fetch(API + '/api/app/invite/click', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: code }) }).catch(function () {});
     })
     .catch(function () { afterSplash(function () { fail(T('t.fail.net', '网络开小差了，请稍后再试')); }); });
-})();
+});
 </script>
 </body>
 </html>

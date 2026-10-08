@@ -31,6 +31,7 @@ import { EmojiModule } from './emoji/emoji.module';
 import { GifModule } from './gif/gif.module';
 import { ShareModule } from './share/share.module';
 import { PublishModule } from './publish/publish.module';
+import { GeoModule } from './geo/geo.module';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { PublishModule } from './publish/publish.module';
     GifModule,
     ShareModule,
     PublishModule,
+    GeoModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: RateLimitGuard }],
 })

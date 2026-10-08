@@ -501,7 +501,7 @@
 
 <script src="qrcode.min.js"></script>
 <script>
-(function () {
+SiteI18n.ready(function () {
   // 先把静态文字换成当前语言，下面再按接口结果改按钮文字（不会被再覆盖）
   SiteI18n.apply();
   var T = SiteI18n.t;
@@ -545,7 +545,7 @@
 
   // ---- 二维码（本页地址）----
   try { QRCode.toCanvas(document.getElementById('qr'), location.origin + location.pathname, { width: 148, margin: 0, color: { dark: '#000000', light: '#ffffff' } }); } catch (e) {}
-})();
+});
 </script>
 </body>
 </html>
