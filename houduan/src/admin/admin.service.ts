@@ -39,15 +39,16 @@ export class AdminService {
 
   // ---------- 用户 ----------
 
-  listUsers(keyword?: string, beforeId?: bigint) {
-    return this.prisma.user.findMany({
-      where: {
-        ...(keyword ? { OR: [{ nickname: { contains: keyword } }, { address: { contains: keyword } }, { shortId: keyword }] } : {}),
-        ...(beforeId ? { id: { lt: beforeId } } : {}),
-      },
-      orderBy: { id: 'desc' },
-      take: 30,
-    });
+  /** 用户列表（分页，新的在前）：keyword 搜昵称 / 地址 / 6 位 ID */
+  async listUsers(keyword: string | undefined, page: number, size: number) {
+    const where = keyword ? { OR: [{ nickname: { contains: keyword } }, { address: { contains: keyword } }, { shortId: keyword }] } : {};
+    size = Math.min(Math.max(Math.floor(size) || 20, 10), 100);
+    page = Math.max(Math.floor(page) || 1, 1);
+    const [total, list] = await Promise.all([
+      this.prisma.user.count({ where }),
+      this.prisma.user.findMany({ where, orderBy: { id: 'desc' }, skip: (page - 1) * size, take: size }),
+    ]);
+    return { list, total, page, size };
   }
 
   async setUserStatus(userId: bigint, status: number) {

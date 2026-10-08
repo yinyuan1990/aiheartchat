@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { api } from '../api';
+import ListPager from '../components/ListPager.vue';
 
 const users = ref<any[]>([]);
 const keyword = ref('');
+const page = ref(1);
+const size = ref(20);
+const total = ref(0);
 const grantFor = ref<any>(null);
 const amount = ref('');
 const remark = ref('');
@@ -63,7 +67,20 @@ const limitFor = ref<any>(null);
 const limitInput = ref('');
 
 async function load() {
-  users.value = await api<any[]>(`/admin/users${keyword.value ? `?keyword=${encodeURIComponent(keyword.value)}` : ''}`);
+  const qs = new URLSearchParams({ page: String(page.value), size: String(size.value) });
+  if (keyword.value.trim()) qs.set('keyword', keyword.value.trim());
+  const r = await api<{ list: any[]; total: number }>(`/admin/users?${qs}`);
+  users.value = r.list;
+  total.value = r.total;
+}
+function search() {
+  page.value = 1;
+  load();
+}
+function onPage(p: number, s: number) {
+  page.value = p;
+  size.value = s;
+  load();
 }
 onMounted(async () => {
   load();
@@ -145,8 +162,8 @@ async function toggleBan(u: any) {
     <div class="page-title">用户管理</div>
     <div class="card">
       <div class="row" style="margin-bottom: 14px">
-        <input v-model="keyword" placeholder="昵称 / 地址 / 6 位 ID 搜索" style="width: 260px" @keydown.enter="load" />
-        <button class="small" @click="load">搜索</button>
+        <input v-model="keyword" placeholder="昵称 / 地址 / 6 位 ID 搜索" style="width: 260px" data-testid="user-search" @keydown.enter="search" />
+        <button class="small" @click="search">搜索</button>
         <span class="muted" style="margin-left: auto">链上钱包入口</span>
         <button
           v-for="m in WALLET_MODES"
@@ -191,8 +208,10 @@ async function toggleBan(u: any) {
               </div>
             </td>
           </tr>
+          <tr v-if="users.length === 0"><td colspan="11" class="muted">没有符合条件的用户</td></tr>
         </tbody>
       </table>
+      <ListPager :total="total" :page="page" :size="size" @change="onPage" />
     </div>
 
     <div v-if="grantFor" class="card">

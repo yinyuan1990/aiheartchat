@@ -740,10 +740,10 @@ export class AdminController {
 
   @Get('users')
   @UseGuards(AdminGuard)
-  async users(@Query('keyword') keyword?: string, @Query('beforeId') beforeId?: string) {
-    const list = await this.admin.listUsers(keyword, beforeId ? BigInt(beforeId) : undefined);
-    const owned = await this.channels.ownedCounts(list.map((u) => u.id));
-    return list.map((u) => ({ ...u, ownedChannels: owned.get(u.id) ?? 0 }));
+  async users(@Query('keyword') keyword?: string, @Query('page') page?: string, @Query('size') size?: string) {
+    const r = await this.admin.listUsers(keyword?.trim() || undefined, Number(page) || 1, Number(size) || 20);
+    const owned = await this.channels.ownedCounts(r.list.map((u) => u.id));
+    return { ...r, list: r.list.map((u) => ({ ...u, ownedChannels: owned.get(u.id) ?? 0 })) };
   }
 
   /** 单独设置某用户最多能创建几个频道；limit 为 null = 跟随全局默认 */
