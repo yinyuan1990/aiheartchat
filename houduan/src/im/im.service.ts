@@ -429,6 +429,7 @@ export class ImService {
       where: {
         status: 0,
         isBot: false,
+        hidden: false,
         id: { not: userId },
         OR: [{ shortId: q }, { nickname: { contains: q }, gender: me.gender === 1 ? 2 : 1 }],
       },

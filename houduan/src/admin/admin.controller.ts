@@ -740,8 +740,8 @@ export class AdminController {
 
   @Get('users')
   @UseGuards(AdminGuard)
-  async users(@Query('keyword') keyword?: string, @Query('page') page?: string, @Query('size') size?: string) {
-    const r = await this.admin.listUsers(keyword?.trim() || undefined, Number(page) || 1, Number(size) || 20);
+  async users(@Query('keyword') keyword?: string, @Query('cat') cat?: string, @Query('page') page?: string, @Query('size') size?: string) {
+    const r = await this.admin.listUsers(keyword?.trim() || undefined, cat, Number(page) || 1, Number(size) || 20);
     const owned = await this.channels.ownedCounts(r.list.map((u) => u.id));
     return { ...r, list: r.list.map((u) => ({ ...u, ownedChannels: owned.get(u.id) ?? 0 })) };
   }
@@ -759,6 +759,12 @@ export class AdminController {
   @UseGuards(AdminGuard)
   setWalletEnabled(@Param('id') id: string, @Body() body: { enabled?: boolean }) {
     return this.admin.setUserWallet(BigInt(id), !!body?.enabled);
+  }
+
+  @Post('users/:id/hidden')
+  @UseGuards(AdminGuard)
+  setUserHidden(@Param('id') id: string, @Body() body: { hidden?: boolean }) {
+    return this.admin.setUserHidden(BigInt(id), !!body?.hidden);
   }
 
   @Get('chain-wallet/config')

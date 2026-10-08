@@ -52,6 +52,8 @@ model User {
   channelLimit Int?     @map("channel_limit")
   /// 链上钱包（自托管，钱包页面在 Arm 网站）入口：后台用户管理里单独打开；全局开关 sys_setting.chain_wallet_mode
   walletEnabled Boolean @default(false) @map("wallet_enabled")
+  /// 后台「隐藏」：不出现在 App 的遇见 / 找地陪 / 找人 / 搜索用户 / 动态广场里；已有的聊天、群、关注不受影响
+  hidden       Boolean  @default(false)
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 

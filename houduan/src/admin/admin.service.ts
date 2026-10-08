@@ -39,21 +39,44 @@ export class AdminService {
 
   // ---------- 用户 ----------
 
-  /** 用户列表（分页，新的在前）：keyword 搜昵称 / 地址 / 6 位 ID */
-  async listUsers(keyword: string | undefined, page: number, size: number) {
-    const where = keyword ? { OR: [{ nickname: { contains: keyword } }, { address: { contains: keyword } }, { shortId: keyword }] } : {};
+  /**
+   * 用户列表（分页，新的在前）：keyword 搜昵称 / 地址 / 6 位 ID；
+   * cat = normal 正常真人（默认，含已隐藏）/ male / female / guide 地陪（男女、正常的）/ hidden 已隐藏 / banned 已封禁 / bot 机器人和系统账号 / all。
+   * counts 是当前搜索下各分类的数量
+   */
+  async listUsers(keyword: string | undefined, cat: string | undefined, page: number, size: number) {
+    const base = keyword ? { OR: [{ nickname: { contains: keyword } }, { address: { contains: keyword } }, { shortId: keyword }] } : {};
+    const CATS: Record<string, object> = {
+      normal: { status: 0, isBot: false },
+      male: { status: 0, isBot: false, gender: 1 },
+      female: { status: 0, isBot: false, gender: 2 },
+      guide: { status: 0, isBot: false, isGuide: true },
+      hidden: { isBot: false, hidden: true },
+      banned: { status: { not: 0 }, isBot: false },
+      bot: { isBot: true },
+      all: {},
+    };
+    const c = cat && CATS[cat] ? cat : 'normal';
     size = Math.min(Math.max(Math.floor(size) || 20, 10), 100);
     page = Math.max(Math.floor(page) || 1, 1);
-    const [total, list] = await Promise.all([
+    const where = { ...base, ...CATS[c] };
+    const [total, counts, list] = await Promise.all([
       this.prisma.user.count({ where }),
+      Promise.all(Object.entries(CATS).map(async ([k, w]) => [k, await this.prisma.user.count({ where: { ...base, ...w } })] as const)).then(Object.fromEntries),
       this.prisma.user.findMany({ where, orderBy: { id: 'desc' }, skip: (page - 1) * size, take: size }),
     ]);
-    return { list, total, page, size };
+    return { list, total, page, size, counts };
   }
 
   async setUserStatus(userId: bigint, status: number) {
     await this.prisma.user.update({ where: { id: userId }, data: { status } });
     return { ok: true };
+  }
+
+  /** 隐藏：不出现在 App 的遇见 / 找地陪 / 找人 / 搜索用户 / 动态广场；聊天、群、关注照旧 */
+  async setUserHidden(userId: bigint, hidden: boolean) {
+    await this.prisma.user.update({ where: { id: userId }, data: { hidden } });
+    return { hidden };
   }
 
   async setUserWallet(userId: bigint, enabled: boolean) {

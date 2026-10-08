@@ -48,6 +48,14 @@ body {
 .cat-tabs button { padding: 5px 14px; font-size: 13px; }
 .cat-tabs button.ghost .n { color: var(--text-2); }
 .cat-tabs .n { margin-left: 4px; opacity: 0.85; }
+.dropdown-menu {
+  position: fixed; z-index: 80; padding: 4px 0; border-radius: 10px;
+  background: var(--bg-input); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.dropdown-item { padding: 9px 16px; cursor: pointer; white-space: nowrap; }
+.dropdown-item:hover { background: rgba(254, 44, 85, 0.1); }
+.dropdown-item.danger { color: var(--accent); }
+button.menu-open { border-color: var(--accent); color: var(--text); }
 .pager { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
 
 .topbar { display: none; }

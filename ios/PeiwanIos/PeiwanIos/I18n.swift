@@ -8,6 +8,8 @@ final class I18nStore: @unchecked Sendable {
     static let shared = I18nStore()
     static let system = "system"
     static let fallback = "zh"
+    /// 没在「我的 → 语言」里选过时用英文（不跟随系统）；选过「跟随系统」的照旧
+    static let defaultChoice = "en"
     private static let key = "appLang"
 
     let tables: [String: [String: String]]
@@ -26,7 +28,7 @@ final class I18nStore: @unchecked Sendable {
             all[String(name.dropFirst(5))] = obj
         }
         tables = all
-        _choice = UserDefaults.standard.string(forKey: I18nStore.key) ?? I18nStore.system
+        _choice = UserDefaults.standard.string(forKey: I18nStore.key) ?? I18nStore.defaultChoice
         serverPatterns = I18nStore.serverKeys.compactMap { k in
             guard let zh = all[I18nStore.fallback]?[k] else { return nil }
             return I18nStore.compile(k, zh)

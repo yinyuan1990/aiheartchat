@@ -111,7 +111,7 @@ export class UserService {
     const viewer = await this.prisma.user.findUnique({ where: { id: viewerId } });
     if (!viewer) throw new NotFoundException('用户不存在');
     // 全局性别隔离：仅可见异性
-    const baseWhere = { gender: viewer.gender === 1 ? 2 : 1, status: 0, id: { not: viewerId } };
+    const baseWhere = { gender: viewer.gender === 1 ? 2 : 1, status: 0, hidden: false, id: { not: viewerId } };
     const select = {
       id: true, nickname: true, avatar: true, gender: true, age: true, cityName: true,
       isGuide: true, idCard: true, ratingAvg: true, ratingCount: true, videoPriceFen: true, createdAt: true,

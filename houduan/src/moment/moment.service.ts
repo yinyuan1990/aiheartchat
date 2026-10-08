@@ -69,11 +69,14 @@ export class MomentService {
       if (followedIds.length === 0) return [];
     }
 
+    // 后台隐藏的用户：动态不进广场（人数很少，直接排除）
+    const hiddenIds = (await this.prisma.user.findMany({ where: { hidden: true }, select: { id: true } })).map((u) => u.id);
     const moments = await this.prisma.moment.findMany({
       where: {
         gender: targetGender,
         status: 0,
         ...(followedIds ? { userId: { in: followedIds } } : {}),
+        ...(hiddenIds.length ? { NOT: { userId: { in: hiddenIds } } } : {}),
         ...(opts.cityCode ? { cityCode: opts.cityCode } : {}),
         ...(opts.beforeId ? { id: { lt: opts.beforeId } } : {}),
         ...(opts.onlyVideo ? { type: 2 } : {}),

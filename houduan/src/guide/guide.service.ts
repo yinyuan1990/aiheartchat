@@ -37,6 +37,7 @@ export class GuideService {
         gender: targetGender,
         isGuide: true,
         status: 0,
+        hidden: false,
         ...(cityCode ? { cityCode } : {}),
         ...(beforeId ? { id: { lt: beforeId } } : {}),
       },
@@ -59,6 +60,7 @@ export class GuideService {
       where: {
         gender: targetGender,
         status: 0,
+        hidden: false,
         ...(cityCode ? { cityCode } : {}),
         ...(beforeId ? { id: { lt: beforeId } } : {}),
       },

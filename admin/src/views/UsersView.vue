@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { api } from '../api';
 import ListPager from '../components/ListPager.vue';
 
@@ -8,6 +8,18 @@ const keyword = ref('');
 const page = ref(1);
 const size = ref(20);
 const total = ref(0);
+const CATS = [
+  { key: 'normal', label: '正常' },
+  { key: 'male', label: '男' },
+  { key: 'female', label: '女' },
+  { key: 'guide', label: '地陪' },
+  { key: 'hidden', label: '已隐藏' },
+  { key: 'banned', label: '已封禁' },
+  { key: 'bot', label: '机器人 / 系统' },
+  { key: 'all', label: '全部' },
+];
+const cat = ref('normal');
+const counts = ref<Record<string, number>>({});
 const grantFor = ref<any>(null);
 const amount = ref('');
 const remark = ref('');
@@ -67,15 +79,25 @@ const limitFor = ref<any>(null);
 const limitInput = ref('');
 
 async function load() {
-  const qs = new URLSearchParams({ page: String(page.value), size: String(size.value) });
+  const qs = new URLSearchParams({ cat: cat.value, page: String(page.value), size: String(size.value) });
   if (keyword.value.trim()) qs.set('keyword', keyword.value.trim());
-  const r = await api<{ list: any[]; total: number }>(`/admin/users?${qs}`);
+  const r = await api<{ list: any[]; total: number; counts: Record<string, number> }>(`/admin/users?${qs}`);
+  // 封禁 / 解封后当前分类少了一条，页码可能越界：退回最后一页
+  if (!r.list.length && r.total > 0 && page.value > 1) {
+    page.value = Math.ceil(r.total / size.value);
+    return load();
+  }
   users.value = r.list;
   total.value = r.total;
+  counts.value = r.counts;
 }
 function search() {
   page.value = 1;
   load();
+}
+function pickCat(k: string) {
+  cat.value = k;
+  search();
 }
 function onPage(p: number, s: number) {
   page.value = p;
@@ -152,9 +174,66 @@ async function grant() {
 }
 
 async function toggleBan(u: any) {
-  await api(`/admin/users/${u.id}/status`, { method: 'POST', body: { status: u.status === 0 ? 1 : 0 } });
-  load();
+  if (u.status === 0 && !confirm(`封禁「${u.nickname}」？封禁后不能登录、发消息`)) return;
+  try {
+    await api(`/admin/users/${u.id}/status`, { method: 'POST', body: { status: u.status === 0 ? 1 : 0 } });
+    showToast(`「${u.nickname}」已${u.status === 0 ? '封禁' : '解封'}`);
+    load();
+  } catch (e: any) {
+    showToast(e.message);
+  }
 }
+
+async function toggleHidden(u: any) {
+  const hidden = !u.hidden;
+  if (hidden && !confirm(`隐藏「${u.nickname}」？\n\n隐藏后 TA 不出现在 App 的遇见、找地陪、找人、搜索用户和动态广场里；已有的聊天、群、关注不受影响，TA 自己照常使用。随时可以取消隐藏。`)) return;
+  try {
+    await api(`/admin/users/${u.id}/hidden`, { method: 'POST', body: { hidden } });
+    showToast(`「${u.nickname}」已${hidden ? '隐藏' : '取消隐藏'}`);
+    load();
+  } catch (e: any) {
+    showToast(e.message);
+  }
+}
+
+// 「操作」下拉：菜单挂在 body 上用 fixed 定位，免得被表格的横向滚动裁掉
+const menuFor = ref<any>(null);
+const menuPos = ref({ top: 0, left: 0 });
+const MENU_W = 150;
+const MENU_H = 5 * 36 + 8;
+function openMenu(u: any, e: MouseEvent) {
+  if (menuFor.value?.id === u.id) return closeMenu();
+  const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  const top = r.bottom + 4 + MENU_H > window.innerHeight ? Math.max(8, r.top - 4 - MENU_H) : r.bottom + 4;
+  menuPos.value = { top, left: Math.max(8, Math.min(r.right - MENU_W, window.innerWidth - MENU_W - 8)) };
+  menuFor.value = u;
+}
+function closeMenu() {
+  menuFor.value = null;
+}
+function reveal(sel: string) {
+  nextTick(() => document.querySelector(sel)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+}
+function act(kind: 'grant' | 'txs' | 'limit' | 'hide' | 'ban') {
+  const u = menuFor.value;
+  closeMenu();
+  if (!u) return;
+  if (kind === 'grant') { grantFor.value = u; reveal('[data-panel="grant"]'); }
+  else if (kind === 'txs') { openTxs(u); reveal('[data-panel="txs"]'); }
+  else if (kind === 'limit') { openLimit(u); reveal('[data-panel="limit"]'); }
+  else if (kind === 'hide') toggleHidden(u);
+  else toggleBan(u);
+}
+onMounted(() => {
+  window.addEventListener('click', closeMenu);
+  window.addEventListener('scroll', closeMenu, true);
+  window.addEventListener('resize', closeMenu);
+});
+onBeforeUnmount(() => {
+  window.removeEventListener('click', closeMenu);
+  window.removeEventListener('scroll', closeMenu, true);
+  window.removeEventListener('resize', closeMenu);
+});
 </script>
 
 <template>
@@ -178,6 +257,11 @@ async function toggleBan(u: any) {
       <div class="muted" style="margin: -6px 0 12px">
         钱包是自托管的（私钥只在用户手机上），这里只控制 App 里显不显示钱包入口；关掉入口冻结不了用户的钱。「按用户开启」时看下表「钱包」列。
       </div>
+      <div class="cat-tabs">
+        <button v-for="c in CATS" :key="c.key" :class="{ ghost: cat !== c.key }" :data-testid="`user-cat-${c.key}`" @click="pickCat(c.key)">
+          {{ c.label }}<span class="n">{{ counts[c.key] ?? 0 }}</span>
+        </button>
+      </div>
       <table>
         <thead>
           <tr><th>ID</th><th>6 位 ID</th><th>昵称</th><th>性别</th><th>年纪</th><th>地址</th><th>地陪</th><th>频道</th><th>钱包</th><th>状态</th><th>操作</th></tr>
@@ -187,7 +271,7 @@ async function toggleBan(u: any) {
             <td>{{ u.id }}</td>
             <td style="font-family: monospace">{{ u.shortId || '—' }}</td>
             <td>{{ u.nickname }}</td>
-            <td>{{ u.gender === 1 ? '男' : '女' }}</td>
+            <td>{{ u.isBot ? '机器人' : u.gender === 1 ? '男' : u.gender === 2 ? '女' : '—' }}</td>
             <td>{{ u.age }}</td>
             <td class="muted">{{ u.address.slice(0, 8) }}…{{ u.address.slice(-4) }}</td>
             <td>{{ u.isGuide ? '是' : '-' }}</td>
@@ -198,14 +282,12 @@ async function toggleBan(u: any) {
             <td :title="walletMode === 'per_user' ? '' : `全局为「${WALLET_MODE_LABEL[walletMode]}」，单人设置暂不生效`">
               <button class="small" :class="{ ghost: !u.walletEnabled }" @click="toggleWallet(u)">{{ u.walletEnabled ? '已开' : '关' }}</button>
             </td>
-            <td><span class="tag" :class="u.status === 0 ? 'ok' : 'off'">{{ u.status === 0 ? '正常' : '封禁' }}</span></td>
+            <td style="white-space: nowrap">
+              <span class="tag" :class="u.status === 0 ? 'ok' : 'off'">{{ u.status === 0 ? '正常' : '封禁' }}</span>
+              <span v-if="u.hidden" class="tag warn" style="margin-left: 4px" title="App 的遇见 / 找人 / 搜索 / 动态广场里不显示">已隐藏</span>
+            </td>
             <td>
-              <div class="row">
-                <button class="small" @click="grantFor = u">发积分</button>
-                <button class="small ghost" @click="openTxs(u)">积分明细</button>
-                <button class="small ghost" @click="openLimit(u)">频道额度</button>
-                <button class="small ghost" @click="toggleBan(u)">{{ u.status === 0 ? '封禁' : '解封' }}</button>
-              </div>
+              <button class="small ghost" :class="{ 'menu-open': menuFor?.id === u.id }" :data-testid="`user-ops-${u.id}`" style="white-space: nowrap" @click.stop="openMenu(u, $event)">操作 ▾</button>
             </td>
           </tr>
           <tr v-if="users.length === 0"><td colspan="11" class="muted">没有符合条件的用户</td></tr>
@@ -214,7 +296,17 @@ async function toggleBan(u: any) {
       <ListPager :total="total" :page="page" :size="size" @change="onPage" />
     </div>
 
-    <div v-if="grantFor" class="card">
+    <Teleport to="body">
+      <div v-if="menuFor" class="dropdown-menu" :style="{ top: `${menuPos.top}px`, left: `${menuPos.left}px`, width: `${MENU_W}px` }" data-testid="user-ops-menu" @click.stop>
+        <div class="dropdown-item" @click="act('grant')">发积分</div>
+        <div class="dropdown-item" @click="act('txs')">积分明细</div>
+        <div class="dropdown-item" @click="act('limit')">频道额度</div>
+        <div class="dropdown-item" data-testid="user-op-hide" @click="act('hide')">{{ menuFor.hidden ? '取消隐藏' : '隐藏' }}</div>
+        <div class="dropdown-item danger" data-testid="user-op-ban" @click="act('ban')">{{ menuFor.status === 0 ? '封禁' : '解封' }}</div>
+      </div>
+    </Teleport>
+
+    <div v-if="grantFor" class="card" data-panel="grant">
       <div class="page-title" style="font-size: 15px">给「{{ grantFor.nickname }}」发放积分（可小数，负数为扣减）</div>
       <div class="row">
         <input v-model="amount" placeholder="积分数量，如 100 或 0.5" style="width: 160px" />
@@ -224,7 +316,7 @@ async function toggleBan(u: any) {
       </div>
     </div>
 
-    <div v-if="limitFor" class="card">
+    <div v-if="limitFor" class="card" data-panel="limit">
       <div class="page-title" style="font-size: 15px">
         「{{ limitFor.nickname }}」最多能创建几个频道（已建 {{ limitFor.ownedChannels ?? 0 }} 个）
       </div>
@@ -237,7 +329,7 @@ async function toggleBan(u: any) {
       </div>
     </div>
 
-    <div v-if="txFor" class="card">
+    <div v-if="txFor" class="card" data-panel="txs">
       <div class="row" style="justify-content: space-between; margin-bottom: 10px">
         <div class="page-title" style="font-size: 15px; margin: 0">「{{ txFor.nickname }}」积分明细（单位：积分）</div>
         <button class="small ghost" @click="txFor = null">关闭</button>
