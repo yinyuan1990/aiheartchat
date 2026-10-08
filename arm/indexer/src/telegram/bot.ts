@@ -24,7 +24,7 @@ const EXPLORER = isMainnet ? "https://arc-scan.org" : "https://testnet.arcscan.a
 /** replayed history is never announced */
 const MAX_AGE_MS = 10 * 60_000;
 /** project X account, used for the 𝕏 line when the token has none (same handle as web `site.ts`) */
-const PROJECT_X = "https://x.com/yinyuan659";
+const PROJECT_X = "https://x.com/EGIRL2026";
 /** minimum spacing between posts to the same chat (Telegram allows ~20/min per group) */
 const PER_CHAT_GAP_MS = 3_000;
 const QUEUE_MAX = 300;

@@ -48,7 +48,7 @@ contract Smoke is Script {
             symbol: vm.envOr("SYMBOL", string("ASMK")),
             logo: "https://arm.yyheart.com/brand/logo.png",
             description: "Arm smoke test token.",
-            socials: LaunchToken.Socials({website: "https://arm.yyheart.com", twitter: "https://x.com/yinyuan659", telegram: "https://t.me/armlauch2", discord: "", farcaster: ""}),
+            socials: LaunchToken.Socials({website: "https://arm.yyheart.com", twitter: "https://x.com/EGIRL2026", telegram: "https://t.me/armlauch2", discord: "", farcaster: ""}),
             payout: address(0),
             buyTaxBps: 0,
             sellTaxBps: 0,

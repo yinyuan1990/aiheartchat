@@ -1,5 +1,5 @@
 /** Official Arm identity. Single source of truth for sidebar, footer, docs and the mobile settings card. */
-export const X_HANDLE = "yinyuan659";
+export const X_HANDLE = "EGIRL2026";
 export const X_URL = `https://x.com/${X_HANDLE}`;
 export const TG_HANDLE = "armlauch2";
 export const TG_URL = `https://t.me/${TG_HANDLE}`;

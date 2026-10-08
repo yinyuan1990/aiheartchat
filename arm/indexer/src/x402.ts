@@ -342,6 +342,53 @@ function cleanMedia(kind: MediaKind, raw: unknown): object | string {
   return lyrics ? { model, prompt, instrumental, lyrics } : { model, prompt, instrumental };
 }
 
+/**
+ * ElevenLabs' sound-effect model only understands English: given 「游戏打击音效」 it voices the words instead of
+ * making the sound. Chinese prompts are rewritten into an English sound description by a free chat model first
+ * (cached, so the quote and the paid retry send the same text; sound effects are flat-priced either way).
+ */
+const CJK = /[\u3400-\u9fff\uf900-\ufaff]/;
+const sfxEnglish = new Map<string, string>();
+export async function sfxPrompt(text: string): Promise<string> {
+  if (!CJK.test(text)) return text;
+  const hit = sfxEnglish.get(text);
+  if (hit) return hit;
+  let free: string[] = [];
+  try {
+    free = (await x402Models()).filter((m) => m.free).map((m) => m.id);
+  } catch {
+    return text;
+  }
+  // Llama follows instructions best but sometimes answers in Chinese; the others are the fallback
+  const order = [...free.filter((m) => m.includes("llama")), ...free.filter((m) => !m.includes("llama"))].slice(0, 3);
+  for (const model of order) {
+    try {
+      const r = await upstream(`${UPSTREAM}/chat/completions`, {
+        method: "POST",
+        body: {
+          model,
+          messages: [
+            { role: "system", content: "You write prompts for an AI sound-effect generator. Always answer in English only. Describe only the sound itself (source, action, texture, feel) in one short line. No speech, no quotes, no explanation." },
+            { role: "user", content: `Translate this sound-effect request into an English sound-effect prompt: ${text}` },
+          ],
+          max_tokens: 120,
+          temperature: 0,
+        },
+        timeoutMs: 20_000,
+      });
+      const raw = (r.json as { choices?: { message?: { content?: string | null } }[] }).choices?.[0]?.message?.content ?? "";
+      const out = (raw.split("</think>").pop() ?? "").trim().split("\n")[0].trim().replace(/^(prompt:\s*)/i, "").replace(/^["'“]+|["'”]+$/g, "").trim();
+      if (r.status !== 200 || out.length < 3 || out.length > 300 || CJK.test(out)) continue;
+      if (sfxEnglish.size > 300) sfxEnglish.delete(sfxEnglish.keys().next().value!);
+      sfxEnglish.set(text, out);
+      return out;
+    } catch {
+      // next model
+    }
+  }
+  return text;
+}
+
 export const isMediaKind = (k: string): k is MediaKind => k in MEDIA_PATH;
 export async function x402Generate(kind: MediaKind, raw: unknown, payment: string | undefined, ip: string): Promise<Relayed> {
   if (!allow(ip)) return { status: 429, json: { error: "too many requests" } };
@@ -349,6 +396,7 @@ export async function x402Generate(kind: MediaKind, raw: unknown, payment: strin
   if (typeof body === "string") return { status: 400, json: { error: body } };
   if (badPayment(payment)) return { status: 400, json: { error: "bad payment header" } };
   let path = MEDIA_PATH[kind];
+  if (kind === "sfx") (body as { text: string }).text = await sfxPrompt((body as { text: string }).text);
   const ref = (body as { image?: string }).image;
   if (kind === "image" && ref) {
     path = "/images/image2image";

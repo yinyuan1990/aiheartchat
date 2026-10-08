@@ -7,7 +7,7 @@
 
 **Free meme-token launches on Circle's Arc. LP locked forever, 78% of trading fees to the creator, all settled in USDC.**
 
-Live app: https://arm.yyheart.com · Demo: https://youtu.be/_AgDNh2oqw8 · X: [@yinyuan659](https://x.com/yinyuan659) · Telegram: [@armlauch2](https://t.me/armlauch2)
+Live app: https://arm.yyheart.com · Demo: https://youtu.be/_AgDNh2oqw8 · X: [@EGIRL2026](https://x.com/EGIRL2026) · Telegram: [@armlauch2](https://t.me/armlauch2)
 
 ## English
 
