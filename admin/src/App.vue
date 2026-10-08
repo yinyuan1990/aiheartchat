@@ -19,6 +19,7 @@ import ChannelsView from './views/ChannelsView.vue';
 import BotsView from './views/BotsView.vue';
 import ReportsView from './views/ReportsView.vue';
 import GroupsView from './views/GroupsView.vue';
+import WalletStatusView from './views/WalletStatusView.vue';
 
 const logged = ref(!!getToken());
 const username = ref('');
@@ -54,6 +55,7 @@ const menu = [
     ],
   },
   { key: 'finance', label: '财务', items: [{ key: 'ledger', label: '平台账本' }] },
+  { key: 'web3', label: 'Web3 钱包', items: [{ key: 'wallet3p', label: '钱包现状（第三方）' }] },
   {
     key: 'ops', label: '运营推广',
     items: [
@@ -193,6 +195,7 @@ function logout() {
       <PublishView v-if="tab === 'publish'" />
       <ChannelsView v-if="tab === 'channels'" />
       <GroupsView v-if="tab === 'groups'" />
+      <WalletStatusView v-if="tab === 'wallet3p'" />
       <BotsView v-if="tab === 'bots'" />
       <ReportsView v-if="tab === 'reports'" />
       <TreeholeView v-if="tab === 'treehole'" />
