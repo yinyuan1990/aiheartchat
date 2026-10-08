@@ -21,6 +21,7 @@ import { XPicsService } from '../publish/x-pics.service';
 import { ChannelService } from '../im/channel.service';
 import { BotService } from '../im/bot.service';
 import { MessageService } from '../im/message.service';
+import { GroupService } from '../im/group.service';
 
 @Controller('admin')
 export class AdminController {
@@ -44,6 +45,7 @@ export class AdminController {
     private readonly channels: ChannelService,
     private readonly bots: BotService,
     private readonly msgs: MessageService,
+    private readonly groups: GroupService,
   ) {}
 
   // ---------- 机器人（用户建的 Bot API 机器人：查看 / 封禁 / 删除） ----------
@@ -128,6 +130,32 @@ export class AdminController {
   @UseGuards(AdminGuard)
   channelDeleteComment(@Param('id') id: string) {
     return this.channels.adminDeleteComment(BigInt(id));
+  }
+
+  // ---------- 群聊（查看 / 封禁 / 对用户显示开关） ----------
+
+  @Get('groups')
+  @UseGuards(AdminGuard)
+  groupList(@Query('q') q?: string) {
+    return this.groups.adminList(q);
+  }
+
+  @Post('groups/:id/status')
+  @UseGuards(AdminGuard)
+  groupStatus(@Param('id') id: string, @Body() body: { banned?: boolean }) {
+    return this.groups.adminSetStatus(BigInt(id), body?.banned ? 2 : 0);
+  }
+
+  @Post('groups/:id/visible')
+  @UseGuards(AdminGuard)
+  groupVisible(@Param('id') id: string, @Body() body: { visible?: boolean }) {
+    return this.groups.adminSetVisible(BigInt(id), body?.visible !== false);
+  }
+
+  @Get('groups/:id/messages')
+  @UseGuards(AdminGuard)
+  groupMessages(@Param('id') id: string, @Query('beforeId') beforeId?: string) {
+    return this.groups.adminMessages(BigInt(id), beforeId ? BigInt(beforeId) : undefined);
   }
 
   // ---------- 内容分发（推广：树洞新帖 → AI 改写 → 小红书 / 抖音 / 快手 / 知乎，发布机在操作者本机） ----------

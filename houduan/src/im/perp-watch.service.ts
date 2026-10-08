@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, Logger, OnModuleDe
 import type { WebSocket } from 'ws';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto.service';
+import { GROUP_HIDDEN } from './group-hidden';
 
 /**
  * 合约喊单卡片的实时状态，走 IM WebSocket：手机打开一个聊天时发 perpWatch（这个会话 + 屏幕上的喊单消息 id），
@@ -51,6 +52,7 @@ export class PerpWatchService implements OnModuleInit, OnModuleDestroy {
       ? !!(await this.prisma.groupMember.findUnique({ where: { groupId_userId: { groupId: conv.groupId, userId } }, select: { id: true } }))
       : conv.userAId === userId || conv.userBId === userId;
     if (!member) throw new ForbiddenException('不在这个聊天里');
+    if (conv.groupId && (await this.prisma.chatGroup.findUnique({ where: { id: conv.groupId }, select: { visible: true } }))?.visible === false) throw new ForbiddenException(GROUP_HIDDEN);
     const rows = msgIds.length ? await this.prisma.message.findMany({ where: { id: { in: msgIds.map(BigInt) }, conversationId: conv.id, type: 'perp' }, select: { id: true, cipherContent: true } }) : [];
     const key = this.crypto.unwrapKey(conv.wrappedKey);
     const cards = new Map<string, Card>();

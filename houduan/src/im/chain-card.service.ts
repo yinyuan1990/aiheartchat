@@ -80,7 +80,7 @@ export class ChainCardService {
 
   /**
    * 点收款消息付的款：付款人得看得到那条消息（单聊双方 / 群成员），链和收款地址要和消息一致；
-   * 卡片回到那条消息所在的聊天，频道里普通成员不能发言，就私聊发给收款人。
+   * 卡片回到那条消息所在的聊天，频道里普通成员不能发言、群被后台设成不显示时，就私聊发给收款人。
    */
   private async fromRequest(userId: bigint, req: string, chain: string, sameAddr: (a: string) => boolean) {
     if (!/^\d{1,19}$/.test(req)) throw new BadRequestException('参数不正确');
@@ -89,7 +89,7 @@ export class ChainCardService {
     if (msg.senderId === userId) throw new BadRequestException('不能付给自己的收款消息');
     const conv = await this.prisma.conversation.findUnique({ where: { id: msg.conversationId } });
     if (!conv) throw new NotFoundException('收款消息不存在');
-    const group = conv.groupId ? await this.prisma.chatGroup.findUnique({ where: { id: conv.groupId }, select: { id: true, kind: true } }) : null;
+    const group = conv.groupId ? await this.prisma.chatGroup.findUnique({ where: { id: conv.groupId }, select: { id: true, kind: true, visible: true } }) : null;
     const canSee = group
       ? !!(await this.prisma.groupMember.findUnique({ where: { groupId_userId: { groupId: group.id, userId } }, select: { id: true } }))
       : conv.userAId === userId || conv.userBId === userId;
@@ -102,7 +102,7 @@ export class ChainCardService {
     }
     if (c.chain !== chain || !c.address || !sameAddr(c.address)) throw new BadRequestException('收款地址和收款消息对不上');
     const payee = String(msg.senderId);
-    const dest = group && group.kind !== 2 ? { convType: 2 as const, targetId: String(group.id) } : { convType: 1 as const, targetId: payee };
+    const dest = group && group.kind !== 2 && group.visible ? { convType: 2 as const, targetId: String(group.id) } : { convType: 1 as const, targetId: payee };
     return { receiverId: msg.senderId, dest };
   }
 

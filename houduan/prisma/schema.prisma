@@ -194,6 +194,8 @@ model ChatGroup {
   memberPost  Boolean  @default(false) @map("member_post")
   /// 0=正常 1=已解散 2=后台封禁
   status      Int      @default(0) @db.TinyInt
+  /// 后台「对用户显示」开关：false = 不进任何人的会话列表、不推送、不能发消息 / 入群，消息保留，打开即恢复
+  visible     Boolean  @default(true)
   createdAt   DateTime @default(now()) @map("created_at")
 
   members GroupMember[]

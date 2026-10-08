@@ -24,6 +24,6 @@ import { UploadModule } from '../upload/upload.module';
   imports: [AuthModule, WalletModule, StickerModule, UploadModule],
   controllers: [ImController, BotApiController],
   providers: [ConnectionRegistry, ImService, GroupService, ImGateway, VoiceRoomService, ChannelService, BotService, MessageService, ChainCardService, CoinGroupService, CoinAvatarService, BotAvatarService, PerpCallService, PerpWatchService],
-  exports: [ConnectionRegistry, ImService, ChannelService, BotService, MessageService],
+  exports: [ConnectionRegistry, ImService, GroupService, ChannelService, BotService, MessageService],
 })
 export class ImModule {}

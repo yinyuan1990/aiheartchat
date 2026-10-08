@@ -36,6 +36,7 @@ export const EN: Record<string, string> = {
   消息不存在: 'Message not found',
   来源不存在: 'Source not found',
   群不存在: 'Group not found',
+  '该群已被关闭，暂时不能查看或发消息': 'This group has been closed. You cannot view it or send messages for now',
   机器人不存在: 'Bot not found',
   不在该群中: 'You are not in this group',
   会话不存在: 'Chat not found',

@@ -9,6 +9,7 @@ import { resolveInviteUser } from '../invite/invite.service';
 import { BotService } from './bot.service';
 import { sanitizeCallout, sanitizePayreq } from './card-content';
 import { COIN_GROUP_COLD_MS } from './coin-group.service';
+import { GROUP_HIDDEN } from './group-hidden';
 
 /** 需要扣费的消息类型（礼物走礼物模块自身计费） */
 const CHARGED_TYPES = new Set(['text', 'image', 'video', 'audio', 'location', 'sticker', 'callout', 'payreq']);
@@ -139,8 +140,9 @@ export class ImService {
       where: { groupId_userId: { groupId, userId: sender.id } },
     });
     if (!member) throw new ForbiddenException('不在该群中');
-    const group = await this.prisma.chatGroup.findUnique({ where: { id: groupId }, select: { id: true, name: true, kind: true, status: true, memberPost: true } });
+    const group = await this.prisma.chatGroup.findUnique({ where: { id: groupId }, select: { id: true, name: true, kind: true, status: true, visible: true, memberPost: true } });
     if (!group || group.status !== 0) throw new NotFoundException('群不存在');
+    if (!group.visible) throw new ForbiddenException(GROUP_HIDDEN);
     if (group.kind === 2) {
       if (member.role !== 'owner' && member.role !== 'admin' && !group.memberPost) throw new ForbiddenException('频道只有频道主能发帖');
       if (!CHANNEL_TYPES.has(frame.msgType)) throw new BadRequestException('频道不支持这种消息');
@@ -282,7 +284,7 @@ export class ImService {
         });
       } else if (conv.groupId) {
         const group = await this.prisma.chatGroup.findUnique({ where: { id: conv.groupId } });
-        if (!group || group.status !== 0) continue;
+        if (!group || group.status !== 0 || !group.visible) continue;
         const lastRead = lastReadByGroup.get(conv.groupId.toString()) ?? 0n;
         const unread = await this.prisma.message.count({
           where: { conversationId: conv.id, id: { gt: lastRead }, senderId: { not: userId } },
@@ -334,7 +336,7 @@ export class ImService {
       select: { id: true, type: true, groupId: true, userAId: true, userBId: true, wrappedKey: true },
     });
     const groups = groupIds.length
-      ? await this.prisma.chatGroup.findMany({ where: { id: { in: groupIds }, status: 0 } })
+      ? await this.prisma.chatGroup.findMany({ where: { id: { in: groupIds }, status: 0, visible: true } })
       : [];
     const groupMap = new Map(groups.map((g) => [g.id.toString(), g]));
     const convMap = new Map(
@@ -641,6 +643,8 @@ export class ImService {
         where: { groupId_userId: { groupId: conv.groupId, userId } },
       });
       if (!member) throw new ForbiddenException('不在该群中');
+      const group = await this.prisma.chatGroup.findUnique({ where: { id: conv.groupId }, select: { visible: true } });
+      if (group && !group.visible) throw new ForbiddenException(GROUP_HIDDEN);
     }
   }
 

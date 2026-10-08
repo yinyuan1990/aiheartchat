@@ -11,6 +11,7 @@ import { UploadService } from '../upload/upload.service';
 import { ConnectionRegistry } from './connection.registry';
 import { ChannelService } from './channel.service';
 import { BotAvatarService } from './bot-avatar.service';
+import { GROUP_HIDDEN } from './group-hidden';
 
 /**
  * 机器人平台（Telegram Bot API 兼容）：
@@ -250,6 +251,7 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
   async addToChat(operatorId: bigint, groupId: bigint, username: string) {
     const group = await this.prisma.chatGroup.findUnique({ where: { id: groupId } });
     if (!group || group.status !== 0) throw new NotFoundException('群不存在');
+    if (!group.visible) throw new ForbiddenException(GROUP_HIDDEN);
     const op = await this.prisma.groupMember.findUnique({ where: { groupId_userId: { groupId, userId: operatorId } } });
     if (op?.role !== 'owner' && op?.role !== 'admin') throw new ForbiddenException(group.kind === 2 ? '只有频道主能添加机器人' : '只有群主 / 管理员能添加机器人');
     const info = await this.publicInfo(username);
@@ -356,6 +358,7 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
       const member = await this.prisma.groupMember.findUnique({ where: { groupId_userId: { groupId: conv.groupId!, userId } } });
       const group = await this.prisma.chatGroup.findUnique({ where: { id: conv.groupId! } });
       if (!group || group.status !== 0) throw new NotFoundException('群不存在');
+      if (!group.visible) throw new ForbiddenException(GROUP_HIDDEN);
       if (!member && group.kind !== 2) throw new ForbiddenException('不在该群中');
       chat = this.groupChat(group);
     }
@@ -697,7 +700,7 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
     }
     const groupId = -n;
     const group = await this.prisma.chatGroup.findUnique({ where: { id: groupId } });
-    if (!group || group.status !== 0) throw new BotApiError(400, 'Bad Request: chat not found');
+    if (!group || group.status !== 0 || !group.visible) throw new BotApiError(400, 'Bad Request: chat not found');
     const member = await this.prisma.groupMember.findUnique({ where: { groupId_userId: { groupId, userId: ctx.bot.id } } });
     const channel = group.kind === 2;
     if (!member) throw new BotApiError(403, `Forbidden: bot is not a member of the ${channel ? 'channel' : 'group'} chat`);

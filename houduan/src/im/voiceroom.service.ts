@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { ConnectionRegistry } from './connection.registry';
 import { SrsService } from '../srs/srs.service';
+import { GROUP_HIDDEN } from './group-hidden';
 
 /** 心跳超时（毫秒）：超过视为已退出（杀进程/断网兜底） */
 const MEMBER_TTL_MS = 90_000;
@@ -67,6 +68,8 @@ export class VoiceRoomService {
       where: { groupId_userId: { groupId, userId } },
     });
     if (!member) throw new ForbiddenException('不在该群中');
+    const group = await this.prisma.chatGroup.findUnique({ where: { id: groupId }, select: { visible: true } });
+    if (group && !group.visible) throw new ForbiddenException(GROUP_HIDDEN);
   }
 
   /**
@@ -137,6 +140,8 @@ export class VoiceRoomService {
 
   /** 成员变化广播全群（在线成员实时刷新语音房状态） */
   private async broadcast(groupId: bigint) {
+    const group = await this.prisma.chatGroup.findUnique({ where: { id: groupId }, select: { visible: true } });
+    if (group && !group.visible) return;
     const { ids, mutedIds } = await this.liveMembers(groupId);
     const [members, max, groupMembers] = await Promise.all([
       this.memberDetails(ids, mutedIds),
@@ -221,6 +226,7 @@ export class VoiceRoomService {
     if (!saved || !token || saved !== token) throw new BadRequestException('二维码已失效');
     const group = await this.prisma.chatGroup.findUnique({ where: { id: groupId } });
     if (!group || group.status !== 0) throw new NotFoundException('群已解散');
+    if (!group.visible) throw new ForbiddenException(GROUP_HIDDEN);
 
     const already = await this.prisma.groupMember.findUnique({
       where: { groupId_userId: { groupId, userId } },

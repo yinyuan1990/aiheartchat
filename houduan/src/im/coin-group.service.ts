@@ -93,9 +93,9 @@ export class CoinGroupService {
     const avatarJob = (groupId: bigint) => ({ groupId, key: `${chain}:${address}`, perp, symbol: perp ? raw : cleanText(b.symbol, 20) || '?', name: cleanText(b.name, 40), image });
     let row = await this.prisma.coinGroup.findUnique({ where: { chain_address: { chain, address } } });
     if (row) {
-      const g = await this.prisma.chatGroup.findUnique({ where: { id: row.groupId }, select: { status: true, avatar: true } });
-      // 后台封了这个群：不能再进，也不重建
-      if (!g || g.status !== 0) throw new BadRequestException('这个币的讨论群已关闭');
+      const g = await this.prisma.chatGroup.findUnique({ where: { id: row.groupId }, select: { status: true, visible: true, avatar: true } });
+      // 后台封了 / 设成不显示：不能再进，也不重建
+      if (!g || g.status !== 0 || !g.visible) throw new BadRequestException('这个币的讨论群已关闭');
       this.avatars.ensure(avatarJob(row.groupId), g.avatar);
     } else {
       const recent = await this.prisma.coinGroup.count({ where: { creatorId: userId, createdAt: { gt: new Date(Date.now() - 86_400_000) } } });

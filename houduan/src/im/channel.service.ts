@@ -108,6 +108,7 @@ export class ChannelService implements OnModuleInit {
       where: {
         kind: CHANNEL_KIND,
         status: 0,
+        visible: true,
         ...(kw ? { OR: [{ name: { contains: kw } }, { notice: { contains: kw } }] } : {}),
       },
       orderBy: { id: 'desc' },
@@ -711,7 +712,7 @@ export class ChannelService implements OnModuleInit {
 
   private async mustChannel(groupId: bigint) {
     const g = await this.prisma.chatGroup.findUnique({ where: { id: groupId } });
-    if (!g || g.kind !== CHANNEL_KIND || g.status !== 0) throw new NotFoundException('频道不存在或已关闭');
+    if (!g || g.kind !== CHANNEL_KIND || g.status !== 0 || !g.visible) throw new NotFoundException('频道不存在或已关闭');
     return g;
   }
 
