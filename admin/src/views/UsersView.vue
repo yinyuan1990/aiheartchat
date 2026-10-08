@@ -145,7 +145,7 @@ async function toggleBan(u: any) {
     <div class="page-title">用户管理</div>
     <div class="card">
       <div class="row" style="margin-bottom: 14px">
-        <input v-model="keyword" placeholder="昵称 / 地址搜索" style="width: 260px" @keydown.enter="load" />
+        <input v-model="keyword" placeholder="昵称 / 地址 / 6 位 ID 搜索" style="width: 260px" @keydown.enter="load" />
         <button class="small" @click="load">搜索</button>
         <span class="muted" style="margin-left: auto">链上钱包入口</span>
         <button
@@ -163,11 +163,12 @@ async function toggleBan(u: any) {
       </div>
       <table>
         <thead>
-          <tr><th>ID</th><th>昵称</th><th>性别</th><th>年纪</th><th>地址</th><th>地陪</th><th>频道</th><th>钱包</th><th>状态</th><th>操作</th></tr>
+          <tr><th>ID</th><th>6 位 ID</th><th>昵称</th><th>性别</th><th>年纪</th><th>地址</th><th>地陪</th><th>频道</th><th>钱包</th><th>状态</th><th>操作</th></tr>
         </thead>
         <tbody>
           <tr v-for="u in users" :key="u.id">
             <td>{{ u.id }}</td>
+            <td style="font-family: monospace">{{ u.shortId || '—' }}</td>
             <td>{{ u.nickname }}</td>
             <td>{{ u.gender === 1 ? '男' : '女' }}</td>
             <td>{{ u.age }}</td>

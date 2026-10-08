@@ -42,7 +42,7 @@ export class AdminService {
   listUsers(keyword?: string, beforeId?: bigint) {
     return this.prisma.user.findMany({
       where: {
-        ...(keyword ? { OR: [{ nickname: { contains: keyword } }, { address: { contains: keyword } }] } : {}),
+        ...(keyword ? { OR: [{ nickname: { contains: keyword } }, { address: { contains: keyword } }, { shortId: keyword }] } : {}),
         ...(beforeId ? { id: { lt: beforeId } } : {}),
       },
       orderBy: { id: 'desc' },
