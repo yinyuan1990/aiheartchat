@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { formatUnits } from "viem";
-import { ArrowDown, ArrowUp, ArrowsLeftRight, CaretDown, CaretRight, CheckCircle, Copy, Eye, EyeSlash, GasPump, Key, PencilSimple, Plus, ArrowSquareOut, Scan, Sparkle, Trash, Wallet as WalletIcon } from "@phosphor-icons/react";
+import { ArrowDown, ArrowUp, ArrowsLeftRight, CaretDown, CaretRight, CheckCircle, Copy, Eye, EyeSlash, GasPump, Key, PencilSimple, Plus, ArrowSquareOut, Scan, Sparkle, Storefront, Trash, Wallet as WalletIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { TokenAvatar, WalletDot } from "@/components/shared";
 import { useWallet } from "@/lib/api";
@@ -318,6 +318,16 @@ function EarnBanner() {
         </span>
         <span className="shrink-0 rounded-full px-2.5 py-1 text-[12px] font-semibold" style={{ background: "rgba(75,43,214,0.1)", color: "#4b2bd6" }}>
           {t("cw.aichat.homeBadge")}
+        </span>
+        <CaretRight size={15} className="shrink-0 text-muted-foreground" />
+      </Link>
+      <Link href="/wallet/shop" className="flex items-center gap-3 px-4 py-3 transition active:bg-muted">
+        <span className="flex size-[38px] shrink-0 items-center justify-center rounded-full text-white" style={{ background: "linear-gradient(145deg, #f97316, #db2777)" }}>
+          <Storefront size={20} weight="fill" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px] font-semibold">{t("cw.shop.entry")}</span>
+          <span className="block truncate text-[12px] text-muted-foreground">{t("cw.shop.entrySub")}</span>
         </span>
         <CaretRight size={15} className="shrink-0 text-muted-foreground" />
       </Link>

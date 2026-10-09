@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { Package, RefreshCw, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { confirmReceived, fetchOrders, pendingOrders, signSession, storedSession, submitPending, type Pending } from "@/lib/shop";
+import { confirmReceived, fetchOrders, pendingOrders, signSession, storedSession, submitPending, type Order, type Pending } from "@/lib/shop";
+import { ReviewDialog } from "@/components/shop/feedback";
 import { useApp } from "@/components/providers";
 import { errMsg, Empty } from "@/components/shared";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ export default function MyOrders() {
   const [session, setSession] = useState(() => storedSession(address));
   const [pending, setPending] = useState<Pending[]>([]);
   const [busy, setBusy] = useState(false);
+  const [reviewing, setReviewing] = useState<Order | null>(null);
   useEffect(() => {
     setSession(storedSession(address));
     setPending(pendingOrders(address));
@@ -86,7 +88,7 @@ export default function MyOrders() {
       ) : (
         <div className="space-y-3">
           {q.data.map((o) => (
-            <OrderCard key={o.id} o={o} role="buyer" onDone={async (x) => {
+            <OrderCard key={o.id} o={o} role="buyer" onReview={setReviewing} onDone={async (x) => {
               try {
                 await confirmReceived(signer, x.id);
                 void q.refetch();
@@ -97,6 +99,7 @@ export default function MyOrders() {
           ))}
         </div>
       )}
+      <ReviewDialog order={reviewing} onClose={() => setReviewing(null)} onDone={() => { setReviewing(null); void q.refetch(); }} />
     </div>
   );
 }

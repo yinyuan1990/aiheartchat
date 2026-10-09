@@ -4,8 +4,8 @@ import { API_BASE, type TokenView } from "@/lib/api";
 import { ADDR, POOL_FEE, addrsFor, routerAbi } from "@/lib/web3";
 
 /**
- * Creator shops (indexer/src/shop.ts). Paying = one swap that spends the item price in USDC on the shop's token with
- * the seller as `recipient`; the buyer then signs the tx hash + shipping details and posts the order. Used by both the
+ * Creator shops (indexer/src/shop.ts). Paying = either buying the item price's worth of the shop token for oneself, or a
+ * USDC transfer to the seller; the buyer then signs the tx hash + shipping details and posts the order. Used by both the
  * site (wagmi) and the in-App wallet (local key), so everything that signs takes a `sign(message)` callback.
  */
 
@@ -25,7 +25,13 @@ export type Product = {
   volumeUsd6: string;
   /** ways the shop takes payment (seller's choice, at least one) */
   pay: PayModes;
+  reviews: number;
+  /** average stars (1–5, one decimal), null before the first review */
+  rating: number | null;
+  comments: number;
 };
+export type ShopComment = { id: number; author: string; text: string; images: string[]; replyTo: number | null; time: string; isSeller: boolean };
+export type ShopReview = { id: number; buyer: string; rating: number; text: string; images: string[]; time: string; payMethod: PayMethod };
 export type PayModes = { token: boolean; usdc: boolean };
 export type PayMethod = "token" | "usdc";
 export type ShopFront = { seller: string; token: ShopToken | null; pay: PayModes; eligible?: ShopToken[]; products: Product[]; orders: number; openOrders?: number };
@@ -46,6 +52,7 @@ export type Order = {
   priceUsd6: string;
   status: OrderStatus;
   payMethod: PayMethod;
+  reviewed: boolean;
   carrier: string;
   tracking: string;
   shipNote: string;
@@ -120,12 +127,14 @@ const sessionHeaders = (address: string, s: Session): Record<string, string> => 
 
 // ---------- reads ----------
 
-export const useShopProducts = (q: { seller?: string; token?: string; limit?: number } = {}, enabled = true) =>
+export const useShopProducts = (q: { seller?: string; token?: string; q?: string; limit?: number } = {}, enabled = true) =>
   useQuery({
-    queryKey: ["shop", "products", q.seller ?? "", q.token ?? "", q.limit ?? 60],
+    queryKey: ["shop", "products", q.seller ?? "", q.token ?? "", q.q ?? "", q.limit ?? 60],
     enabled,
     staleTime: 30_000,
-    queryFn: () => call<Product[]>(`/products?${new URLSearchParams({ ...(q.seller ? { seller: q.seller } : {}), ...(q.token ? { token: q.token } : {}), limit: String(q.limit ?? 60) })}`),
+    placeholderData: (prev) => prev,
+    queryFn: () =>
+      call<Product[]>(`/products?${new URLSearchParams({ ...(q.seller ? { seller: q.seller } : {}), ...(q.token ? { token: q.token } : {}), ...(q.q ? { q: q.q } : {}), limit: String(q.limit ?? 60) })}`),
   });
 
 export const useProduct = (id?: number) =>
@@ -142,9 +151,44 @@ export const useShopFront = (seller?: string, viewer?: string) =>
     },
   });
 
+export const useComments = (id?: number) =>
+  useQuery({ queryKey: ["shop", "comments", id], enabled: !!id, queryFn: () => call<ShopComment[]>(`/products/${id}/comments`) });
+export const useReviews = (id?: number) =>
+  useQuery({ queryKey: ["shop", "reviews", id], enabled: !!id, queryFn: () => call<ShopReview[]>(`/products/${id}/reviews`) });
+
+/** product page link people can share (always the public site, also from inside the wallet) */
+export const productUrl = (id: number) => `${SHARE_ORIGIN}/shop/${id}`;
+const SHARE_ORIGIN = "https://arm.yyheart.com";
+
 export async function fetchOrders(address: string, session: Session, role: "buyer" | "seller") {
   return call<Order[]>(`/orders?role=${role}`, { headers: sessionHeaders(address, session) });
 }
+
+// ---------- shipping address book (session signature; only the owner sees it) ----------
+
+export type SavedAddress = { id: number; name: string; phone: string; address: string; isDefault: boolean };
+export type AddressInput = { id?: number; name: string; phone: string; address: string; isDefault?: boolean };
+
+export async function fetchAddresses(s: Signer) {
+  const session = await signSession(s);
+  return call<SavedAddress[]>("/addresses", { headers: sessionHeaders(s.address, session) });
+}
+export async function saveAddress(s: Signer, a: AddressInput) {
+  const session = await signSession(s);
+  return call<SavedAddress>("/addresses", { method: "POST", headers: { "content-type": "application/json", ...sessionHeaders(s.address, session) }, body: JSON.stringify(a) });
+}
+export async function deleteAddress(s: Signer, id: number) {
+  const session = await signSession(s);
+  return call<{ ok: boolean }>(`/addresses/${id}/delete`, { method: "POST", headers: sessionHeaders(s.address, session) });
+}
+
+/** the address the buyer picked on the address page for the next checkout (falls back to the default) */
+const PICK_KEY = "arm.shop.pickedAddress";
+export const pickAddress = (id: number) => sessionStorage.setItem(PICK_KEY, String(id));
+export const pickedAddress = (list: SavedAddress[]) => {
+  const id = typeof sessionStorage === "undefined" ? NaN : Number(sessionStorage.getItem(PICK_KEY));
+  return list.find((a) => a.id === id) ?? list.find((a) => a.isDefault) ?? list[0] ?? null;
+};
 
 // ---------- writes ----------
 
@@ -162,30 +206,41 @@ export const updateProduct = (s: Signer, id: number, p: ProductInput) => signedA
 export const deleteProduct = (s: Signer, id: number) => signedAction(s, `/products/${id}`, `product:${id}`, { delete: true });
 export const shipOrder = (s: Signer, id: number, p: { carrier: string; tracking: string; note: string }) => signedAction(s, `/orders/${id}/ship`, `ship:${id}`, p);
 export const confirmReceived = (s: Signer, id: number) => signedAction(s, `/orders/${id}/done`, `done:${id}`, {});
+export const postShopComment = (s: Signer, productId: number, c: { text: string; images: string[]; replyTo?: number | null }) =>
+  signedAction<{ id: number }>(s, `/products/${productId}/comments`, `comment:${productId}`, c);
+/** review an order once it has shipped (also marks it completed) */
+export const postReview = (s: Signer, orderId: number, r: { rating: number; text: string; images: string[] }) =>
+  signedAction<{ id: number }>(s, `/orders/${orderId}/review`, `review:${orderId}`, r);
 
 // ---------- paying ----------
 
-/** Router call that spends `amountIn` USDC on the shop token and delivers the tokens to the seller. */
-export function payCall(token: TokenView, amountIn: bigint, minOut: bigint, seller: Address) {
+/**
+ * "Buy the token" payment: the buyer spends `amountIn` USDC on the shop token for their own wallet (`recipient` =
+ * the buyer). The money goes into the pool; the seller earns the creator share (78%) of the 1% pool fee.
+ */
+export function payCall(token: TokenView, amountIn: bigint, minOut: bigint, recipient: Address) {
   const A = addrsFor(token.factory);
   const tokenAddr = token.address as Address;
   const quote = token.quote && token.quote !== ADDR.usdc.toLowerCase() ? (token.quote as Address) : undefined;
   const deadline = BigInt(Math.floor(Date.now() / 1000) + 600);
   if (quote) {
     const path: Hex = encodePacked(["address", "uint24", "address", "uint24", "address"], [ADDR.usdc, token.quoteUsdcFee ?? 0, quote, POOL_FEE, tokenAddr]);
-    return { address: A.router, abi: routerAbi, functionName: "exactInput" as const, args: [{ path, recipient: seller, deadline, amountIn, amountOutMinimum: minOut }] as const };
+    return { address: A.router, abi: routerAbi, functionName: "exactInput" as const, args: [{ path, recipient, deadline, amountIn, amountOutMinimum: minOut }] as const };
   }
   return {
     address: A.router,
     abi: routerAbi,
     functionName: "exactInputSingle" as const,
-    args: [{ tokenIn: ADDR.usdc, tokenOut: tokenAddr, fee: POOL_FEE, recipient: seller, deadline, amountIn, amountOutMinimum: minOut, sqrtPriceLimitX96: 0n }] as const,
+    args: [{ tokenIn: ADDR.usdc, tokenOut: tokenAddr, fee: POOL_FEE, recipient, deadline, amountIn, amountOutMinimum: minOut, sqrtPriceLimitX96: 0n }] as const,
   };
 }
 
 /** Direct USDC payment: a plain transfer of the price to the seller. */
 export const usdcPayCall = (amount: bigint, seller: Address) => ({ address: ADDR.usdc, abi: erc20Abi, functionName: "transfer" as const, args: [seller, amount] as const });
 
+
+/** the seller's cut of a "buy the token" payment: 78% of the 1% pool fee */
+export const sellerFeeShare = (usd6: bigint) => (usd6 * 78n) / 10_000n;
 
 /** what the buyer sees first: buying the token helps the creator's market, so it leads when the shop takes both */
 export const defaultMethod = (pay: PayModes): PayMethod => (pay.token ? "token" : "usdc");

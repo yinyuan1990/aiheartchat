@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, Lock, RefreshCw } from "lucide-react";
+import { CheckCircle2, ChevronRight, Lock, MapPin, RefreshCw } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { usePublicClient, useReadContract } from "wagmi";
 import { formatUnits, maxUint256, type Address, type PublicClient } from "viem";
@@ -12,45 +12,49 @@ import { fmtNum } from "@/lib/format";
 import { quote } from "@/lib/wallet/arm-trade";
 import { ADDR, NET, addrsFor, erc20Abi } from "@/lib/web3";
 import { useTx } from "@/lib/tx";
-import { defaultMethod, fmtPrice, payCall, payMinOut, placeOrder, usdcPayCall, type PayMethod, type Product, type Ship } from "@/lib/shop";
+import {
+  defaultMethod, fetchAddresses, fmtPrice, payCall, payMinOut, pickedAddress, placeOrder, sellerFeeShare, storedSession, usdcPayCall,
+  type PayMethod, type Product,
+} from "@/lib/shop";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/components/providers";
 import { errMsg } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { fill, useSiteSigner } from "./shared";
 
-const SHIP_KEY = "arm.shop.ship";
-const loadShip = (): Ship => {
-  try {
-    const saved = JSON.parse(localStorage.getItem(SHIP_KEY) ?? "{}") as Partial<Ship>;
-    return { name: saved.name ?? "", phone: saved.phone ?? "", address: saved.address ?? "", note: "" };
-  } catch {
-    return { name: "", phone: "", address: "", note: "" };
-  }
-};
-
 type Step = "approve" | "pay" | "sign" | "submit";
+
+/** the address page sends the buyer back here (?buy=1 reopens this dialog) */
+export const addressPageFor = (productId: number) => `/shop/addresses?back=${encodeURIComponent(`/shop/${productId}?buy=1`)}`;
 
 export function Checkout({ product, token, open, onOpenChange }: { product: Product; token: TokenView; open: boolean; onOpenChange: (o: boolean) => void }) {
   const { t, address, connected, wrongChain, toggleConnect } = useApp();
   const signer = useSiteSigner();
   const client = usePublicClient();
   const { run } = useTx();
-  const [ship, setShip] = useState<Ship>({ name: "", phone: "", address: "", note: "" });
+  const [note, setNote] = useState("");
   const [step, setStep] = useState<Step | null>(null);
   const [done, setDone] = useState<number | null>(null);
   const [method, setMethod] = useState<PayMethod>(defaultMethod(product.pay));
+  const [signedIn, setSignedIn] = useState(false);
   useEffect(() => {
     if (open) {
-      setShip(loadShip());
+      setNote("");
       setDone(null);
       setMethod(defaultMethod(product.pay));
+      setSignedIn(!!storedSession(address));
     }
-  }, [open, product.pay]);
+  }, [open, product.pay, address]);
   const viaToken = method === "token";
+
+  const addrs = useQuery({
+    queryKey: ["shop", "addresses", address],
+    enabled: open && !!signer && signedIn,
+    queryFn: () => fetchAddresses(signer!),
+  });
+  const ship = addrs.data ? pickedAddress(addrs.data) : null;
 
   const price = BigInt(product.priceUsd6);
   const me = address as Address | undefined;
@@ -65,11 +69,20 @@ export function Checkout({ product, token, open, onOpenChange }: { product: Prod
   const out = q.data ?? 0n;
   const net = token.buyTaxBps ? afterBuyTax(out, token.buyTaxBps) : out;
   const low = usdc.data != null && usdc.data < price;
-  const formOk = !!ship.name.trim() && !!ship.phone.trim() && !!ship.address.trim();
+  const own = me?.toLowerCase() === seller.toLowerCase();
+
+  const signIn = async () => {
+    if (!signer) return;
+    try {
+      await fetchAddresses(signer);
+      setSignedIn(true);
+    } catch (e) {
+      toast.error(errMsg(e));
+    }
+  };
 
   const pay = async () => {
-    if (!me || !client || !signer || (viaToken && out === 0n)) return;
-    localStorage.setItem(SHIP_KEY, JSON.stringify({ name: ship.name, phone: ship.phone, address: ship.address }));
+    if (!me || !client || !signer || !ship || (viaToken && out === 0n)) return;
     const label = `${product.title.slice(0, 18)} · ${fmtPrice(price)}`;
     try {
       let rc;
@@ -83,15 +96,14 @@ export function Checkout({ product, token, open, onOpenChange }: { product: Prod
         }
         setStep("pay");
         const fresh = await quote(token, "buy", price, client as unknown as PublicClient);
-        rc = await run(label, payCall(token, price, payMinOut(fresh), seller));
+        rc = await run(label, payCall(token, price, payMinOut(fresh), me));
       } else {
         setStep("pay");
         rc = await run(label, usdcPayCall(price, seller));
       }
       if (!rc) return;
       setStep("sign");
-      const clean = { name: ship.name.trim(), phone: ship.phone.trim(), address: ship.address.trim(), note: ship.note.trim() };
-      const id = await placeOrder(signer, product.id, rc.transactionHash, clean, () => setStep("submit"));
+      const id = await placeOrder(signer, product.id, rc.transactionHash, { name: ship.name, phone: ship.phone, address: ship.address, note: note.trim() }, () => setStep("submit"));
       setDone(id);
       void usdc.refetch();
     } catch (e) {
@@ -102,16 +114,6 @@ export function Checkout({ product, token, open, onOpenChange }: { product: Prod
   };
 
   const busy = step !== null;
-  const field = (k: keyof Ship, label: string, area = false) => (
-    <label className="block space-y-1">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      {area ? (
-        <Textarea value={ship[k]} onChange={(e) => setShip({ ...ship, [k]: e.target.value })} rows={2} maxLength={k === "address" ? 300 : 200} disabled={busy} />
-      ) : (
-        <Input value={ship[k]} onChange={(e) => setShip({ ...ship, [k]: e.target.value })} maxLength={k === "phone" ? 30 : 40} disabled={busy} inputMode={k === "phone" ? "tel" : undefined} />
-      )}
-    </label>
-  );
 
   return (
     <Dialog open={open} onOpenChange={(o) => !busy && onOpenChange(o)}>
@@ -130,19 +132,34 @@ export function Checkout({ product, token, open, onOpenChange }: { product: Prod
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="space-y-3">
+            <div className="space-y-2">
               <div className="flex items-center justify-between text-sm font-medium">
                 {t("shop.ship.title")}
                 <span className="inline-flex items-center gap-1 text-[11px] font-normal text-muted-foreground">
                   <Lock size={11} /> {t("shop.ship.privacy")}
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                {field("name", t("shop.ship.name"))}
-                {field("phone", t("shop.ship.phone"))}
-              </div>
-              {field("address", t("shop.ship.address"), true)}
-              {field("note", t("shop.ship.note"))}
+              {!connected ? null : !signedIn ? (
+                <Button variant="outline" className="w-full" onClick={() => void signIn()}>
+                  <MapPin /> {t("shop.addr.signIn")}
+                </Button>
+              ) : ship ? (
+                <Link href={addressPageFor(product.id)} className="flex items-center gap-3 rounded-lg border p-3 text-sm hover:border-ring">
+                  <MapPin size={18} className="shrink-0 text-primary" />
+                  <span className="min-w-0 flex-1">
+                    <span className="font-medium">{ship.name}</span> <span className="text-muted-foreground">{ship.phone}</span>
+                    <span className="mt-0.5 line-clamp-2 block text-xs text-secondary-foreground">{ship.address}</span>
+                  </span>
+                  <span className="flex shrink-0 items-center text-xs text-muted-foreground">{t("shop.addr.change")} <ChevronRight size={14} /></span>
+                </Link>
+              ) : (
+                <Button variant="outline" className="w-full" asChild disabled={addrs.isLoading}>
+                  <Link href={addressPageFor(product.id)}>
+                    <MapPin /> {addrs.isLoading ? "…" : t("shop.addr.add")}
+                  </Link>
+                </Button>
+              )}
+              <Input value={note} maxLength={200} placeholder={t("shop.ship.note")} onChange={(e) => setNote(e.target.value)} disabled={busy} />
             </div>
             {product.pay.token && product.pay.usdc && (
               <div className="space-y-1.5">
@@ -162,10 +179,23 @@ export function Checkout({ product, token, open, onOpenChange }: { product: Prod
                 <span className="text-muted-foreground">{t("shop.youPay")}</span>
                 <span className="font-mono font-semibold">{formatUnits(price, 6)} USDC</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">{viaToken ? t("shop.sellerGets") : t("shop.sellerGetsUsdc")}</span>
-                <span className="font-mono">{!viaToken ? `${formatUnits(price, 6)} USDC` : q.isFetching && !q.data ? "…" : `${fmtNum(Number(formatUnits(net, 18)))} ${token.symbol}`}</span>
-              </div>
+              {viaToken ? (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">{t("shop.youGet")}</span>
+                    <span className="font-mono">{q.isFetching && !q.data ? "…" : `${fmtNum(Number(formatUnits(net, 18)))} ${token.symbol}`}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">{t("shop.sellerFee")}</span>
+                    <span className="font-mono">≈ ${Number(formatUnits(sellerFeeShare(price), 6)).toFixed(4)}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">{t("shop.sellerGetsUsdc")}</span>
+                  <span className="font-mono">{formatUnits(price, 6)} USDC</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">{t("common.balance")}</span>
                 <span className={low ? "font-mono text-down" : "font-mono"}>{usdc.data != null ? `${fmtNum(Number(formatUnits(usdc.data, 6)), 2)} USDC` : "—"}</span>
@@ -177,12 +207,12 @@ export function Checkout({ product, token, open, onOpenChange }: { product: Prod
                 {!connected ? t("common.connect") : t(`wallet.switch.${NET}`)}
               </Button>
             ) : (
-              <Button size="xl" variant="up" className="w-full" disabled={busy || !formOk || low || (viaToken && out === 0n) || me?.toLowerCase() === seller.toLowerCase()} onClick={() => void pay()}>
+              <Button size="xl" variant="up" className="w-full" disabled={busy || !ship || low || (viaToken && out === 0n) || own} onClick={() => void pay()}>
                 {busy ? (
                   <>
                     <RefreshCw className="animate-spin" /> {t(`shop.step.${step}`)}
                   </>
-                ) : me?.toLowerCase() === seller.toLowerCase() ? (
+                ) : own ? (
                   t("shop.own")
                 ) : low ? (
                   t("shop.balanceLow")

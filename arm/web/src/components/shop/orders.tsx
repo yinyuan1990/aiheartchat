@@ -20,7 +20,7 @@ const copy = async (s: string, msg: string) => {
   toast.success(msg);
 };
 
-export function OrderCard({ o, role, onShip, onDone }: { o: Order; role: "buyer" | "seller"; onShip?: (o: Order) => void; onDone?: (o: Order) => void }) {
+export function OrderCard({ o, role, onShip, onDone, onReview }: { o: Order; role: "buyer" | "seller"; onShip?: (o: Order) => void; onDone?: (o: Order) => void; onReview?: (o: Order) => void }) {
   const { t } = useApp();
   const shipText = o.ship ? `${o.ship.name} ${o.ship.phone}\n${o.ship.address}${o.ship.note ? `\n${o.ship.note}` : ""}` : "";
   return (
@@ -74,8 +74,11 @@ export function OrderCard({ o, role, onShip, onDone }: { o: Order; role: "buyer"
             <Truck /> {t("shop.ship")}
           </Button>
         )}
-        {role === "buyer" && o.status === "shipped" && onDone && (
-          <Button size="sm" className="w-full" onClick={() => onDone(o)}>{t("shop.confirmReceived")}</Button>
+        {role === "buyer" && o.status !== "paid" && (
+          <div className="flex gap-2">
+            {o.status === "shipped" && onDone && <Button size="sm" variant="outline" className="flex-1" onClick={() => onDone(o)}>{t("shop.confirmReceived")}</Button>}
+            {onReview && (o.reviewed ? <Button size="sm" variant="ghost" className="flex-1" disabled>{t("shop.reviewed")}</Button> : <Button size="sm" className="flex-1" onClick={() => onReview(o)}>{t("shop.review")}</Button>)}
+          </div>
         )}
       </CardContent>
     </Card>

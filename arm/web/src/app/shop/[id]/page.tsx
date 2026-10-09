@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ShoppingBag, Store } from "lucide-react";
@@ -15,6 +15,8 @@ import { Addr, Empty, SectionTitle, TokenAvatar } from "@/components/shared";
 import { Checkout } from "@/components/shop/checkout";
 import { Gallery, ProductGrid, fill, payWays } from "@/components/shop/shared";
 import { CalloutButton } from "@/components/shop/callout";
+import { CommentBox, ReviewList, ShareButton, Stars } from "@/components/shop/feedback";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
@@ -24,6 +26,13 @@ export default function ProductPage() {
   const tq = useToken(p?.token?.address ?? "");
   const more = useShopProducts({ seller: p?.seller, limit: 9 }, !!p);
   const [open, setOpen] = useState(false);
+  // back from the address page (?buy=1): reopen the checkout once the token for it is loaded
+  const ready = !!tq.data;
+  useEffect(() => {
+    if (!ready || new URLSearchParams(window.location.search).get("buy") !== "1") return;
+    setOpen(true);
+    window.history.replaceState(null, "", window.location.pathname);
+  }, [ready]);
 
   if (pq.isLoading) return <div className="mx-auto grid max-w-6xl gap-6 md:grid-cols-2"><Skeleton className="aspect-square rounded-xl" /><Skeleton className="h-64 rounded-xl" /></div>;
   if (!p) return <Empty>{t("shop.empty")}</Empty>;
@@ -39,7 +48,15 @@ export default function ProductPage() {
       <div className="grid gap-6 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
         <Gallery images={p.images} />
         <div className="space-y-4">
-          <h1 className="text-xl leading-snug font-bold md:text-2xl">{p.title}</h1>
+          <div className="flex items-start gap-2">
+            <h1 className="flex-1 text-xl leading-snug font-bold md:text-2xl">{p.title}</h1>
+            <ShareButton product={p} className="shrink-0" />
+          </div>
+          {p.rating != null && (
+            <a href="#feedback" className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Stars value={p.rating} /> <span className="font-mono text-foreground">{p.rating.toFixed(1)}</span> {fill(t("shop.reviewCount"), { n: p.reviews })}
+            </a>
+          )}
           <Card size="sm">
             <CardContent className="space-y-2">
               <div className="flex items-baseline justify-between gap-3">
@@ -83,6 +100,19 @@ export default function ProductPage() {
           )}
         </div>
       </div>
+
+      <Card id="feedback" className="gap-0 py-0">
+        <Tabs defaultValue="reviews">
+          <div className="border-b p-2">
+            <TabsList>
+              <TabsTrigger value="reviews">{t("shop.reviews")} · {p.reviews}</TabsTrigger>
+              <TabsTrigger value="comments">{t("shop.comments")} · {p.comments}</TabsTrigger>
+            </TabsList>
+          </div>
+          <TabsContent value="reviews" className="p-4"><ReviewList product={p} /></TabsContent>
+          <TabsContent value="comments" className="p-4"><CommentBox product={p} /></TabsContent>
+        </Tabs>
+      </Card>
 
       {others.length > 0 && (
         <section>
