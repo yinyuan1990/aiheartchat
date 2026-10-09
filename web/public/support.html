@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HeartChat Support</title>
+<style>
+  * { box-sizing: border-box }
+  body { margin: 0; font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: #f6f6f8; color: #1c1c1e; line-height: 1.65 }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 32px 20px 56px }
+  header { display: flex; align-items: center; gap: 14px }
+  .logo { width: 52px; height: 52px; border-radius: 15px; background: linear-gradient(145deg, #ff5a7e, #fe2c55 45%, #c3123b); color: #fff; font-size: 30px; font-weight: 800; display: flex; align-items: center; justify-content: center }
+  h1 { font-size: 26px; margin: 0; flex: 1 }
+  .switch { border: 1px solid #d8d8de; background: #fff; border-radius: 20px; padding: 6px 14px; font-size: 14px; cursor: pointer }
+  .card { background: #fff; border-radius: 16px; padding: 20px 22px; margin-top: 18px; box-shadow: 0 1px 3px rgba(0,0,0,.05) }
+  h2 { font-size: 18px; margin: 0 0 10px }
+  h3 { font-size: 16px; margin: 16px 0 4px }
+  p { margin: 0; color: #3a3a3c }
+  a { color: #e8204b; text-decoration: none }
+  .contact { display: inline-block; margin-top: 10px; padding: 10px 18px; border-radius: 12px; background: #fe2c55; color: #fff; font-weight: 700 }
+  footer { margin-top: 28px; text-align: center; font-size: 13px; color: #8e8e93 }
+  [data-l] { display: none }
+  body.zh [data-l="zh"], body.en [data-l="en"] { display: block }
+  body.zh span[data-l="zh"], body.en span[data-l="en"] { display: inline }
+</style>
+</head>
+<body class="en">
+<div class="wrap">
+  <header>
+    <div class="logo">心</div>
+    <h1><span data-l="en">HeartChat Support</span><span data-l="zh">心之音 · 技术支持</span></h1>
+    <button class="switch" id="sw" type="button"></button>
+  </header>
+
+  <div class="card">
+    <h2><span data-l="en">Contact us</span><span data-l="zh">联系我们</span></h2>
+    <p data-l="en">Questions, problems or feedback? Message us on Telegram and we will get back to you as soon as possible.</p>
+    <p data-l="zh">使用中遇到问题或有建议，请通过 Telegram 联系我们，我们会尽快回复。</p>
+    <a class="contact" href="https://t.me/chengzong2026" target="_blank" rel="noopener">Telegram @chengzong2026</a>
+  </div>
+
+  <div class="card">
+    <h2><span data-l="en">FAQ</span><span data-l="zh">常见问题</span></h2>
+    <h3><span data-l="en">How do I sign up?</span><span data-l="zh">怎么注册？</span></h3>
+    <p data-l="en">Open the app and fill in a nickname, age and gender. Your account is linked to your device, so no password is needed. You must be 18 or older.</p>
+    <p data-l="zh">打开 App，填写昵称、年龄和性别即可。账号与设备绑定，不需要密码。仅限年满 18 周岁的用户使用。</p>
+    <h3><span data-l="en">How do I log in again?</span><span data-l="zh">怎么重新登录？</span></h3>
+    <p data-l="en">Open the app on the same device and you are signed in automatically. If you changed devices, contact us.</p>
+    <p data-l="zh">在同一台设备上打开 App 会自动登录。如果换了设备，请联系我们。</p>
+    <h3><span data-l="en">How do I report content or a user?</span><span data-l="zh">怎么举报内容或用户？</span></h3>
+    <p data-l="en">Long-press the message or post and choose "Report", or contact us with the details.</p>
+    <p data-l="zh">长按消息或动态，选择「举报」；也可以把情况发给我们。</p>
+    <h3><span data-l="en">How do I delete my account?</span><span data-l="zh">怎么注销账号？</span></h3>
+    <p data-l="en">Contact us and we will delete your account and its data.</p>
+    <p data-l="zh">联系我们，我们会注销你的账号并删除相关数据。</p>
+  </div>
+
+  <div class="card">
+    <h2><span data-l="en">Policies</span><span data-l="zh">协议与政策</span></h2>
+    <p><a id="privacy" href="./#/agreement/privacy?lang=en"><span data-l="en">Privacy Policy</span><span data-l="zh">隐私政策</span></a></p>
+    <p><a id="terms" href="./#/agreement/user?lang=en"><span data-l="en">User Agreement</span><span data-l="zh">用户协议</span></a></p>
+  </div>
+
+  <footer>© 2026 HeartChat</footer>
+</div>
+<script>
+  // ?lang=en / ?lang=zh first, else the browser language (Chinese → 中文, anything else → English)
+  var q = new URLSearchParams(location.search).get("lang");
+  var lang = q === "zh" || q === "en" ? q : /^zh/i.test(navigator.language || "") ? "zh" : "en";
+  function apply(l) {
+    lang = l;
+    document.body.className = l;
+    document.documentElement.lang = l === "zh" ? "zh-CN" : "en";
+    document.title = l === "zh" ? "心之音 · 技术支持" : "HeartChat Support";
+    document.getElementById("sw").textContent = l === "zh" ? "English" : "中文";
+    document.getElementById("privacy").href = "./#/agreement/privacy?lang=" + l;
+    document.getElementById("terms").href = "./#/agreement/user?lang=" + l;
+  }
+  document.getElementById("sw").onclick = function () { apply(lang === "zh" ? "en" : "zh"); };
+  apply(lang);
+</script>
+</body>
+</html>
