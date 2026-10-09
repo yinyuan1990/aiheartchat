@@ -57,8 +57,8 @@
 
   <div class="card">
     <h2><span data-l="en">Policies</span><span data-l="zh">协议与政策</span></h2>
-    <p><a id="privacy" href="./#/agreement/privacy?lang=en"><span data-l="en">Privacy Policy</span><span data-l="zh">隐私政策</span></a></p>
-    <p><a id="terms" href="./#/agreement/user?lang=en"><span data-l="en">User Agreement</span><span data-l="zh">用户协议</span></a></p>
+    <p><a id="privacy" href="/privacy.html"><span data-l="en">Privacy Policy</span><span data-l="zh">隐私政策</span></a></p>
+    <p><a id="terms" href="/terms.html"><span data-l="en">User Agreement</span><span data-l="zh">用户协议</span></a></p>
   </div>
 
   <footer>© 2026 HeartChat</footer>
@@ -73,8 +73,8 @@
     document.documentElement.lang = l === "zh" ? "zh-CN" : "en";
     document.title = l === "zh" ? "心之音 · 技术支持" : "HeartChat Support";
     document.getElementById("sw").textContent = l === "zh" ? "English" : "中文";
-    document.getElementById("privacy").href = "./#/agreement/privacy?lang=" + l;
-    document.getElementById("terms").href = "./#/agreement/user?lang=" + l;
+    document.getElementById("privacy").href = "/privacy.html?lang=" + l;
+    document.getElementById("terms").href = "/terms.html?lang=" + l;
   }
   document.getElementById("sw").onclick = function () { apply(lang === "zh" ? "en" : "zh"); };
   apply(lang);

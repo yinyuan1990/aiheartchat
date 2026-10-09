@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>User Agreement · HeartChat</title>
+<style>
+  body { margin: 0; font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: #f6f6f8; color: #1c1c1e; line-height: 1.75 }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 28px 20px 56px }
+  header { display: flex; align-items: center; gap: 12px }
+  h1 { flex: 1; font-size: 24px; margin: 0 }
+  button { border: 1px solid #d8d8de; background: #fff; border-radius: 20px; padding: 6px 14px; font-size: 14px; cursor: pointer }
+  .doc { background: #fff; border-radius: 16px; padding: 22px 24px; margin-top: 18px; white-space: pre-wrap; font-size: 15px; color: #3a3a3c }
+  footer { margin-top: 24px; text-align: center; font-size: 13px; color: #8e8e93 }
+  footer a { color: #e8204b; text-decoration: none }
+  [data-l] { display: none }
+  body.zh [data-l="zh"], body.en [data-l="en"] { display: block }
+</style>
+</head>
+<body class="en">
+<div class="wrap">
+  <header><h1><span data-l="en">User Agreement</span><span data-l="zh">用户协议</span></h1><button id="sw" type="button"></button></header>
+  <div class="doc" data-l="en">Welcome to HeartChat (the "Platform"). Please read this Agreement carefully before using the Platform. By using the Platform, you agree to the following terms.
+
+1. Age restriction
+The Platform is intended only for adults aged 18 or older. By registering for or using the Platform, you confirm that you are at least 18 years old. If a user is found to be under 18, the Platform may immediately terminate the service and delete the account.
+
+2. Account rules
+(1) The Platform uses a one-account-per-device policy. Your account is automatically bound to your device, and no password is required.
+(2) The gender selected at registration cannot be changed. Please provide it truthfully.
+(3) Your account is for your personal use only and may not be sold, rented or transferred.
+
+3. Code of conduct
+When using the Platform, you agree not to post or spread any of the following:
+(1) Content that violates laws or regulations;
+(2) Pornographic, gambling, violent or terrorist content;
+(3) Content that harasses, insults or defames others;
+(4) Fraud, false advertising or spam.
+If you violate these rules, the Platform may remove the content, restrict features or permanently ban the account.
+
+4. Points
+(1) Platform points are virtual items that can only be spent within the Platform (messages, calls, gifts, orders, etc.).
+(2) Points cannot be exchanged for legal currency, and the Platform does not provide any form of cash-out service.
+(3) Points in accounts banned for violations will not be refunded.
+
+5. Safety at offline meetings
+When meeting in person through a Platform order, please look after your own safety and choose a public place. The Platform only matches information and is not responsible for offline conduct. In case of a dispute, you may apply for arbitration through the Platform.
+
+6. Responsibility for content
+You are responsible for the posts, comments, messages and other content you publish on the Platform. The Platform may deal with content that violates the rules and cooperate with investigations by regulatory authorities.
+
+7. Changes to and termination of services
+The Platform may change, suspend or terminate some or all of its services as operations require. Major changes will be announced in advance.
+
+8. Changes to this Agreement
+The Platform may revise this Agreement from time to time. The revised Agreement takes effect once published on the Platform. Continued use means you accept the changes.</div>
+  <div class="doc" data-l="zh">欢迎使用心之音（以下简称"本平台"）。请在使用前仔细阅读本协议，使用本平台即表示您同意以下条款。
+
+一、年龄限制
+本平台仅面向年满 18 周岁的成年人。注册或使用本平台即表示您确认已年满 18 周岁。若发现用户未满 18 周岁，平台有权立即终止服务并注销账号。
+
+二、账号规则
+1. 本平台采用一机一号制度，账号与设备自动绑定，无需密码。
+2. 注册时选择的性别不可修改，请如实填写。
+3. 账号仅限本人使用，不得出售、出租、转让。
+
+三、行为规范
+使用本平台时，您承诺不发布、传播以下内容：
+1. 违反法律法规的内容；
+2. 色情、赌博、暴力、恐怖内容；
+3. 骚扰、辱骂、诽谤他人的内容；
+4. 诈骗、虚假宣传或垃圾广告信息。
+违反上述规范的，平台有权删除内容、限制功能或永久封禁账号。
+
+四、积分说明
+1. 平台积分为虚拟道具，仅用于平台内消费（消息、通话、礼物、约单等）。
+2. 积分不可兑换为法定货币，平台不提供任何形式的兑现服务。
+3. 因违规被封禁的账号，其积分不予退还。
+
+五、线下活动安全
+通过平台约单进行线下见面时，请注意自身安全，选择公共场所。平台仅提供信息撮合，对线下行为不承担责任，如遇纠纷可通过平台申请仲裁。
+
+六、内容责任
+您在平台发布的动态、评论、消息等内容由您本人负责。平台有权对违规内容进行处理并配合监管部门调查。
+
+七、服务变更与终止
+平台有权根据运营需要变更、暂停或终止部分或全部服务，重大变更将提前公告。
+
+八、协议修改
+平台可能不时修改本协议，修改后的协议在平台内公布后生效。继续使用即视为接受修改。</div>
+  <footer>© 2026 HeartChat · <a href="/support.html">Support</a></footer>
+</div>
+<script>
+  var q = new URLSearchParams(location.search).get("lang");
+  var lang = q === "zh" || q === "en" ? q : /^zh/i.test(navigator.language || "") ? "zh" : "en";
+  function apply(l) { lang = l; document.body.className = l; document.documentElement.lang = l === "zh" ? "zh-CN" : "en"; document.getElementById("sw").textContent = l === "zh" ? "English" : "中文"; }
+  document.getElementById("sw").onclick = function () { apply(lang === "zh" ? "en" : "zh"); };
+  apply(lang);
+</script>
+</body>
+</html>

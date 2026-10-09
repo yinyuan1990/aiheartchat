@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy · HeartChat</title>
+<style>
+  body { margin: 0; font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: #f6f6f8; color: #1c1c1e; line-height: 1.75 }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 28px 20px 56px }
+  header { display: flex; align-items: center; gap: 12px }
+  h1 { flex: 1; font-size: 24px; margin: 0 }
+  button { border: 1px solid #d8d8de; background: #fff; border-radius: 20px; padding: 6px 14px; font-size: 14px; cursor: pointer }
+  .doc { background: #fff; border-radius: 16px; padding: 22px 24px; margin-top: 18px; white-space: pre-wrap; font-size: 15px; color: #3a3a3c }
+  footer { margin-top: 24px; text-align: center; font-size: 13px; color: #8e8e93 }
+  footer a { color: #e8204b; text-decoration: none }
+  [data-l] { display: none }
+  body.zh [data-l="zh"], body.en [data-l="en"] { display: block }
+</style>
+</head>
+<body class="en">
+<div class="wrap">
+  <header><h1><span data-l="en">Privacy Policy</span><span data-l="zh">隐私政策</span></h1><button id="sw" type="button"></button></header>
+  <div class="doc" data-l="en">HeartChat (the "Platform") takes your privacy seriously. This Policy explains how we collect, use and protect your information.
+
+1. Information we collect
+(1) Registration information: nickname, avatar, age and gender;
+(2) Device information: device identifier (used to bind and recover your one-account-per-device account);
+(3) Location information: with your permission, used for local content recommendations and showing distance;
+(4) Real-name information: name and ID number voluntarily submitted by female users (used only for ID verification);
+(5) Usage records: chat messages, posts, call records and points history.
+
+2. How we use information
+(1) To provide core features: messaging, voice and video calls, posting and order matching;
+(2) Local recommendations and distance calculation;
+(3) Account security and handling of violations;
+(4) Points settlement and reconciliation.
+
+3. Storage and protection
+(1) Chat messages are encrypted in storage and in transit;
+(2) Real-name information and ID numbers are stored encrypted, and staff cannot view the full information;
+(3) Data is stored on servers located in China.
+
+4. Information sharing
+We will not sell your personal information to any third party. We share it only when:
+(1) we have your explicit consent;
+(2) it is required by laws and regulations or lawfully requested by regulatory authorities.
+
+5. Your rights
+(1) You can change your nickname, avatar and other profile details at any time;
+(2) You can delete your own posts and clear your chat history;
+(3) To delete your account, please contact customer support.
+
+6. Protection of minors
+The Platform does not provide services to users under 18. If we find that a minor is using the Platform, we will immediately delete the account and its information.
+
+7. Policy updates
+This Policy may be updated from time to time. Updates will be published on the Platform.</div>
+  <div class="doc" data-l="zh">心之音（以下简称"本平台"）非常重视您的隐私。本政策说明我们如何收集、使用和保护您的信息。
+
+一、我们收集的信息
+1. 注册信息：昵称、头像、年龄、性别；
+2. 设备信息：设备标识符（用于一机一号账号绑定与找回）；
+3. 位置信息：在您授权后，用于同城内容推荐和距离显示；
+4. 实名信息：女性用户自愿提交的姓名与身份证号（仅用于实名核验）；
+5. 使用记录：聊天消息、动态、通话记录、积分明细。
+
+二、信息的使用
+1. 提供核心功能：消息收发、音视频通话、动态发布、约单撮合；
+2. 同城推荐与距离计算；
+3. 账号安全与违规行为处置；
+4. 积分结算与对账。
+
+三、信息的存储与保护
+1. 聊天消息采用加密方式存储与传输；
+2. 实名信息与身份证号加密保存，员工无法查看完整信息；
+3. 数据存储在中国境内的服务器。
+
+四、信息共享
+我们不会向任何第三方出售您的个人信息。仅在以下情况共享：
+1. 获得您的明确同意；
+2. 法律法规要求或监管部门依法调取。
+
+五、您的权利
+1. 您可以随时修改昵称、头像等资料；
+2. 您可以删除自己发布的动态、清空聊天记录；
+3. 如需注销账号，可联系平台客服处理。
+
+六、未成年人保护
+本平台不向未满 18 周岁的用户提供服务。如发现未成年人使用，我们将立即注销相关账号并删除其信息。
+
+七、政策更新
+本政策可能不时更新，更新后将在平台内公布。</div>
+  <footer>© 2026 HeartChat · <a href="/support.html">Support</a></footer>
+</div>
+<script>
+  var q = new URLSearchParams(location.search).get("lang");
+  var lang = q === "zh" || q === "en" ? q : /^zh/i.test(navigator.language || "") ? "zh" : "en";
+  function apply(l) { lang = l; document.body.className = l; document.documentElement.lang = l === "zh" ? "zh-CN" : "en"; document.getElementById("sw").textContent = l === "zh" ? "English" : "中文"; }
+  document.getElementById("sw").onclick = function () { apply(lang === "zh" ? "en" : "zh"); };
+  apply(lang);
+</script>
+</body>
+</html>
