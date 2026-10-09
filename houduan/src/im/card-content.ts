@@ -80,6 +80,83 @@ export function sanitizePerp(b: Record<string, unknown>, coin: string, side: 'lo
 }
 
 /**
+ * 通用卡片（msgType card，v1）：以后新加喊单类型只改后端 + 网页，App 不用发版。只由服务端发（card-call.service.ts，
+ * im.gateway 拦了直接发 card），卡片 JSON 来自我们自己的服务（Arm indexer），这里再按格式清洗一遍。
+ * 文字字段可以是字符串，也可以是 {zh, en}，客户端按 App 语言取。三端按同一套积木画（Android ChainCards.kt
+ * GenericCard、iOS ChainCards.swift、Web ChainCards.tsx）：
+ *   fallback  老版本 App 不认识 card 时看到的一行字（放在最前面）
+ *   cover     封面图 https
+ *   title / subtitle / note
+ *   badge     { text, tone }                       tone: accent | up | down | gold | muted
+ *   stats     [{ label, value, live?, tone? }]     最多 4 个；live = 实时数据里的 key
+ *   actions   [{ text, type, path?, url?, value?, primary? }]  最多 2 个
+ *             type: wallet（钱包打开 path，没钱包入口就打开 url）| url（白名单域名）| copy（复制 value）
+ *   live      实时数据地址（白名单域名），返回 { values: { key: "显示的字符串" } }。只给服务端用：聊天页发 cardWatch，
+ *             card-watch.service.ts 统一拉、缓存，经 WebSocket 推 cardTick，客户端不直接请求它
+ */
+export const CARD_HOSTS = ['arm.yyheart.com', 'yyheart.com', 'app.yyheart.com', 'api.yyheart.com'];
+const cardHostOk = (u: string) => {
+  try {
+    const h = new URL(u);
+    return h.protocol === 'https:' && (CARD_HOSTS.includes(h.hostname) || h.hostname.endsWith('.yyheart.com'));
+  } catch {
+    return false;
+  }
+};
+const TONES = ['accent', 'up', 'down', 'gold', 'muted'];
+const ACTIONS = ['wallet', 'url', 'copy'];
+
+/** 字符串或 {zh, en}；其它语言以后加也不用改 App（客户端找不到当前语言就用 zh → en） */
+function cardText(v: unknown, max: number): string | Record<string, string> | null {
+  if (typeof v === 'string') return cleanText(v, max) || null;
+  if (v && typeof v === 'object' && !Array.isArray(v)) {
+    const out: Record<string, string> = {};
+    for (const [k, s] of Object.entries(v as Record<string, unknown>)) if (/^[a-z]{2}(-[A-Za-z]{2,4})?$/.test(k) && typeof s === 'string' && cleanText(s, max)) out[k] = cleanText(s, max);
+    return Object.keys(out).length ? out : null;
+  }
+  return null;
+}
+
+export function sanitizeCard(raw: Record<string, unknown>, note: string): string {
+  const title = cardText(raw.title, 80);
+  if (!title) throw new BadRequestException('卡片内容不对');
+  const https = (u: unknown) => (typeof u === 'string' && /^https:\/\/[^\s"'<>]{1,400}$/.test(u) ? u : null);
+  const tone = (t: unknown) => (typeof t === 'string' && TONES.includes(t) ? t : null);
+  const badge = raw.badge && typeof raw.badge === 'object' ? { text: cardText((raw.badge as any).text, 12), tone: tone((raw.badge as any).tone) ?? 'accent' } : null;
+  const stats = (Array.isArray(raw.stats) ? raw.stats : []).slice(0, 4).flatMap((s: any) => {
+    const label = cardText(s?.label, 12);
+    const value = cleanText(s?.value, 24);
+    if (!label || !value) return [];
+    return [{ label, value, live: typeof s.live === 'string' && /^[a-zA-Z0-9_]{1,20}$/.test(s.live) ? s.live : null, tone: tone(s.tone) }];
+  });
+  const actions = (Array.isArray(raw.actions) ? raw.actions : []).slice(0, 2).flatMap((a: any) => {
+    const text = cardText(a?.text, 12);
+    const type = typeof a?.type === 'string' && ACTIONS.includes(a.type) ? a.type : null;
+    if (!text || !type) return [];
+    const path = typeof a.path === 'string' && /^\/wallet(\/[A-Za-z0-9/_-]*)?(\?[A-Za-z0-9=&_.:%-]*)?$/.test(a.path) ? a.path : null;
+    const url = typeof a.url === 'string' && cardHostOk(a.url) ? a.url : null;
+    const value = cleanText(a.value, 200) || null;
+    if ((type === 'wallet' && !path) || (type === 'url' && !url) || (type === 'copy' && !value)) return [];
+    return [{ text, type, path, url, value, primary: a.primary === true }];
+  });
+  const live = typeof raw.live === 'string' && cardHostOk(raw.live) ? raw.live : null;
+  return JSON.stringify({
+    fallback: cleanText(raw.fallback, 200) || (typeof title === 'string' ? title : title.zh ?? Object.values(title)[0]),
+    v: 1,
+    kind: cleanText(raw.kind, 20) || 'card',
+    cover: https(raw.cover),
+    title,
+    subtitle: cardText(raw.subtitle, 60),
+    badge: badge?.text ? badge : null,
+    stats,
+    note: cleanText(note, 200) || null,
+    actions,
+    live,
+    at: Date.now(),
+  });
+}
+
+/**
  * 喊单 / 分享代币卡片（msgType callout）的内容：只留认识的字段，链必须是钱包支持的，图片只收 https。
  * 价格、市值是发的那一刻的快照，客户端打开代币页看实时行情。
  */

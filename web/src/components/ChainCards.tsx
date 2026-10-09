@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { wsManager } from '../ws';
-import { t } from '../i18n';
+import { lang, t } from '../i18n';
 
 /**
  * 链上钱包的聊天卡片（和 Android ChainCards.kt、iOS ChainCards.swift 同一套字段）。网页版没有钱包：
@@ -49,9 +49,96 @@ export function chainCardPreview(type: string, content: string): string | null {
   const o = parse(content);
   if (type === 'transfer') return t('card.preview.transfer', { amount: tokenAmount(o.amount, Number(o.decimals) || 0), symbol: o.symbol ?? '' }).trim();
   if (type === 'callout') return t('card.preview.callout', { symbol: o.symbol ?? '' });
+  if (type === 'card') return `[${cardText(o.badge?.text) || t('card.preview.card')}] ${cardText(o.title)}`;
   if (type === 'perp') return t('card.preview.perp', { side: o.side === 'short' ? t('card.short') : t('card.long'), coin: o.coin ?? '', lev: o.lev ?? '' });
   if (type === 'payreq') return o.amount ? t('card.preview.payreq', { amount: tokenAmount(o.amount, Number(o.decimals) || 0), symbol: o.symbol ?? '' }).trim() : t('card.preview.payreqChain', { chain: CHAIN_NAMES[o.chain] ?? o.chain ?? '' });
   return null;
+}
+
+/**
+ * 通用卡片（msgType card，后端 card-content.ts sanitizeCard 有完整字段说明）：封面、标题、角标、数据行、备注、按钮，
+ * 内容全由服务端给，新类型不用改这里。数据行的实时值由服务端经 WebSocket 推 cardTick（聊天页 wsManager.cardWatch）。
+ * 网页版没有钱包：wallet 按钮打开它的 url。
+ */
+const CARD_TONES: Record<string, string> = { accent: '#2563eb', up: '#16a34a', down: '#dc2626', gold: '#b77700', muted: '#888' };
+const cardHostOk = (u: unknown) => {
+  try {
+    const h = new URL(String(u));
+    return h.protocol === 'https:' && (h.hostname === 'yyheart.com' || h.hostname.endsWith('.yyheart.com'));
+  } catch {
+    return false;
+  }
+};
+/** 字符串或 {zh, en, …}：取当前语言，没有就 zh → en → 第一个 */
+export function cardText(v: unknown): string {
+  if (typeof v === 'string') return v;
+  if (!v || typeof v !== 'object') return '';
+  const o = v as Record<string, string>;
+  const l = lang();
+  return o[l] ?? o[l.split('-')[0]] ?? o.zh ?? o.en ?? Object.values(o)[0] ?? '';
+}
+
+const cardValues = new Map<string, Record<string, string>>();
+const cardListeners = new Set<() => void>();
+wsManager.on((f) => {
+  if (f?.op !== 'cardTick') return;
+  for (const [k, v] of Object.entries((f.values ?? {}) as Record<string, Record<string, string>>)) cardValues.set(k, v);
+  cardListeners.forEach((l) => l());
+});
+
+export function GenericCard({ id, content }: { id: string; content: string }) {
+  const o = parse(content);
+  const [live, setLive] = useState<Record<string, string>>(() => cardValues.get(id) ?? {});
+  useEffect(() => {
+    const l = () => setLive(cardValues.get(id) ?? {});
+    cardListeners.add(l);
+    l();
+    return () => void cardListeners.delete(l);
+  }, [id]);
+  if (!o.title) return <LinkLike text={String(o.fallback ?? content)} />;
+  const stats: any[] = Array.isArray(o.stats) ? o.stats.slice(0, 4) : [];
+  const actions: any[] = (Array.isArray(o.actions) ? o.actions.slice(0, 2) : []).filter((a: any) => (a.type === 'wallet' || a.type === 'url' ? cardHostOk(a.url) : a.type === 'copy'));
+  const act = (a: any) => {
+    if (a.type === 'copy') void navigator.clipboard?.writeText(String(a.value ?? ''));
+    else if (cardHostOk(a.url)) window.open(a.url, '_blank', 'noopener');
+  };
+  const main = actions.find((a) => a.primary) ?? actions[0];
+  return (
+    <span className="no-menu" onClick={() => main && act(main)} style={{ display: 'flex', flexDirection: 'column', width: 240, borderRadius: 14, overflow: 'hidden', background: '#fff', border: '1px solid #e5e7eb', color: '#111', cursor: main ? 'pointer' : 'default' }}>
+      {o.cover && /^https:\/\//.test(o.cover) && <img src={o.cover} alt="" style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', background: '#f4f4f5' }} />}
+      <span style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '10px 12px' }}>
+        <span style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+          {o.badge?.text && <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 600, color: '#fff', background: CARD_TONES[o.badge.tone] ?? CARD_TONES.accent, borderRadius: 6, padding: '2px 6px', marginTop: 1 }}>{cardText(o.badge.text)}</span>}
+          <span style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{cardText(o.title)}</span>
+        </span>
+        {o.subtitle && <span style={{ fontSize: 11, color: '#777' }}>{cardText(o.subtitle)}</span>}
+        {stats.length > 0 && (
+          <span style={{ display: 'grid', gridTemplateColumns: `repeat(${stats.length}, 1fr)`, gap: 4, marginTop: 4, background: '#f6f7f9', borderRadius: 10, padding: '7px 4px' }}>
+            {stats.map((s, i) => (
+              <span key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 0 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: CARD_TONES[s.tone] ?? '#111', whiteSpace: 'nowrap' }}>{(s.live && live[s.live]) || s.value}</span>
+                <span style={{ fontSize: 10, color: '#888' }}>{cardText(s.label)}</span>
+              </span>
+            ))}
+          </span>
+        )}
+        {o.note && <span style={{ fontSize: 13, lineHeight: 1.4, marginTop: 2 }}>{o.note}</span>}
+        {actions.length > 0 && (
+          <span style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+            {actions.map((a, i) => (
+              <span key={i} onClick={(e) => { e.stopPropagation(); act(a); }} style={{ flex: 1, textAlign: 'center', fontSize: 12, fontWeight: 600, borderRadius: 12, padding: '6px 0', background: a.primary ? '#111' : '#f1f1f3', color: a.primary ? '#fff' : '#111' }}>
+                {cardText(a.text)}
+              </span>
+            ))}
+          </span>
+        )}
+      </span>
+    </span>
+  );
+}
+
+function LinkLike({ text }: { text: string }) {
+  return <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{text}</span>;
 }
 
 /** 收款消息：二维码 + 地址（点一下复制）+ 可选的币和金额；网页版没有钱包，「转账」要在 App 里点 */

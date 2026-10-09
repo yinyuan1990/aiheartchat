@@ -27,6 +27,7 @@ import { GraduationRing } from "@/components/token/graduation-ring";
 import { Thread } from "@/components/token/thread";
 import { BurnCard } from "@/components/token/burn-card";
 import { TokenReferral } from "@/components/token/token-referral";
+import { TokenShopStrip } from "@/components/shop/token-strip";
 
 const TFS = ["1m", "5m", "15m", "1h", "4h", "1d"] as const;
 
@@ -136,6 +137,8 @@ export default function TokenPage() {
 
           {/* Public "next burn" countdown (9.23) — renders only on the token being burned, switchable in /admin */}
           <BurnCard where="token" tokenAddress={token.address} />
+
+          <TokenShopStrip token={token.address} symbol={token.symbol} />
 
           {/* Chart */}
           <Card className="gap-0 py-0">

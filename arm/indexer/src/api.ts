@@ -35,6 +35,7 @@ import { isMint, pumpCandles, pumpCoin, pumpHolders, pumpList, pumpTrades } from
 import { isEvmAddr, isMarketChain, kyberBuild, kyberQuote, marketCandles, marketList, marketPrices, marketSearch, marketToken, marketTrades, type MarketPrice } from "./markets.js";
 import { earnPositions, earnVaults } from "./earn.js";
 import { isMediaKind, x402Chat, x402Generate, x402Job, x402Media, x402MediaFile, x402Models, x402Relay } from "./x402.js";
+import { shop } from "./shop.js";
 
 export const app = new Hono();
 // paged list endpoints report the full row count in X-Total-Count; expose it so the browser can read it
@@ -113,6 +114,8 @@ function shapeToken(r: Record<string, unknown>, extra: Record<string, unknown> =
     ...extra,
   };
 }
+
+app.route("/api/shop", shop);
 
 app.get("/api/health", async (c) => {
   const [{ v }] = await sql`select value as v from sync_state where key = 'last_block'`.catch(() => [{ v: null }]);

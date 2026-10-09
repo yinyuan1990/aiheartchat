@@ -10,6 +10,7 @@ import type { WebSocket } from 'ws';
 import { ConnectionRegistry } from './connection.registry';
 import { ImService } from './im.service';
 import { PerpWatchService } from './perp-watch.service';
+import { CardWatchService } from './card-watch.service';
 import { ReadFrame, SendFrame } from './im.types';
 import { langOf, translate } from '../i18n/translate';
 
@@ -25,13 +26,14 @@ export class ImGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private static readonly MAX_CONN_PER_USER = 8;
   private static readonly MAX_FRAMES_PER_SEC = 25;
   private static readonly MAX_CONTENT_LEN = 8000;
-  private static readonly SERVER_ONLY_TYPES = new Set(['transfer', 'perp']);
+  private static readonly SERVER_ONLY_TYPES = new Set(['transfer', 'perp', 'card']);
 
   constructor(
     private readonly jwt: JwtService,
     private readonly registry: ConnectionRegistry,
     private readonly im: ImService,
     private readonly perpWatch: PerpWatchService,
+    private readonly cardWatch: CardWatchService,
   ) {}
 
   async handleConnection(ws: WebSocket, req: IncomingMessage) {
@@ -61,6 +63,7 @@ export class ImGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   async handleDisconnect(ws: WebSocket) {
     this.perpWatch.drop(ws);
+    this.cardWatch.drop(ws);
     const userId = this.socketUser.get(ws);
     if (userId !== undefined) {
       await this.registry.unregister(userId, ws);
@@ -117,6 +120,13 @@ export class ImGateway implements OnGatewayConnection, OnGatewayDisconnect {
           break;
         case 'perpUnwatch':
           this.perpWatch.unwatch(ws, frame.conversationId);
+          break;
+        // 通用卡片的实时数据（销量、成交额…）：同上，由 card-watch.service.ts 推 cardTick
+        case 'cardWatch':
+          await this.cardWatch.watch(ws, userId, frame.conversationId, frame.ids);
+          break;
+        case 'cardUnwatch':
+          this.cardWatch.unwatch(ws, frame.conversationId);
           break;
         case 'read': {
           const f = frame as ReadFrame;

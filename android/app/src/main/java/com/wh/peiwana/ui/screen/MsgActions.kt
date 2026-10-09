@@ -63,7 +63,7 @@ import kotlinx.serialization.json.put
 val MSG_REACTIONS = listOf("❤️", "👍", "👎", "🔥", "🥰", "👏", "😁", "😂", "😮", "😢", "🎉", "🙏")
 
 /** 能转发的类型（礼物、通话记录、转账卡片不行；喊单卡片可以），和后端 message.service FORWARDABLE 一致 */
-val FORWARDABLE = setOf("text", "image", "video", "audio", "location", "sticker", "callout")
+val FORWARDABLE = setOf("text", "image", "video", "audio", "location", "sticker", "callout", "card")
 
 fun msgSnippet(type: String, content: String): String = when (type) {
     "text" -> content.replace(Regex("\\s+"), " ").take(60)
@@ -73,7 +73,7 @@ fun msgSnippet(type: String, content: String): String = when (type) {
     "sticker" -> t("msg.snippet.sticker")
     "location" -> t("msg.snippet.location")
     "gift" -> t("msg.snippet.gift")
-    "transfer", "callout", "payreq", "perp" -> chainCardPreview(type, content) ?: t("msg.snippet.message")
+    "transfer", "callout", "payreq", "perp", "card" -> chainCardPreview(type, content) ?: t("msg.snippet.message")
     else -> if (type.startsWith("call")) t("msg.snippet.call") else t("msg.snippet.message")
 }
 

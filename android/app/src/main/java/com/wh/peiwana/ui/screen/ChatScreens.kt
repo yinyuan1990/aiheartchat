@@ -161,7 +161,7 @@ internal fun preview(msg: LastMsg?): String = when {
     msg.type == "audio" -> t("chat.preview.voice")
     msg.type == "location" -> t("chat.preview.location")
     msg.type == "gift" -> t("chat.preview.gift")
-    msg.type == "transfer" || msg.type == "callout" || msg.type == "payreq" || msg.type == "perp" -> chainCardPreview(msg.type, msg.content).orEmpty()
+    msg.type == "transfer" || msg.type == "callout" || msg.type == "payreq" || msg.type == "perp" || msg.type == "card" -> chainCardPreview(msg.type, msg.content).orEmpty()
     msg.type.startsWith("call") -> t("chat.preview.call")
     else -> ""
 }
@@ -620,6 +620,13 @@ fun ChatRoomScreen(
     DisposableEffect(convId) {
         val remove = WsClient.addListener { PerpLive.onFrame(it) }
         onDispose { remove(); WsClient.perpUnwatch(convId) }
+    }
+    // 通用卡片：同样告诉服务端在看哪些，它推 cardTick（CardLive）
+    val cardIds = messages.filter { it.type == "card" && !it.pending }.map { it.id }
+    LaunchedEffect(convId, cardIds) { if (cardIds.isNotEmpty()) WsClient.cardWatch(convId, cardIds) }
+    DisposableEffect(convId) {
+        val remove = WsClient.addListener { CardLive.onFrame(it) }
+        onDispose { remove(); WsClient.cardUnwatch(convId) }
     }
     DisposableEffect(convId) {
         val remove = WsClient.addListener { frame ->
@@ -1333,6 +1340,7 @@ private fun Bubble(
                 }
                 "transfer" -> TransferCard(m.content, mine)
                 "callout" -> CalloutCard(m.content, canWallet = onOpenWallet != null) { onOpenWallet?.invoke(it) }
+                "card" -> GenericCard(m.id, m.content, canWallet = onOpenWallet != null) { onOpenWallet?.invoke(it) }
                 "perp" -> PerpCard(m.id, m.content, canWallet = onOpenWallet != null) { perpFollowPath(m.content, m.senderNickname)?.let { onOpenWallet?.invoke(it) } }
                 "payreq" -> PayreqCard(m.content, mine, onOpenWallet?.let { open -> { payreqPath(m.content, m.id, m.senderNickname)?.let(open) } })
                 "call" -> {

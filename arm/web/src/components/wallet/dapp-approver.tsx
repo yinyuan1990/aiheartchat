@@ -11,7 +11,8 @@ import { t } from "@/lib/wallet/i18n";
 import { chainById, publicClientFor, rpcOf, type WalletChain } from "@/lib/wallet/chains";
 import { accountOf, WrongPasswordError } from "@/lib/wallet/vault";
 import { hasFeature, nativeBridge, onNativePush, type DappRequest, type RpcError } from "@/lib/wallet/native";
-import { addRecent, getPerm, isTrusted, launchChainOf, loadDappStore, revokePerm, setPerm, toggleFav } from "@/lib/wallet/dapp-store";
+import { TRUSTED_ORIGINS, addRecent, getPerm, isTrusted, launchChainOf, loadDappStore, revokePerm, setPerm, toggleFav } from "@/lib/wallet/dapp-store";
+import { CARD_CALL_METHOD } from "@/lib/shop";
 import { describeTx, describeTyped, looksLikeLogin, readableMessage, type Risk, type TxView, type TypedData, type TypedView } from "@/lib/wallet/dapp-decode";
 import { useVault } from "./wallet-context";
 import { BottomSheet, ChainGlyph, GhostButton, PrimaryButton } from "./ui";
@@ -144,6 +145,18 @@ export function DappApprover({ onOverlay }: { onOverlay: (on: boolean) => void }
             return enqueue(method === "personal_sign" ? "sign" : method === "eth_sendTransaction" ? "tx" : "typed");
           case "eth_sign":
             return respond(id, null, E.unsupported("eth_sign (blind signing is disabled)"));
+          // Arm site's 喊单 button inside the DApp browser: post a 心之音 generic card through the App's own login
+          // (native perpCall forwards any body to houduan /im/perp-call → card-call.service.ts). Our own site only,
+          // so a random DApp cannot post into the user's groups.
+          case CARD_CALL_METHOD: {
+            if (!TRUSTED_ORIGINS.includes(origin)) return respond(id, null, E.unauthorized);
+            const b = (params[0] ?? {}) as { kind?: unknown; productId?: unknown; note?: unknown };
+            const bridge = nativeBridge();
+            if (!hasFeature("perpcall") || !bridge?.perpCall) return respond(id, null, E.unsupported(method));
+            if (b.kind !== "shop" || !Number.isSafeInteger(Number(b.productId))) return respond(id, null, E.unsupported(method));
+            const r = await bridge.perpCall({ kind: "shop", productId: Number(b.productId), note: String(b.note ?? "").slice(0, 200) });
+            return respond(id, r ?? null);
+          }
           default: {
             if (!READ_METHODS.has(method)) return respond(id, null, E.unsupported(method));
             const c = chainById(chainOf(origin))!;

@@ -87,6 +87,7 @@ function previewOf(msg?: SearchConv['lastMsg']) {
     case 'transfer':
     case 'callout':
     case 'perp':
+    case 'card':
     case 'payreq': return chainCardPreview(msg.type, msg.content) ?? '';
     default: return msg.type.startsWith('call') ? t('msg.preview.call') : '';
   }

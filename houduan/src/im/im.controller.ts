@@ -10,6 +10,7 @@ import { MessageService } from './message.service';
 import { ChainCardService, type TransferBody } from './chain-card.service';
 import { CoinGroupService, type CoinGroupBody } from './coin-group.service';
 import { PerpCallService, type PerpCallBody } from './perp-call.service';
+import { CardCallService, type CardCallBody } from './card-call.service';
 import { CreateGroupDto, GroupInfoDto, MemberIdsDto } from './im.dto';
 
 function toId(v: unknown): bigint {
@@ -35,6 +36,7 @@ export class ImController {
     private readonly cards: ChainCardService,
     private readonly coinGroups: CoinGroupService,
     private readonly perpCalls: PerpCallService,
+    private readonly cardCalls: CardCallService,
   ) {}
 
   /** 币的讨论群：没有就建（系统账号当群主），然后加入；返回群和会话 id。见 coin-group.service.ts */
@@ -43,10 +45,20 @@ export class ImController {
     return this.coinGroups.open(userId, body ?? {});
   }
 
-  /** 合约喊单：卡片发进这个合约的群（没有就建），喊单者地址从主钱包签名恢复，见 perp-call.service.ts */
+  /**
+   * 合约喊单：卡片发进这个合约的群（没有就建），喊单者地址从主钱包签名恢复，见 perp-call.service.ts。
+   * 带 kind 的是通用卡片喊单（商品等，card-call.service.ts）：老外壳只有 perpCall 这一个桥，原样转发到这里。
+   */
   @Post('perp-call')
-  perpCall(@CurrentUser() userId: bigint, @Body() body: PerpCallBody) {
+  perpCall(@CurrentUser() userId: bigint, @Body() body: PerpCallBody & CardCallBody) {
+    if (body?.kind) return this.cardCalls.call(userId, body);
     return this.perpCalls.call(userId, body ?? {});
+  }
+
+  /** 通用卡片喊单（以后的外壳直接调这个），见 card-call.service.ts */
+  @Post('card-call')
+  cardCall(@CurrentUser() userId: bigint, @Body() body: CardCallBody) {
+    return this.cardCalls.call(userId, body ?? {});
   }
 
   /** 链上钱包转账成功后发转账卡片（单聊）；服务端到链上核对过才发，见 chain-card.service.ts */

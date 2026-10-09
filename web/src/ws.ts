@@ -61,6 +61,7 @@ class WsManager {
       pending.forEach((f) => this.ws?.send(f));
       // 合约喊单卡片：重连后服务端不记得在看哪些卡片，重新告诉它
       if (this.perpWatching && !pending.some((f) => f.includes('"perpWatch"'))) this.ws?.send(JSON.stringify(this.perpWatching));
+      if (this.cardWatching && !pending.some((f) => f.includes('"cardWatch"'))) this.ws?.send(JSON.stringify(this.cardWatching));
     };
     this.ws.onmessage = (e) => {
       try {
@@ -130,6 +131,18 @@ class WsManager {
     this.raw({ op: 'perpUnwatch', conversationId });
   }
 
+  /** 通用卡片（msgType card）的实时数据：服务端统一拉、推 cardTick（card-watch.service.ts） */
+  private cardWatching: { op: string; conversationId: string; ids: string[] } | null = null;
+
+  cardWatch(conversationId: string, ids: string[]) {
+    this.cardWatching = { op: 'cardWatch', conversationId, ids: ids.slice(-100) };
+    this.raw(this.cardWatching);
+  }
+
+  cardUnwatch(conversationId: string) {
+    if (this.cardWatching?.conversationId === conversationId) this.cardWatching = null;
+    this.raw({ op: 'cardUnwatch', conversationId });
+  }
   /** 没连上时 send / read 先排队，连上后补发（刚打开页面就发消息不会丢） */
   private raw(frame: { op: string; [k: string]: unknown }) {
     if (this.ws?.readyState === WebSocket.OPEN) {

@@ -197,10 +197,31 @@ async function toggleHidden(u: any) {
 }
 
 // 「操作」下拉：菜单挂在 body 上用 fixed 定位，免得被表格的横向滚动裁掉
+// Arm 创作者商城：只看基本信息（发货是卖家自己的事），店铺按钱包地址算
+const shopFor = ref<any>(null);
+const shopData = ref<any>(null);
+const shopAddr = ref('');
+const shopLoading = ref(false);
+const ARM_SITE = 'https://arm.yyheart.com';
+async function loadShop(u: any, address = '') {
+  shopFor.value = u;
+  shopLoading.value = true;
+  try {
+    shopData.value = await api<any>(`/admin/users/${u.id}/shop${address ? `?address=${address}` : ''}`);
+    shopAddr.value = shopData.value?.address ?? '';
+  } catch (e: any) {
+    showToast(e.message);
+  } finally {
+    shopLoading.value = false;
+  }
+}
+const usd6 = (v: unknown) => `$${(Number(v ?? 0) / 1e6).toFixed(2)}`;
+const imgUrl = (u?: string) => (u && u.startsWith('/') ? ARM_SITE + u : u);
+
 const menuFor = ref<any>(null);
 const menuPos = ref({ top: 0, left: 0 });
 const MENU_W = 150;
-const MENU_H = 5 * 36 + 8;
+const MENU_H = 6 * 36 + 8;
 function openMenu(u: any, e: MouseEvent) {
   if (menuFor.value?.id === u.id) return closeMenu();
   const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -214,11 +235,12 @@ function closeMenu() {
 function reveal(sel: string) {
   nextTick(() => document.querySelector(sel)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
 }
-function act(kind: 'grant' | 'txs' | 'limit' | 'hide' | 'ban') {
+function act(kind: 'grant' | 'txs' | 'limit' | 'shop' | 'hide' | 'ban') {
   const u = menuFor.value;
   closeMenu();
   if (!u) return;
-  if (kind === 'grant') { grantFor.value = u; reveal('[data-panel="grant"]'); }
+  if (kind === 'shop') { shopData.value = null; loadShop(u); reveal('[data-panel="shop"]'); }
+  else if (kind === 'grant') { grantFor.value = u; reveal('[data-panel="grant"]'); }
   else if (kind === 'txs') { openTxs(u); reveal('[data-panel="txs"]'); }
   else if (kind === 'limit') { openLimit(u); reveal('[data-panel="limit"]'); }
   else if (kind === 'hide') toggleHidden(u);
@@ -301,6 +323,7 @@ onBeforeUnmount(() => {
         <div class="dropdown-item" @click="act('grant')">发积分</div>
         <div class="dropdown-item" @click="act('txs')">积分明细</div>
         <div class="dropdown-item" @click="act('limit')">频道额度</div>
+        <div class="dropdown-item" data-testid="user-op-shop" @click="act('shop')">Arm 店铺</div>
         <div class="dropdown-item" data-testid="user-op-hide" @click="act('hide')">{{ menuFor.hidden ? '取消隐藏' : '隐藏' }}</div>
         <div class="dropdown-item danger" data-testid="user-op-ban" @click="act('ban')">{{ menuFor.status === 0 ? '封禁' : '解封' }}</div>
       </div>
@@ -314,6 +337,51 @@ onBeforeUnmount(() => {
         <button @click="grant">发放</button>
         <button class="ghost" @click="grantFor = null">取消</button>
       </div>
+    </div>
+
+    <div v-if="shopFor" class="card" data-panel="shop">
+      <div class="row" style="justify-content: space-between; margin-bottom: 10px">
+        <div class="page-title" style="font-size: 15px; margin: 0">「{{ shopFor.nickname }}」的 Arm 店铺</div>
+        <button class="small ghost" @click="shopFor = null">关闭</button>
+      </div>
+      <div class="muted" style="margin-bottom: 10px">
+        店铺按钱包地址算，默认用用户在钱包里公开的收款地址{{ shopData?.published ? '' : '（这个用户没公开，可以手填地址查）' }}。平台只看基本信息，发货由卖家自己处理。
+      </div>
+      <div class="row" style="margin-bottom: 12px">
+        <input v-model="shopAddr" placeholder="钱包地址 0x…" style="width: 380px; font-family: monospace" @keydown.enter="loadShop(shopFor, shopAddr)" />
+        <button class="small" :disabled="shopLoading" @click="loadShop(shopFor, shopAddr)">{{ shopLoading ? '查询中…' : '查询' }}</button>
+        <a v-if="shopData?.address" class="small" :href="`${ARM_SITE}/shop/store/${shopData.address}`" target="_blank" rel="noreferrer">打开店铺页 ↗</a>
+      </div>
+      <template v-if="shopData?.shop">
+        <div v-if="!shopData.shop.token" class="muted">这个地址还没开店</div>
+        <template v-else>
+          <div class="row" style="gap: 18px; margin-bottom: 12px">
+            <span>收款代币 <b>${{ shopData.shop.token.symbol }}</b></span>
+            <span>收款方式：{{ [shopData.shop.pay?.token ? '买入代币付款' : '', shopData.shop.pay?.usdc ? 'USDC 直付' : ''].filter(Boolean).join(' / ') }}</span>
+            <span>商品 <b>{{ shopData.shop.products.length }}</b></span>
+            <span>订单 <b>{{ shopData.shop.orders }}</b></span>
+            <span>总成交额 <b>{{ usd6(shopData.shop.products.reduce((s: number, p: any) => s + Number(p.volumeUsd6 ?? 0), 0)) }}</b></span>
+          </div>
+          <table>
+            <thead>
+              <tr><th>图</th><th>商品</th><th>价格</th><th>销量</th><th>成交额</th><th>库存</th><th>上架时间</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="p in shopData.shop.products" :key="p.id">
+                <td><img v-if="p.images?.[0]" :src="imgUrl(p.images[0])" style="width: 40px; height: 40px; object-fit: cover; border-radius: 6px" /></td>
+                <td><a :href="`${ARM_SITE}/shop/${p.id}`" target="_blank" rel="noreferrer">{{ p.title }}</a></td>
+                <td>{{ usd6(p.priceUsd6) }}</td>
+                <td>{{ p.sold }}</td>
+                <td>{{ usd6(p.volumeUsd6) }}</td>
+                <td>{{ p.stock ?? '不限' }}</td>
+                <td class="muted">{{ new Date(p.createdAt).toLocaleString() }}</td>
+              </tr>
+              <tr v-if="!shopData.shop.products.length"><td colspan="7" class="muted">没有上架中的商品</td></tr>
+            </tbody>
+          </table>
+        </template>
+      </template>
+      <div v-else-if="shopData && !shopData.address" class="muted">这个用户没有公开钱包地址</div>
     </div>
 
     <div v-if="limitFor" class="card" data-panel="limit">

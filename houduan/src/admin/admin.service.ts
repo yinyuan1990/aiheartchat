@@ -109,6 +109,20 @@ export class AdminService {
     return this.wallets.listTransactions(userId, beforeId);
   }
 
+  /**
+   * 某用户在 Arm 创作者商城的店铺（只看基本信息：收款方式、商品、销量、成交额、订单数；发货是卖家自己的事）。
+   * 店铺按钱包地址算：默认用用户在钱包里公开的 EVM 收款地址（user_chain_address.evm），没公开时后台可以手填地址查。
+   */
+  async userShop(userId: bigint, address?: string) {
+    const published = (await this.prisma.userChainAddress.findUnique({ where: { userId }, select: { evm: true } }))?.evm ?? null;
+    const addr = address && /^0x[0-9a-fA-F]{40}$/.test(address) ? address : published;
+    if (!addr) return { published, address: null, shop: null };
+    const base = (process.env.ARM_API_BASE ?? 'https://arm.yyheart.com/api').replace(/\/$/, '');
+    const r = await fetch(`${base}/shop/sellers/${addr}`, { signal: AbortSignal.timeout(10_000) }).catch(() => null);
+    if (!r?.ok) throw new BadRequestException('暂时取不到店铺信息（Arm 接口不通）');
+    return { published, address: addr, shop: await r.json() };
+  }
+
   // ---------- 通话日志（排查视频/语音概率性问题） ----------
 
   /** 通话记录列表（游标分页），附双方昵称与日志条数 */

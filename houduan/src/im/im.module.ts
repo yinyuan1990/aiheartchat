@@ -15,6 +15,8 @@ import { CoinGroupService } from './coin-group.service';
 import { CoinAvatarService } from './coin-avatar.service';
 import { BotAvatarService } from './bot-avatar.service';
 import { PerpCallService } from './perp-call.service';
+import { CardCallService } from './card-call.service';
+import { CardWatchService } from './card-watch.service';
 import { PerpWatchService } from './perp-watch.service';
 import { BotApiController } from './bot-api.controller';
 import { StickerModule } from '../sticker/sticker.module';
@@ -23,7 +25,7 @@ import { UploadModule } from '../upload/upload.module';
 @Module({
   imports: [AuthModule, WalletModule, StickerModule, UploadModule],
   controllers: [ImController, BotApiController],
-  providers: [ConnectionRegistry, ImService, GroupService, ImGateway, VoiceRoomService, ChannelService, BotService, MessageService, ChainCardService, CoinGroupService, CoinAvatarService, BotAvatarService, PerpCallService, PerpWatchService],
+  providers: [ConnectionRegistry, ImService, GroupService, ImGateway, VoiceRoomService, ChannelService, BotService, MessageService, ChainCardService, CoinGroupService, CoinAvatarService, BotAvatarService, PerpCallService, PerpWatchService, CardCallService, CardWatchService],
   exports: [ConnectionRegistry, ImService, GroupService, ChannelService, BotService, MessageService],
 })
 export class ImModule {}

@@ -60,6 +60,7 @@ final class WsClient: NSObject {
         receiveLoop()
         // 合约喊单卡片：重连后服务端不记得在看哪些卡片，重新告诉它
         if let w = perpWatching { sendFrame(w) }
+        if let w = cardWatching { sendFrame(w) }
 
         DispatchQueue.main.async { [weak self] in
             self?.heartbeatTimer?.invalidate()
@@ -116,6 +117,20 @@ final class WsClient: NSObject {
     func perpUnwatch(conversationId: String) {
         if (perpWatching?["conversationId"] as? String) == conversationId { perpWatching = nil }
         sendFrame(["op": "perpUnwatch", "conversationId": conversationId])
+    }
+
+    /// 正在看的会话里的通用卡片（服务端统一拉实时数据、推 cardTick，见后端 card-watch.service.ts）
+    private var cardWatching: [String: Any]?
+
+    func cardWatch(conversationId: String, ids: [String]) {
+        let frame: [String: Any] = ["op": "cardWatch", "conversationId": conversationId, "ids": Array(ids.suffix(100))]
+        cardWatching = frame
+        sendFrame(frame)
+    }
+
+    func cardUnwatch(conversationId: String) {
+        if (cardWatching?["conversationId"] as? String) == conversationId { cardWatching = nil }
+        sendFrame(["op": "cardUnwatch", "conversationId": conversationId])
     }
 
     private func sendFrame(_ dict: [String: Any]) {

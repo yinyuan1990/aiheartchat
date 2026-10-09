@@ -74,7 +74,7 @@ func previewOf(_ msg: LastMsg?) -> String {
     case "audio": return t("chat.preview.voice")
     case "location": return t("chat.preview.location")
     case "gift": return t("chat.preview.gift")
-    case "transfer", "callout", "payreq", "perp": return ChainCards.preview(type, msg.content ?? "") ?? ""
+    case "transfer", "callout", "payreq", "perp", "card": return ChainCards.preview(type, msg.content ?? "") ?? ""
     default: return type.hasPrefix("call") ? t("chat.preview.call") : ""
     }
 }
@@ -569,6 +569,7 @@ struct ChatRoomView: View {
     private var isGroupAdmin: Bool { convType == 2 && (myRole == "owner" || myRole == "admin") }
     private var canPin: Bool { convType == 1 || isGroupAdmin }
     private var perpIds: [String] { messages.filter { $0.type == "perp" && !$0.pending }.map { $0.id } }
+    private var cardIds: [String] { messages.filter { $0.type == "card" && !$0.pending }.map { $0.id } }
 
     // body 拆成几段，整块写在一起 Swift 类型检查会超时
     var body: some View {
@@ -579,14 +580,23 @@ struct ChatRoomView: View {
                 removeListener?()
                 removePerpListener?()
                 WsClient.shared.perpUnwatch(conversationId: convId)
+                WsClient.shared.cardUnwatch(conversationId: convId)
             }
             // 合约喊单卡片：告诉服务端这个聊天里在看哪些卡片，它每 3 秒推实时状态（PerpLive）
             .onChange(of: perpIds) { ids in
                 if !ids.isEmpty { WsClient.shared.perpWatch(conversationId: convId, ids: ids) }
             }
+            // 通用卡片：同样告诉服务端在看哪些，它推 cardTick（CardLive）
+            .onChange(of: cardIds) { ids in
+                if !ids.isEmpty { WsClient.shared.cardWatch(conversationId: convId, ids: ids) }
+            }
             .onAppear {
-                removePerpListener = WsClient.shared.addListener { frame in PerpLive.shared.onFrame(frame) }
+                removePerpListener = WsClient.shared.addListener { frame in
+                    PerpLive.shared.onFrame(frame)
+                    CardLive.shared.onFrame(frame)
+                }
                 if !perpIds.isEmpty { WsClient.shared.perpWatch(conversationId: convId, ids: perpIds) }
+                if !cardIds.isEmpty { WsClient.shared.cardWatch(conversationId: convId, ids: cardIds) }
             }
             .routePush($walletRoute)
             .onReceive(NotificationCenter.default.publisher(for: ChainWallet.resultNotification)) { n in
@@ -1872,6 +1882,8 @@ struct MsgBubble: View {
             TransferCardView(content: m.content, mine: mine)
         case "callout":
             CalloutCardView(content: m.content, canWallet: onOpenWallet != nil) { onOpenWallet?($0) }
+        case "card":
+            GenericCardView(msgId: m.id, content: m.content, canWallet: onOpenWallet != nil) { onOpenWallet?($0) }
         case "perp":
             PerpCardView(msgId: m.id, content: m.content, canWallet: onOpenWallet != nil) {
                 if let p = PerpLive.followPath(m.content, name: m.senderNickname ?? "") { onOpenWallet?(p) }

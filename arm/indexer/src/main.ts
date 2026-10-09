@@ -16,9 +16,11 @@ import { bus } from "./bus.js";
 import { config } from "./config.js";
 import { loadQuotePrices, refreshQuotePrices } from "./quotes.js";
 import { ensureAiBotTables, startAiBots } from "./aibot/bots.js";
+import { ensureShopTables } from "./shop.js";
 
 await migrate();
 await ensureCalloutTables();
+await ensureShopTables();
 await ensureAiBotTables();
 // stock generation: USDC prices of the whitelisted quote assets must be known before the first stock swap is indexed
 await loadQuotePrices().catch((e) => console.error("[quotes]", e.message));

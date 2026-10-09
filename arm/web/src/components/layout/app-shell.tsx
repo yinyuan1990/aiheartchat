@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { BookOpen, Languages, Menu, ShieldAlert, Wallet, Zap } from "lucide-react";
-import { ArrowsLeftRight, BookOpenText, ChartBar, Compass, Crown, GameController, Images, Megaphone, Mountains, RocketLaunch, Trophy, UserCircle, type Icon as PhosphorIcon } from "@phosphor-icons/react";
+import { ArrowsLeftRight, BookOpenText, ChartBar, Compass, Crown, GameController, Images, Megaphone, Mountains, RocketLaunch, Storefront, Trophy, UserCircle, type Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { useApp } from "@/components/providers";
 import { useDomains, useHealth, useSite } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -33,6 +33,7 @@ const NAV: Array<{ href: string; key: DictKey; icon: PhosphorIcon }> = [
   { href: "/analytics", key: "nav.analytics", icon: ChartBar },
   { href: "/create", key: "nav.create", icon: RocketLaunch },
   { href: "/creator", key: "nav.creator", icon: Crown },
+  { href: "/shop", key: "nav.shop", icon: Storefront },
   { href: "/promote", key: "nav.promote", icon: Megaphone },
   { href: "/tools", key: "nav.tools", icon: ArrowsLeftRight },
   // "/burn" removed 9.14 (boss): buybacks are done by hand from the buyback multisig and not shown publicly

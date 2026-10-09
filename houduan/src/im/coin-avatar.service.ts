@@ -10,7 +10,8 @@ import { fetchImage, paintPollinations, sleep, toPng } from './ai-avatar';
  * 失败的群 1 小时内不再试；启动后把还没转存的币群补一遍。
  */
 
-export type CoinAvatarJob = { groupId: bigint; key: string; perp: boolean; symbol: string; name?: string; image?: string };
+/** shop = 卖家店铺群（coin_group.chain = 'shop'），画一个店铺图标 */
+export type CoinAvatarJob = { groupId: bigint; key: string; perp: boolean; symbol: string; name?: string; image?: string; shop?: boolean };
 
 const RETRY_AFTER_MS = 3_600_000;
 const MAX_QUEUE = 200;
@@ -54,8 +55,9 @@ export class CoinAvatarService implements OnApplicationBootstrap {
       const g = byId.get(r.groupId.toString());
       if (!g || isOwn(g.avatar)) continue;
       const perp = r.chain === 'hl';
-      const symbol = perp ? r.address : g.name.replace(/^\$/, '').replace(/\s*讨论群$/, '');
-      this.ensure({ groupId: g.id, key: `${r.chain}:${r.address}`, perp, symbol, image: g.avatar || undefined }, g.avatar);
+      const shop = r.chain === 'shop';
+      const symbol = perp ? r.address : g.name.replace(/^\$/, '').replace(/\s*(讨论群|店铺 · .*)$/, '');
+      this.ensure({ groupId: g.id, key: `${r.chain}:${r.address}`, perp, shop, symbol, image: shop ? undefined : g.avatar || undefined }, g.avatar);
     }
   }
 
@@ -84,6 +86,9 @@ export class CoinAvatarService implements OnApplicationBootstrap {
   }
 
   private async paint(job: CoinAvatarJob): Promise<Buffer> {
+    if (job.shop) {
+      return paintPollinations(`Round app icon of a cute little storefront shop with a striped awning and a shopping bag, themed for the $${job.symbol} crypto community, flat vector, bold shapes, bright colours, plain background, no text, no letters, no watermark.`, `shop-avatar:${job.key}`);
+    }
     const sources: string[] = [];
     if (job.image && /^https:\/\//.test(job.image)) sources.push(job.image);
     // Hyperliquid 的 kPEPE = 1000 PEPE

@@ -1,4 +1,4 @@
-import { createWalletClient, encodePacked, http, maxUint256, type Address, type Hex, type LocalAccount, type PublicClient } from "viem";
+import { createWalletClient, encodePacked, http, maxUint256, erc20Abi as viemErc20Abi, type Address, type Hex, type LocalAccount, type PublicClient } from "viem";
 import { afterBuyTax, maxSellable, sellTaxOn, type TokenView } from "@/lib/api";
 import { ADDR, POOL_FEE, addrsFor, erc20Abi, quoterAbi, routerAbi } from "@/lib/web3";
 import { chainByKey, publicClientFor, rpcOf } from "./chains";
@@ -72,7 +72,23 @@ export const sellableOf = (token: TokenView, balance: bigint) => ((token.sellTax
 
 export type TradeStep = "approving" | "swapping" | "confirming";
 
-/** Approves the router once (max, like the site does) if needed, then swaps; resolves with the swap receipt. */
+/** Plain USDC transfer on Arc signed by the wallet's key (shop "pay with USDC"); resolves with the receipt. */
+export async function transferUsdc(account: LocalAccount, to: Address, amount: bigint, onStep?: (s: TradeStep, hash?: Hex) => void) {
+  const chain = arc();
+  const pc = publicClientFor(chain);
+  const wc = createWalletClient({ account, chain: chain.chain, transport: http(rpcOf(chain)) });
+  onStep?.("swapping");
+  const hash = await wc.writeContract({ address: ADDR.usdc, abi: viemErc20Abi, functionName: "transfer", args: [to, amount] });
+  onStep?.("confirming", hash);
+  const rc = await pc.waitForTransactionReceipt({ hash, timeout: 120_000 });
+  if (rc.status !== "success") throw Object.assign(new Error(t("cw.coin.errReverted")), { hash });
+  return rc;
+}
+
+/**
+ * Approves the router once (max, like the site does) if needed, then swaps; resolves with the swap receipt.
+ * `recipient` (buys only): deliver the tokens to another wallet — a shop purchase pays the seller this way.
+ */
 export async function executeTrade(
   account: LocalAccount,
   token: TokenView,
@@ -80,12 +96,14 @@ export async function executeTrade(
   amountIn: bigint,
   minOut: bigint,
   onStep?: (s: TradeStep, hash?: Hex) => void,
+  recipient?: Address,
 ) {
   const chain = arc();
   const pc = publicClientFor(chain);
   const wc = createWalletClient({ account, chain: chain.chain, transport: http(rpcOf(chain)) });
   const r = route(token, side);
   const me = account.address;
+  const to = side === "buy" && recipient ? recipient : me;
 
   const allowance = await pc.readContract({ address: r.tokenIn, abi: erc20Abi, functionName: "allowance", args: [me, r.A.router] });
   if (allowance < amountIn) {
@@ -98,12 +116,12 @@ export async function executeTrade(
   onStep?.("swapping");
   const deadline = BigInt(Math.floor(Date.now() / 1000) + 600);
   const hash = r.path
-    ? await wc.writeContract({ address: r.A.router, abi: routerAbi, functionName: "exactInput", args: [{ path: r.path, recipient: me, deadline, amountIn, amountOutMinimum: minOut }] })
+    ? await wc.writeContract({ address: r.A.router, abi: routerAbi, functionName: "exactInput", args: [{ path: r.path, recipient: to, deadline, amountIn, amountOutMinimum: minOut }] })
     : await wc.writeContract({
         address: r.A.router,
         abi: routerAbi,
         functionName: "exactInputSingle",
-        args: [{ tokenIn: r.tokenIn, tokenOut: r.tokenOut, fee: POOL_FEE, recipient: me, deadline, amountIn, amountOutMinimum: minOut, sqrtPriceLimitX96: 0n }],
+        args: [{ tokenIn: r.tokenIn, tokenOut: r.tokenOut, fee: POOL_FEE, recipient: to, deadline, amountIn, amountOutMinimum: minOut, sqrtPriceLimitX96: 0n }],
       });
   onStep?.("confirming", hash);
   const rc = await pc.waitForTransactionReceipt({ hash, timeout: 120_000 });

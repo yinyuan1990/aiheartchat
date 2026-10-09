@@ -20,6 +20,8 @@ const MEMBER_LIMIT = 2000;
 export const COIN_GROUP_COLD_MS = 7 * 86_400_000;
 /** coin_group.chain for Hyperliquid perps (address = the perp's name) */
 export const PERP_CHAIN = 'hl';
+/** coin_group.chain for Arm creator shops (address = the seller wallet, lower-case) */
+export const SHOP_CHAIN = 'shop';
 const ARM_API = (process.env.ARM_API_BASE ?? 'https://arm.yyheart.com/api').replace(/\/$/, '');
 
 export type CoinGroupBody = { chain?: string; address?: string; symbol?: string; name?: string; image?: string };
@@ -115,6 +117,40 @@ export class CoinGroupService {
         this.avatars.ensure(avatarJob(groupId));
       } catch {
         // 两个人同时点：留先建好的那个，刚建的群作废
+        await this.prisma.chatGroup.update({ where: { id: groupId }, data: { status: 1 } }).catch(() => {});
+        row = await this.prisma.coinGroup.findUnique({ where: { chain_address: { chain, address } } });
+        if (!row) throw new BadRequestException('建群失败，请重试');
+      }
+    }
+    const g = await this.groups.join(userId, row.groupId);
+    return { groupId: String(g.id), conversationId: g.conversationId != null ? String(g.conversationId) : null, name: g.name, avatar: g.avatar };
+  }
+
+  /**
+   * 卖家店铺群（Arm 创作者商城）：一个卖家地址一个群，店里所有商品的喊单都发这里（card-call.service.ts）。
+   * 群名 / 公告由 Arm indexer 的卡片接口给出；头像 Pollinations 免费画（coin-avatar.service.ts）。
+   */
+  async openShop(userId: bigint, s: { key: string; name: string; notice: string; symbol: string }) {
+    const address = s.key.toLowerCase();
+    if (!/^0x[0-9a-f]{40}$/.test(address)) throw new BadRequestException('卖家地址不对');
+    const chain = SHOP_CHAIN;
+    const avatarJob = (groupId: bigint) => ({ groupId, key: `${chain}:${address}`, perp: false, shop: true, symbol: cleanText(s.symbol, 20) || '?' });
+    let row = await this.prisma.coinGroup.findUnique({ where: { chain_address: { chain, address } } });
+    if (row) {
+      const g = await this.prisma.chatGroup.findUnique({ where: { id: row.groupId }, select: { status: true, visible: true, avatar: true } });
+      if (!g || g.status !== 0 || !g.visible) throw new BadRequestException('这个店铺群已关闭');
+      this.avatars.ensure(avatarJob(row.groupId), g.avatar);
+    } else {
+      const recent = await this.prisma.coinGroup.count({ where: { creatorId: userId, createdAt: { gt: new Date(Date.now() - 86_400_000) } } });
+      if (recent >= NEW_PER_DAY) throw new BadRequestException('今天新建的群太多了，明天再来');
+      const owner = await this.systemOwner();
+      const created = await this.groups.createGroup(owner, cleanText(s.name, 50) || `店铺 ${address.slice(0, 6)}…${address.slice(-4)}`, [userId], '');
+      const groupId = BigInt(created.id);
+      await this.prisma.chatGroup.update({ where: { id: groupId }, data: { memberLimit: MEMBER_LIMIT, notice: cleanText(s.notice, 500) } });
+      try {
+        row = await this.prisma.coinGroup.create({ data: { chain, address, groupId, creatorId: userId } });
+        this.avatars.ensure(avatarJob(groupId));
+      } catch {
         await this.prisma.chatGroup.update({ where: { id: groupId }, data: { status: 1 } }).catch(() => {});
         row = await this.prisma.coinGroup.findUnique({ where: { chain_address: { chain, address } } });
         if (!row) throw new BadRequestException('建群失败，请重试');

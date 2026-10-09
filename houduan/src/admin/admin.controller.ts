@@ -799,6 +799,13 @@ export class AdminController {
     return this.admin.listUserTransactions(BigInt(id), beforeId ? BigInt(beforeId) : undefined);
   }
 
+  /** 用户的 Arm 商城店铺基本信息（address 可选：用户没公开钱包地址时手填） */
+  @Get('users/:id/shop')
+  @UseGuards(AdminGuard)
+  userShop(@Param('id') id: string, @Query('address') address?: string) {
+    return this.admin.userShop(BigInt(id), address);
+  }
+
   // ---------- 通话日志 ----------
 
   @Get('call-logs')

@@ -91,6 +91,7 @@ fun chainCardPreview(type: String, content: String): String? {
         "transfer" -> "${t("card.tag.transfer")} ${tokenAmount(o?.str("amount"), o?.str("decimals")?.toIntOrNull() ?: 0)} ${o?.str("symbol") ?: ""}".trim()
         "callout" -> "${t("card.tag.callout")} $${o?.str("symbol") ?: ""}"
         "perp" -> perpPreview(content)
+        "card" -> "[${o?.let { cardText(it["badge"]?.let { b -> (b as? JsonObject)?.get("text") }) }?.takeIf { it.isNotEmpty() } ?: t("card.preview.card")}] ${o?.let { cardText(it["title"]) }.orEmpty()}"
         "payreq" -> o?.str("amount")?.let { "${t("card.tag.payreq")} ${tokenAmount(it, o.str("decimals")?.toIntOrNull() ?: 0)} ${o.str("symbol").orEmpty()}".trim() } ?: "${t("card.tag.payreq")} ${chainName(o?.str("chain").orEmpty())}"
         else -> null
     }
@@ -210,6 +211,107 @@ fun CalloutCard(content: String, canWallet: Boolean, onOpenWallet: (String) -> U
             Text(" " + t("card.calloutFooter", "chain" to chainName(o.str("chain").orEmpty())), color = Color.White.copy(alpha = 0.55f), fontSize = 11.sp, modifier = Modifier.weight(1f))
             Box(Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xFF4ADE80)).padding(10.dp, 4.dp)) {
                 Text(if (canWallet) t("card.view") else t("card.viewMarket"), color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
+
+/**
+ * 通用卡片（msgType card，字段说明见后端 card-content.ts sanitizeCard）：内容全由服务端给，新类型不用改这里。
+ * 文字是字符串或 {zh, en}；数据行的实时值由服务端经 WebSocket 推（CardLive）；wallet 按钮在钱包打开 path，
+ * 没有钱包入口就用浏览器打开 url（只认 *.yyheart.com）。
+ */
+private val CARD_TONES = mapOf("accent" to Color(0xFF2563EB), "up" to Color(0xFF16A34A), "down" to Color(0xFFDC2626), "gold" to Color(0xFFB77700), "muted" to Color(0xFF888888))
+
+private fun cardHostOk(u: String?): Boolean = runCatching {
+    val uri = Uri.parse(u ?: return false)
+    uri.scheme == "https" && (uri.host == "yyheart.com" || uri.host?.endsWith(".yyheart.com") == true)
+}.getOrDefault(false)
+
+fun cardText(v: JsonElement?): String = when (v) {
+    is JsonPrimitive -> v.contentOrNull.orEmpty()
+    is JsonObject -> {
+        val lang = com.wh.peiwana.i18n.I18n.lang
+        listOf(lang, lang.substringBefore('-'), "zh", "en").firstNotNullOfOrNull { v[it]?.jsonPrimitive?.contentOrNull } ?: v.values.firstOrNull()?.jsonPrimitive?.contentOrNull.orEmpty()
+    }
+    else -> ""
+}
+
+/** 通用卡片的实时数据：聊天页 WsClient.cardWatch 告诉服务端在看哪些，服务端推 cardTick（card-watch.service.ts），按消息 id 存 */
+object CardLive {
+    val values = mutableStateMapOf<String, Map<String, String>>()
+    fun onFrame(frame: JsonObject) {
+        if (frame.str("op") != "cardTick") return
+        (frame["values"] as? JsonObject)?.forEach { (id, v) ->
+            (v as? JsonObject)?.let { o -> values[id] = o.mapNotNull { (k, x) -> x.jsonPrimitive.contentOrNull?.let { k to it } }.toMap() }
+        }
+    }
+}
+
+@Composable
+fun GenericCard(msgId: String, content: String, canWallet: Boolean, onOpenWallet: (String) -> Unit) {
+    val ctx = LocalContext.current
+    val o = remember(content) { obj(content) }
+    if (o == null || o["title"] == null) {
+        Text(o?.str("fallback") ?: content, color = TextMain, fontSize = 14.sp)
+        return
+    }
+    val live = CardLive.values[msgId].orEmpty()
+    val stats = (o["stats"] as? JsonArray).orEmpty().take(4).mapNotNull { it as? JsonObject }
+    val actions = (o["actions"] as? JsonArray).orEmpty().take(2).mapNotNull { it as? JsonObject }.filter { a ->
+        when (a.str("type")) { "wallet" -> a.str("path") != null || cardHostOk(a.str("url")); "url" -> cardHostOk(a.str("url")); "copy" -> a.str("value") != null; else -> false }
+    }
+    val act: (JsonObject) -> Unit = { a ->
+        when (a.str("type")) {
+            "copy" -> {
+                val cm = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("card", a.str("value").orEmpty()))
+                android.widget.Toast.makeText(ctx, t("card.copied"), android.widget.Toast.LENGTH_SHORT).show()
+            }
+            else -> {
+                val path = a.str("path")
+                if (a.str("type") == "wallet" && canWallet && path != null) onOpenWallet(path)
+                else a.str("url")?.takeIf { cardHostOk(it) }?.let { runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }
+            }
+        }
+    }
+    val main = actions.firstOrNull { it["primary"]?.jsonPrimitive?.booleanOrNull == true } ?: actions.firstOrNull()
+    Column(Modifier.width(240.dp).clip(RoundedCornerShape(14.dp)).background(Color.White).border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(14.dp)).noRippleClick { main?.let(act) }) {
+        o.str("cover")?.takeIf { it.startsWith("https://") }?.let {
+            AsyncImage(model = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().aspectRatio(1f).background(Color(0xFFF4F4F5)))
+        }
+        Column(Modifier.padding(12.dp, 10.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                (o["badge"] as? JsonObject)?.let { b ->
+                    val bt = cardText(b["text"])
+                    if (bt.isNotEmpty()) {
+                        Box(Modifier.padding(top = 2.dp).clip(RoundedCornerShape(6.dp)).background(CARD_TONES[b.str("tone")] ?: CARD_TONES.getValue("accent")).padding(6.dp, 2.dp)) { Text(bt, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.SemiBold) }
+                        Spacer(Modifier.width(6.dp))
+                    }
+                }
+                Text(cardText(o["title"]), color = Color(0xFF111111), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, lineHeight = 19.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            cardText(o["subtitle"]).takeIf { it.isNotEmpty() }?.let { Text(it, color = Color(0xFF777777), fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp), maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            if (stats.isNotEmpty()) {
+                Row(Modifier.padding(top = 8.dp).fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0xFFF6F7F9)).padding(vertical = 7.dp)) {
+                    stats.forEach { s ->
+                        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(s.str("live")?.let { live[it] } ?: s.str("value").orEmpty(), color = CARD_TONES[s.str("tone")] ?: Color(0xFF111111), fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                            Text(cardText(s["label"]), color = Color(0xFF888888), fontSize = 10.sp, maxLines = 1)
+                        }
+                    }
+                }
+            }
+            o.str("note")?.takeIf { it.isNotBlank() }?.let { Text(it, color = Color(0xFF111111), fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 6.dp)) }
+            if (actions.isNotEmpty()) {
+                Row(Modifier.padding(top = 8.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    actions.forEach { a ->
+                        val primary = a["primary"]?.jsonPrimitive?.booleanOrNull == true
+                        Box(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(if (primary) Color(0xFF111111) else Color(0xFFF1F1F3)).noRippleClick { act(a) }.padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
+                            Text(cardText(a["text"]), color = if (primary) Color.White else Color(0xFF111111), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
             }
         }
     }

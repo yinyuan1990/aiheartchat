@@ -75,6 +75,7 @@ object WsClient {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
                     // 合约喊单卡片：重连后服务端不记得在看哪些卡片，重新告诉它
                     perpWatching?.let { webSocket.send(it.toString()) }
+                    cardWatching?.let { webSocket.send(it.toString()) }
                 }
 
                 override fun onMessage(webSocket: WebSocket, text: String) {
@@ -149,6 +150,24 @@ object WsClient {
     fun perpUnwatch(conversationId: String) {
         if (perpWatching?.get("conversationId")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content } == conversationId) perpWatching = null
         ws?.send(buildJsonObject { put("op", "perpUnwatch"); put("conversationId", conversationId) }.toString())
+    }
+
+    /** 正在看的会话里的通用卡片（服务端统一拉实时数据、推 cardTick，见后端 card-watch.service.ts） */
+    @Volatile private var cardWatching: JsonObject? = null
+
+    fun cardWatch(conversationId: String, ids: List<String>) {
+        val frame = buildJsonObject {
+            put("op", "cardWatch")
+            put("conversationId", conversationId)
+            put("ids", kotlinx.serialization.json.JsonArray(ids.takeLast(100).map { kotlinx.serialization.json.JsonPrimitive(it) }))
+        }
+        cardWatching = frame
+        ws?.send(frame.toString())
+    }
+
+    fun cardUnwatch(conversationId: String) {
+        if (cardWatching?.get("conversationId")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content } == conversationId) cardWatching = null
+        ws?.send(buildJsonObject { put("op", "cardUnwatch"); put("conversationId", conversationId) }.toString())
     }
 
     fun markRead(conversationId: String, msgId: String) {

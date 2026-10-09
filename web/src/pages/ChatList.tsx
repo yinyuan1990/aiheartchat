@@ -72,6 +72,7 @@ function previewText(msg?: ConversationItem['lastMsg']): string {
     case 'transfer':
     case 'callout':
     case 'perp':
+    case 'card':
     case 'payreq': return chainCardPreview(msg.type, msg.content) ?? '';
     default: return msg.type.startsWith('call') ? t('msg.preview.call') : '';
   }

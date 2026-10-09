@@ -9,7 +9,7 @@ import { UploadService } from '../upload/upload.service';
 /** 聊天里长按消息可选的表情；前 7 个是菜单顶上那一排 */
 export const MSG_REACTIONS = ['❤️', '👍', '👎', '🔥', '🥰', '👏', '😁', '😂', '😮', '😢', '🎉', '🙏'];
 /** 能转发的消息类型（礼物、通话记录、转账卡片不能转发；喊单卡片可以） */
-const FORWARDABLE = new Set(['text', 'image', 'video', 'audio', 'location', 'sticker', 'callout']);
+const FORWARDABLE = new Set(['text', 'image', 'video', 'audio', 'location', 'sticker', 'callout', 'card']);
 const MAX_BATCH = 100;
 const MAX_FORWARD_TARGETS = 10;
 

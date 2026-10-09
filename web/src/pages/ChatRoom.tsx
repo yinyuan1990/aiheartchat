@@ -12,7 +12,7 @@ import { EmojiPanel } from '../components/EmojiPanel';
 import { StickerView } from '../components/StickerView';
 import { AttachSheet, AttachAction } from '../components/AttachSheet';
 import { LinkText } from '../components/LinkText';
-import { CalloutCard, PayreqCard, PerpCard, TransferCard } from '../components/ChainCards';
+import { CalloutCard, GenericCard, PayreqCard, PerpCard, TransferCard } from '../components/ChainCards';
 import {
   DeleteDialog, FORWARDABLE, ForwardSheet, MenuActions, MsgMenu, PinBar, PinItem,
   ReactionChips, ReplyBar, ReplyQuote, ReportSheet, saveMedia,
@@ -452,7 +452,7 @@ function MsgBubble({ m, album, mine, convType, myId, uploads, onImage, onMenu, o
 }) {
   const press = useRef<ReturnType<typeof setTimeout>>();
   const pressed = useRef(false);
-  const isMedia = m.type === 'image' || m.type === 'video' || m.type === 'sticker' || m.type === 'transfer' || m.type === 'callout' || m.type === 'payreq' || m.type === 'perp';
+  const isMedia = m.type === 'image' || m.type === 'video' || m.type === 'sticker' || m.type === 'transfer' || m.type === 'callout' || m.type === 'payreq' || m.type === 'perp' || m.type === 'card';
   const all = album ?? [m];
   const targetOf = (el: EventTarget | null) => {
     const i = Number((el as Element | null)?.closest?.('[data-album-i]')?.getAttribute('data-album-i'));
@@ -541,6 +541,9 @@ function MsgBubble({ m, album, mine, convType, myId, uploads, onImage, onMenu, o
       break;
     case 'perp':
       body = <PerpCard id={m.id} content={m.content} />;
+      break;
+    case 'card':
+      body = <GenericCard id={m.id} content={m.content} />;
       break;
     case 'payreq':
       body = <PayreqCard content={m.content} mine={mine} />;
@@ -632,6 +635,12 @@ export function ChatRoomPage() {
     if (conversationId && perpIds) wsManager.perpWatch(conversationId, perpIds.split(','));
   }, [conversationId, perpIds]);
   useEffect(() => () => void (conversationId && wsManager.perpUnwatch(conversationId)), [conversationId]);
+  // 通用卡片：同样告诉服务端在看哪些，它推 cardTick（GenericCard 收）
+  const cardIds = messages.filter((m) => m.type === 'card' && !m.id.startsWith('t_')).map((m) => m.id).join(',');
+  useEffect(() => {
+    if (conversationId && cardIds) wsManager.cardWatch(conversationId, cardIds.split(','));
+  }, [conversationId, cardIds]);
+  useEffect(() => () => void (conversationId && wsManager.cardUnwatch(conversationId)), [conversationId]);
   const [showCmds, setShowCmds] = useState(false);
   const [input, setInput] = useState('');
   const [showDownload, setShowDownload] = useState(false);

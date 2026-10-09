@@ -30,6 +30,8 @@ const AI_GRADIENT = "linear-gradient(90deg, #7c3aed, #2563eb)";
 import { MARKET_CHAINS, isMarketChain, useMarketList, useMarketPrices, type MarketChainKey, type MarketTab } from "@/lib/wallet/market";
 import { STOCKS, stockName } from "@/lib/wallet/stocks";
 import { StockNotice } from "@/components/wallet/stocks";
+import { ItemGrid } from "@/components/wallet/shop";
+import { useShopProducts } from "@/lib/shop";
 
 export default function TokenRoute() {
   return (
@@ -449,6 +451,7 @@ function TokenDetail({ address }: { address: string }) {
   const comments = useComments(address, me);
   const bal = useBalances(token, me);
   const wallet = useWallet(me);
+  const shopItems = useShopProducts({ token: address, limit: 20 });
   const [sheet, setSheet] = useState<{ side: Side; quick?: boolean } | null>(null);
   const viewers = useViewers(`arc:${address}`);
   const [starred, toggleStar] = useStar(`arc:${address}`);
@@ -569,6 +572,9 @@ function TokenDetail({ address }: { address: string }) {
 
         <CoinTabs
           tabs={[
+            ...(shopItems.data?.length
+              ? [{ key: "shop", label: t("cw.shop.tab"), count: shopItems.data.length, render: () => <div className="p-3"><ItemGrid items={shopItems.data ?? []} /></div> }]
+              : []),
             {
               key: "thread",
               label: t("cw.coin.thread"),

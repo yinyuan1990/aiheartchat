@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ExternalLink, Pencil, Sparkles, Wallet } from "lucide-react";
+import { ExternalLink, Pencil, Sparkles, Store, Wallet } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { isAddress, type Address } from "viem";
 import { progressOf, usd, useCreator, type TokenView } from "@/lib/api";
@@ -97,6 +97,19 @@ export default function CreatorPage() {
           <p className="text-secondary-foreground">{t("payout.notice.body")}</p>
         </CardContent>
       </Card>
+
+      <Link href="/creator/shop" className="block">
+        <Card size="sm" className="transition hover:border-ring">
+          <CardContent className="flex items-center gap-3 text-sm">
+            <span className="flex size-9 items-center justify-center rounded-full bg-primary/15 text-primary"><Store size={18} /></span>
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold">{t("shop.manage")}</div>
+              <div className="text-xs text-muted-foreground">{t("shop.manageHint")}</div>
+            </div>
+            <span className="text-muted-foreground">→</span>
+          </CardContent>
+        </Card>
+      </Link>
 
       <section className="grid gap-3 sm:grid-cols-3">
         <Stat label={t("creator.totalEarned")} value={data ? fmtUsd(usd(data.earnedUsdc)) : "…"} tone="up" sub={t("creator.forever")} />

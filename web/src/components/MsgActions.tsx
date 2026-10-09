@@ -8,7 +8,7 @@ import { t } from '../i18n';
 export const MSG_REACTIONS = ['❤️', '👍', '👎', '🔥', '🥰', '👏', '😁', '😂', '😮', '😢', '🎉', '🙏'];
 
 /** 能转发的类型（礼物、通话记录、转账卡片不行；喊单卡片可以），和后端 message.service FORWARDABLE 一致 */
-export const FORWARDABLE = new Set(['text', 'image', 'video', 'audio', 'location', 'sticker', 'callout']);
+export const FORWARDABLE = new Set(['text', 'image', 'video', 'audio', 'location', 'sticker', 'callout', 'card']);
 
 export interface MenuMsg {
   id: string;
@@ -32,6 +32,7 @@ export function msgSnippet(type: string, content: string): string {
     case 'transfer':
     case 'callout':
     case 'perp':
+    case 'card':
     case 'payreq': return chainCardPreview(type, content) ?? t('msg.preview.message');
     default: return type.startsWith('call') ? t('msg.preview.call') : t('msg.preview.message');
   }

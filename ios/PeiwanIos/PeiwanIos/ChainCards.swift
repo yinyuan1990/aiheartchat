@@ -69,6 +69,9 @@ enum ChainCards {
             return t("card.preview.transfer", ["amount": amount(o["amount"] as? String, dec), "symbol": symbol])
         case "callout":
             return t("card.preview.callout", ["symbol": symbol])
+        case "card":
+            let badge = cardText((o["badge"] as? [String: Any])?["text"])
+            return "[\(badge.isEmpty ? t("card.preview.card") : badge)] \(cardText(o["title"]))"
         case "perp":
             let side = (o["side"] as? String) == "short" ? t("card.short") : t("card.long")
             let lev = Int(PerpLive.num(o["lev"]) ?? 0)
@@ -81,6 +84,21 @@ enum ChainCards {
         default:
             return nil
         }
+    }
+
+    /// 通用卡片的文字：字符串或 {zh, en, …}，取 App 语言，没有就 zh → en → 第一个
+    static func cardText(_ v: Any?) -> String {
+        if let s = v as? String { return s }
+        guard let o = v as? [String: Any] else { return "" }
+        let lang = I18nStore.shared.lang
+        for k in [lang, String(lang.split(separator: "-").first ?? ""), "zh", "en"] { if let s = o[k] as? String { return s } }
+        return o.values.compactMap { $0 as? String }.first ?? ""
+    }
+
+    /// 通用卡片只认 *.yyheart.com 的 https 地址（实时数据、按钮链接）
+    static func cardHostOk(_ s: String?) -> Bool {
+        guard let s, let u = URL(string: s), u.scheme == "https", let h = u.host else { return false }
+        return h == "yyheart.com" || h.hasSuffix(".yyheart.com")
     }
 
     /// 点收款消息的「转账」：钱包转账页填好收款地址 / 币 / 金额，转完交回结果（req = 收款消息 id，服务端据此把卡片发回原聊天）
@@ -177,6 +195,119 @@ struct TransferCardView: View {
             .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(red: 0.96, green: 0.62, blue: 0.04), lineWidth: 1))
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// 通用卡片的实时数据：聊天页 WsClient.cardWatch 告诉服务端在看哪些，服务端推 cardTick（card-watch.service.ts），按消息 id 存
+final class CardLive: ObservableObject {
+    static let shared = CardLive()
+    @Published var values: [String: [String: String]] = [:]
+
+    func onFrame(_ f: [String: Any]) {
+        guard f["op"] as? String == "cardTick", let vs = f["values"] as? [String: Any] else { return }
+        DispatchQueue.main.async {
+            for (id, v) in vs { if let o = v as? [String: Any] { self.values[id] = o.compactMapValues { $0 as? String } } }
+        }
+    }
+}
+
+/// 通用卡片（msgType card，字段说明见后端 card-content.ts sanitizeCard）：内容全由服务端给，新类型不用改这里。
+/// 数据行的实时值由服务端经 WebSocket 推（CardLive）；wallet 按钮在钱包打开 path，没有钱包入口就用浏览器打开 url。
+struct GenericCardView: View {
+    let msgId: String
+    let content: String
+    let canWallet: Bool
+    let onOpenWallet: (String) -> Void
+    @ObservedObject private var cardLive = CardLive.shared
+    private var live: [String: String] { cardLive.values[msgId] ?? [:] }
+
+    private static let tones: [String: Color] = ["accent": Color(red: 0.15, green: 0.39, blue: 0.92), "up": Color(red: 0.09, green: 0.64, blue: 0.29), "down": Color(red: 0.86, green: 0.15, blue: 0.15), "gold": Color(red: 0.72, green: 0.47, blue: 0), "muted": Color(white: 0.53)]
+
+    private func act(_ a: [String: Any]) {
+        switch a["type"] as? String {
+        case "copy":
+            UIPasteboard.general.string = a["value"] as? String
+        case "wallet" where canWallet && a["path"] is String:
+            onOpenWallet(a["path"] as? String ?? "")
+        default:
+            if let s = a["url"] as? String, ChainCards.cardHostOk(s), let u = URL(string: s) { UIApplication.shared.open(u) }
+        }
+    }
+
+    var body: some View {
+        let o = ChainCards.obj(content)
+        if o["title"] == nil {
+            Text(o["fallback"] as? String ?? content).font(.system(size: 14))
+        } else {
+            let stats = ((o["stats"] as? [[String: Any]]) ?? []).prefix(4)
+            let actions = ((o["actions"] as? [[String: Any]]) ?? []).prefix(2).filter { a in
+                switch a["type"] as? String {
+                case "wallet": return a["path"] is String || ChainCards.cardHostOk(a["url"] as? String)
+                case "url": return ChainCards.cardHostOk(a["url"] as? String)
+                case "copy": return a["value"] is String
+                default: return false
+                }
+            }
+            let main = actions.first { ($0["primary"] as? Bool) == true } ?? actions.first
+            VStack(alignment: .leading, spacing: 0) {
+                if let c = o["cover"] as? String, c.hasPrefix("https://") {
+                    RemoteImage(url: c).frame(width: 240, height: 240).clipped().background(Color(white: 0.96))
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .top, spacing: 6) {
+                        if let b = o["badge"] as? [String: Any], !ChainCards.cardText(b["text"]).isEmpty {
+                            Text(ChainCards.cardText(b["text"])).font(.system(size: 10, weight: .semibold)).foregroundStyle(.white)
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(RoundedRectangle(cornerRadius: 6).fill(Self.tones[b["tone"] as? String ?? ""] ?? Self.tones["accent"]!))
+                                .padding(.top, 1)
+                        }
+                        Text(ChainCards.cardText(o["title"])).font(.system(size: 14, weight: .semibold)).foregroundStyle(Color(white: 0.07)).lineLimit(2).multilineTextAlignment(.leading)
+                    }
+                    let sub = ChainCards.cardText(o["subtitle"])
+                    if !sub.isEmpty { Text(sub).font(.system(size: 11)).foregroundStyle(Color(white: 0.47)).lineLimit(1) }
+                    if !stats.isEmpty {
+                        HStack(spacing: 0) {
+                            ForEach(Array(stats.enumerated()), id: \.offset) { _, s in
+                                VStack(spacing: 1) {
+                                    Text((s["live"] as? String).flatMap { live[$0] } ?? (s["value"] as? String ?? ""))
+                                        .font(.system(size: 13, weight: .bold)).foregroundStyle(Self.tones[s["tone"] as? String ?? ""] ?? Color(white: 0.07)).lineLimit(1)
+                                    Text(ChainCards.cardText(s["label"])).font(.system(size: 10)).foregroundStyle(Color(white: 0.53)).lineLimit(1)
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                        }
+                        .padding(.vertical, 7)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(Color(red: 0.965, green: 0.969, blue: 0.976)))
+                        .padding(.top, 4)
+                    }
+                    if let note = o["note"] as? String, !note.isEmpty {
+                        Text(note).font(.system(size: 13)).foregroundStyle(Color(white: 0.07)).multilineTextAlignment(.leading).padding(.top, 2)
+                    }
+                    if !actions.isEmpty {
+                        HStack(spacing: 6) {
+                            ForEach(Array(actions.enumerated()), id: \.offset) { _, a in
+                                let primary = (a["primary"] as? Bool) == true
+                                Button { act(a) } label: {
+                                    Text(ChainCards.cardText(a["text"])).font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(primary ? .white : Color(white: 0.07))
+                                        .frame(maxWidth: .infinity).padding(.vertical, 6)
+                                        .background(RoundedRectangle(cornerRadius: 12).fill(primary ? Color(white: 0.07) : Color(white: 0.945)))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.top, 6)
+                    }
+                }
+                .padding(.horizontal, 12).padding(.vertical, 10)
+            }
+            .frame(width: 240, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 14).fill(Color.white))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(white: 0.9), lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .contentShape(Rectangle())
+            .onTapGesture { if let m = main { act(m) } }
+        }
     }
 }
 
