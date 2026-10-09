@@ -100,6 +100,13 @@ html, body { width: 1080px; height: 1920px; overflow: hidden; background: #05050
 #brand span { font: 600 22px "Segoe UI"; letter-spacing: 3px; color: rgba(255,255,255,.55); margin-left: 4px }
 #sub { position: absolute; left: 60px; right: 60px; bottom: 96px; text-align: center }
 #sub span { display: inline-block; background: rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.1); border-radius: 20px; padding: 12px 32px; font-size: 44px; font-weight: 700; color: #fff; text-shadow: 0 2px 6px #000 }
+/* English cut: English line over its Chinese translation */
+body.lang-en #sub span { font: 700 40px "Segoe UI", "Microsoft YaHei", sans-serif; line-height: 1.25 }
+body.lang-en #sub small { display: block; margin-top: 6px; font: 600 32px "Microsoft YaHei", sans-serif; color: #ffd2b0 }
+body.lang-en .h1 { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 84px; letter-spacing: 1px }
+body.lang-en .h1en { font: 600 34px "Microsoft YaHei", sans-serif; letter-spacing: 6px; color: rgba(255,255,255,.62) }
+body.lang-en .chip { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 32px }
+body.lang-en .chip small { font: 600 22px "Microsoft YaHei", sans-serif; letter-spacing: 2px }
 #sweep { position: absolute; top: -200px; bottom: -200px; width: 260px; background: linear-gradient(90deg, transparent, rgba(255,210,225,.2), transparent); transform: skewX(-18deg); opacity: 0; pointer-events: none }
 #progress { position: absolute; left: 0; bottom: 0; height: 6px; background: linear-gradient(90deg, #fe2c55, #f7b955) }
 </style>
@@ -115,111 +122,133 @@ html, body { width: 1080px; height: 1920px; overflow: hidden; background: #05050
   <div id="orbs" style="position:absolute;inset:0"></div>
   <div class="center" style="top:560px">
     <div class="seal pop" style="width:280px;height:280px;font-size:170px">心</div>
-    <div class="rise" style="--d:.35s;font-size:190px;font-weight:900;letter-spacing:24px;margin-top:60px;line-height:1.1">心之音</div>
-    <div class="rise en" style="--d:.6s;font-size:44px;margin-top:18px;letter-spacing:22px">HEARTCHAT</div>
-    <div class="rise" data-at="社交" style="font-size:52px;font-weight:800;margin-top:90px;letter-spacing:6px">社交 <span style="color:#ff4d7d">·</span> 娱乐 <span style="color:#ff4d7d">·</span> <span class="grad">Web3</span></div>
-    <div class="rise" data-at="商业闭环" style="margin-top:34px;font-size:40px;color:rgba(255,255,255,.75)">一个 App，一个完整的 <b class="gold" style="font-size:48px">商业闭环</b></div>
+    <div class="rise" data-en="HeartChat" data-en-style="font-family:'Segoe UI';letter-spacing:4px;font-size:170px" style="--d:.35s;font-size:190px;font-weight:900;letter-spacing:24px;margin-top:60px;line-height:1.1">心之音</div>
+    <div class="rise en" data-en="心之音" style="--d:.6s;font-size:44px;margin-top:18px;letter-spacing:22px">HEARTCHAT</div>
+    <div class="rise" data-at="社交" data-en="Social <span style='color:#ff4d7d'>·</span> Entertainment <span style='color:#ff4d7d'>·</span> <span class='grad'>Web3</span>" style="font-size:52px;font-weight:800;margin-top:90px;letter-spacing:6px">社交 <span style="color:#ff4d7d">·</span> 娱乐 <span style="color:#ff4d7d">·</span> <span class="grad">Web3</span></div>
+    <div class="rise" data-at="商业闭环" data-en="One app, one complete <b class='gold' style='font-size:48px'>business loop</b>" style="margin-top:34px;font-size:40px;color:rgba(255,255,255,.75)">一个 App，一个完整的 <b class="gold" style="font-size:48px">商业闭环</b></div>
   </div>
 </section>
 
 <!-- s1 chat -->
 <section class="scene" id="s1">
   <div class="kicker rise">01 · <b>CHAT</b></div>
-  <div class="h1 rise" style="--d:.1s">即时<span class="grad">聊天</span></div>
+  <div class="h1 rise" style="--d:.1s" data-en="Instant <span class='grad'>chat</span>">即时<span class="grad">聊天</span></div>
   <div class="h1en en rise" style="--d:.2s">MESSAGES · ALBUMS · VOICE</div>
   <div class="phone pop" style="--d:.15s"><div class="screen" data-screens="s1"></div></div>
-  <div class="chip slideL" data-at="相册" style="left:40px;top:930px"><span class="ico" data-icon="image"></span><div>相册拼版<small>ALBUMS</small></div></div>
-  <div class="chip slideR" data-at="语音" style="right:40px;top:1180px"><span class="ico" data-icon="mic"></span><div>语音消息<small>VOICE</small></div></div>
-  <div class="chip slideL" data-at="已读" style="left:60px;top:1450px"><span class="ico" data-icon="check"></span><div>已读回执<small>READ RECEIPTS</small></div></div>
+  <div class="chip slideL" data-at="相册" style="left:40px;top:930px"><span class="ico" data-icon="image"></span><div data-en="Photo albums">相册拼版<small>ALBUMS</small></div></div>
+  <div class="chip slideR" data-at="语音" style="right:40px;top:1180px"><span class="ico" data-icon="mic"></span><div data-en="Voice messages">语音消息<small>VOICE</small></div></div>
+  <div class="chip slideL" data-at="已读" style="left:60px;top:1450px"><span class="ico" data-icon="check"></span><div data-en="Read receipts">已读回执<small>READ RECEIPTS</small></div></div>
 </section>
 
 <!-- s2 group -->
 <section class="scene" id="s2">
   <div class="kicker rise">02 · <b>GROUPS</b></div>
-  <div class="h1 rise" style="--d:.1s"><span class="grad">群聊</span>社区</div>
+  <div class="h1 rise" style="--d:.1s" data-en="<span class='grad'>Group</span> communities"><span class="grad">群聊</span>社区</div>
   <div class="h1en en rise" style="--d:.2s">GROUPS · COIN CHATS · VOICE ROOMS</div>
   <div class="phone pop" style="--d:.15s"><div class="screen" data-screens="s2"></div></div>
-  <div class="chip slideR" data-at="兴趣群" style="right:40px;top:760px"><span class="ico" data-icon="users"></span><div>兴趣群<small>GROUPS</small></div></div>
-  <div class="chip slideL" data-at="币种讨论群" style="left:40px;top:1060px"><span class="ico" data-icon="coin"></span><div>币种讨论群<small>COIN CHATS</small></div></div>
-  <div class="chip slideR" data-at="语音房" style="right:50px;top:1380px"><span class="ico" data-icon="headset"></span><div>语音房<small>VOICE ROOMS</small></div></div>
+  <div class="chip slideR" data-at="兴趣群" style="right:40px;top:760px"><span class="ico" data-icon="users"></span><div data-en="Interest groups">兴趣群<small>GROUPS</small></div></div>
+  <div class="chip slideL" data-at="币种讨论群" style="left:40px;top:1060px"><span class="ico" data-icon="coin"></span><div data-en="Coin chats">币种讨论群<small>COIN CHATS</small></div></div>
+  <div class="chip slideR" data-at="语音房" style="right:50px;top:1380px"><span class="ico" data-icon="headset"></span><div data-en="Voice rooms">语音房<small>VOICE ROOMS</small></div></div>
 </section>
 
 <!-- s3 video -->
 <section class="scene" id="s3">
   <div class="kicker rise">03 · <b>VIDEO</b></div>
-  <div class="h1 rise" style="--d:.1s">一对一<span class="grad">视频</span></div>
+  <div class="h1 rise" style="--d:.1s" data-en="1-on-1 <span class='grad'>video</span>">一对一<span class="grad">视频</span></div>
   <div class="h1en en rise" style="--d:.2s">1-ON-1 HD VIDEO · PAY PER MINUTE</div>
   <div class="phone pop" style="--d:.15s"><div class="screen" data-screens="s3"></div></div>
-  <div class="chip slideL" data-at="按分钟计费" style="left:40px;top:900px"><span class="ico" data-icon="clock"></span><div>按分钟计费<small>PAY PER MINUTE</small></div></div>
-  <div class="chip slideR" data-at="主播自主定价" style="right:40px;top:1170px"><span class="ico" data-icon="tag"></span><div>主播自主定价<small>CREATOR PRICING</small></div></div>
-  <div class="chip slideL" data-at="平台按分钟抽成" style="left:50px;top:1440px"><span class="ico" data-icon="pie"></span><div>平台分钟抽成<small>PLATFORM FEE</small></div></div>
+  <div class="chip slideL" data-at="按分钟计费" style="left:40px;top:900px"><span class="ico" data-icon="clock"></span><div data-en="Pay per minute">按分钟计费<small>PAY PER MINUTE</small></div></div>
+  <div class="chip slideR" data-at="主播自主定价" style="right:40px;top:1170px"><span class="ico" data-icon="tag"></span><div data-en="Hosts set the price">主播自主定价<small>CREATOR PRICING</small></div></div>
+  <div class="chip slideL" data-at="平台按分钟抽成" style="left:50px;top:1440px"><span class="ico" data-icon="pie"></span><div data-en="Platform fee per minute">平台分钟抽成<small>PLATFORM FEE</small></div></div>
 </section>
 
 <!-- s4 wallet -->
 <section class="scene" id="s4">
   <div class="kicker rise">04 · <b>WALLET</b></div>
-  <div class="h1 rise" style="--d:.1s"><span class="grad">Web3</span> 钱包</div>
+  <div class="h1 rise" style="--d:.1s" data-en="<span class='grad'>Web3</span> wallet"><span class="grad">Web3</span> 钱包</div>
   <div class="h1en en rise" style="--d:.2s">SELF-CUSTODY · MULTI-CHAIN · ON-CHAIN PERPS</div>
   <div class="phone pop" style="--d:.15s"><div class="screen" data-screens="s4"></div></div>
-  <div class="chip slideL" data-at="自托管" style="left:40px;top:760px"><span class="ico" data-icon="key"></span><div>私钥自持<small>SELF-CUSTODY</small></div></div>
-  <div class="chip slideR" data-at="多条公链" style="right:40px;top:990px"><span class="ico" data-icon="chain"></span><div>多链资产 · 行情<small>MULTI-CHAIN</small></div></div>
-  <div class="chip slideL" data-at="一键兑换" style="left:50px;top:1230px"><span class="ico" data-icon="swap"></span><div>一键兑换<small>SWAP</small></div></div>
-  <div class="chip slideR" data-at="链上合约" style="right:50px;top:1470px"><span class="ico" data-icon="chart"></span><div>链上合约<small>PERPS</small></div></div>
+  <div class="chip slideL" data-at="自托管" style="left:40px;top:760px"><span class="ico" data-icon="key"></span><div data-en="Your keys, your coins">私钥自持<small>SELF-CUSTODY</small></div></div>
+  <div class="chip slideR" data-at="多条公链" style="right:40px;top:990px"><span class="ico" data-icon="chain"></span><div data-en="Multi-chain · prices">多链资产 · 行情<small>MULTI-CHAIN</small></div></div>
+  <div class="chip slideL" data-at="一键兑换" style="left:50px;top:1230px"><span class="ico" data-icon="swap"></span><div data-en="One-tap swaps">一键兑换<small>SWAP</small></div></div>
+  <div class="chip slideR" data-at="链上合约" style="right:50px;top:1470px"><span class="ico" data-icon="chart"></span><div data-en="On-chain perps">链上合约<small>PERPS</small></div></div>
+</section>
+
+<!-- s4m more in the wallet -->
+<section class="scene" id="s4m">
+  <div class="kicker rise">05 · <b>MORE</b></div>
+  <div class="h1 rise" style="--d:.1s" data-en="More in the <span class='grad'>wallet</span>">钱包<span class="grad">新玩法</span></div>
+  <div class="h1en en rise" style="--d:.2s">US STOCKS · AI MODELS · USDC EARN</div>
+  <div class="phone pop" style="--d:.15s"><div class="screen" data-screens="s4m"></div></div>
+  <div class="chip slideL" data-at="美股" style="left:40px;top:780px"><span class="ico" data-icon="chart"></span><div data-en="US stock tokens">美股代币<small>US STOCKS</small></div></div>
+  <div class="chip slideR" data-at="AI 模型" style="right:40px;top:1080px"><span class="ico" data-icon="spark"></span><div data-en="AI chat · images · video">AI 对话 · 生图 · 视频<small>AI MODELS</small></div></div>
+  <div class="chip slideL" data-at="生息" style="left:50px;top:1400px"><span class="ico" data-icon="percent"></span><div data-en="USDC earns interest">USDC 自动生息<small>USDC EARN</small></div></div>
 </section>
 
 <!-- s5 games -->
 <section class="scene" id="s5">
-  <div class="kicker rise">05 · <b>GAMES</b></div>
-  <div class="h1 rise" style="--d:.1s">玩<span class="grad">游戏</span>赚币</div>
+  <div class="kicker rise">06 · <b>GAMES</b></div>
+  <div class="h1 rise" style="--d:.1s" data-en="Play &amp; <span class='grad'>earn</span>">玩<span class="grad">游戏</span>赚币</div>
   <div class="h1en en rise" style="--d:.2s">PLAY · EARN $BOAT · WITHDRAW &amp; TRADE</div>
   <div class="phone pop" style="--d:.15s"><div class="screen" data-screens="s5"></div></div>
-  <div class="chip slideL" data-at="快艇" style="left:40px;top:800px"><span class="ico" data-icon="game"></span><div>4 款小游戏<small>4 GAMES</small></div></div>
-  <div class="chip slideR" data-at="赢到的" style="right:40px;top:1120px"><span class="ico" data-icon="coin"></span><div>赢 $BOAT<small>PLAY TO EARN</small></div></div>
-  <div class="chip slideL" data-at="可以提现" style="left:50px;top:1420px"><span class="ico" data-icon="swap"></span><div>可提现 · 可交易<small>WITHDRAW · TRADE</small></div></div>
+  <div class="chip slideL" data-at="快艇" style="left:40px;top:800px"><span class="ico" data-icon="game"></span><div data-en="4 mini games">4 款小游戏<small>4 GAMES</small></div></div>
+  <div class="chip slideR" data-at="赢到的" style="right:40px;top:1120px"><span class="ico" data-icon="coin"></span><div data-en="Win $BOAT">赢 $BOAT<small>PLAY TO EARN</small></div></div>
+  <div class="chip slideL" data-at="可以提现" style="left:50px;top:1420px"><span class="ico" data-icon="swap"></span><div data-en="Withdraw · trade">可提现 · 可交易<small>WITHDRAW · TRADE</small></div></div>
 </section>
 
 <!-- s6 callouts -->
 <section class="scene" id="s6">
-  <div class="kicker rise">06 · <b>CALLS</b></div>
-  <div class="h1 rise" style="--d:.1s">一键<span class="grad">喊单</span></div>
+  <div class="kicker rise">07 · <b>CALLS</b></div>
+  <div class="h1 rise" style="--d:.1s" data-en="One-tap <span class='grad'>calls</span>">一键<span class="grad">喊单</span></div>
   <div class="h1en en rise" style="--d:.2s">CALL IT IN CHAT · FRIENDS FOLLOW IN ONE TAP</div>
   <div class="phone pop" style="--d:.15s"><div class="screen" data-screens="s6"></div></div>
-  <div class="chip slideL" data-at="一键喊单" style="left:40px;top:780px"><span class="ico" data-icon="mega"></span><div>喊单到群<small>CALL TO CHAT</small></div></div>
-  <div class="chip slideR" data-at="行情实时" style="right:40px;top:1060px"><span class="ico" data-icon="chart"></span><div>实时行情<small>LIVE PRICE</small></div></div>
-  <div class="chip slideL" data-at="跟单" style="left:50px;top:1400px"><span class="ico" data-icon="follow"></span><div>一键跟单<small>COPY IN ONE TAP</small></div></div>
+  <div class="chip slideL" data-at="一键喊单" style="left:40px;top:780px"><span class="ico" data-icon="mega"></span><div data-en="Call it in chat">喊单到群<small>CALL TO CHAT</small></div></div>
+  <div class="chip slideR" data-at="行情实时" style="right:40px;top:1060px"><span class="ico" data-icon="chart"></span><div data-en="Live prices">实时行情<small>LIVE PRICE</small></div></div>
+  <div class="chip slideL" data-at="跟单" style="left:50px;top:1400px"><span class="ico" data-icon="follow"></span><div data-en="Copy in one tap">一键跟单<small>COPY IN ONE TAP</small></div></div>
+</section>
+
+<!-- s6s creator shops -->
+<section class="scene" id="s6s">
+  <div class="kicker rise">08 · <b>SHOPS</b></div>
+  <div class="h1 rise" style="--d:.1s" data-en="Creator <span class='grad'>shops</span>">创作者<span class="grad">商城</span></div>
+  <div class="h1en en rise" style="--d:.2s">OPEN A SHOP · PAY WITH TOKENS · CALL IT OUT</div>
+  <div class="phone pop" style="--d:.15s"><div class="screen" data-screens="s6s"></div></div>
+  <div class="chip slideL" data-at="开店" style="left:40px;top:780px"><span class="ico" data-icon="bag"></span><div data-en="Launched a token? Open a shop">发过币就能开店<small>OPEN A SHOP</small></div></div>
+  <div class="chip slideR" data-at="买入等值代币" style="right:40px;top:1080px"><span class="ico" data-icon="coin"></span><div data-en="Pay in tokens or USDC">代币或 USDC 付款<small>PAY YOUR WAY</small></div></div>
+  <div class="chip slideL" data-at="喊单到店铺群" style="left:50px;top:1400px"><span class="ico" data-icon="mega"></span><div data-en="Call items to the shop group">商品喊单进店铺群<small>CALL IT OUT</small></div></div>
 </section>
 
 <!-- s7 the loop -->
 <section class="scene" id="s7">
   <div class="kicker rise">THE <b>LOOP</b></div>
-  <div class="h1 rise" style="--d:.1s">商业<span class="gold">闭环</span></div>
+  <div class="h1 rise" style="--d:.1s" data-en="The business <span class='gold'>loop</span>">商业<span class="gold">闭环</span></div>
   <svg width="1080" height="1080" style="position:absolute;top:440px;left:0">
     <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4d7d"/><stop offset=".55" stop-color="#ffb36b"/><stop offset="1" stop-color="#8b3dff"/></linearGradient></defs>
     <circle cx="540" cy="540" r="340" fill="none" stroke="rgba(255,255,255,.07)" stroke-width="22"/>
     <circle class="draw" data-at="社交带来" cx="540" cy="540" r="340" fill="none" stroke="url(#lg)" stroke-width="10" stroke-linecap="round" stroke-dasharray="2136" transform="rotate(-90 540 540)"/>
     <circle id="dot" cx="540" cy="200" r="22" fill="#fff" style="filter:drop-shadow(0 0 18px #fff)"/>
   </svg>
-  <div class="center pop" data-at="社交带来" style="top:880px"><div class="seal" style="width:150px;height:150px;font-size:92px">心</div><div style="font-size:30px;color:rgba(255,255,255,.7);margin-top:18px;letter-spacing:4px">心之音</div></div>
-  <div class="node pop" data-at="社交带来" style="left:540px;top:640px"><div class="nt">聊天 · 群聊</div><div class="ns">流量 Traffic</div></div>
-  <div class="node pop" data-at="视频和礼物" style="left:863px;top:875px"><div class="nt">一对一视频</div><div class="ns">收入 Revenue</div></div>
-  <div class="node pop" data-at="钱包承接" style="left:740px;top:1255px"><div class="nt">Web3 钱包</div><div class="ns">资产 Assets</div></div>
-  <div class="node pop" data-at="游戏和喊单" style="left:340px;top:1255px"><div class="nt">游戏 · 喊单</div><div class="ns">交易 Volume</div></div>
-  <div class="node pop" data-at="交易又把" style="left:217px;top:875px"><div class="nt">回到社交</div><div class="ns">留存 Retention</div></div>
-  <div class="center rise" data-at="这就是" style="top:1530px"><span class="rev">视频分钟抽成</span><span class="rev">礼物积分</span><span class="rev">BOAT 池费回购</span></div>
+  <div class="center pop" data-at="社交带来" style="top:880px"><div class="seal" style="width:150px;height:150px;font-size:92px">心</div><div data-en="HeartChat" style="font-size:30px;color:rgba(255,255,255,.7);margin-top:18px;letter-spacing:4px">心之音</div></div>
+  <div class="node pop" data-at="社交带来" style="left:540px;top:640px"><div class="nt" data-en="Chat · Groups">聊天 · 群聊</div><div class="ns">流量 Traffic</div></div>
+  <div class="node pop" data-at="视频和礼物" style="left:863px;top:875px"><div class="nt" data-en="1-on-1 video">一对一视频</div><div class="ns">收入 Revenue</div></div>
+  <div class="node pop" data-at="钱包承接" style="left:740px;top:1255px"><div class="nt" data-en="Web3 wallet">Web3 钱包</div><div class="ns">资产 Assets</div></div>
+  <div class="node pop" data-at="游戏、喊单" style="left:340px;top:1255px"><div class="nt" data-en="Games · Calls · Shops" data-en-style="font-size:29px;white-space:nowrap" style="font-size:36px">游戏 · 喊单 · 商城</div><div class="ns">交易 Volume</div></div>
+  <div class="node pop" data-at="交易又把" style="left:217px;top:875px"><div class="nt" data-en="Back to social">回到社交</div><div class="ns">留存 Retention</div></div>
+  <div class="center rise" data-at="这就是" style="top:1530px"><span class="rev" data-en="Video minute fees">视频分钟抽成</span><span class="rev" data-en="Gift points">礼物积分</span><span class="rev" data-en="BOAT fee buybacks">BOAT 池费回购</span></div>
 </section>
 
 <!-- s8 outro -->
 <section class="scene" id="s8">
   <div class="center" style="top:430px">
     <div class="seal pop" style="width:240px;height:240px;font-size:146px">心</div>
-    <div class="rise" style="--d:.3s;font-size:170px;font-weight:900;letter-spacing:22px;margin-top:50px;line-height:1.1">心之音</div>
-    <div class="rise en" style="--d:.5s;font-size:40px;letter-spacing:20px;margin-top:10px">HEARTCHAT</div>
-    <div class="rise" data-at="遇见有趣" style="margin-top:80px;font-size:56px;font-weight:800">遇见有趣的人</div>
-    <div class="rise" data-at="也遇见" style="margin-top:20px;font-size:56px;font-weight:800">也遇见<span class="grad">更大的世界</span></div>
-    <div class="rise" style="--d:1.6s;margin-top:80px;font-size:34px;color:rgba(255,255,255,.7);letter-spacing:4px">聊天 · 群聊 · 视频 · 钱包 · 游戏 · 喊单</div>
+    <div class="rise" data-en="HeartChat" data-en-style="font-family:'Segoe UI';letter-spacing:4px;font-size:150px" style="--d:.3s;font-size:170px;font-weight:900;letter-spacing:22px;margin-top:50px;line-height:1.1">心之音</div>
+    <div class="rise en" data-en="心之音" style="--d:.5s;font-size:40px;letter-spacing:20px;margin-top:10px">HEARTCHAT</div>
+    <div class="rise" data-at="遇见有趣" data-en="Meet interesting people" style="margin-top:80px;font-size:56px;font-weight:800">遇见有趣的人</div>
+    <div class="rise" data-at="也遇见" data-en="and a <span class='grad'>bigger world</span>" style="margin-top:20px;font-size:56px;font-weight:800">也遇见<span class="grad">更大的世界</span></div>
+    <div class="rise" data-en="Chat · Groups · Video · Wallet · Games · Calls · Shops" data-en-style="font-size:30px;letter-spacing:1px" style="--d:1.6s;margin-top:80px;font-size:34px;color:rgba(255,255,255,.7);letter-spacing:4px">聊天 · 群聊 · 视频 · 钱包 · 游戏 · 喊单 · 商城</div>
     <div class="rise" style="--d:2s;margin-top:50px;display:inline-block;padding:20px 54px;border-radius:60px;background:linear-gradient(90deg,#fe2c55,#ff7a59);font:800 56px 'Segoe UI';box-shadow:0 20px 60px rgba(254,44,85,.5)">app.yyheart.com</div>
   </div>
-  <div class="center rise" style="--d:2.4s;top:1720px;font-size:24px;color:rgba(255,255,255,.45);line-height:1.6">画面为产品实拍与功能演示 · 加密资产价格波动大，不构成投资建议</div>
+  <div class="center rise" data-en="Real product footage and demos · crypto prices are volatile; not investment advice · stock tokens are not shares and are not offered to US persons<br>画面为产品实拍与功能演示 · 加密资产价格波动大，不构成投资建议" style="--d:2.4s;top:1720px;font-size:24px;color:rgba(255,255,255,.45);line-height:1.6">画面为产品实拍与功能演示 · 加密资产价格波动大，不构成投资建议 · 美股代币是凭证不是股权，不向美国用户提供</div>
 </section>
 
 <div id="brand"><span class="seal">心</span>心之音<span>HEARTCHAT</span></div>
@@ -227,15 +256,45 @@ html, body { width: 1080px; height: 1920px; overflow: hidden; background: #05050
 <div id="sweep"></div>
 <div id="progress"></div>
 
-<script src="out/timeline.js"></script>
+<!-- ?tl=out-en → the English cut's timeline (make.py --en) -->
+<script>document.write('<script src="' + (new URLSearchParams(location.search).get("tl") || "out") + '/timeline.js"><\/script>');</script>
 <script>
 const TL = window.TL;
+const EN = TL.lang === "en";
+const ASSETS = TL.assets || "assets";
 const $ = (id) => document.getElementById(id);
 const clamp = (x) => Math.max(0, Math.min(1, x));
 const ease = (x) => 1 - Math.pow(1 - clamp(x), 3);
 const easeIO = (x) => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2 };
 const scene = (id) => TL.scenes.find((s) => s.id === id);
-const at = (sc, word) => { const i = sc.text.indexOf(word); return i >= 0 ? sc.vo + sc.ct[i] : 0 };
+// cue words are written in Chinese; the English cut looks up the English words the voice says at that point
+const AT_EN = {
+  "社交": "social", "商业闭环": "business loop",
+  "相册": "photo albums", "语音": "voice", "已读": "read receipts",
+  "兴趣群": "Interest groups", "币种讨论群": "coin chats", "语音房": "voice rooms",
+  "按分钟计费": "billed by the minute", "主播自主定价": "Hosts set", "主播自主": "Hosts set", "平台按分钟抽成": "platform takes",
+  "自托管": "self-custody", "多条公链": "many chains", "行情": "prices", "一键兑换": "one-tap swaps", "链上合约": "on-chain perps",
+  "美股": "US stocks", "AI 模型": "AI models", "生息": "earns interest",
+  "快艇": "Speedboat", "赛车": "racing", "射击": "shooting", "盖楼": "tower building", "赢到的": "the BOAT you win", "可以提现": "cashed out",
+  "一键喊单": "Call it out", "行情实时": "Live prices", "群友点开": "friends tap", "合约仓位": "perp positions", "跟单": "copied",
+  "开店": "Open a shop", "买入等值代币": "same value", "直接付": "in USDC", "喊单到店铺群": "called out",
+  "社交带来": "Social brings", "视频和礼物": "video and gifts", "钱包承接": "the wallet holds", "游戏、喊单": "games, calls", "交易又把": "and trading brings", "带回社交": "back to social", "这就是": "That's the",
+  "遇见有趣": "Meet interesting", "也遇见": "and a bigger",
+};
+const at = (sc, word) => { const w = EN ? AT_EN[word] ?? word : word; const i = sc.text.indexOf(w); if (i < 0) console.warn("cue not in voice", sc.id, w); return i >= 0 ? sc.vo + sc.ct[i] : 0 };
+
+if (EN) {
+  document.body.classList.add("lang-en");
+  document.querySelectorAll("[data-en]").forEach((n) => {
+    const zh = (n.childNodes[0]?.nodeType === 3 ? n.childNodes[0].textContent : n.textContent).trim();
+    if (n.parentElement.classList.contains("chip")) n.innerHTML = `${n.dataset.en}<small>${zh}</small>`;
+    else {
+      if (n.classList.contains("h1")) { const sub = n.parentElement.querySelector(".h1en"); if (sub) sub.textContent = n.textContent.trim(); }
+      n.innerHTML = n.dataset.en;
+      if (n.dataset.enStyle) n.style.cssText += ";" + n.dataset.enStyle;
+    }
+  });
+}
 
 const SVG = {
   image: '<rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 8"/>',
@@ -259,6 +318,9 @@ const SVG = {
   phoneOff: '<path d="M3 12c5-5 13-5 18 0l-2.5 2.5-3-1.5v-2.5c-2-1-5-1-7 0V13l-3 1.5z"/>',
   camera: '<rect x="2" y="6" width="14" height="12" rx="3"/><path d="M16 10l6-3v10l-6-3"/>',
   gift: '<rect x="3" y="9" width="18" height="12" rx="2"/><path d="M12 9v12M3 13h18M12 9C10 4 6 5 7 8M12 9c2-5 6-4 5-1"/>',
+  spark: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>',
+  percent: '<circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/><path d="M19 5L5 19"/>',
+  bag: '<path d="M5 8h14l-1 12H6z"/><path d="M9 8V6a3 3 0 016 0v2"/>',
 };
 const icon = (k, color = "#fff", w = 2) => `<svg viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${SVG[k]}</svg>`;
 document.querySelectorAll("[data-icon]").forEach((n) => (n.innerHTML = icon(n.dataset.icon)));
@@ -277,8 +339,8 @@ for (let i = 0; i < 50; i++) {
   $("bg").appendChild(p);
 }
 
-// intro: six feature icons orbit the seal
-const ORBS = ["image", "users", "video", "wallet", "game", "mega"].map((k) => {
+// intro: the feature icons orbit the seal
+const ORBS = ["image", "users", "video", "wallet", "spark", "game", "mega", "bag"].map((k) => {
   const o = document.createElement("div");
   o.className = "orb";
   o.innerHTML = icon(k);
@@ -289,21 +351,24 @@ const ORBS = ["image", "users", "video", "wallet", "game", "mega"].map((k) => {
 // keyword timing: elements with data-at come in when the voice says that word
 for (const sc of TL.scenes) {
   $(sc.id).querySelectorAll("[data-at]").forEach((n) => {
-    const i = sc.text.indexOf(n.dataset.at);
-    const d = i >= 0 ? sc.vo + sc.ct[i] - 0.15 : 0;
-    n.style.setProperty("--d", d.toFixed(2) + "s");
+    n.style.setProperty("--d", Math.max(0, at(sc, n.dataset.at) - 0.15).toFixed(2) + "s");
   });
 }
 
 // ---- phone screens: real screenshots (assets/*.png), game clips (assets/clips/<name>/0001.jpg…) or the call demo
-const SB = { "chat-single": "#fff", "chat-list": "#fff", "chat-group": "#fff", "video-price": "#fff", games: "#fdfdfd", "wallet-boat": "#f3f3f3", "wallet-coin": "#000", "wallet-home": "#f4f4f4", "wallet-market": "#f3f3f3", "wallet-perp": "#f3f3f3", "wallet-swap": "#f3f3f3", call: "#0b0b10", race: "#000", shoot: "#000", tower: "#000" };
+const SB = { "chat-single": "#fff", "chat-list": "#fff", "chat-group": "#fff", "video-price": "#fff", games: "#fdfdfd", "wallet-boat": "#f3f3f3", "wallet-coin": "#000", "wallet-home": "#f4f4f4", "wallet-market": "#f3f3f3", "wallet-perp": "#f3f3f3", "wallet-swap": "#f3f3f3",
+  "wallet-stocks": "#f3f3f3", "wallet-ai": "#f3f3f3", "wallet-earn": "#f3f3f3", "wallet-shop": "#f3f3f3", "wallet-shop-item": "#f3f3f3", call: "#0b0b10", race: "#000", shoot: "#000", tower: "#000" };
+// the callout card / video price row sit a little differently in the English screenshots
+const POS = EN ? { card: [251, 533], cardTap: [339, 613], price: [24, 500, 512, 116] } : { card: [251, 488], cardTap: [360, 556], price: [22, 500, 516, 104] };
 const SCREENS = {
   s1: [{ img: "chat-single" }],
   s2: [{ img: "chat-list" }, { word: "兴趣群", img: "chat-group" }],
-  s3: [{ call: true }, { word: "主播自主", img: "video-price", hl: [22, 500, 516, 104] }],
+  s3: [{ call: true }, { word: "主播自主", img: "video-price", hl: POS.price }],
   s4: [{ img: "wallet-home" }, { word: "多条公链", img: "wallet-market" }, { word: "行情", img: "wallet-coin", delay: 0.5 }, { word: "一键兑换", img: "wallet-swap" }, { word: "链上合约", img: "wallet-perp" }],
+  s4m: [{ img: "wallet-stocks" }, { word: "AI 模型", img: "wallet-ai" }, { word: "生息", img: "wallet-earn" }],
   s5: [{ img: "games" }, { word: "赛车", clip: "race" }, { word: "射击", clip: "shoot" }, { word: "盖楼", clip: "tower" }, { word: "可以提现", img: "wallet-boat" }],
-  s6: [{ img: "chat-group", zoom: { word: "一键喊单", cx: 251, cy: 488, s: 1.6 }, tap: { word: "群友点开", x: 360, y: 556 } }, { word: "群友点开", img: "wallet-boat", delay: 0.45 }, { word: "合约仓位", img: "wallet-perp" }],
+  s6: [{ img: "chat-group", zoom: { word: "一键喊单", cx: POS.card[0], cy: POS.card[1], s: 1.6 }, tap: { word: "群友点开", x: POS.cardTap[0], y: POS.cardTap[1] } }, { word: "群友点开", img: "wallet-boat", delay: 0.45 }, { word: "合约仓位", img: "wallet-perp" }],
+  s6s: [{ img: "wallet-shop" }, { word: "买入等值代币", img: "wallet-shop-item" }],
 };
 const statusBar = (bg) => {
   const dark = bg === "#000" || bg === "#0b0b10";
@@ -311,7 +376,7 @@ const statusBar = (bg) => {
     <svg width="30" height="18" viewBox="0 0 30 18"><rect x="0" y="12" width="5" height="6" rx="1" fill="currentColor"/><rect x="8" y="8" width="5" height="10" rx="1" fill="currentColor"/><rect x="16" y="4" width="5" height="14" rx="1" fill="currentColor"/><rect x="24" y="0" width="5" height="18" rx="1" fill="currentColor"/></svg>
     <span class="bat"><i></i></span></span></div>`;
 };
-const avatar = (k) => `url(assets/src/avatar-${k}.png)`;
+const avatar = (k) => `url(${ASSETS}/src/avatar-${k}.png)`;
 document.querySelectorAll("[data-screens]").forEach((scr) => {
   const sid = scr.dataset.screens;
   const sc = scene(sid);
@@ -323,11 +388,11 @@ document.querySelectorAll("[data-screens]").forEach((scr) => {
     let body = "";
     if (d.call) {
       body = `<div class="call"><div class="remote" style="background-image:${avatar("a")}"></div><div class="face" style="background-image:${avatar("a")}"></div>
-        <div class="name">林小鹿</div><div class="timer">00:00</div><div class="self" style="background-image:${avatar("b")}"></div>
-        <div class="bill">视频计费<br><b>5</b> 积分 / 分钟</div><div class="gift">🎁</div>
+        <div class="name">${EN ? "Luna" : "林小鹿"}</div><div class="timer">00:00</div><div class="self" style="background-image:${avatar("b")}"></div>
+        <div class="bill">${EN ? "Video rate<br><b>5</b> points / min" : "视频计费<br><b>5</b> 积分 / 分钟"}</div><div class="gift">🎁</div>
         <div class="btns"><span>${icon("mic")}</span><span class="end">${icon("phoneOff", "#fff", 2.2)}</span><span>${icon("camera")}</span><span>${icon("gift")}</span></div></div>`;
     } else {
-      body = `<img src="${d.clip ? `assets/clips/${d.clip}/0001.jpg` : `assets/${d.img}.png`}">`;
+      body = `<img src="${d.clip ? `assets/clips/${d.clip}/0001.jpg` : `${ASSETS}/${d.img}.png`}">`;
     }
     el.innerHTML = statusBar(SB[key]) + `<div class="body">${body}</div>` + (d.hl ? `<div class="hl" style="left:${d.hl[0]}px;top:${d.hl[1] + 44}px;width:${d.hl[2]}px;height:${d.hl[3]}px"></div>` : "") + (d.tap ? `<div class="tap"></div>` : "");
     scr.appendChild(el);
@@ -365,7 +430,7 @@ function drawScreens(scr, lt) {
     }
     if (d.call) {
       const secs = Math.floor(12 + Math.max(0, local) * 1.6);
-      d.el.querySelector(".timer").textContent = `通话中 00:${String(secs).padStart(2, "0")}`;
+      d.el.querySelector(".timer").textContent = `${EN ? "In call" : "通话中"} 00:${String(secs).padStart(2, "0")}`;
       const gift = d.el.querySelector(".gift"), gu = (local - 1.6) / 1.4;
       gift.style.opacity = gu > 0 && gu < 1 ? Math.sin(Math.PI * gu) : 0;
       gift.style.transform = `translate(${-gu * 90}px, ${-gu * 330}px) scale(${1 + gu * 0.7})`;
@@ -399,7 +464,7 @@ const hooks = {
   s0(lt) {
     const app = ease((lt - 0.5) / 1.2);
     ORBS.forEach((o, k) => {
-      const a = (k * 60 - 90 + lt * 10) * Math.PI / 180, R = 380 * app;
+      const a = (k * (360 / ORBS.length) - 90 + lt * 10) * Math.PI / 180, R = 380 * app;
       o.style.left = 540 + R * Math.cos(a) + "px";
       o.style.top = 700 + R * Math.sin(a) * 0.92 + "px";
       o.style.opacity = app * clamp((lt - 0.5 - k * 0.12) / 0.4);
@@ -407,7 +472,7 @@ const hooks = {
     });
   },
   s7(lt, sc) {
-    const W = ["社交带来", "视频和礼物", "钱包承接", "游戏和喊单", "交易又把"];
+    const W = ["社交带来", "视频和礼物", "钱包承接", "游戏、喊单", "交易又把"];
     const T = W.map((w) => at(sc, w));
     // the dot arrives at each node as the voice names it; "带回社交" brings it back to the top, "这就是" lights all
     const A = [-90, -18, 54, 126, 198, 270];
@@ -456,7 +521,9 @@ function seek(t) {
   }
   $("brand").style.display = cur && !["s0", "s8"].includes(cur.id) ? "flex" : "none";
   const sub = TL.subs.find((s) => t >= s.t0 && t < s.t1);
-  $("sub").firstElementChild.textContent = sub ? sub.text : "";
+  const span = $("sub").firstElementChild;
+  span.textContent = sub ? sub.text : "";
+  if (sub?.zh) { const z = document.createElement("small"); z.textContent = sub.zh; span.appendChild(z); }
   $("sub").style.display = sub ? "block" : "none";
   $("progress").style.width = (t / TL.total) * 100 + "%";
   return Promise.all(pending).then(() => new Promise((r) => requestAnimationFrame(() => r(true))));

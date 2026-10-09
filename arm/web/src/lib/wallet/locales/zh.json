@@ -2798,5 +2798,15 @@
   "cw.shop.reviewed": "已评价",
   "cw.shop.reviewPlaceholder": "收到的东西怎么样？可以带图",
   "cw.shop.reviewSubmit": "提交评价",
-  "cw.shop.share": "分享"
+  "cw.shop.share": "分享",
+  "cw.shop.filterAll": "全部",
+  "cw.shop.loading": "加载中…",
+  "cw.shop.noMore": "没有更多了",
+  "cw.shop.noOrdersHere": "这一类还没有订单",
+  "cw.shop.kindVirtual": "虚拟商品",
+  "cw.shop.autoDelivery": "自动发货",
+  "cw.shop.virtualNoAddr": "虚拟商品，不用填收货地址",
+  "cw.shop.contact": "联系方式 / 备注（选填，比如邮箱、游戏账号）",
+  "cw.shop.deliveredAuto": "已自动发货，去订单里查看",
+  "cw.shop.delivered": "发货内容"
 }

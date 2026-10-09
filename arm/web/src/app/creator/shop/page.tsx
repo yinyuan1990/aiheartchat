@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, ImagePlus, Pencil, Plus, Store, Trash2, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
-import { useQuery } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import {
-  createProduct, deleteProduct, fetchOrders, fmtPrice, imgSrc, setPayModes, setShopToken, shipOrder, signSession, storedSession, updateProduct, uploadPicture, useShopFront,
-  type Order, type PayModes, type Product, type ProductInput,
+  createProduct, deleteProduct, flatPages, fmtPrice, imgSrc, setPayModes, setShopToken, shipOrder, signSession, storedSession, updateProduct, uploadPicture, useProductPages, useShopFront,
+  type ItemStatus, type Order, type PayModes, type Product, type ProductInput,
 } from "@/lib/shop";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/components/providers";
@@ -19,11 +20,11 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Empty, errMsg, TokenAvatar } from "@/components/shared";
-import { Cover, fill, useSiteSigner } from "@/components/shop/shared";
-import { OrderCard, ShipDialog } from "@/components/shop/orders";
+import { errMsg, TokenAvatar } from "@/components/shared";
+import { Cover, KindBadge, LoadMore, fill, useSiteSigner } from "@/components/shop/shared";
+import { OrderCard, OrderList, ShipDialog } from "@/components/shop/orders";
 
-const EMPTY: ProductInput = { title: "", body: "", images: [], priceUsd6: "1000000", stock: null, status: "on" };
+const EMPTY: ProductInput = { title: "", body: "", images: [], priceUsd6: "1000000", stock: null, status: "on", kind: "physical", delivery: "manual", autoContent: "" };
 
 export default function ManageShop() {
   const { t, connected, address, toggleConnect } = useApp();
@@ -32,12 +33,9 @@ export default function ManageShop() {
   const [busy, setBusy] = useState(false);
   useEffect(() => setSession(storedSession(address)), [address]);
   const front = useShopFront(address, session ? address : undefined);
-  const orders = useQuery({
-    queryKey: ["shop", "orders", "seller", address],
-    enabled: !!address && !!session,
-    queryFn: () => fetchOrders(address!, session!, "seller"),
-    refetchInterval: 30_000,
-  });
+  const qc = useQueryClient();
+  const [itemStatus, setItemStatus] = useState<ItemStatus>("all");
+  const items = useProductPages({ seller: address, viewer: session ? address : undefined, status: itemStatus }, 23, !!address && !!session);
   const [edit, setEdit] = useState<{ id?: number; v: ProductInput } | null>(null);
   const [shipping, setShipping] = useState<Order | null>(null);
 
@@ -73,6 +71,7 @@ export default function ManageShop() {
       await fn();
       toast.success(ok);
       await front.refetch();
+      void qc.invalidateQueries({ queryKey: ["shop", "products"] });
       return true;
     } catch (e) {
       toast.error(errMsg(e));
@@ -154,25 +153,40 @@ export default function ManageShop() {
       {data?.token && (
         <Tabs defaultValue={data.openOrders ? "orders" : "items"}>
           <TabsList>
-            <TabsTrigger value="items">{t("shop.items")} · {data.products.length}</TabsTrigger>
+            <TabsTrigger value="items">{t("shop.items")} · {data.items.on + (data.items.off ?? 0)}</TabsTrigger>
             <TabsTrigger value="orders">{t("shop.sellerOrders")}{data.openOrders ? ` · ${data.openOrders}` : ""}</TabsTrigger>
           </TabsList>
-          <TabsContent value="items" className="mt-3">
+          <TabsContent value="items" className="mt-3 space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {(["all", "on", "off"] as const).map((s) => {
+                const n = s === "all" ? data.items.on + (data.items.off ?? 0) : s === "on" ? data.items.on : (data.items.off ?? 0);
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setItemStatus(s)}
+                    className={cn("rounded-full border px-3 py-1.5 text-xs font-medium transition", itemStatus === s ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:border-ring hover:text-foreground")}
+                  >
+                    {s === "all" ? t("common.all") : t(`shop.form.${s}`)}
+                    {n ? <span className="ml-1 font-mono">{n}</span> : null}
+                  </button>
+                );
+              })}
+            </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               <button type="button" onClick={() => setEdit({ v: EMPTY })} className="flex aspect-[3/4] flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed text-sm text-muted-foreground hover:border-ring hover:text-foreground">
                 <Plus size={28} /> {t("shop.addItem")}
               </button>
-              {data.products.map((p) => (
-                <ItemTile key={p.id} p={p} onEdit={() => setEdit({ id: p.id, v: { title: p.title, body: p.body, images: p.images, priceUsd6: p.priceUsd6, stock: p.stock, status: p.status } })} />
-              ))}
+              {items.isLoading
+                ? Array.from({ length: 3 }, (_, i) => <Skeleton key={i} className="aspect-[3/4] rounded-xl" />)
+                : flatPages(items.data).map((p) => (
+                    <ItemTile key={p.id} p={p} onEdit={() => setEdit({ id: p.id, v: { title: p.title, body: p.body, images: p.images, priceUsd6: p.priceUsd6, stock: p.stock, status: p.status, kind: p.kind, delivery: p.delivery, autoContent: p.autoContent ?? "" } })} />
+                  ))}
             </div>
+            <LoadMore q={items} />
           </TabsContent>
-          <TabsContent value="orders" className="mt-3 space-y-3">
-            {!orders.data?.length ? (
-              <Empty>{t("common.noData")}</Empty>
-            ) : (
-              orders.data.map((o) => <OrderCard key={o.id} o={o} role="seller" onShip={setShipping} />)
-            )}
+          <TabsContent value="orders" className="mt-3">
+            <OrderList address={address} session={session} role="seller" initial={data.openOrders ? "paid" : "all"} card={(o) => <OrderCard o={o} role="seller" onShip={setShipping} />} />
           </TabsContent>
         </Tabs>
       )}
@@ -198,7 +212,7 @@ export default function ManageShop() {
           try {
             await shipOrder(signer, o.id, v);
             toast.success(t("shop.saved"));
-            void orders.refetch();
+            void qc.invalidateQueries({ queryKey: ["shop", "orders"] });
             void front.refetch();
           } catch (e) {
             toast.error(errMsg(e));
@@ -232,6 +246,7 @@ function ItemTile({ p, onEdit }: { p: Product; onEdit: () => void }) {
       <Link href={`/shop/${p.id}`} className="relative block aspect-square bg-muted">
         <Cover src={p.images[0]} />
         {p.status === "off" && <Badge variant="secondary" className="absolute top-2 left-2">{t("shop.form.off")}</Badge>}
+        <KindBadge p={p} className="absolute top-2 right-2" />
       </Link>
       <div className="space-y-1 p-3">
         <div className="line-clamp-1 text-sm font-medium">{p.title}</div>
@@ -284,7 +299,8 @@ function ProductForm({ state, busy, onClose, onSave, onDelete }: { state: { id?:
     return { ...x, images: a };
   });
   const priceUsd6 = Math.round(Number(price) * 1e6);
-  const valid = v.title.trim() && v.images.length > 0 && priceUsd6 >= 10_000 && priceUsd6 <= 10_000_000_000 && uploading === 0;
+  const auto = v.kind === "virtual" && v.delivery === "auto";
+  const valid = v.title.trim() && v.images.length > 0 && priceUsd6 >= 10_000 && priceUsd6 <= 10_000_000_000 && uploading === 0 && (!auto || v.autoContent.trim());
 
   return (
     <Dialog open={!!state} onOpenChange={(o) => !o && !busy && onClose()}>
@@ -313,6 +329,36 @@ function ProductForm({ state, busy, onClose, onSave, onDelete }: { state: { id?:
           )}
         </div>
         <div className="space-y-3">
+          <div className="space-y-1">
+            <span className="text-xs text-muted-foreground">{t("shop.kind.title")}</span>
+            <div className="grid grid-cols-2 gap-2">
+              {(["physical", "virtual"] as const).map((k) => (
+                <button key={k} type="button" onClick={() => setV({ ...v, kind: k })} className={cn("rounded-lg border p-2.5 text-left text-xs transition", v.kind === k ? "border-primary bg-primary/10" : "hover:border-ring")}>
+                  <div className="font-semibold">{t(`shop.kind.${k}`)}</div>
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">{t(`shop.kind.${k}Hint`)}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+          {v.kind === "virtual" && (
+            <div className="space-y-2 rounded-lg bg-muted/60 p-2.5">
+              <span className="text-xs text-muted-foreground">{t("shop.delivery.title")}</span>
+              <div className="grid grid-cols-2 gap-2">
+                {(["manual", "auto"] as const).map((d) => (
+                  <button key={d} type="button" onClick={() => setV({ ...v, delivery: d })} className={cn("rounded-lg border bg-background p-2.5 text-left text-xs transition", v.delivery === d ? "border-primary bg-primary/10" : "hover:border-ring")}>
+                    <div className="font-semibold">{t(`shop.delivery.${d}`)}</div>
+                    <div className="mt-0.5 text-[11px] text-muted-foreground">{t(`shop.delivery.${d}Hint`)}</div>
+                  </button>
+                ))}
+              </div>
+              {auto && (
+                <label className="block space-y-1">
+                  <span className="text-xs text-muted-foreground">{t("shop.delivery.autoContent")}</span>
+                  <Textarea value={v.autoContent} maxLength={2000} rows={3} onChange={(e) => setV({ ...v, autoContent: e.target.value })} className="font-mono text-xs" />
+                </label>
+              )}
+            </div>
+          )}
           <label className="block space-y-1">
             <span className="text-xs text-muted-foreground">{t("shop.form.title")}</span>
             <Input value={v.title} maxLength={60} onChange={(e) => setV({ ...v, title: e.target.value })} />
@@ -340,7 +386,7 @@ function ProductForm({ state, busy, onClose, onSave, onDelete }: { state: { id?:
         <DialogFooter className="gap-2">
           {onDelete && <Button variant="ghost" className="mr-auto text-down" disabled={busy} onClick={() => void onDelete()}><Trash2 /> {t("shop.delete")}</Button>}
           <Button variant="ghost" onClick={onClose} disabled={busy}>{t("common.cancel")}</Button>
-          <Button disabled={busy || !valid} onClick={() => void onSave({ ...v, title: v.title.trim(), body: v.body.trim(), priceUsd6: String(priceUsd6), stock: stock === "" ? null : Number(stock) })}>{t("shop.save")}</Button>
+          <Button disabled={busy || !valid} onClick={() => void onSave({ ...v, title: v.title.trim(), body: v.body.trim(), priceUsd6: String(priceUsd6), stock: stock === "" ? null : Number(stock), autoContent: auto ? v.autoContent.trim() : "" })}>{t("shop.save")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

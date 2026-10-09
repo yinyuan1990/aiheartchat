@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ImageSquare, Star, X } from "@phosphor-icons/react";
+import { CircleNotch, ImageSquare, Star, X } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { shortAddr, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -28,6 +28,25 @@ export function ItemGrid({ items }: { items: Product[] }) {
           </div>
         </Link>
       ))}
+    </div>
+  );
+}
+
+/** Loads the next page as the bottom of the list scrolls into view. */
+export function MoreLoader({ q }: { q: { hasNextPage: boolean; isFetchingNextPage: boolean; fetchNextPage: () => unknown; data?: { pages: unknown[] } } }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = q;
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !hasNextPage) return;
+    const io = new IntersectionObserver((e) => e[0]?.isIntersecting && !isFetchingNextPage && void fetchNextPage(), { rootMargin: "300px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+  if (!hasNextPage) return (q.data?.pages.length ?? 0) > 1 ? <div className="py-4 text-center text-[12px] text-muted-foreground">{t("cw.shop.noMore")}</div> : null;
+  return (
+    <div ref={ref} className="flex items-center justify-center gap-2 py-4 text-[12px] text-muted-foreground">
+      <CircleNotch size={16} className="animate-spin" /> {t("cw.shop.loading")}
     </div>
   );
 }

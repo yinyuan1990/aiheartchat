@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, type InfiniteData } from "@tanstack/react-query";
 import { encodePacked, erc20Abi, type Address, type Hex } from "viem";
 import { API_BASE, type TokenView } from "@/lib/api";
 import { ADDR, POOL_FEE, addrsFor, routerAbi } from "@/lib/web3";
@@ -17,6 +17,11 @@ export type Product = {
   body: string;
   images: string[];
   priceUsd6: string;
+  /** physical ships to an address; virtual is delivered as text in the order (by hand, or automatically on payment) */
+  kind: ItemKind;
+  delivery: Delivery;
+  /** only in the seller's own view: what auto delivery sends */
+  autoContent?: string;
   stock: number | null;
   sold: number;
   status: "on" | "off";
@@ -33,8 +38,20 @@ export type Product = {
 export type ShopComment = { id: number; author: string; text: string; images: string[]; replyTo: number | null; time: string; isSeller: boolean };
 export type ShopReview = { id: number; buyer: string; rating: number; text: string; images: string[]; time: string; payMethod: PayMethod };
 export type PayModes = { token: boolean; usdc: boolean };
+export type ItemKind = "physical" | "virtual";
+export type Delivery = "manual" | "auto";
 export type PayMethod = "token" | "usdc";
-export type ShopFront = { seller: string; token: ShopToken | null; pay: PayModes; eligible?: ShopToken[]; products: Product[]; orders: number; openOrders?: number };
+export type ShopFront = {
+  seller: string;
+  token: ShopToken | null;
+  pay: PayModes;
+  eligible?: ShopToken[];
+  products: Product[];
+  /** listed / hidden item counts (hidden only for the owner) */
+  items: { on: number; off?: number };
+  orders: number;
+  openOrders?: number;
+};
 export type Ship = { name: string; phone: string; address: string; note: string };
 export type OrderStatus = "paid" | "shipped" | "done";
 export type Order = {
@@ -59,7 +76,10 @@ export type Order = {
   shippedAt: string | null;
   doneAt: string | null;
   createdAt: string;
+  kind: ItemKind;
   ship?: Ship;
+  /** virtual items: what the seller delivered (code / link / account …) */
+  content?: string;
 };
 
 export type Signer = { address: string; sign: (message: string) => Promise<string> };
@@ -100,7 +120,7 @@ const postJson = <T>(path: string, body: unknown) => call<T>(path, { method: "PO
 // ---------- session (reads that include shipping details) ----------
 
 const SESSION_KEY = (a: string) => `arm.shop.session.${a.toLowerCase()}`;
-type Session = { ts: number; sig: string };
+export type Session = { ts: number; sig: string };
 const freshSession = (s: Session | null) => !!s && Date.now() - s.ts < 23 * 3600_000;
 
 export function storedSession(address?: string): Session | null {
@@ -141,13 +161,42 @@ export const useProduct = (id?: number) =>
   useQuery({ queryKey: ["shop", "product", id], enabled: !!id, staleTime: 30_000, queryFn: () => call<Product>(`/products/${id}`) });
 
 /** `viewer` with a stored session = the owner sees hidden items and the tokens it could take payment in */
+const viewerHeaders = (viewer?: string) => {
+  const s = viewer ? storedSession(viewer) : null;
+  return s && viewer ? sessionHeaders(viewer, s) : {};
+};
+
+/** shop header only (token, payment ways, counts); the items come through `useProductPages` */
 export const useShopFront = (seller?: string, viewer?: string) =>
   useQuery({
     queryKey: ["shop", "front", seller?.toLowerCase(), viewer?.toLowerCase() ?? ""],
     enabled: !!seller,
-    queryFn: () => {
-      const s = viewer ? storedSession(viewer) : null;
-      return call<ShopFront>(`/sellers/${seller}`, { headers: s && viewer ? sessionHeaders(viewer, s) : {} });
+    queryFn: () => call<ShopFront>(`/sellers/${seller}?brief=1`, { headers: viewerHeaders(viewer) }),
+  });
+
+/** pages can overlap by an item or two when something new is listed meanwhile */
+export const flatPages = <T extends { id: number }>(d?: InfiniteData<T[]>) => {
+  const seen = new Set<number>();
+  return (d?.pages ?? []).flat().filter((x) => !seen.has(x.id) && !!seen.add(x.id));
+};
+
+export type ItemStatus = "on" | "off" | "all";
+/** Paged items, newest first. `viewer` = the seller themself (with a session) also gets hidden items, filtered by `status`. */
+export const useProductPages = (q: { seller?: string; token?: string; q?: string; status?: ItemStatus; viewer?: string }, size = 24, enabled = true) =>
+  useInfiniteQuery({
+    queryKey: ["shop", "products", "pages", q.seller?.toLowerCase() ?? "", q.token ?? "", q.q ?? "", q.status ?? "", q.viewer?.toLowerCase() ?? "", size],
+    enabled,
+    staleTime: 30_000,
+    placeholderData: (prev) => prev,
+    initialPageParam: 0,
+    getNextPageParam: (last: Product[], all: Product[][]) => (last.length < size ? undefined : all.length * size),
+    queryFn: ({ pageParam }) => {
+      const p = new URLSearchParams({ limit: String(size), offset: String(pageParam) });
+      if (q.seller) p.set("seller", q.seller);
+      if (q.token) p.set("token", q.token);
+      if (q.q) p.set("q", q.q);
+      if (q.status) p.set("status", q.status);
+      return call<Product[]>(`/products?${p}`, { headers: viewerHeaders(q.viewer) });
     },
   });
 
@@ -160,9 +209,33 @@ export const useReviews = (id?: number) =>
 export const productUrl = (id: number) => `${SHARE_ORIGIN}/shop/${id}`;
 const SHARE_ORIGIN = "https://arm.yyheart.com";
 
-export async function fetchOrders(address: string, session: Session, role: "buyer" | "seller") {
-  return call<Order[]>(`/orders?role=${role}`, { headers: sessionHeaders(address, session) });
-}
+export type OrderFilter = "all" | OrderStatus;
+export type OrderCounts = Record<OrderFilter, number>;
+export const ORDER_FILTERS: OrderFilter[] = ["all", "paid", "shipped", "done"];
+
+/** Paged orders (newest first) of one status; `session` null keeps it idle until the user has signed in. */
+export const useOrderPages = (address: string | undefined, session: Session | null, role: "buyer" | "seller", status: OrderFilter, size = 20) =>
+  useInfiniteQuery({
+    queryKey: ["shop", "orders", role, address?.toLowerCase(), status, size],
+    enabled: !!address && !!session,
+    refetchInterval: 30_000,
+    placeholderData: (prev) => prev,
+    initialPageParam: 0,
+    getNextPageParam: (last: Order[], all: Order[][]) => (last.length < size ? undefined : all.length * size),
+    queryFn: ({ pageParam }) => {
+      const p = new URLSearchParams({ role, limit: String(size), offset: String(pageParam) });
+      if (status !== "all") p.set("status", status);
+      return call<Order[]>(`/orders?${p}`, { headers: sessionHeaders(address!, session!) });
+    },
+  });
+
+export const useOrderCounts = (address: string | undefined, session: Session | null, role: "buyer" | "seller") =>
+  useQuery({
+    queryKey: ["shop", "orders", "counts", role, address?.toLowerCase()],
+    enabled: !!address && !!session,
+    refetchInterval: 30_000,
+    queryFn: () => call<OrderCounts>(`/orders/counts?role=${role}`, { headers: sessionHeaders(address!, session!) }),
+  });
 
 // ---------- shipping address book (session signature; only the owner sees it) ----------
 
@@ -198,13 +271,15 @@ export async function signedAction<T = { ok: boolean }>(s: Signer, path: string,
   return postJson<T>(path, { address: s.address, ts, signature, payload });
 }
 
-export type ProductInput = { title: string; body: string; images: string[]; priceUsd6: string; stock: number | null; status: "on" | "off" };
+export type ProductInput = { title: string; body: string; images: string[]; priceUsd6: string; stock: number | null; status: "on" | "off"; kind: ItemKind; delivery: Delivery; autoContent: string };
 export const setShopToken = (s: Signer, token: string) => signedAction(s, "/sellers/token", "token", { token });
 export const setPayModes = (s: Signer, m: PayModes) => signedAction(s, "/sellers/settings", "settings", { payToken: m.token, payUsdc: m.usdc });
 export const createProduct = (s: Signer, p: ProductInput) => signedAction<{ id: number }>(s, "/products", "create", p);
 export const updateProduct = (s: Signer, id: number, p: ProductInput) => signedAction(s, `/products/${id}`, `product:${id}`, p);
 export const deleteProduct = (s: Signer, id: number) => signedAction(s, `/products/${id}`, `product:${id}`, { delete: true });
-export const shipOrder = (s: Signer, id: number, p: { carrier: string; tracking: string; note: string }) => signedAction(s, `/orders/${id}/ship`, `ship:${id}`, p);
+/** physical: carrier / tracking / note; virtual: `content` (what the buyer gets) + optional note */
+export type ShipInput = { carrier: string; tracking: string; note: string; content?: string };
+export const shipOrder = (s: Signer, id: number, p: ShipInput) => signedAction(s, `/orders/${id}/ship`, `ship:${id}`, p);
 export const confirmReceived = (s: Signer, id: number) => signedAction(s, `/orders/${id}/done`, `done:${id}`, {});
 export const postShopComment = (s: Signer, productId: number, c: { text: string; images: string[]; replyTo?: number | null }) =>
   signedAction<{ id: number }>(s, `/products/${productId}/comments`, `comment:${productId}`, c);

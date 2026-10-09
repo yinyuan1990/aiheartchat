@@ -111,22 +111,34 @@ export async function ensureShopTables() {
   await sql`create index if not exists shop_reviews_product on shop_reviews (product_id, created_at desc)`;
   await sql`alter table shop_reviews add column if not exists images jsonb not null default '[]'::jsonb`;
   await sql`alter table shop_comments add column if not exists images jsonb not null default '[]'::jsonb`;
+  // physical items ship to an address; virtual ones are delivered as text (code / link / account …) in the order,
+  // by hand or automatically on payment (auto_content, shown only to buyers)
+  await sql`alter table shop_products add column if not exists kind text not null default 'physical'`;
+  await sql`alter table shop_products add column if not exists delivery text not null default 'manual'`;
+  await sql`alter table shop_products add column if not exists auto_content text not null default ''`;
+  await sql`alter table shop_orders add column if not exists kind text not null default 'physical'`;
+  await sql`alter table shop_orders add column if not exists content text not null default ''`;
 }
 
 type ProductRow = {
   id: string; seller: string; title: string; body: string; images: string[]; price_usd6: string; stock: number | null; sold: number; status: string; created_at: Date; volume_usd6?: string | null;
+  kind?: string; delivery?: string; auto_content?: string;
   token?: string | null; symbol?: string | null; name?: string | null; logo?: string | null; price?: number | null; quote?: string | null; quote_symbol?: string | null; factory?: string | null;
   pay_token?: boolean | null; pay_usdc?: boolean | null;
   review_count?: number | null; rating_avg?: number | null; comment_count?: number | null;
 };
 
-const shapeProduct = (r: ProductRow) => ({
+/** `own`: the seller's own view, which also carries the auto-delivery content (nobody else sees it before paying) */
+const shapeProduct = (r: ProductRow, own = false) => ({
   id: Number(r.id),
   seller: r.seller,
   title: r.title,
   body: r.body,
   images: r.images ?? [],
   priceUsd6: String(r.price_usd6),
+  kind: r.kind === "virtual" ? "virtual" : "physical",
+  delivery: r.kind === "virtual" && r.delivery === "auto" ? "auto" : "manual",
+  ...(own ? { autoContent: r.auto_content ?? "" } : {}),
   stock: r.stock,
   sold: r.sold,
   volumeUsd6: String(r.volume_usd6 ?? "0"),
@@ -174,7 +186,8 @@ const shapeOrder = (r: OrderRow, withShip: boolean) => ({
   shippedAt: r.shipped_at,
   doneAt: r.done_at,
   createdAt: r.created_at,
-  ...(withShip ? { ship: r.ship } : {}),
+  kind: r.kind === "virtual" ? "virtual" : "physical",
+  ...(withShip ? { ship: r.ship, content: r.content ?? "" } : {}),
 });
 
 /** Tokens a wallet may sell in: launched by it, or paying their creator fees to it. */
@@ -202,6 +215,10 @@ async function checkSession(h: (n: string) => string | undefined) {
 }
 
 const clean = (s: unknown, max: number) => (typeof s === "string" ? s.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").trim().slice(0, max) : "");
+const page = (l: unknown, o: unknown, def: number, max: number) => ({
+  limit: Math.min(Math.max(Math.floor(Number(l)) || def, 1), max),
+  offset: Math.min(Math.max(Math.floor(Number(o)) || 0, 0), 100_000),
+});
 const isImage = (u: unknown): u is string => typeof u === "string" && /^\/api\/uploads\/[a-f0-9]{32}\.(png|jpg|gif|webp)$/.test(u);
 
 function readProduct(p: Record<string, unknown>) {
@@ -220,7 +237,11 @@ function readProduct(p: Record<string, unknown>) {
   if (price < MIN_PRICE || price > MAX_PRICE) throw new Error("price $0.01 – $10,000");
   if (stock != null && (!Number.isFinite(stock) || stock < 0 || stock > 1_000_000)) throw new Error("bad stock");
   const status = p.status === "off" ? "off" : "on";
-  return { title, body, images, price, stock, status };
+  const kind = p.kind === "virtual" ? "virtual" : "physical";
+  const delivery = kind === "virtual" && p.delivery === "auto" ? "auto" : "manual";
+  const autoContent = delivery === "auto" ? clean(p.autoContent, 2000) : "";
+  if (delivery === "auto" && !autoContent) throw new Error("auto delivery needs the content to send");
+  return { title, body, images, price, stock, status, kind, delivery, autoContent };
 }
 
 type Paid = { method: "token" | "usdc"; usd: bigint; tokensOut: bigint } | { error: string; pending?: boolean };
@@ -284,14 +305,17 @@ shop.get("/products", async (c) => {
   // search: item title / description, the payment token's symbol / name, or a seller address
   const q = clean(c.req.query("q"), 40);
   const like = `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
-  const limit = Math.min(Math.max(Number(c.req.query("limit")) || 60, 1), 200);
+  const { limit, offset } = page(c.req.query("limit"), c.req.query("offset"), 60, 200);
+  // the owner (session headers) also sees hidden items of their own shop; status = on | off | all
+  const own = !!seller && isAddress(seller) && (await checkSession((n) => c.req.header(n))) === getAddress(seller);
+  const status = own ? (["on", "off"].includes(c.req.query("status") ?? "") ? c.req.query("status")! : "all") : "on";
   const rows = await sql<ProductRow[]>`${productSelect}
-    where p.status = 'on' and s.token is not null
+    where ${status === "all" ? sql`p.status <> 'deleted'` : sql`p.status = ${status}`} and s.token is not null
     ${seller && isAddress(seller) ? sql`and p.seller = ${getAddress(seller)}` : sql``}
     ${token && isAddress(token) ? sql`and lower(s.token) = ${token.toLowerCase()}` : sql``}
     ${q ? (isAddress(q) ? sql`and lower(p.seller) = ${q.toLowerCase()}` : sql`and (p.title ilike ${like} or p.body ilike ${like} or t.symbol ilike ${like} or t.name ilike ${like})`) : sql``}
-    order by p.created_at desc limit ${limit}`;
-  return c.json(rows.map(shapeProduct));
+    order by p.created_at desc, p.id desc limit ${limit} offset ${offset}`;
+  return c.json(rows.map((r) => shapeProduct(r, own)));
 });
 
 shop.get("/products/:id", async (c) => {
@@ -327,7 +351,7 @@ shop.get("/card/:id", async (c) => {
       const ways = [p.pay_usdc ? "USDC" : null, p.pay_token !== false ? sym : null].filter(Boolean).join(" / ");
       return { zh: `${ways} 支付 · 卖家 ${short(p.seller)}`, en: `Pay with ${ways} · seller ${short(p.seller)}` };
     })(),
-    badge: { text: { zh: "商品", en: "Item" }, tone: "accent" },
+    badge: p.kind === "virtual" ? { text: { zh: "虚拟商品", en: "Digital" }, tone: "accent" } : { text: { zh: "商品", en: "Item" }, tone: "accent" },
     stats: [
       { label: { zh: "价格", en: "Price" }, value: values.price, live: "price", tone: "up" },
       { label: { zh: "销量", en: "Sold" }, value: values.sold, live: "sold" },
@@ -358,14 +382,17 @@ shop.get("/sellers/:address", async (c) => {
   const [tok] = s ? await sql`select address, symbol, name, logo, last_price as price, factory from tokens where address = ${s.token}` : [];
   const viewer = await checkSession((n) => c.req.header(n));
   const own = viewer === seller;
-  const rows = await sql<ProductRow[]>`${productSelect} where p.seller = ${seller} and ${own ? sql`p.status <> 'deleted'` : sql`p.status = 'on'`} order by p.created_at desc`;
+  // brief=1: pages list the items through the paged /products instead
+  const rows = c.req.query("brief") === "1" ? [] : await sql<ProductRow[]>`${productSelect} where p.seller = ${seller} and ${own ? sql`p.status <> 'deleted'` : sql`p.status = 'on'`} order by p.created_at desc`;
   const [stats] = await sql<{ orders: number; open: number }[]>`select count(*)::int as orders, count(*) filter (where status = 'paid')::int as open from shop_orders where seller = ${seller}`;
+  const [items] = await sql<{ on: number; off: number }[]>`select count(*) filter (where status = 'on')::int as "on", count(*) filter (where status = 'off')::int as "off" from shop_products where seller = ${seller}`;
   return c.json({
     seller,
     token: tok ? { address: tok.address, symbol: tok.symbol, name: tok.name, logo: tok.logo, price: Number(tok.price ?? 0) } : null,
     pay: { token: s ? s.pay_token : true, usdc: s ? s.pay_usdc : false },
     eligible: own ? await tokensOf(seller) : undefined,
-    products: rows.map(shapeProduct),
+    products: rows.map((r) => shapeProduct(r, own)),
+    items: { on: items?.on ?? 0, off: own ? (items?.off ?? 0) : undefined },
     orders: stats?.orders ?? 0,
     openOrders: own ? (stats?.open ?? 0) : undefined,
   });
@@ -408,8 +435,8 @@ shop.post("/products", async (c) => {
   if (n >= 200) return c.json({ error: "200 items per shop" }, 400);
   try {
     const p = readProduct((body!.payload ?? {}) as Record<string, unknown>);
-    const [row] = await sql`insert into shop_products (seller, title, body, images, price_usd6, stock, status)
-      values (${seller}, ${p.title}, ${p.body}, ${sql.json(p.images)}, ${p.price.toString()}, ${p.stock}, ${p.status}) returning id`;
+    const [row] = await sql`insert into shop_products (seller, title, body, images, price_usd6, stock, status, kind, delivery, auto_content)
+      values (${seller}, ${p.title}, ${p.body}, ${sql.json(p.images)}, ${p.price.toString()}, ${p.stock}, ${p.status}, ${p.kind}, ${p.delivery}, ${p.autoContent}) returning id`;
     return c.json({ id: Number(row.id) });
   } catch (e) {
     return c.json({ error: (e as Error).message }, 400);
@@ -431,7 +458,7 @@ shop.post("/products/:id", async (c) => {
   try {
     const p = readProduct(payload);
     await sql`update shop_products set title = ${p.title}, body = ${p.body}, images = ${sql.json(p.images)}, price_usd6 = ${p.price.toString()},
-      stock = ${p.stock}, status = ${p.status}, updated_at = now() where id = ${id}`;
+      stock = ${p.stock}, status = ${p.status}, kind = ${p.kind}, delivery = ${p.delivery}, auto_content = ${p.autoContent}, updated_at = now() where id = ${id}`;
     return c.json({ ok: true });
   } catch (e) {
     return c.json({ error: (e as Error).message }, 400);
@@ -439,10 +466,11 @@ shop.post("/products/:id", async (c) => {
 });
 
 type Ship = { name: string; phone: string; address: string; note: string };
-function readShip(s: unknown): Ship {
+/** virtual items need no address: only the buyer's optional contact / note (in `note`) */
+function readShip(s: unknown, virtual = false): Ship {
   const o = (s ?? {}) as Record<string, unknown>;
   const ship = { name: clean(o.name, 40), phone: clean(o.phone, 30), address: clean(o.address, 300), note: clean(o.note, 200) };
-  if (!ship.name || !ship.phone || !ship.address) throw new Error("name, phone and address are required");
+  if (!virtual && (!ship.name || !ship.phone || !ship.address)) throw new Error("name, phone and address are required");
   return ship;
 }
 
@@ -450,12 +478,6 @@ function readShip(s: unknown): Ship {
 shop.post("/orders", async (c) => {
   const body = await c.req.json<{ productId: number; tx: string; buyer: string; ship: unknown; ts: number; signature: string }>().catch(() => null);
   if (!body || !isAddress(body.buyer) || !/^0x[0-9a-fA-F]{64}$/.test(body.tx ?? "") || Math.abs(Date.now() - Number(body.ts)) > 30 * 60_000) return c.json({ error: "bad request" }, 400);
-  let ship: Ship;
-  try {
-    ship = readShip(body.ship);
-  } catch (e) {
-    return c.json({ error: (e as Error).message }, 400);
-  }
   const productId = Number(body.productId);
   const ok = await verifyMessage({ address: getAddress(body.buyer), message: shopOrderMessage(productId, body.tx, Number(body.ts), JSON.stringify(body.ship)), signature: body.signature as Hex }).catch(() => false);
   if (!ok) return c.json({ error: "bad signature" }, 401);
@@ -464,17 +486,27 @@ shop.post("/orders", async (c) => {
   if (dup) return dup.buyer === getAddress(body.buyer) ? c.json({ id: Number(dup.id), existing: true }) : c.json({ error: "this payment is already used" }, 409);
   const [p] = await sql<(ProductRow & { token: string | null })[]>`${productSelect} where p.id = ${productId} and p.status <> 'deleted'`;
   if (!p || !p.token) return c.json({ error: "item not found" }, 404);
+  const virtual = p.kind === "virtual";
+  let ship: Ship;
+  try {
+    ship = readShip(body.ship, virtual);
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
   const buyer = getAddress(body.buyer);
   const seller = getAddress(p.seller);
   if (buyer === seller) return c.json({ error: "you can't buy from your own shop" }, 400);
   const paid = await checkPayment(tx as Hex, buyer, seller, p.token, BigInt(p.price_usd6), { token: p.pay_token !== false, usdc: p.pay_usdc === true });
   if ("error" in paid) return c.json({ error: paid.error, pending: paid.pending ?? false }, paid.pending ? 202 : 400);
-  const [row] = await sql`insert into shop_orders (product_id, seller, buyer, token, tx_hash, paid_usd6, tokens, title, image, price_usd6, ship, pay_method)
-    values (${productId}, ${seller}, ${buyer}, ${p.token}, ${tx}, ${paid.usd.toString()}, ${paid.tokensOut.toString()}, ${p.title}, ${p.images?.[0] ?? ""}, ${p.price_usd6}, ${sql.json(ship)}, ${paid.method})
+  // auto delivery: the order is shipped the moment it is paid, with the item's content
+  const auto = virtual && p.delivery === "auto" && !!p.auto_content;
+  const [row] = await sql`insert into shop_orders (product_id, seller, buyer, token, tx_hash, paid_usd6, tokens, title, image, price_usd6, ship, pay_method, kind, content, status, shipped_at)
+    values (${productId}, ${seller}, ${buyer}, ${p.token}, ${tx}, ${paid.usd.toString()}, ${paid.tokensOut.toString()}, ${p.title}, ${p.images?.[0] ?? ""}, ${p.price_usd6}, ${sql.json(ship)}, ${paid.method},
+      ${virtual ? "virtual" : "physical"}, ${auto ? p.auto_content! : ""}, ${auto ? "shipped" : "paid"}, ${auto ? sql`now()` : null})
     on conflict (tx_hash) do nothing returning id`;
   if (!row) return c.json({ error: "this payment is already used" }, 409);
   await sql`update shop_products set sold = sold + 1 where id = ${productId}`;
-  return c.json({ id: Number(row.id) });
+  return c.json({ id: Number(row.id), delivered: auto });
 });
 
 // ---- 留言 (public, wallet-signed) and 评价 (buyer of a shipped order, once per order) ----
@@ -591,12 +623,24 @@ shop.get("/orders", async (c) => {
   if (!me) return c.json({ error: "sign in" }, 401);
   const seller = c.req.query("role") === "seller";
   const status = c.req.query("status");
+  const { limit, offset } = page(c.req.query("limit"), c.req.query("offset"), 20, 100);
   const rows = await sql<OrderRow[]>`select o.*, t.symbol, exists(select 1 from shop_reviews r where r.order_id = o.id) as reviewed
     from shop_orders o left join tokens t on t.address = o.token
     where ${seller ? sql`o.seller = ${me}` : sql`o.buyer = ${me}`}
     ${status && ["paid", "shipped", "done"].includes(status) ? sql`and o.status = ${status}` : sql``}
-    order by o.created_at desc limit 300`;
+    order by o.created_at desc, o.id desc limit ${limit} offset ${offset}`;
   return c.json(rows.map((r) => shapeOrder(r, true)));
+});
+
+/** order counts per status for the filter tabs (same session headers / role as /orders) */
+shop.get("/orders/counts", async (c) => {
+  const me = await checkSession((n) => c.req.header(n));
+  if (!me) return c.json({ error: "sign in" }, 401);
+  const seller = c.req.query("role") === "seller";
+  const [r] = await sql<{ all: number; paid: number; shipped: number; done: number }[]>`select count(*)::int as "all",
+    count(*) filter (where status = 'paid')::int as paid, count(*) filter (where status = 'shipped')::int as shipped, count(*) filter (where status = 'done')::int as done
+    from shop_orders where ${seller ? sql`seller = ${me}` : sql`buyer = ${me}`}`;
+  return c.json(r);
 });
 
 shop.post("/orders/:id/ship", async (c) => {
@@ -605,13 +649,21 @@ shop.post("/orders/:id/ship", async (c) => {
   const seller = await checkAction(body, `ship:${id}`);
   if (!seller) return c.json({ error: "bad signature" }, 401);
   const p = (body!.payload ?? {}) as Record<string, unknown>;
+  const [o] = await sql`select kind from shop_orders where id = ${id} and seller = ${seller} and status in ('paid','shipped')`;
+  if (!o) return c.json({ error: "not found" }, 404);
+  const note = clean(p.note, 200);
+  if (o.kind === "virtual") {
+    // virtual: what the buyer gets (code, link, account …), visible only to the two of them
+    const content = clean(p.content, 2000);
+    if (!content) return c.json({ error: "fill in what you are delivering" }, 400);
+    await sql`update shop_orders set status = 'shipped', content = ${content}, ship_note = ${note}, shipped_at = coalesce(shipped_at, now()) where id = ${id}`;
+    return c.json({ ok: true });
+  }
   const carrier = clean(p.carrier, 40);
   const tracking = clean(p.tracking, 80);
-  const note = clean(p.note, 200);
   if (!tracking && !note) return c.json({ error: "tracking number or a note" }, 400);
-  const [row] = await sql`update shop_orders set status = 'shipped', carrier = ${carrier}, tracking = ${tracking}, ship_note = ${note}, shipped_at = coalesce(shipped_at, now())
-    where id = ${id} and seller = ${seller} and status in ('paid','shipped') returning id`;
-  return row ? c.json({ ok: true }) : c.json({ error: "not found" }, 404);
+  await sql`update shop_orders set status = 'shipped', carrier = ${carrier}, tracking = ${tracking}, ship_note = ${note}, shipped_at = coalesce(shipped_at, now()) where id = ${id}`;
+  return c.json({ ok: true });
 });
 
 shop.post("/orders/:id/done", async (c) => {

@@ -1,14 +1,15 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, ImageOff } from "lucide-react";
+import { ChevronLeft, ChevronRight, ImageOff, Loader2 } from "lucide-react";
 import { useSignMessage } from "wagmi";
 import { awaitWallet } from "@/lib/wallet-wait";
 import { fmtPrice, imgSrc, type OrderStatus, type Product, type Signer } from "@/lib/shop";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/components/providers";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { TokenAvatar } from "@/components/shared";
 
 export const fill = (s: string, vars: Record<string, string | number>) => s.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
@@ -36,6 +37,13 @@ export function Cover({ src, className }: { src?: string | null; className?: str
   );
 }
 
+/** "数字商品 · 自动发货" — nothing for physical items */
+export function KindBadge({ p, className }: { p: Pick<Product, "kind" | "delivery">; className?: string }) {
+  const { t } = useApp();
+  if (p.kind !== "virtual") return null;
+  return <Badge variant="accent" className={className}>{t("shop.kind.virtual")}{p.delivery === "auto" ? ` · ${t("shop.badge.auto")}` : ""}</Badge>;
+}
+
 export function ProductCard({ p, href }: { p: Product; href?: string }) {
   const { t } = useApp();
   const soldOut = p.stock != null && p.sold >= p.stock;
@@ -46,6 +54,7 @@ export function ProductCard({ p, href }: { p: Product; href?: string }) {
         {p.images.length > 1 && <span className="absolute right-2 bottom-2 rounded-full bg-black/55 px-2 py-0.5 font-mono text-[10px] text-white">1/{p.images.length}</span>}
         {soldOut && <span className="absolute inset-0 flex items-center justify-center bg-black/45 text-sm font-semibold text-white">{t("shop.soldOut")}</span>}
         {p.status === "off" && <Badge variant="secondary" className="absolute top-2 left-2">{t("shop.form.off")}</Badge>}
+        <KindBadge p={p} className="absolute top-2 right-2" />
       </div>
       <div className="space-y-1.5 p-3">
         <div className="line-clamp-2 min-h-[2.5em] text-sm leading-tight font-medium">{p.title}</div>
@@ -106,6 +115,28 @@ export function Gallery({ images }: { images: string[] }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Next page loads when this comes into view (button as a fallback); "that's everything" once more than one page was shown. */
+export function LoadMore({ q }: { q: { hasNextPage: boolean; isFetchingNextPage: boolean; fetchNextPage: () => unknown; data?: { pages: unknown[] } } }) {
+  const { t } = useApp();
+  const ref = useRef<HTMLDivElement>(null);
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = q;
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !hasNextPage) return;
+    const io = new IntersectionObserver((e) => e[0]?.isIntersecting && !isFetchingNextPage && void fetchNextPage(), { rootMargin: "400px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+  if (!hasNextPage) return (q.data?.pages.length ?? 0) > 1 ? <div className="py-4 text-center text-xs text-muted-foreground">{t("shop.noMore")}</div> : null;
+  return (
+    <div ref={ref} className="flex justify-center py-4">
+      <Button variant="ghost" size="sm" disabled={isFetchingNextPage} onClick={() => void fetchNextPage()}>
+        {isFetchingNextPage ? <Loader2 className="animate-spin" /> : null} {t("shop.loadMore")}
+      </Button>
     </div>
   );
 }

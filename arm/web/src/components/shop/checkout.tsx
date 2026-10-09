@@ -48,13 +48,15 @@ export function Checkout({ product, token, open, onOpenChange }: { product: Prod
     }
   }, [open, product.pay, address]);
   const viaToken = method === "token";
+  const virtual = product.kind === "virtual";
 
   const addrs = useQuery({
     queryKey: ["shop", "addresses", address],
-    enabled: open && !!signer && signedIn,
+    enabled: open && !!signer && signedIn && !virtual,
     queryFn: () => fetchAddresses(signer!),
   });
   const ship = addrs.data ? pickedAddress(addrs.data) : null;
+  const shipReady = virtual || !!ship;
 
   const price = BigInt(product.priceUsd6);
   const me = address as Address | undefined;
@@ -82,7 +84,7 @@ export function Checkout({ product, token, open, onOpenChange }: { product: Prod
   };
 
   const pay = async () => {
-    if (!me || !client || !signer || !ship || (viaToken && out === 0n)) return;
+    if (!me || !client || !signer || !shipReady || (viaToken && out === 0n)) return;
     const label = `${product.title.slice(0, 18)} · ${fmtPrice(price)}`;
     try {
       let rc;
@@ -103,7 +105,8 @@ export function Checkout({ product, token, open, onOpenChange }: { product: Prod
       }
       if (!rc) return;
       setStep("sign");
-      const id = await placeOrder(signer, product.id, rc.transactionHash, { name: ship.name, phone: ship.phone, address: ship.address, note: note.trim() }, () => setStep("submit"));
+      const to = virtual || !ship ? { name: "", phone: "", address: "" } : { name: ship.name, phone: ship.phone, address: ship.address };
+      const id = await placeOrder(signer, product.id, rc.transactionHash, { ...to, note: note.trim() }, () => setStep("submit"));
       setDone(id);
       void usdc.refetch();
     } catch (e) {
@@ -126,12 +129,19 @@ export function Checkout({ product, token, open, onOpenChange }: { product: Prod
           <div className="space-y-4 text-center">
             <CheckCircle2 className="mx-auto text-up" size={48} />
             <div className="text-sm text-secondary-foreground">#{done} · {fmtPrice(price)}</div>
+            {virtual && product.delivery === "auto" && <div className="text-sm font-medium text-up">{t("shop.deliveredAuto")}</div>}
             <Button className="w-full" asChild>
               <Link href="/shop/orders">{t("shop.orders")} →</Link>
             </Button>
           </div>
         ) : (
           <div className="space-y-4">
+            {virtual ? (
+              <div className="space-y-2">
+                <div className="text-xs text-muted-foreground">{t("shop.virtualNoAddr")}</div>
+                <Input value={note} maxLength={200} placeholder={t("shop.contact")} onChange={(e) => setNote(e.target.value)} disabled={busy} />
+              </div>
+            ) : (
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm font-medium">
                 {t("shop.ship.title")}
@@ -161,6 +171,7 @@ export function Checkout({ product, token, open, onOpenChange }: { product: Prod
               )}
               <Input value={note} maxLength={200} placeholder={t("shop.ship.note")} onChange={(e) => setNote(e.target.value)} disabled={busy} />
             </div>
+            )}
             {product.pay.token && product.pay.usdc && (
               <div className="space-y-1.5">
                 <div className="text-sm font-medium">{t("shop.method")}</div>
@@ -207,7 +218,7 @@ export function Checkout({ product, token, open, onOpenChange }: { product: Prod
                 {!connected ? t("common.connect") : t(`wallet.switch.${NET}`)}
               </Button>
             ) : (
-              <Button size="xl" variant="up" className="w-full" disabled={busy || !ship || low || (viaToken && out === 0n) || own} onClick={() => void pay()}>
+              <Button size="xl" variant="up" className="w-full" disabled={busy || !shipReady || low || (viaToken && out === 0n) || own} onClick={() => void pay()}>
                 {busy ? (
                   <>
                     <RefreshCw className="animate-spin" /> {t(`shop.step.${step}`)}

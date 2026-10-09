@@ -13,7 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Addr, Empty, SectionTitle, TokenAvatar } from "@/components/shared";
 import { Checkout } from "@/components/shop/checkout";
-import { Gallery, ProductGrid, fill, payWays } from "@/components/shop/shared";
+import { Gallery, KindBadge, ProductGrid, fill, payWays } from "@/components/shop/shared";
 import { CalloutButton } from "@/components/shop/callout";
 import { CommentBox, ReviewList, ShareButton, Stars } from "@/components/shop/feedback";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -66,6 +66,7 @@ export default function ProductPage() {
                   {p.stock != null && !soldOut && ` · ${fill(t("shop.stockLeft"), { n: p.stock - p.sold })}`}
                 </span>
               </div>
+              <KindBadge p={p} />
               {p.token && (
                 <Link href={`/token/${p.token.address}`} className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-xs hover:bg-accent">
                   <TokenAvatar logo={imgSrc(p.token.logo)} symbol={p.token.symbol} seed={p.token.address} size={20} />

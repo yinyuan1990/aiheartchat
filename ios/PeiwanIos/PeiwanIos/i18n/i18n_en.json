@@ -2798,5 +2798,15 @@
   "cw.shop.reviewed": "Reviewed",
   "cw.shop.reviewPlaceholder": "How was it? Pictures welcome",
   "cw.shop.reviewSubmit": "Submit review",
-  "cw.shop.share": "Share"
+  "cw.shop.share": "Share",
+  "cw.shop.filterAll": "All",
+  "cw.shop.loading": "Loading…",
+  "cw.shop.noMore": "That's everything",
+  "cw.shop.noOrdersHere": "No orders here yet",
+  "cw.shop.kindVirtual": "Digital",
+  "cw.shop.autoDelivery": "Instant delivery",
+  "cw.shop.virtualNoAddr": "Digital item: no shipping address needed",
+  "cw.shop.contact": "Contact / note (optional, e.g. email or game ID)",
+  "cw.shop.deliveredAuto": "Delivered: see it in your orders",
+  "cw.shop.delivered": "Delivered"
 }

@@ -3,21 +3,22 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Store } from "lucide-react";
-import { imgSrc, useShopFront } from "@/lib/shop";
+import { flatPages, imgSrc, useProductPages, useShopFront } from "@/lib/shop";
 import { fmtUsd } from "@/lib/format";
 import { useApp } from "@/components/providers";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Addr, Empty, TokenAvatar } from "@/components/shared";
-import { ProductGrid, fill } from "@/components/shop/shared";
+import { LoadMore, ProductGrid, fill } from "@/components/shop/shared";
 
 export default function StorePage() {
   const { address: seller } = useParams<{ address: string }>();
   const { t, address } = useApp();
   const q = useShopFront(seller);
   const own = !!address && address.toLowerCase() === seller.toLowerCase();
-  const items = (q.data?.products ?? []).filter((p) => p.status === "on");
+  const pages = useProductPages({ seller });
+  const items = flatPages(pages.data);
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
@@ -44,14 +45,17 @@ export default function StorePage() {
           )}
         </CardContent>
       </Card>
-      {q.isLoading ? (
+      {q.isLoading || pages.isLoading ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="aspect-[3/4] rounded-xl" />)}</div>
       ) : !q.data?.token ? (
         <Empty>{t("shop.noShop")}</Empty>
       ) : items.length === 0 ? (
         <Empty>{t("shop.empty")}</Empty>
       ) : (
-        <ProductGrid items={items} />
+        <>
+          <ProductGrid items={items} />
+          <LoadMore q={pages} />
+        </>
       )}
     </div>
   );

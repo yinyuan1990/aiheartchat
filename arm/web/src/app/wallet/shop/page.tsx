@@ -17,13 +17,13 @@ import { executeTrade, quote, transferUsdc, type TradeStep } from "@/lib/wallet/
 import { t } from "@/lib/wallet/i18n";
 import { hasFeature, nativeBridge, shareText } from "@/lib/wallet/native";
 import {
-  HEARTCHAT_DOWNLOAD, confirmReceived, defaultMethod, deleteAddress, fetchAddresses, fetchOrders, fmtPrice, imgSrc, payMinOut, pendingOrders, pickAddress, pickedAddress, placeOrder, saveAddress,
-  productUrl, sellerFeeShare, sendCardCall, signSession, submitPending, useProduct, useShopProducts, usd6,
-  type AddressInput, type Order, type PayMethod, type Pending, type Product, type SavedAddress, type Signer,
+  HEARTCHAT_DOWNLOAD, ORDER_FILTERS, confirmReceived, defaultMethod, deleteAddress, fetchAddresses, flatPages, fmtPrice, imgSrc, payMinOut, pendingOrders, pickAddress, pickedAddress, placeOrder, saveAddress,
+  productUrl, sellerFeeShare, sendCardCall, signSession, submitPending, useOrderCounts, useOrderPages, useProduct, useProductPages, useShopProducts, usd6,
+  type AddressInput, type Order, type OrderFilter, type PayMethod, type Pending, type Product, type SavedAddress, type Session, type Signer,
 } from "@/lib/shop";
 import { useVault } from "@/components/wallet/wallet-context";
 import { BottomSheet, PrimaryButton, TopBar, WalletFrame } from "@/components/wallet/ui";
-import { ItemFeedback, ItemGrid, ReviewSheetBody, StarRow } from "@/components/wallet/shop";
+import { ItemFeedback, ItemGrid, MoreLoader, ReviewSheetBody, StarRow } from "@/components/wallet/shop";
 
 export default function WalletShopRoute() {
   return (
@@ -70,7 +70,8 @@ function MarketPage() {
     const id = setTimeout(() => setQuery(text.trim()), 300);
     return () => clearTimeout(id);
   }, [text]);
-  const q = useShopProducts({ q: query, limit: 100 });
+  const q = useProductPages({ q: query }, 20);
+  const items = flatPages(q.data);
   return (
     <WalletFrame>
       <TopBar back="/wallet" title={t("cw.shop.market")} />
@@ -82,10 +83,13 @@ function MarketPage() {
       <div className="flex-1 px-4 pb-10">
         {q.isLoading ? (
           <div className="flex justify-center py-16"><CircleNotch size={26} className="animate-spin text-muted-foreground" /></div>
-        ) : !q.data?.length ? (
+        ) : !items.length ? (
           <div className="flex flex-col items-center gap-2 py-16 text-[14px] text-muted-foreground"><Storefront size={36} />{t("cw.shop.empty")}</div>
         ) : (
-          <ItemGrid items={q.data} />
+          <>
+            <ItemGrid items={items} />
+            <MoreLoader q={q} />
+          </>
         )}
       </div>
     </WalletFrame>
@@ -258,6 +262,11 @@ function ItemPage({ id }: { id: number }) {
             </span>
           </div>
           <h1 className="mt-1 text-[17px] leading-snug font-semibold">{p.title}</h1>
+          {p.kind === "virtual" && (
+            <span className="mt-1.5 inline-block rounded-full bg-primary/12 px-2.5 py-0.5 text-[12px] font-semibold text-primary">
+              {t("cw.shop.kindVirtual")}{p.delivery === "auto" ? ` · ${t("cw.shop.autoDelivery")}` : ""}
+            </span>
+          )}
           {p.rating != null && (
             <div className="mt-1 flex items-center gap-1.5 text-[12px] text-muted-foreground">
               <StarRow value={p.rating} size={13} /> <span className="font-mono text-foreground">{p.rating.toFixed(1)}</span> · {t("cw.shop.reviews")} {p.reviews}
@@ -363,8 +372,10 @@ function BuySheet({ p, onDone }: { p: Product; onDone: () => void }) {
   const [done, setDone] = useState<number | null>(null);
   const [method, setMethod] = useState<PayMethod>(defaultMethod(p.pay));
   const viaToken = method === "token";
-  const addrs = useQuery({ queryKey: ["shop", "addresses", signer?.address], enabled: !!signer, queryFn: () => fetchAddresses(signer!) });
+  const virtual = p.kind === "virtual";
+  const addrs = useQuery({ queryKey: ["shop", "addresses", signer?.address], enabled: !!signer && !virtual, queryFn: () => fetchAddresses(signer!) });
   const ship = addrs.data ? pickedAddress(addrs.data) : null;
+  const shipReady = virtual || !!ship;
   const me = active?.address as Address | undefined;
   const bal = useQuery({
     queryKey: ["wallet", "usdc", me],
@@ -378,7 +389,7 @@ function BuySheet({ p, onDone }: { p: Product; onDone: () => void }) {
   const low = bal.data != null && bal.data < price;
 
   const go = async () => {
-    if (!token || !signer || !ship || (viaToken && out === 0n)) return;
+    if (!token || !signer || !shipReady || (viaToken && out === 0n)) return;
     setErr("");
     try {
       // buying the token = for the buyer's own wallet; the seller earns the creator share of the pool fee
@@ -386,7 +397,8 @@ function BuySheet({ p, onDone }: { p: Product; onDone: () => void }) {
         ? await executeTrade(account(), token, "buy", price, payMinOut(await quote(token, "buy", price)), setStep)
         : await transferUsdc(account(), p.seller as Address, price, setStep);
       setStep("submit");
-      setDone(await placeOrder(signer, p.id, rc.transactionHash, { name: ship.name, phone: ship.phone, address: ship.address, note: note.trim() }));
+      const to = virtual || !ship ? { name: "", phone: "", address: "" } : { name: ship.name, phone: ship.phone, address: ship.address };
+      setDone(await placeOrder(signer, p.id, rc.transactionHash, { ...to, note: note.trim() }));
       void qc.invalidateQueries({ queryKey: ["wallet"] });
       void qc.invalidateQueries({ queryKey: ["shop"] });
     } catch (e) {
@@ -402,6 +414,7 @@ function BuySheet({ p, onDone }: { p: Product; onDone: () => void }) {
         <CheckCircle size={56} weight="fill" className="text-up" />
         <div className="text-[17px] font-semibold">{t("cw.shop.success")}</div>
         <div className="text-[13px] text-muted-foreground">#{done} · {p.title}</div>
+        {virtual && p.delivery === "auto" && <div className="text-[14px] font-semibold text-up">{t("cw.shop.deliveredAuto")}</div>}
         <Link href="/wallet/shop?tab=orders" onClick={onDone} className="mt-2 w-full">
           <PrimaryButton>{t("cw.shop.orders")}</PrimaryButton>
         </Link>
@@ -419,6 +432,13 @@ function BuySheet({ p, onDone }: { p: Product; onDone: () => void }) {
           <div className="font-mono text-[15px] text-up">{fmtPrice(p.priceUsd6)}</div>
         </div>
       </div>
+      {virtual ? (
+        <>
+          <p className="mt-4 px-1 text-[12px] text-muted-foreground">{t("cw.shop.virtualNoAddr")}</p>
+          <input value={note} maxLength={200} placeholder={t("cw.shop.contact")} disabled={!!step} onChange={(e) => setNote(e.target.value)} className="mt-2 w-full rounded-2xl bg-muted px-3.5 py-3 text-[15px] outline-none" />
+        </>
+      ) : (
+      <>
       <div className="mt-4 flex items-center justify-between text-[13px] font-semibold">
         {t("cw.shop.shipTitle")}
         <span className="flex items-center gap-1 text-[11px] font-normal text-muted-foreground"><LockSimple size={12} /> {t("cw.shop.privacy")}</span>
@@ -436,6 +456,8 @@ function BuySheet({ p, onDone }: { p: Product; onDone: () => void }) {
         <CaretRight size={16} className="shrink-0 text-muted-foreground" />
       </Link>
       <input value={note} maxLength={200} placeholder={t("cw.shop.note")} disabled={!!step} onChange={(e) => setNote(e.target.value)} className="mt-2 w-full rounded-2xl bg-muted px-3.5 py-3 text-[15px] outline-none" />
+      </>
+      )}
       {p.pay.token && p.pay.usdc && (
         <div className="mt-3 grid grid-cols-2 gap-2">
           {(["token", "usdc"] as const).map((m) => (
@@ -459,7 +481,7 @@ function BuySheet({ p, onDone }: { p: Product; onDone: () => void }) {
         <div className="flex justify-between"><dt className="text-muted-foreground">{t("cw.shop.balance")}</dt><dd className={cn("font-mono", low && "text-down")}>{bal.data != null ? Number(formatUnits(bal.data, 6)).toFixed(2) : "…"}</dd></div>
       </dl>
       {err && <div className="mt-2 rounded-xl bg-down/10 px-3 py-2 text-[12px] text-down">{err}</div>}
-      <PrimaryButton tone="up" className="mt-4" disabled={!!step || !ship || low || (viaToken && out === 0n)} onClick={() => void go()}>
+      <PrimaryButton tone="up" className="mt-4" disabled={!!step || !shipReady || low || (viaToken && out === 0n)} onClick={() => void go()}>
         {step ? (
           <span className="flex items-center justify-center gap-2"><CircleNotch size={18} className="animate-spin" /> {t(STEP[step])}</span>
         ) : low ? (
@@ -476,28 +498,28 @@ function BuySheet({ p, onDone }: { p: Product; onDone: () => void }) {
 
 function OrdersPage() {
   const signer = useSigner();
-  const [session, setSession] = useState<{ ts: number; sig: string } | null>(null);
+  const qc = useQueryClient();
+  const [session, setSession] = useState<Session | null>(null);
   const [pending, setPending] = useState<Pending[]>([]);
   const [busy, setBusy] = useState(false);
   const [reviewing, setReviewing] = useState<Order | null>(null);
+  const [status, setStatus] = useState<OrderFilter>("all");
   useEffect(() => {
     if (!signer) return;
     setPending(pendingOrders(signer.address));
     void signSession(signer).then(setSession).catch(() => {});
   }, [signer]);
-  const q = useQuery({
-    queryKey: ["shop", "orders", "buyer", signer?.address],
-    enabled: !!signer && !!session,
-    refetchInterval: 30_000,
-    queryFn: () => fetchOrders(signer!.address, session!, "buyer"),
-  });
+  const q = useOrderPages(signer?.address, session, "buyer", status);
+  const counts = useOrderCounts(signer?.address, session, "buyer");
+  const list = flatPages(q.data);
+  const refresh = () => void qc.invalidateQueries({ queryKey: ["shop", "orders"] });
   const retry = async (p: Pending) => {
     if (!signer) return;
     setBusy(true);
     try {
       await submitPending(p, signer);
       toast.success(t("cw.shop.success"));
-      void q.refetch();
+      refresh();
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -516,25 +538,39 @@ function OrdersPage() {
             <button type="button" disabled={busy} onClick={() => void retry(p)} className="shrink-0 rounded-full bg-foreground px-3 py-1.5 text-[12px] font-semibold text-background">{t("cw.shop.retry")}</button>
           </div>
         ))}
+        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+          {ORDER_FILTERS.map((f) => {
+            const n = counts.data?.[f];
+            const label = { all: "cw.shop.filterAll", paid: "cw.shop.statusPaid", shipped: "cw.shop.statusShipped", done: "cw.shop.statusDone" }[f];
+            return (
+              <button key={f} type="button" onClick={() => setStatus(f)} className={cn("shrink-0 rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition", status === f ? "bg-foreground text-background" : "bg-muted text-muted-foreground")}>
+                {t(label)}{n ? <span className="ml-1 font-mono">{n}</span> : null}
+              </button>
+            );
+          })}
+        </div>
         {q.isLoading || !session ? (
           <div className="flex justify-center py-16"><CircleNotch size={26} className="animate-spin text-muted-foreground" /></div>
-        ) : !q.data?.length ? (
-          <div className="flex flex-col items-center gap-2 py-16 text-[14px] text-muted-foreground"><Storefront size={36} />{t("cw.shop.noOrders")}</div>
+        ) : !list.length ? (
+          <div className="flex flex-col items-center gap-2 py-16 text-[14px] text-muted-foreground"><Storefront size={36} />{t(status === "all" ? "cw.shop.noOrders" : "cw.shop.noOrdersHere")}</div>
         ) : (
-          q.data.map((o) => <OrderRow key={o.id} o={o} onReview={() => setReviewing(o)} onDone={async () => {
-            if (!signer) return;
-            try {
-              await confirmReceived(signer, o.id);
-              void q.refetch();
-            } catch (e) {
-              toast.error((e as Error).message);
-            }
-          }} />)
+          <>
+            {list.map((o) => <OrderRow key={o.id} o={o} onReview={() => setReviewing(o)} onDone={async () => {
+              if (!signer) return;
+              try {
+                await confirmReceived(signer, o.id);
+                refresh();
+              } catch (e) {
+                toast.error((e as Error).message);
+              }
+            }} />)}
+            <MoreLoader q={q} />
+          </>
         )}
         <p className="px-1 pt-2 text-center text-[11px] text-muted-foreground">{t("cw.shop.manageWeb")}</p>
       </div>
       <BottomSheet open={!!reviewing} onClose={() => setReviewing(null)}>
-        {reviewing && signer && <ReviewSheetBody key={reviewing.id} order={reviewing} signer={signer} onDone={() => { setReviewing(null); void q.refetch(); }} />}
+        {reviewing && signer && <ReviewSheetBody key={reviewing.id} order={reviewing} signer={signer} onDone={() => { setReviewing(null); refresh(); }} />}
       </BottomSheet>
     </WalletFrame>
   );
@@ -563,7 +599,15 @@ function OrderRow({ o, onDone, onReview }: { o: Order; onDone: () => void; onRev
           </div>
         </div>
       </div>
-      {(o.tracking || o.shipNote) && (
+      {o.kind === "virtual" && o.content && (
+        <div className="mt-3 rounded-2xl bg-up/8 px-3 py-2 text-[12px] ring-1 ring-up/30">
+          <button type="button" className="flex w-full items-center justify-between font-semibold text-up" onClick={() => void navigator.clipboard.writeText(o.content!).then(() => toast.success(t("cw.shop.copied")))}>
+            {t("cw.shop.delivered")} <Copy size={13} />
+          </button>
+          <div className="mt-1 font-mono break-all whitespace-pre-wrap">{o.content}</div>
+        </div>
+      )}
+      {o.kind !== "virtual" && (o.tracking || o.shipNote) && (
         <div className="mt-3 flex items-start gap-2 rounded-2xl bg-muted px-3 py-2 text-[12px]">
           <Truck size={15} className="mt-0.5 shrink-0 text-primary" />
           <div className="min-w-0 flex-1">

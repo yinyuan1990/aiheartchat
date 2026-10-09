@@ -3,13 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { MapPin, Package, Search, Store } from "lucide-react";
-import { useShopProducts } from "@/lib/shop";
+import { flatPages, useProductPages } from "@/lib/shop";
 import { useApp } from "@/components/providers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Empty } from "@/components/shared";
-import { ProductGrid } from "@/components/shop/shared";
+import { LoadMore, ProductGrid } from "@/components/shop/shared";
 
 export default function ShopIndex() {
   const { t } = useApp();
@@ -19,7 +19,8 @@ export default function ShopIndex() {
     const id = setTimeout(() => setQuery(text.trim()), 300);
     return () => clearTimeout(id);
   }, [text]);
-  const q = useShopProducts({ q: query, limit: 120 });
+  const q = useProductPages({ q: query });
+  const items = flatPages(q.data);
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -47,10 +48,13 @@ export default function ShopIndex() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="aspect-[3/4] rounded-xl" />)}
         </div>
-      ) : !q.data?.length ? (
+      ) : !items.length ? (
         <Empty>{t("shop.empty")}</Empty>
       ) : (
-        <ProductGrid items={q.data} />
+        <>
+          <ProductGrid items={items} />
+          <LoadMore q={q} />
+        </>
       )}
     </div>
   );
