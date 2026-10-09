@@ -1,0 +1,445 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0 }
+html, body { width: 1080px; height: 1920px; overflow: hidden; background: #0b0605; font-family: "Microsoft YaHei", "Segoe UI", sans-serif; color: #fff }
+.bg { position: absolute; inset: 0; overflow: hidden; background: radial-gradient(ellipse at 50% 0%, #3a1408 0%, #140806 55%, #070404 100%) }
+.blob { position: absolute; border-radius: 50%; filter: blur(130px); opacity: .45 }
+.b1 { width: 900px; height: 900px; background: #ff7a1a; left: -360px; top: -280px }
+.b2 { width: 900px; height: 900px; background: #ff3d6e; right: -420px; bottom: 120px; opacity: .35 }
+.b3 { width: 600px; height: 600px; background: #3ddc84; left: 260px; top: 1100px; opacity: .14 }
+.pt { position: absolute; border-radius: 50%; background: #ffe2b8; box-shadow: 0 0 10px #ffb36b }
+
+.scene { position: absolute; inset: 0; display: none }
+.center { position: absolute; left: 0; right: 0; text-align: center }
+.grad { background: linear-gradient(90deg, #ff9a3c, #ffd36e 50%, #fff1c2); -webkit-background-clip: text; background-clip: text; color: transparent }
+.hot { background: linear-gradient(90deg, #ff3d6e, #ff7a1a); -webkit-background-clip: text; background-clip: text; color: transparent }
+.kicker { position: absolute; left: 0; right: 0; top: 150px; text-align: center; font: 700 30px "Segoe UI"; letter-spacing: 12px; color: #ffb36b }
+.kicker b { color: #fff }
+.h1 { position: absolute; left: 0; right: 0; top: 205px; text-align: center; font-size: 92px; font-weight: 900; letter-spacing: 4px }
+.seal { display: inline-flex; align-items: center; justify-content: center; border-radius: 28%; background: linear-gradient(145deg, #ff5a7e, #fe2c55 45%, #c3123b); color: #fff; font-weight: 900;
+  box-shadow: 0 0 0 4px rgba(255,255,255,.12), 0 30px 90px rgba(254,44,85,.55), inset 0 6px 0 rgba(255,255,255,.25) }
+
+/* s0 */
+.av { position: absolute; width: 84px; height: 84px; margin: -42px 0 0 -42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 46px;
+  box-shadow: 0 8px 22px rgba(0,0,0,.45), 0 0 0 3px rgba(255,255,255,.25) }
+.av i { position: absolute; right: -8px; bottom: -6px; font-style: normal; font-size: 30px; filter: drop-shadow(0 2px 3px rgba(0,0,0,.5)) }
+#count { font: 900 230px "Segoe UI"; line-height: 1; letter-spacing: -4px }
+
+/* s1 product cards */
+.pc { position: absolute; width: 300px; border-radius: 26px; overflow: hidden; background: #fff; color: #1b1210; box-shadow: 0 30px 70px rgba(0,0,0,.55) }
+.pc img { display: block; width: 300px; height: 300px; object-fit: cover }
+.pc .lb { padding: 12px 16px 14px }
+.pc .nm { font-size: 25px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.pc .rw { display: flex; justify-content: space-between; align-items: center; margin-top: 4px }
+.pc .pr { font: 800 28px "Segoe UI"; color: #12a150 }
+.pc .rg { font-size: 19px; color: #8a7a74; background: #f4ece8; border-radius: 20px; padding: 2px 10px }
+
+/* phone */
+.phone { position: absolute; left: 250px; top: 420px; width: 580px; height: 1240px; border-radius: 76px; padding: 10px;
+  background: linear-gradient(145deg, #5a5a66, #15151b 30%, #0b0b10 70%, #3c3c46); box-shadow: 0 60px 140px rgba(0,0,0,.7), 0 0 0 2px rgba(255,255,255,.08), 0 0 120px rgba(255,122,26,.25) }
+.screen { position: relative; width: 560px; height: 1220px; border-radius: 66px; overflow: hidden; background: #efe9e6; color: #161616 }
+.sb { height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 6px 44px 0 52px; font: 700 21px "Segoe UI"; background: #fff }
+.chathead { height: 92px; background: #fff; display: flex; align-items: center; gap: 16px; padding: 0 24px; border-bottom: 1px solid #e8e2df }
+.chathead .gav { width: 60px; height: 60px; border-radius: 18px; background: linear-gradient(135deg, #ffb347, #ff6a3d); display: flex; align-items: center; justify-content: center; font-size: 34px }
+.chathead b { display: block; font-size: 26px }
+.chathead small { font-size: 19px; color: #8b8b8b }
+.msgs { position: absolute; left: 0; right: 0; top: 136px; bottom: 96px; padding: 20px 20px; display: flex; flex-direction: column; gap: 18px; overflow: hidden }
+.m { display: flex; gap: 12px; align-items: flex-start }
+.m.me { flex-direction: row-reverse }
+.m .ma { width: 56px; height: 56px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 30px }
+.m .who { font-size: 18px; color: #8b8b8b; margin: 0 0 4px 4px }
+.m .bub { max-width: 380px; padding: 14px 18px; border-radius: 22px; background: #fff; font-size: 25px; line-height: 1.35; box-shadow: 0 2px 4px rgba(0,0,0,.04) }
+.m.me .bub { background: #ffe1d2 }
+.card { width: 390px; border-radius: 24px; overflow: hidden; background: #fff; box-shadow: 0 6px 18px rgba(0,0,0,.08) }
+.card img { display: block; width: 390px; height: 230px; object-fit: cover }
+.card .cb { padding: 14px 18px 16px }
+.card .ct { font-size: 25px; font-weight: 800 }
+.card .bd { display: inline-block; font-size: 17px; color: #fff; background: #ff7a1a; border-radius: 8px; padding: 1px 8px; margin-right: 6px; vertical-align: 3px }
+.card .st { display: flex; justify-content: space-between; margin-top: 12px; text-align: center }
+.card .st div { flex: 1 }
+.card .st small { display: block; font-size: 17px; color: #999 }
+.card .st b { font: 800 26px "Segoe UI" }
+.card .go { margin-top: 14px; height: 54px; border-radius: 16px; background: #12a150; color: #fff; font-size: 24px; font-weight: 800; display: flex; align-items: center; justify-content: center }
+.inputbar { position: absolute; left: 0; right: 0; bottom: 0; height: 96px; background: #fff; border-top: 1px solid #e8e2df; display: flex; align-items: center; padding: 0 22px }
+.inputbar div { flex: 1; height: 58px; border-radius: 29px; background: #f1eeec; color: #aaa; font-size: 22px; display: flex; align-items: center; padding: 0 24px }
+.tap { position: absolute; width: 90px; height: 90px; margin: -45px 0 0 -45px; border-radius: 50%; border: 6px solid #fff; box-shadow: 0 0 30px #fff; opacity: 0 }
+.toast { position: absolute; display: flex; align-items: center; gap: 14px; padding: 16px 22px; border-radius: 22px; background: rgba(20,12,10,.82); border: 2px solid rgba(255,179,107,.35);
+  box-shadow: 0 18px 40px rgba(0,0,0,.5); font-size: 24px; white-space: nowrap }
+.toast b { color: #ffd36e; font-family: "Segoe UI" }
+.callflash { position: absolute; left: 520px; top: 760px; font-size: 64px; font-weight: 900; color: #fff; padding: 14px 34px; border-radius: 30px; background: linear-gradient(90deg, #ff3d6e, #ff7a1a);
+  box-shadow: 0 20px 60px rgba(255,61,110,.6); opacity: 0; white-space: nowrap }
+
+/* s3 wall */
+.tile { position: absolute; width: 90px; height: 108px; border-radius: 18px; background: rgba(255,255,255,.07); border: 2px solid rgba(255,255,255,.1); text-align: center }
+.tile .e { font-size: 44px; line-height: 64px }
+.tile .n { font: 700 17px "Segoe UI"; color: #ffd9b0 }
+.tile .fire { position: absolute; right: -10px; top: -14px; font-size: 22px; font-weight: 900; color: #fff; background: #ff3d6e; border-radius: 12px; padding: 0 6px; opacity: 0 }
+.stat { display: inline-block; margin: 0 22px; text-align: center }
+.stat small { display: block; font-size: 28px; color: rgba(255,255,255,.65); letter-spacing: 4px }
+.stat b { font: 900 76px "Segoe UI" }
+
+/* s4 steps */
+.step { position: absolute; left: 90px; right: 90px; height: 210px; border-radius: 34px; padding: 30px 36px 30px 170px; background: rgba(28,16,12,.78); border: 2px solid rgba(255,179,107,.25);
+  box-shadow: 0 24px 60px rgba(0,0,0,.5) }
+.step .no { position: absolute; left: 34px; top: 40px; width: 110px; height: 110px; border-radius: 30px; display: flex; align-items: center; justify-content: center; font-size: 58px;
+  background: linear-gradient(135deg, #ff9a3c, #ff3d6e) }
+.step b { display: block; font-size: 44px; font-weight: 900 }
+.step span { display: block; margin-top: 10px; font-size: 28px; line-height: 1.4; color: rgba(255,255,255,.75) }
+
+/* s5 */
+.medal { width: 360px; height: 360px; border-radius: 50%; margin: 0 auto; display: flex; align-items: center; justify-content: center; font-size: 190px;
+  background: radial-gradient(circle at 35% 30%, #fff3c4, #ffc94a 45%, #c98a12); box-shadow: 0 0 0 14px rgba(255,211,110,.2), 0 0 120px rgba(255,190,60,.7) }
+.seat { position: absolute; width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px; background: rgba(255,255,255,.08); border: 2px solid rgba(255,255,255,.15) }
+.stamp { position: absolute; font-size: 84px; font-weight: 900; color: #ff3d6e; border: 8px solid #ff3d6e; border-radius: 22px; padding: 4px 28px; transform: rotate(-12deg); opacity: 0; background: rgba(255,255,255,.04) }
+
+#brand { position: absolute; left: 52px; top: 58px; display: none; align-items: center; gap: 16px; font-size: 34px; font-weight: 900; opacity: .95 }
+#brand .seal { width: 60px; height: 60px; font-size: 34px; box-shadow: 0 8px 30px rgba(254,44,85,.5) }
+#brand span { font-size: 24px; color: #ffb36b; font-weight: 700 }
+#sub { position: absolute; left: 60px; right: 60px; bottom: 96px; text-align: center }
+#sub span { display: inline-block; background: rgba(0,0,0,.62); border: 1px solid rgba(255,255,255,.1); border-radius: 20px; padding: 12px 32px; font-size: 46px; font-weight: 800; color: #fff; text-shadow: 0 2px 6px #000 }
+#progress { position: absolute; left: 0; bottom: 0; height: 6px; background: linear-gradient(90deg, #ff3d6e, #ffb347) }
+</style>
+</head>
+<body>
+<div class="bg" id="bg"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
+
+<!-- s0 hook: 0 → 100 hosts -->
+<section class="scene" id="s0">
+  <div id="avs" style="position:absolute;inset:0"></div>
+  <div style="position:absolute;inset:0;background:radial-gradient(ellipse 620px 760px at 50% 50%, rgba(10,5,4,.9), rgba(10,5,4,.55) 60%, transparent 85%)"></div>
+  <div class="center" style="top:520px">
+    <div class="ap" data-fx="pop" data-d=".1" style="display:inline-block;padding:10px 34px;border-radius:40px;background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.2);font-size:34px;font-weight:700;letter-spacing:6px">心之音 · HEARTCHAT</div>
+    <div class="ap" data-fx="rise" data-d=".25" style="margin-top:40px;font-size:200px;font-weight:900;letter-spacing:12px;line-height:1.05;text-shadow:0 10px 60px rgba(0,0,0,.6)"><span class="grad">百位主播</span></div>
+    <div class="ap" data-fx="rise" data-d=".45" style="font-size:132px;font-weight:900;letter-spacing:18px;text-shadow:0 10px 60px rgba(0,0,0,.6)">招募计划</div>
+    <div class="ap" data-fx="pop" data-at="正式开启" style="margin-top:60px"><span id="count" class="hot">000</span><div style="font-size:42px;font-weight:800;letter-spacing:8px;margin-top:6px">位主播 · 家小店</div></div>
+  </div>
+</section>
+
+<!-- s1 products -->
+<section class="scene" id="s1">
+  <div class="kicker ap" data-fx="rise">SELL WHAT YOUR <b>HOMETOWN</b> GROWS</div>
+  <div class="h1 ap" data-fx="rise" data-d=".1">卖你家乡的<span class="grad">好东西</span></div>
+  <div id="cards"></div>
+</section>
+
+<!-- s2 shop group: chat, call out, fans buy -->
+<section class="scene" id="s2">
+  <div class="kicker ap" data-fx="rise">CHAT · <b>CALL IT OUT</b> · SELL</div>
+  <div class="h1 ap" data-fx="rise" data-d=".1">聊着天就<span class="hot">卖爆了</span></div>
+  <div class="phone ap" data-fx="pop" data-d=".15"><div class="screen">
+    <div class="sb"><span>9:41</span><span>●●●● ▮</span></div>
+    <div class="chathead"><div class="gav">🥭</div><div><b>芒果妹妹的小店群</b><small id="members">326 人</small></div></div>
+    <div class="msgs" id="msgs">
+      <div class="m ap" data-fx="rise" data-at="聊着天"><div class="ma" style="background:#ffd6a5">👧</div><div><div class="who">芒果妹妹 · 店主</div><div class="bub">今天刚下树的凯特芒，甜过初恋 🥭</div></div></div>
+      <div class="m ap" data-fx="rise" data-at="聊着天" data-plus=".9"><div class="ma" style="background:#c7e9ff">🧑</div><div><div class="who">阿杰</div><div class="bub">去年买过，真的甜！</div></div></div>
+      <div class="m ap" data-fx="pop" data-at="一键喊单" id="cardmsg"><div class="ma" style="background:#ffd6a5">👧</div><div><div class="who">芒果妹妹 · 店主</div>
+        <div class="card"><img src="assets/p-mango.jpg"><div class="cb"><div class="ct"><span class="bd">商品</span>攀枝花凯特芒 · 5斤装</div>
+          <div class="st"><div><small>价格</small><b style="color:#12a150">$9.90</b></div><div><small>销量</small><b id="sold">0</b></div><div><small>成交额</small><b id="gmv">$0</b></div></div>
+          <div class="go" id="gobtn">去看看</div></div></div></div></div>
+      <div class="m me ap" data-fx="rise" data-at="下单"><div class="ma" style="background:#e3d7ff">👩</div><div><div class="bub">我要两箱！已下单 🛒</div></div></div>
+      <div class="m ap" data-fx="rise" data-at="下单" data-plus=".7"><div class="ma" style="background:#d4f5d9">👵</div><div><div class="who">王阿姨</div><div class="bub">给孙子也来一箱 😄</div></div></div>
+    </div>
+    <div class="inputbar"><div>发消息…</div></div>
+    <div class="tap" id="tap"></div>
+  </div></div>
+  <div class="callflash" id="callflash">📣 喊单！</div>
+  <div id="toasts"></div>
+</section>
+
+<!-- s3 100 shops wall -->
+<section class="scene" id="s3">
+  <div class="kicker ap" data-fx="rise">100 SHOPS · <b>OPEN NOW</b></div>
+  <div class="h1 ap" data-fx="rise" data-d=".1"><span class="grad">100 家小店</span>同时开张</div>
+  <div class="center ap" data-fx="pop" data-d=".3" style="top:350px">
+    <div class="stat"><small>今日成交</small><b class="grad" id="wgmv">$0</b></div>
+    <div class="stat"><small>订单</small><b id="worders">0</b></div>
+  </div>
+  <div id="wall"></div>
+</section>
+
+<!-- s4 how it works -->
+<section class="scene" id="s4">
+  <div class="kicker ap" data-fx="rise">HOW IT <b>WORKS</b></div>
+  <div class="h1 ap" data-fx="rise" data-d=".1">开店只要<span class="grad">四步</span></div>
+  <div class="step ap" data-fx="left" data-at="开店" style="top:420px"><div class="no">🪙</div><b>发过币就能开店</b><span>用你自己发的币开店，商品图片为主、美元标价</span></div>
+  <div class="step ap" data-fx="right" data-at="买入等值代币" style="top:670px"><div class="no">💱</div><b>买家买入等值代币付款</b><span>代币归买家，你拿交易手续费分成</span></div>
+  <div class="step ap" data-fx="left" data-at="USDC" style="top:920px"><div class="no">💵</div><b>也能直接收 USDC</b><span>两种收款方式，你自己选</span></div>
+  <div class="step ap" data-fx="right" data-at="实物" style="top:1170px"><div class="no">📦</div><b>实物 · 虚拟都能卖</b><span>实物自己发货，虚拟商品可以自动发货</span></div>
+</section>
+
+<!-- s5 rewards + seats -->
+<section class="scene" id="s5">
+  <div class="kicker ap" data-fx="rise">FIRST <b>100</b> HOSTS</div>
+  <div class="center ap" data-fx="pop" data-at="毕业" style="top:300px"><div class="medal">🎓</div></div>
+  <div class="center ap" data-fx="rise" data-at="毕业" data-plus=".3" style="top:720px;font-size:70px;font-weight:900">毕业代币 · <span class="grad">平台额外奖励</span></div>
+  <div class="center ap" data-fx="rise" data-at="首批" style="top:860px;font-size:46px;font-weight:800;letter-spacing:4px">首批名额 <span class="hot" style="font:900 120px 'Segoe UI';vertical-align:-18px">100</span> 个</div>
+  <div id="seats"></div>
+  <div class="stamp" id="stamp" style="left:640px;top:1440px">先到先得</div>
+</section>
+
+<!-- s6 outro -->
+<section class="scene" id="s6">
+  <div class="center" style="top:400px">
+    <div class="seal ap" data-fx="pop" style="width:240px;height:240px;font-size:146px">心</div>
+    <div class="ap" data-fx="rise" data-d=".3" style="font-size:150px;font-weight:900;letter-spacing:22px;margin-top:46px;line-height:1.1">心之音</div>
+    <div class="ap" data-fx="rise" data-d=".5" style="margin-top:30px;font-size:66px;font-weight:900"><span class="grad">百位主播招募计划</span></div>
+    <div class="ap" data-fx="rise" data-at="让每个主播" style="margin-top:40px;font-size:46px;font-weight:700;color:rgba(255,255,255,.85)">让每个主播都有自己的小店</div>
+    <div class="ap" data-fx="pop" data-at="报名" style="margin-top:70px;display:inline-block;padding:22px 60px;border-radius:60px;background:linear-gradient(90deg,#ff3d6e,#ff7a1a);box-shadow:0 20px 60px rgba(255,61,110,.5)">
+      <div style="font-size:44px;font-weight:900">现在报名 →</div><div style="font:800 40px 'Segoe UI';margin-top:4px">app.yyheart.com</div></div>
+  </div>
+  <div class="center ap" data-fx="rise" data-d="2.2" style="top:1700px;font-size:24px;color:rgba(255,255,255,.45);line-height:1.6">画面为活动示意，商品与数据为演示 · 奖励规则以平台公告为准<br>加密资产价格波动大，不构成投资建议</div>
+</section>
+
+<div id="brand"><span class="seal">心</span>心之音<span>百位主播招募</span></div>
+<div id="sub"><span></span></div>
+<div id="progress"></div>
+
+<script src="out/timeline.js"></script>
+<script>
+const TL = window.TL;
+const $ = (id) => document.getElementById(id);
+const clamp = (x) => Math.max(0, Math.min(1, x));
+const ease = (x) => 1 - Math.pow(1 - clamp(x), 3);
+const easeIO = (x) => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2 };
+const back = (x) => { x = clamp(x); const c = 1.7; return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2) };
+const scene = (id) => TL.scenes.find((s) => s.id === id);
+const at = (sc, w) => { const i = sc.text.indexOf(w); if (i < 0) console.warn("cue not in voice", sc.id, w); return i >= 0 ? sc.vo + sc.ct[i] : 0 };
+let seed = 7;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const fmt = (n) => Math.round(n).toLocaleString("en-US");
+
+// background particles (positions only; motion comes from seek)
+const PTS = Array.from({ length: 46 }, () => {
+  const p = document.createElement("div");
+  p.className = "pt";
+  const s = 2 + rnd() * 5;
+  p.style.width = p.style.height = s + "px";
+  $("bg").appendChild(p);
+  return { el: p, x: rnd() * 1080, y: rnd() * 1920, v: 30 + rnd() * 70, ph: rnd() * 6 };
+});
+
+// ---- data
+const PRODUCTS = [
+  { img: "orange", name: "眉山春见耙耙柑 · 5斤", price: "$12.90", region: "四川眉山", cue: "水果" },
+  { img: "mango", name: "攀枝花凯特芒 · 5斤", price: "$9.90", region: "四川攀枝花", cue: "水果", plus: .15 },
+  { img: "cherry", name: "汉源甜樱桃 · 2斤", price: "$15.90", region: "四川汉源", cue: "水果", plus: .3 },
+  { img: "melon", name: "新疆哈密瓜 · 2个", price: "$11.90", region: "新疆哈密", cue: "水果", plus: .45 },
+  { img: "tea", name: "蒙顶山甘露 · 100g", price: "$18.80", region: "四川雅安", cue: "茶叶" },
+  { img: "honey", name: "大凉山野生蜂蜜 · 500g", price: "$13.90", region: "四川凉山", cue: "蜂蜜" },
+  { img: "pepper", name: "汉源贡椒 · 250g", price: "$6.90", region: "四川汉源", cue: "地方特产" },
+  { img: "flowercake", name: "云南玫瑰鲜花饼 · 10枚", price: "$7.90", region: "云南昆明", cue: "地方特产", plus: .2 },
+];
+const PEOPLE = ["👩‍🌾", "🧑‍🌾", "👨‍🌾", "👩", "👧", "🧑", "👵", "👴", "🧕", "👱‍♀️", "👨‍🍳", "👩‍🍳"];
+const GOODS = ["🍊", "🥭", "🍒", "🍈", "🍵", "🍯", "🌶️", "🥮", "🍎", "🍇", "🍑", "🍓", "🍋", "🥝", "🍐", "🍌", "🥥", "🌰", "🍄", "🦀", "🐟", "🍚", "🌽", "🥜", "🍠", "🫖", "🧄", "🥬", "🍅", "🫐"];
+const CITIES = ["成都", "上海", "北京", "广州", "深圳", "杭州", "重庆", "武汉", "西安", "南京", "长沙", "昆明"];
+const SURN = ["李", "王", "张", "刘", "陈", "杨", "赵", "黄", "周", "吴"];
+
+// ---- s0: 100 avatars scattered on a jittered grid, popping in as the counter climbs
+const ORDER = Array.from({ length: 100 }, (_, i) => i).sort(() => rnd() - 0.5);
+const AVS = Array.from({ length: 100 }, (_, i) => {
+  const el = document.createElement("div");
+  el.className = "av";
+  const hue = Math.floor(rnd() * 360);
+  el.style.background = `linear-gradient(135deg, hsl(${hue},85%,72%), hsl(${hue + 35},70%,48%))`;
+  el.innerHTML = `${PEOPLE[i % PEOPLE.length]}<i>${GOODS[i % GOODS.length]}</i>`;
+  const c = i % 10, r = Math.floor(i / 10);
+  const x = 70 + c * 104 + (rnd() - 0.5) * 30, y = 150 + r * 175 + (rnd() - 0.5) * 50;
+  $("avs").appendChild(el);
+  return { el, x, y, rank: ORDER.indexOf(i), s: 0.75 + rnd() * 0.45 };
+});
+
+// ---- s1: product cards, 3 columns
+const CARDS = PRODUCTS.map((p, i) => {
+  const el = document.createElement("div");
+  el.className = "pc ap";
+  el.dataset.fx = "pop";
+  el.dataset.at = p.cue;
+  if (p.plus) el.dataset.plus = p.plus;
+  el.innerHTML = `<img src="assets/p-${p.img}.jpg"><div class="lb"><div class="nm">${p.name}</div><div class="rw"><span class="pr">${p.price}</span><span class="rg">${p.region}</span></div></div>`;
+  const slot = i < 4 ? i : i + (i >= 4 ? 0 : 0);
+  const c = slot % 3, r = Math.floor(slot / 3);
+  el.style.left = 60 + c * 330 + "px";
+  el.style.top = 380 + r * 410 + "px";
+  el.style.rotate = `${(rnd() - 0.5) * 6}deg`;
+  $("cards").appendChild(el);
+  return el;
+});
+{
+  const more = document.createElement("div");
+  more.className = "pc ap";
+  more.dataset.fx = "pop";
+  more.dataset.at = "好东西";
+  more.style.cssText = "left:720px;top:1200px;height:370px;background:linear-gradient(135deg,#ff9a3c,#ff3d6e);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center";
+  more.innerHTML = `<div style="font-size:64px;line-height:1.2">🍎🍇🥜<br>🍄🦀🌽</div><div style="font-size:34px;font-weight:900;margin-top:16px">还有更多…</div>`;
+  $("cards").appendChild(more);
+}
+
+// ---- s2: order toasts
+const TOASTS = Array.from({ length: 9 }, (_, k) => {
+  const el = document.createElement("div");
+  el.className = "toast";
+  const n = 1 + Math.floor(rnd() * 3);
+  el.innerHTML = `🛒 <span>${CITIES[k % CITIES.length]} · ${SURN[k % SURN.length]}** 刚下单 ×${n}</span> <b>$${(9.9 * n).toFixed(1)}</b>`;
+  el.style.left = "540px";
+  el.style.top = "322px";
+  $("toasts").appendChild(el);
+  return { el, k };
+});
+
+// ---- s3: wall of 100 shops
+const TILES = Array.from({ length: 100 }, (_, i) => {
+  const el = document.createElement("div");
+  el.className = "tile";
+  const c = i % 10, r = Math.floor(i / 10);
+  el.style.left = 60 + c * 97 + "px";
+  el.style.top = 540 + r * 116 + "px";
+  el.innerHTML = `<div class="e">${GOODS[(i * 7) % GOODS.length]}</div><div class="n">0</div><div class="fire">爆单</div>`;
+  $("wall").appendChild(el);
+  const dist = Math.hypot(c - 4.5, r - 4.5);
+  return { el, n: el.querySelector(".n"), fire: el.querySelector(".fire"), dist, rate: 6 + rnd() * 30, hot: rnd() < 0.14, hotAt: 1.5 + rnd() * 3.5 };
+});
+
+// ---- s5: 100 seats filling up
+const SEATS = Array.from({ length: 100 }, (_, i) => {
+  const el = document.createElement("div");
+  el.className = "seat";
+  const c = i % 14, r = Math.floor(i / 14);
+  el.style.left = 64 + c * 68 + "px";
+  el.style.top = 1060 + r * 66 + "px";
+  $("s5").appendChild(el);
+  return { el, rank: ORDER.indexOf(i), face: PEOPLE[i % PEOPLE.length] };
+});
+SEATS.splice(100);
+
+// ---- generic appear: .ap with data-fx, timed by data-at (cue word) [+ data-plus] or data-d (seconds)
+const APS = [];
+for (const sc of TL.scenes) {
+  $(sc.id).querySelectorAll(".ap").forEach((n) => {
+    const t = n.dataset.at ? at(sc, n.dataset.at) - 0.12 + Number(n.dataset.plus || 0) : Number(n.dataset.d || 0);
+    APS.push({ n, sid: sc.id, t, fx: n.dataset.fx || "rise", base: n.style.transform || "" });
+  });
+}
+function appear(lt, sid) {
+  for (const a of APS) {
+    if (a.sid !== sid) continue;
+    const u = (lt - a.t) / 0.55;
+    a.n.style.opacity = clamp(u * 1.6);
+    const k = a.fx === "pop" ? back(u) : ease(u);
+    a.n.style.transform = a.fx === "pop" ? `scale(${0.4 + 0.6 * k})` : a.fx === "left" ? `translateX(${(1 - k) * -160}px)` : a.fx === "right" ? `translateX(${(1 - k) * 160}px)` : `translateY(${(1 - k) * 70}px)`;
+  }
+}
+
+const hooks = {
+  s0(lt, sc) {
+    const c0 = 0.35, c1 = Math.max(at(sc, "正式开启"), 2.2);
+    const count = Math.round(100 * easeIO((lt - c0) / (c1 - c0)));
+    $("count").textContent = String(count).padStart(3, "0");
+    for (const a of AVS) {
+      const on = a.rank < count;
+      const u = on ? clamp((lt - c0 - (a.rank / 100) * (c1 - c0)) / 0.35) : 0;
+      a.el.style.opacity = u * 0.9;
+      a.el.style.left = a.x + "px";
+      a.el.style.top = a.y + Math.sin(lt * 1.3 + a.rank) * 6 + "px";
+      a.el.style.transform = `scale(${a.s * back(u)})`;
+    }
+  },
+  s1(lt) {
+    CARDS.forEach((c, i) => (c.style.translate = `0 ${Math.sin(lt * 1.1 + i) * 6}px`));
+  },
+  s2(lt, sc) {
+    const tCall = at(sc, "一键喊单"), tTap = at(sc, "粉丝点开"), tBuy = at(sc, "下单");
+    // callout flash
+    const f = (lt - tCall + 0.05) / 0.9;
+    $("callflash").style.opacity = f > 0 && f < 1 ? Math.sin(Math.PI * f) : 0;
+    $("callflash").style.transform = `scale(${0.7 + 0.5 * ease(f)}) rotate(-6deg)`;
+    // tap on 去看看
+    const btn = $("gobtn").getBoundingClientRect(), scr = $("tap").parentElement.getBoundingClientRect();
+    const tu = (lt - tTap) / 0.5;
+    $("tap").style.left = btn.left - scr.left + btn.width / 2 + "px";
+    $("tap").style.top = btn.top - scr.top + btn.height / 2 + "px";
+    $("tap").style.opacity = tu > 0 && tu < 1 ? 1 - tu : 0;
+    $("tap").style.transform = `scale(${0.4 + tu * 1.2})`;
+    // counters
+    const sold = Math.max(0, Math.floor((lt - tTap) * 23));
+    $("sold").textContent = fmt(sold);
+    $("gmv").textContent = "$" + fmt(sold * 9.9);
+    $("members").textContent = `${326 + Math.max(0, Math.floor((lt - tCall) * 9))} 人`;
+    // order ticker above the phone: a new order every 0.42 s slides up and replaces the last one
+    const STEP = 0.42;
+    TOASTS.forEach((o) => {
+      const t0 = tTap + 0.15 + o.k * STEP;
+      const u = (lt - t0) / 0.22, v = (lt - t0 - STEP) / 0.12;
+      const last = o.k === TOASTS.length - 1;
+      o.el.style.opacity = clamp(u) * (last ? 1 : 1 - clamp(v));
+      o.el.style.transform = `translate(-50%, ${(1 - ease(u)) * 40 - (last ? 0 : ease(v) * 14)}px)`;
+    });
+  },
+  s3(lt) {
+    const total = TILES.reduce((s, t) => s + Math.max(0, lt - 0.6 - t.dist * 0.12) * t.rate, 0);
+    $("wgmv").textContent = "$" + fmt(total * 9.6);
+    $("worders").textContent = fmt(total);
+    for (const t of TILES) {
+      const lu = clamp((lt - 0.4 - t.dist * 0.12) / 0.4);
+      t.el.style.opacity = 0.25 + 0.75 * lu;
+      t.el.style.transform = `scale(${0.7 + 0.3 * back(lu)})`;
+      t.el.style.borderColor = lu >= 1 ? "rgba(255,179,107,.45)" : "rgba(255,255,255,.1)";
+      t.n.textContent = fmt(Math.max(0, lt - 0.6 - t.dist * 0.12) * t.rate);
+      const fu = t.hot ? (lt - t.hotAt) / 0.4 : -1;
+      t.fire.style.opacity = clamp(fu);
+      t.fire.style.transform = `scale(${0.5 + 0.5 * back(fu)})`;
+      if (t.hot && fu > 0) t.el.style.background = "rgba(255,61,110,.22)";
+      else t.el.style.background = "rgba(255,255,255,.07)";
+    }
+  },
+  s5(lt, sc) {
+    const t0 = at(sc, "首批"), t1 = at(sc, "先到先得");
+    const filled = Math.round(100 * clamp((lt - t0) / Math.max(1.2, t1 - t0 + 0.6)) * 0.86);
+    for (const s of SEATS) {
+      const on = s.rank < filled;
+      s.el.textContent = on ? s.face : "";
+      s.el.style.background = on ? "linear-gradient(135deg,#ff9a3c,#ff3d6e)" : "rgba(255,255,255,.08)";
+      s.el.style.opacity = clamp((lt - t0 + 0.4) / 0.4);
+    }
+    const su = (lt - t1) / 0.35;
+    $("stamp").style.opacity = clamp(su);
+    $("stamp").style.transform = `rotate(-12deg) scale(${2.2 - 1.2 * ease(su)})`;
+  },
+};
+
+function seek(t) {
+  for (const p of PTS) {
+    p.el.style.left = p.x + Math.sin(t * 0.6 + p.ph) * 18 + "px";
+    p.el.style.top = (((p.y - t * p.v) % 1920) + 1920) % 1920 + "px";
+    p.el.style.opacity = 0.35 + 0.35 * Math.sin(t * 2 + p.ph);
+  }
+  document.querySelectorAll(".blob").forEach((b, i) => (b.style.transform = `translate(${Math.sin(t * 0.25 + i * 2) * 120}px, ${Math.cos(t * 0.2 + i) * 160}px)`));
+  let cur = null;
+  for (const sc of TL.scenes) {
+    const el = $(sc.id), lt = t - sc.start;
+    const on = lt >= 0 && lt < sc.dur;
+    el.style.display = on ? "block" : "none";
+    if (!on) continue;
+    cur = sc;
+    const fin = clamp(lt / 0.3), fout = sc.last ? 1 : clamp((sc.dur - lt) / 0.3);
+    el.style.opacity = Math.min(fin, fout);
+    el.style.transform = `scale(${1 + 0.035 * (1 - ease(lt / 0.7))})`;
+    appear(lt, sc.id);
+    el.querySelectorAll(".phone").forEach((p) => (p.style.translate = `0 ${Math.sin(lt * 0.9) * 8}px`));
+    if (hooks[sc.id]) hooks[sc.id](lt, sc);
+  }
+  $("brand").style.display = cur && !["s0", "s6"].includes(cur.id) ? "flex" : "none";
+  const sub = TL.subs.find((s) => t >= s.t0 && t < s.t1);
+  $("sub").firstElementChild.textContent = sub ? sub.text : "";
+  $("sub").style.display = sub ? "block" : "none";
+  $("progress").style.width = (t / TL.total) * 100 + "%";
+  const imgs = [...document.images].filter((i) => !i.complete);
+  return Promise.all(imgs.map((i) => i.decode().catch(() => {}))).then(() => new Promise((r) => requestAnimationFrame(() => r(true))));
+}
+window.seek = seek;
+seek(0);
+</script>
+</body>
+</html>
