@@ -418,13 +418,6 @@ export function BotDetailPage() {
 curl -X POST ${apiBase}/bot<token>/sendMessage \\
   -H 'Content-Type: application/json' \\
   -d '{"chat_id": ${t('bot.sampleUserId')}, "text": "${t('bot.sampleHello')}", "reply_markup": {"inline_keyboard": [[{"text": "${t('bot.sampleTapMe')}", "callback_data": "hi"}]]}}'`}</div>
-          <div className="small">{t('bot.samplePython')}</div>
-          <div className="bot-code">{`app = (Application.builder().token(TOKEN)
-       .base_url("${apiBase}/bot")
-       .base_file_url("${apiBase}/file/bot")
-       .build())`}</div>
-          <div className="small">{t('bot.sampleNode')}</div>
-          <div className="bot-code">{`const bot = new Telegraf(TOKEN, { telegram: { apiRoot: '${location.origin}/api' } })`}</div>
           <div className="small">{t('bot.webhookNote')}</div>
         </div>
       </div>
