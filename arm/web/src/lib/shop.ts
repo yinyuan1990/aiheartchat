@@ -277,6 +277,10 @@ export const setPayModes = (s: Signer, m: PayModes) => signedAction(s, "/sellers
 export const createProduct = (s: Signer, p: ProductInput) => signedAction<{ id: number }>(s, "/products", "create", p);
 export const updateProduct = (s: Signer, id: number, p: ProductInput) => signedAction(s, `/products/${id}`, `product:${id}`, p);
 export const deleteProduct = (s: Signer, id: number) => signedAction(s, `/products/${id}`, `product:${id}`, { delete: true });
+/** 闲鱼一键导入: the indexer reads the listing and copies its pictures; the result only fills the item form */
+export type Imported = { source: "xianyu"; itemId: string; title: string; body: string; images: string[]; priceCny: string | null; stock: number | null };
+export const importListing = (address: string, session: Session, text: string) =>
+  call<Imported>("/import", { method: "POST", headers: { "content-type": "application/json", ...sessionHeaders(address, session) }, body: JSON.stringify({ text }) });
 /** physical: carrier / tracking / note; virtual: `content` (what the buyer gets) + optional note */
 export type ShipInput = { carrier: string; tracking: string; note: string; content?: string };
 export const shipOrder = (s: Signer, id: number, p: ShipInput) => signedAction(s, `/orders/${id}/ship`, `ship:${id}`, p);

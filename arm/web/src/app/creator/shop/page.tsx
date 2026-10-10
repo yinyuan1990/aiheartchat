@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, ImagePlus, Pencil, Plus, Store, Trash2, Wallet, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Download, ImagePlus, Pencil, Plus, Store, Trash2, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  createProduct, deleteProduct, flatPages, fmtPrice, imgSrc, setPayModes, setShopToken, shipOrder, signSession, storedSession, updateProduct, uploadPicture, useProductPages, useShopFront,
-  type ItemStatus, type Order, type PayModes, type Product, type ProductInput,
+  createProduct, deleteProduct, flatPages, fmtPrice, importListing, imgSrc, setPayModes, setShopToken, shipOrder, signSession, storedSession, updateProduct, uploadPicture, useProductPages, useShopFront,
+  type Imported, type ItemStatus, type Order, type PayModes, type Product, type ProductInput,
 } from "@/lib/shop";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
@@ -176,6 +176,7 @@ export default function ManageShop() {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               <button type="button" onClick={() => setEdit({ v: EMPTY })} className="flex aspect-[3/4] flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed text-sm text-muted-foreground hover:border-ring hover:text-foreground">
                 <Plus size={28} /> {t("shop.addItem")}
+                <span className="text-[11px]">{t("shop.addItemHint")}</span>
               </button>
               {items.isLoading
                 ? Array.from({ length: 3 }, (_, i) => <Skeleton key={i} className="aspect-[3/4] rounded-xl" />)
@@ -194,6 +195,10 @@ export default function ManageShop() {
       <ProductForm
         state={edit}
         busy={busy}
+        pay={data?.pay}
+        symbol={data?.token?.symbol}
+        onPay={(next) => void act(() => setPayModes(signer, next))}
+        onImport={(text) => importListing(address, session, text)}
         onClose={() => setEdit(null)}
         onSave={async (v) => {
           const ok = await act(() => (edit?.id ? updateProduct(signer, edit.id, v) : createProduct(signer, v)));
@@ -260,12 +265,30 @@ function ItemTile({ p, onEdit }: { p: Product; onEdit: () => void }) {
   );
 }
 
-function ProductForm({ state, busy, onClose, onSave, onDelete }: { state: { id?: number; v: ProductInput } | null; busy: boolean; onClose: () => void; onSave: (v: ProductInput) => Promise<void>; onDelete?: () => Promise<void> }) {
+const IMPORT_ERRORS = ["bad_link", "not_xianyu", "busy", "gone", "no_pictures"] as const;
+type ImportErr = (typeof IMPORT_ERRORS)[number];
+
+type FormProps = {
+  state: { id?: number; v: ProductInput } | null;
+  busy: boolean;
+  pay?: PayModes;
+  symbol?: string;
+  onPay: (next: PayModes) => void;
+  onImport: (text: string) => Promise<Imported>;
+  onClose: () => void;
+  onSave: (v: ProductInput) => Promise<void>;
+  onDelete?: () => Promise<void>;
+};
+
+function ProductForm({ state, busy, pay, symbol, onPay, onImport, onClose, onSave, onDelete }: FormProps) {
   const { t } = useApp();
   const [v, setV] = useState<ProductInput>(EMPTY);
   const [price, setPrice] = useState("1");
   const [stock, setStock] = useState("");
   const [uploading, setUploading] = useState(0);
+  const [link, setLink] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [srcPrice, setSrcPrice] = useState<string | null>(null);
   const [key, setKey] = useState<string | null>(null);
   const k = state ? String(state.id ?? "new") : null;
   if (k !== key) {
@@ -274,8 +297,27 @@ function ProductForm({ state, busy, onClose, onSave, onDelete }: { state: { id?:
       setV(state.v);
       setPrice(String(Number(state.v.priceUsd6) / 1e6));
       setStock(state.v.stock == null ? "" : String(state.v.stock));
+      setLink("");
+      setSrcPrice(null);
     }
   }
+
+  const doImport = async () => {
+    setImporting(true);
+    try {
+      const r = await onImport(link.trim());
+      setV((x) => ({ ...x, title: r.title, body: r.body, images: r.images, kind: "physical", delivery: "manual", autoContent: "" }));
+      setStock(r.stock == null ? "" : String(r.stock));
+      setPrice("");
+      setSrcPrice(r.priceCny);
+      toast.success(t("shop.import.done"));
+    } catch (e) {
+      const code = errMsg(e);
+      toast.error(IMPORT_ERRORS.includes(code as ImportErr) ? t(`shop.import.err.${code as ImportErr}`) : code);
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const pick = async (files: FileList | null) => {
     const list = [...(files ?? [])].slice(0, 9 - v.images.length);
@@ -300,7 +342,7 @@ function ProductForm({ state, busy, onClose, onSave, onDelete }: { state: { id?:
   });
   const priceUsd6 = Math.round(Number(price) * 1e6);
   const auto = v.kind === "virtual" && v.delivery === "auto";
-  const valid = v.title.trim() && v.images.length > 0 && priceUsd6 >= 10_000 && priceUsd6 <= 10_000_000_000 && uploading === 0 && (!auto || v.autoContent.trim());
+  const valid = v.title.trim() && v.images.length > 0 && priceUsd6 >= 10_000 && priceUsd6 <= 10_000_000_000 && uploading === 0 && !importing && (!auto || v.autoContent.trim());
 
   return (
     <Dialog open={!!state} onOpenChange={(o) => !o && !busy && onClose()}>
@@ -309,6 +351,16 @@ function ProductForm({ state, busy, onClose, onSave, onDelete }: { state: { id?:
           <DialogTitle>{state?.id ? t("shop.editItem") : t("shop.addItem")}</DialogTitle>
           <DialogDescription>{t("shop.form.images")}</DialogDescription>
         </DialogHeader>
+        {!state?.id && (
+          <div className="space-y-2 rounded-lg border border-primary/40 bg-primary/5 p-3">
+            <div className="flex items-center gap-1.5 text-sm font-semibold"><Download size={14} /> {t("shop.import.title")}</div>
+            <p className="text-[11px] text-muted-foreground">{t("shop.import.hint")}</p>
+            <div className="flex gap-2">
+              <Input value={link} placeholder={t("shop.import.placeholder")} onChange={(e) => setLink(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && link.trim() && !importing) void doImport(); }} className="text-xs" />
+              <Button type="button" size="sm" disabled={!link.trim() || importing} onClick={() => void doImport()}>{importing ? t("shop.import.busy") : t("shop.import.go")}</Button>
+            </div>
+          </div>
+        )}
         <div className="grid grid-cols-3 gap-2">
           {v.images.map((u, i) => (
             <div key={u + i} className={cn("group relative aspect-square overflow-hidden rounded-lg bg-muted", i === 0 && "ring-2 ring-primary")}>
@@ -370,13 +422,31 @@ function ProductForm({ state, busy, onClose, onSave, onDelete }: { state: { id?:
           <div className="grid grid-cols-2 gap-2">
             <label className="block space-y-1">
               <span className="text-xs text-muted-foreground">{t("shop.form.price")}</span>
-              <Input value={price} inputMode="decimal" onChange={(e) => setPrice(e.target.value.replace(/[^0-9.]/g, ""))} className="font-mono" />
+              <Input value={price} inputMode="decimal" placeholder="$" onChange={(e) => setPrice(e.target.value.replace(/[^0-9.]/g, ""))} className={cn("font-mono", srcPrice && !price && "border-primary")} />
+              {srcPrice && <span className="block text-[11px] text-muted-foreground">{fill(t("shop.import.srcPrice"), { p: srcPrice })}</span>}
             </label>
             <label className="block space-y-1">
               <span className="text-xs text-muted-foreground">{t("shop.form.stock")}</span>
               <Input value={stock} inputMode="numeric" onChange={(e) => setStock(e.target.value.replace(/\D/g, ""))} className="font-mono" />
             </label>
           </div>
+          {pay && (
+            <div className="space-y-1">
+              <span className="text-xs text-muted-foreground">{t("shop.form.payShop")}</span>
+              <div className="grid grid-cols-2 gap-2">
+                {(["token", "usdc"] as const).map((m) => {
+                  const on = pay[m];
+                  const next: PayModes = { ...pay, [m]: !on };
+                  return (
+                    <label key={m} className={cn("flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-xs", on && "border-primary/60 bg-primary/5")}>
+                      <span className="font-medium">{m === "token" ? fill(t("shop.method.token"), { sym: `$${symbol ?? ""}` }) : t("shop.method.usdc")}</span>
+                      <Switch checked={on} disabled={busy || (on && !next.token && !next.usdc)} onCheckedChange={() => onPay(next)} />
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div className="flex gap-2">
             {(["on", "off"] as const).map((s) => (
               <Button key={s} type="button" size="sm" variant={v.status === s ? "default" : "outline"} onClick={() => setV({ ...v, status: s })}>{t(`shop.form.${s}`)}</Button>

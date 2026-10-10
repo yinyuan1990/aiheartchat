@@ -4,6 +4,7 @@ import { sql } from "./db.js";
 import { ADDR, client } from "./chain.js";
 import { poolAbi } from "./abi.js";
 import { quotePrice, quoteToUsdc } from "./quotes.js";
+import { ImportError, importXianyu } from "./shop-import.js";
 
 /**
  * Creator shops (10.9). A seller is any wallet that launched (or receives the fees of) an Arm token. Two ways to pay,
@@ -440,6 +441,31 @@ shop.post("/products", async (c) => {
     return c.json({ id: Number(row.id) });
   } catch (e) {
     return c.json({ error: (e as Error).message }, 400);
+  }
+});
+
+/** 闲鱼一键导入: fills the item form (title / description / pictures copied to our uploads); nothing is listed yet */
+const importLog = new Map<string, number[]>();
+shop.post("/import", async (c) => {
+  const me = await checkSession((n) => c.req.header(n));
+  if (!me) return c.json({ error: "sign in" }, 401);
+  const now = Date.now();
+  const recent = (importLog.get(me) ?? []).filter((t) => now - t < 24 * 3600_000);
+  if (recent.length && now - recent[recent.length - 1] < 5_000) return c.json({ error: "slow down" }, 429);
+  if (recent.length >= 100) return c.json({ error: "100 imports a day" }, 429);
+  importLog.set(me, [...recent, now]);
+  const b = await c.req.json<{ text?: unknown }>().catch(() => null);
+  const text = clean(b?.text, 2000);
+  if (!text) return c.json({ error: "bad_link" }, 400);
+  try {
+    return c.json(await importXianyu(text));
+  } catch (e) {
+    if (e instanceof ImportError) {
+      if (e.code === "busy") console.warn("[shop] import: Xianyu is throttling us", e.message);
+      return c.json({ error: e.code }, e.code === "busy" ? 503 : 400);
+    }
+    console.error("[shop] import", e);
+    return c.json({ error: "import failed, try again" }, 502);
   }
 });
 
