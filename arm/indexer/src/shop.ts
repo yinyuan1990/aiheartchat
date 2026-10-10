@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { Hono } from "hono";
 import { decodeEventLog, decodeFunctionData, erc20Abi, getAddress, isAddress, verifyMessage, type Address, type Hex } from "viem";
 import { sql } from "./db.js";
@@ -439,6 +440,40 @@ shop.post("/products", async (c) => {
     const [row] = await sql`insert into shop_products (seller, title, body, images, price_usd6, stock, status, kind, delivery, auto_content)
       values (${seller}, ${p.title}, ${p.body}, ${sql.json(p.images)}, ${p.price.toString()}, ${p.stock}, ${p.status}, ${p.kind}, ${p.delivery}, ${p.autoContent}) returning id`;
     return c.json({ id: Number(row.id) });
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+});
+
+/**
+ * 代上架 (10.10): the operator lists items into a seller's shop from the local lister (arm/ops/shop-lister), e.g. for
+ * shops whose wallet key we do not hold. Authenticated by SHOP_ADMIN_TOKEN (indexer.env; off when unset); only
+ * addresses that already picked a payment token. `pay` optionally switches the shop's payment modes too.
+ */
+const ADMIN_TOKEN = process.env.SHOP_ADMIN_TOKEN ?? "";
+const isAdmin = (h: string | undefined) => {
+  const got = Buffer.from(h?.replace(/^Bearer /, "") ?? "");
+  const want = Buffer.from(ADMIN_TOKEN);
+  return ADMIN_TOKEN.length >= 32 && got.length === want.length && timingSafeEqual(got, want);
+};
+
+shop.post("/admin/products", async (c) => {
+  if (!isAdmin(c.req.header("authorization"))) return c.json({ error: "not found" }, 404);
+  const b = await c.req.json<Record<string, unknown>>().catch(() => null);
+  const a = String(b?.seller ?? "");
+  if (!isAddress(a)) return c.json({ error: "bad seller address" }, 400);
+  const seller = getAddress(a);
+  const [s] = await sql`select 1 from shop_sellers where seller = ${seller}`;
+  if (!s) return c.json({ error: "this address has not opened a shop (no payment token picked)" }, 400);
+  const pay = b!.pay as { token?: unknown; usdc?: unknown } | undefined;
+  if (pay && pay.token !== true && pay.usdc !== true) return c.json({ error: "turn on at least one way to pay" }, 400);
+  try {
+    const p = readProduct(b!);
+    const [row] = await sql`insert into shop_products (seller, title, body, images, price_usd6, stock, status, kind, delivery, auto_content)
+      values (${seller}, ${p.title}, ${p.body}, ${sql.json(p.images)}, ${p.price.toString()}, ${p.stock}, ${p.status}, ${p.kind}, ${p.delivery}, ${p.autoContent}) returning id`;
+    if (pay) await sql`update shop_sellers set pay_token = ${pay.token === true}, pay_usdc = ${pay.usdc === true}, updated_at = now() where seller = ${seller}`;
+    console.log("[shop] admin listed", Number(row.id), "for", seller);
+    return c.json({ id: Number(row.id), url: `${SITE}/shop/${Number(row.id)}` });
   } catch (e) {
     return c.json({ error: (e as Error).message }, 400);
   }

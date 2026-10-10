@@ -99,7 +99,7 @@ function sniff(buf: Uint8Array) {
 }
 
 /** alicdn resizes on the fly: ask for ≤1280px webp first (fits the 1 MB upload cap), the original as a fallback */
-async function copyPicture(src: string): Promise<string | null> {
+export async function fetchPicture(src: string): Promise<{ buf: Uint8Array; ext: string } | null> {
   const u = src.replace(/^\/\//, "https://").replace(/^http:/, "https:");
   if (!/^https:\/\/[a-z0-9.-]+\.alicdn\.com\//.test(u)) return null;
   for (const v of [`${u}_1280x1280q85.jpg_.webp`, u]) {
@@ -107,24 +107,29 @@ async function copyPicture(src: string): Promise<string | null> {
       .then(async (r) => (r.ok ? new Uint8Array(await r.arrayBuffer()) : null))
       .catch(() => null);
     const ext = buf && buf.length <= MAX_UPLOAD ? sniff(buf) : null;
-    if (!buf || !ext) continue;
-    const name = `${createHash("sha256").update(buf).digest("hex").slice(0, 32)}.${ext}`;
-    await mkdir(UPLOAD_DIR, { recursive: true });
-    // names are content hashes: an existing file is this very picture (imported before)
-    await writeFile(`${UPLOAD_DIR}/${name}`, buf, { flag: "wx" }).catch((e: NodeJS.ErrnoException) => {
-      if (e.code !== "EEXIST") throw e;
-    });
-    return `/api/uploads/${name}`;
+    if (buf && ext) return { buf, ext };
   }
   return null;
 }
 
-type ItemDO = { title?: string; desc?: string; imageInfos?: { url?: string }[]; soldPrice?: string; quantity?: number };
+async function copyPicture(src: string): Promise<string | null> {
+  const pic = await fetchPicture(src);
+  if (!pic) return null;
+  const name = `${createHash("sha256").update(pic.buf).digest("hex").slice(0, 32)}.${pic.ext}`;
+  await mkdir(UPLOAD_DIR, { recursive: true });
+  // names are content hashes: an existing file is this very picture (imported before)
+  await writeFile(`${UPLOAD_DIR}/${name}`, pic.buf, { flag: "wx" }).catch((e: NodeJS.ErrnoException) => {
+    if (e.code !== "EEXIST") throw e;
+  });
+  return `/api/uploads/${name}`;
+}
 
-export async function importXianyu(text: string): Promise<Imported> {
+type ItemDO = { title?: string; desc?: string; imageInfos?: { url?: string }[]; soldPrice?: string; quantity?: number };
+export type Listing = Omit<Imported, "images"> & { pictures: string[] };
+
+/** the listing as text + the Xianyu picture URLs (nothing downloaded yet) */
+export async function readXianyu(text: string): Promise<Listing> {
   const itemId = await itemIdOf(text);
-  const hit = done.get(itemId);
-  if (hit && Date.now() - hit.at < CACHE_MS) return hit.r;
   const data = await mtop<{ itemDO?: ItemDO }>(DETAIL_API, { itemId });
   const it = data.itemDO;
   if (!it?.title && !it?.desc) throw new ImportError("gone");
@@ -138,19 +143,27 @@ export async function importXianyu(text: string): Promise<Imported> {
   const lead = title.match(/^[¥￥]?(\d+(?:\.\d+)?)(?:元|块)?\s*/);
   if (lead && Number(lead[1]) === Number(it.soldPrice) && title.length > lead[0].length + 4) title = title.slice(lead[0].length);
   const body = lines.join("\n").replace(/\n{3,}/g, "\n\n").trim().slice(0, 2000);
-  const pics = (it.imageInfos ?? []).map((x) => x.url).filter((u): u is string => !!u).slice(0, 9);
-  const images = (await Promise.all(pics.map((u) => copyPicture(u).catch((e) => (console.error("[shop] import picture", (e as Error).message), null))))).filter((u): u is string => !!u);
-  if (!images.length) throw new ImportError("no_pictures");
   const stock = Number(it.quantity);
-  const r: Imported = {
+  return {
     source: "xianyu",
     itemId,
     title: [...title].slice(0, 60).join(""),
     body,
-    images,
+    pictures: (it.imageInfos ?? []).map((x) => x.url).filter((u): u is string => !!u).slice(0, 9),
     priceCny: it.soldPrice ?? null,
     stock: Number.isInteger(stock) && stock > 1 ? stock : null,
   };
+}
+
+/** read the listing and copy its pictures into our uploads (the site's 一键导入) */
+export async function importXianyu(text: string): Promise<Imported> {
+  const itemId = await itemIdOf(text);
+  const hit = done.get(itemId);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.r;
+  const { pictures, ...rest } = await readXianyu(itemId);
+  const images = (await Promise.all(pictures.map((u) => copyPicture(u).catch((e) => (console.error("[shop] import picture", (e as Error).message), null))))).filter((u): u is string => !!u);
+  if (!images.length) throw new ImportError("no_pictures");
+  const r: Imported = { ...rest, images };
   for (const [k, v] of done) if (Date.now() - v.at > CACHE_MS) done.delete(k);
   done.set(itemId, { at: Date.now(), r });
   return r;
