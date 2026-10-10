@@ -130,6 +130,8 @@ export async function importXianyu(text: string): Promise<Imported> {
   if (!it?.title && !it?.desc) throw new ImportError("gone");
   const lines = (it.desc ?? "").replace(/\r/g, "").split("\n").map((l) => l.trim());
   let title = (it.title ?? lines.find(Boolean) ?? "").trim();
+  // Xianyu cuts auto titles at 30 characters of the description's first line: take the whole line when it fits
+  if (lines[0] && lines[0] !== title && lines[0].startsWith(title) && [...lines[0]].length <= 60) title = lines[0];
   // Xianyu's title is usually just the description's first line: don't say it twice
   if (lines[0] === title && lines.slice(1).some(Boolean)) lines.shift();
   // "59.9发一包…": a leading ¥ price contradicts the dollar price set here
