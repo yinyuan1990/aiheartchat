@@ -4,7 +4,7 @@
 // faster and denser the further you go, an eagle takes the chicken if it falls too far behind the scrolling view,
 // swipe / tap controls, sound, squash, feathers and shake. Score = furthest lane reached.
 import * as THREE from "three";
-import { HopAudio } from "./audio";
+import { HopAudio, recordingAudio, renderLog, type AudioLog } from "./audio";
 
 export type Phase = "ready" | "playing" | "over";
 type Hooks = {
@@ -261,7 +261,7 @@ function makeLane(k: Kit, index: number, prev: LaneType | undefined): Lane {
 type Feather = { m: THREE.Mesh; v: THREE.Vector3; spin: THREE.Vector3; life: number };
 
 export class HopEngine {
-  readonly audio = new HopAudio();
+  readonly audio: HopAudio;
   zh = true;
   phase: Phase = "ready";
   private renderer: THREE.WebGLRenderer;
@@ -294,14 +294,22 @@ export class HopEngine {
   private raf = 0;
   private last = 0;
   private lastDanger = 0;
+  /** game seconds (the capture's audio log runs on it) */
+  private t = 0;
+  private audioLog: AudioLog = [];
   private down: { x: number; y: number } | null = null;
   private params = new URLSearchParams(typeof location === "undefined" ? "" : location.search);
   private local = typeof location !== "undefined" && /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
-  private demo = this.local && this.params.get("demo") === "1";
+  // local only: ?demo=1 plays itself; ?capture=1 also stops the clock so a script steps fixed 1/60 s frames
+  // (window.__hop.step) and gets the run's sound rendered offline (__hop.audio) for promo videos
+  private capture = this.local && this.params.get("capture") === "1";
+  private demo = this.local && (this.params.get("demo") === "1" || this.capture);
   private ro: ResizeObserver;
 
   constructor(private host: HTMLElement, private hooks: Hooks) {
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    const sound = new HopAudio();
+    this.audio = this.capture ? recordingAudio(sound, this.audioLog, () => this.t) : sound;
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: this.capture });
     this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -332,8 +340,27 @@ export class HopEngine {
     host.addEventListener("pointerdown", this.onDown);
     host.addEventListener("pointerup", this.onUp);
     window.addEventListener("keydown", this.onKey);
-    this.raf = requestAnimationFrame(this.frame);
-    if (typeof window !== "undefined" && this.local) (window as unknown as { __hop: unknown }).__hop = { info: () => ({ phase: this.phase, score: this.best, lane: this.lane, col: this.col, scroll: this.scroll / TILE, death: this.death }) };
+    if (!this.capture) this.raf = requestAnimationFrame(this.frame);
+    if (this.local) {
+      const info = () => ({ phase: this.phase, score: this.best, lane: this.lane, col: this.col, scroll: this.scroll / TILE, death: this.death });
+      (window as unknown as { __hop: unknown }).__hop = this.capture
+        ? {
+            info,
+            start: () => this.hooks.onRequestStart(),
+            time: () => this.t,
+            step: (n = 1) => {
+              for (let i = 0; i < n; i++) { this.t += 1 / 60; this.update(1 / 60); }
+              this.renderer.render(this.scene, this.camera);
+            },
+            audio: async (t0: number, secs: number) => {
+              const wav = await renderLog(this.audioLog, t0, secs);
+              let s = "";
+              for (let i = 0; i < wav.length; i += 0x8000) s += String.fromCharCode(...wav.subarray(i, i + 0x8000));
+              return btoa(s);
+            },
+          }
+        : { info };
+    }
   }
 
   start() {
@@ -444,6 +471,7 @@ export class HopEngine {
     this.raf = requestAnimationFrame(this.frame);
     const dt = Math.min(0.05, this.last ? (now - this.last) / 1000 : 0);
     this.last = now;
+    this.t += dt;
     this.update(dt);
     this.renderer.render(this.scene, this.camera);
   };
