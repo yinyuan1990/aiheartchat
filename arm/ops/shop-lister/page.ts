@@ -53,6 +53,17 @@ export const PAGE = /* html */ `<!doctype html>
   </section>
 
   <section>
+    <label>闲鱼登录（工具自己的浏览器，第一次要扫码登录一次，之后一直有效）</label>
+    <div class="row"><div id="loginInfo" class="muted">未打开</div><button class="fit ghost" id="login">打开浏览器登录闲鱼</button></div>
+    <label>抓取方式</label>
+    <div class="chips">
+      <label><input type="radio" name="mode" value="browser" /> 用登录的浏览器（最稳，会弹出窗口）</label>
+      <label><input type="radio" name="mode" value="auto" /> 先直连，被拦再用浏览器</label>
+      <label><input type="radio" name="mode" value="direct" /> 只直连（快，不登录）</label>
+    </div>
+  </section>
+
+  <section>
     <label>闲鱼分享口令 / 链接（也可以只填商品 ID）</label>
     <div class="row"><textarea id="link" rows="2" placeholder="【闲鱼】https://m.tb.cn/h.xxxx …"></textarea><button class="fit" id="read">抓取</button></div>
   </section>
@@ -104,7 +115,7 @@ const call = async (path, body) => {
   if (!r.ok) throw new Error(j.error || r.status);
   return j;
 };
-const ERR = { bad_link: "没认出闲鱼链接", not_xianyu: "这个链接不是闲鱼商品", busy: "闲鱼暂时限制访问，过几分钟再试", gone: "商品已下架或不公开", no_pictures: "图片没下载下来" };
+const ERR = { bad_link: "没认出闲鱼链接", not_xianyu: "这个链接不是闲鱼商品", busy: "没抓到：闲鱼限制了访问，或者浏览器里要登录 / 拖滑块。处理完再点一次抓取", gone: "商品已下架或不公开", no_pictures: "图片没下载下来" };
 const msg = (t, cls) => { $("msg").textContent = t; $("msg").className = cls || ""; };
 let pics = [];
 
@@ -113,8 +124,16 @@ async function init() {
   const c = await call("/api/config");
   showToken(c.hasToken);
   $("seller").value = c.seller || "0x6D80C00F410c448b0dc705a1D104797bA1ca160d";
+  document.querySelector('input[name="mode"][value="' + c.mode + '"]').checked = true;
   checkShop();
+  pollLogin();
 }
+document.querySelectorAll('input[name="mode"]').forEach((el) => el.onchange = () => call("/api/config", { mode: el.value }));
+function showLogin(s) {
+  $("loginInfo").innerHTML = !s.open ? "浏览器未打开（抓取时会自动打开）" : s.loggedIn ? '<span class="ok">已登录闲鱼' + (s.nick ? "：" + s.nick : "") + "</span>" : '<span class="err">浏览器已打开，还没登录闲鱼</span>';
+}
+async function pollLogin() { try { showLogin(await call("/api/login")); } catch {} setTimeout(pollLogin, 4000); }
+$("login").onclick = async () => { $("login").disabled = true; try { showLogin(await call("/api/login", {})); } catch (e) { alert(e.message); } finally { $("login").disabled = false; } };
 $("saveToken").onclick = async () => { const c = await call("/api/config", { token: $("token").value }); $("token").value = ""; showToken(c.hasToken); };
 $("changeToken").onclick = (e) => { e.preventDefault(); showToken(false); };
 
@@ -150,7 +169,7 @@ function renderPics() {
 }
 
 $("read").onclick = async () => {
-  $("read").disabled = true; $("read").textContent = "抓取中…";
+  $("read").disabled = true; $("read").textContent = "抓取中…（有滑块 / 登录页就在弹出的浏览器里处理）";
   try {
     const r = await call("/api/read", { text: $("link").value });
     $("title").value = r.title; $("body").value = r.body;
@@ -158,7 +177,7 @@ $("read").onclick = async () => {
     $("srcPrice").textContent = r.priceCny ? "闲鱼标价 ¥" + r.priceCny : "";
     pics = r.pictures.map((url) => ({ url, on: true }));
     renderPics();
-    $("form").classList.remove("hidden"); msg("");
+    $("form").classList.remove("hidden"); msg(r.via === "browser" ? "（通过登录的浏览器抓取）" : "（直连抓取）", "muted");
     $("price").focus();
   } catch (e) { alert(ERR[e.message] || e.message); }
   finally { $("read").disabled = false; $("read").textContent = "抓取"; }

@@ -12,12 +12,15 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
-import { fetchPicture, ImportError, readXianyu } from "../../indexer/src/shop-import";
+import { fetchPicture, ImportError, itemIdOf, listingFrom, readXianyu, type Listing } from "../../indexer/src/shop-import";
+import { grabInBrowser, loginState, openLogin } from "./browser";
 import { PAGE } from "./page";
 
 const DIR = join(homedir(), ".arm-shop-admin");
 const CONFIG = join(DIR, "config.json");
-type Config = { token?: string; seller?: string; api?: string };
+/** how listings are read: browser = the logged-in Chrome of this tool; direct = plain request; auto = direct, browser when throttled */
+type Mode = "browser" | "direct" | "auto";
+type Config = { token?: string; seller?: string; api?: string; mode?: Mode };
 const load = (): Config => {
   try {
     return JSON.parse(readFileSync(CONFIG, "utf8"));
@@ -46,7 +49,7 @@ const readJson = async (req: IncomingMessage) => {
 
 async function upload(buf: Uint8Array, ext: string) {
   const fd = new FormData();
-  fd.append("file", new Blob([buf], { type: `image/${ext === "jpg" ? "jpeg" : ext}` }), `pic.${ext}`);
+  fd.append("file", new Blob([new Uint8Array(buf)], { type: `image/${ext === "jpg" ? "jpeg" : ext}` }), `pic.${ext}`);
   const r = await fetch(`${api()}/api/upload`, { method: "POST", body: fd, signal: AbortSignal.timeout(60_000) });
   const j = (await r.json().catch(() => ({}))) as { url?: string; error?: string };
   if (!r.ok || !j.url) throw new Error(`upload: ${j.error ?? r.status}`);
@@ -68,10 +71,15 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       const c = load();
       if (typeof b.token === "string" && b.token.trim()) c.token = b.token.trim();
       if (typeof b.seller === "string") c.seller = b.seller.trim();
+      if (b.mode === "browser" || b.mode === "direct" || b.mode === "auto") c.mode = b.mode;
       save(c);
     }
     const c = load();
-    return send(res, 200, { seller: c.seller ?? "", hasToken: !!c.token, api: api() });
+    return send(res, 200, { seller: c.seller ?? "", hasToken: !!c.token, api: api(), mode: c.mode ?? "browser" });
+  }
+  if (url.pathname === "/api/login") {
+    if (req.method === "POST") await openLogin();
+    return send(res, 200, await loginState());
   }
   if (url.pathname === "/api/shop") {
     const r = await fetch(`${api()}/api/shop/sellers/${encodeURIComponent(url.searchParams.get("addr") ?? "")}?brief=1`);
@@ -79,8 +87,17 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   }
   if (url.pathname === "/api/read" && req.method === "POST") {
     const b = await readJson(req);
+    const mode = load().mode ?? "browser";
     try {
-      return send(res, 200, await readXianyu(String(b.text ?? "")));
+      const itemId = await itemIdOf(String(b.text ?? ""));
+      const viaBrowser = async (): Promise<Listing & { via: string }> => ({ ...listingFrom(itemId, await grabInBrowser(itemId)), via: "browser" });
+      if (mode === "browser") return send(res, 200, await viaBrowser());
+      try {
+        return send(res, 200, { ...(await readXianyu(itemId)), via: "direct" });
+      } catch (e) {
+        if (mode === "auto" && e instanceof ImportError && e.code === "busy") return send(res, 200, await viaBrowser());
+        throw e;
+      }
     } catch (e) {
       return send(res, 400, { error: e instanceof ImportError ? e.code : (e as Error).message });
     }

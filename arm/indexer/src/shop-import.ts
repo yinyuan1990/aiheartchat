@@ -33,7 +33,7 @@ let blockedUntil = 0;
 const BLOCK_MS = 10 * 60_000;
 const cookieHeader = () => [...cookies].map(([k, v]) => `${k}=${v}`).join("; ");
 
-async function itemIdOf(text: string): Promise<string> {
+export async function itemIdOf(text: string): Promise<string> {
   const bare = text.trim().match(/^\d{9,16}$/);
   if (bare) return bare[0];
   for (const raw of text.match(/https?:\/\/[^\s<>"'，。！】【）（]+/g) ?? []) {
@@ -124,15 +124,19 @@ async function copyPicture(src: string): Promise<string | null> {
   return `/api/uploads/${name}`;
 }
 
-type ItemDO = { title?: string; desc?: string; imageInfos?: { url?: string }[]; soldPrice?: string; quantity?: number };
+export type ItemDO = { title?: string; desc?: string; imageInfos?: { url?: string }[]; soldPrice?: string; quantity?: number };
 export type Listing = Omit<Imported, "images"> & { pictures: string[] };
 
 /** the listing as text + the Xianyu picture URLs (nothing downloaded yet) */
 export async function readXianyu(text: string): Promise<Listing> {
   const itemId = await itemIdOf(text);
   const data = await mtop<{ itemDO?: ItemDO }>(DETAIL_API, { itemId });
-  const it = data.itemDO;
-  if (!it?.title && !it?.desc) throw new ImportError("gone");
+  return listingFrom(itemId, data.itemDO);
+}
+
+/** Xianyu's detail record (`itemDO` of mtop.taobao.idle.awesome.detail) → our item text, cleaned up */
+export function listingFrom(itemId: string, it: ItemDO | undefined): Listing {
+  if (!it || (!it.title && !it.desc)) throw new ImportError("gone");
   const lines = (it.desc ?? "").replace(/\r/g, "").split("\n").map((l) => l.trim());
   let title = (it.title ?? lines.find(Boolean) ?? "").trim();
   // Xianyu cuts auto titles at 30 characters of the description's first line: take the whole line when it fits

@@ -10,7 +10,8 @@ const esbuild = join(here, "../../indexer/node_modules/.bin/esbuild.cmd");
 mkdirSync(dist, { recursive: true });
 const sh = (cmd, args) => execFileSync(cmd, args, { stdio: "inherit", cwd: here, shell: cmd.endsWith(".cmd") });
 
-sh(esbuild, ["lister.ts", "--bundle", "--platform=node", "--format=cjs", "--target=node22", `--outfile=${join(dist, "lister.cjs")}`]);
+// ws' optional native speedups are not installed (it falls back to JS)
+sh(esbuild, ["lister.ts", "--bundle", "--platform=node", "--format=cjs", "--target=node22", "--external:bufferutil", "--external:utf-8-validate", `--outfile=${join(dist, "lister.cjs")}`]);
 writeFileSync(join(dist, "sea-config.json"), JSON.stringify({ main: "lister.cjs", output: "sea-prep.blob", disableExperimentalSEAWarning: true }));
 execFileSync(process.execPath, ["--experimental-sea-config", "sea-config.json"], { stdio: "inherit", cwd: dist });
 const exe = join(dist, "arm-shop-lister.exe");

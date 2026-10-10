@@ -1,0 +1,11 @@
+{
+  "name": "arm-shop-lister",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "puppeteer-core": "25.9.0"
+  }
+}
