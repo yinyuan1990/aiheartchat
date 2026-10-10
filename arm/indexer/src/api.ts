@@ -22,6 +22,7 @@ import { replayDetail, replayList } from "./replay.js";
 import { perpMarket, perpWhales } from "./perp.js";
 import { gameBoard, gamePlay, gameSell, gameSession, gameStart, gameTick, gameToday } from "./game.js";
 import { boatBoard, boatInfo, boatLogin, boatMe, boatRunEnd, boatRunStart, boatWithdraw } from "./boat.js";
+import { storyEnd, storyLevels, storyStart } from "./story.js";
 import { addSolComment, jupQuote, jupSwap, solComments, solRelay, solTokens } from "./solana.js";
 import { isAvatarAddress, walletAvatar } from "./avatars.js";
 import { claimOf, verifyTransfer } from "./verify.js";
@@ -613,6 +614,17 @@ app.post("/api/boat/run", async (c) => {
 app.post("/api/boat/run/:id/end", async (c) => {
   const body = await c.req.json<{ meters?: number }>().catch(() => ({ meters: 0 }));
   const r = await boatRunEnd(boatToken(c), c.req.param("id").slice(0, 32), Number(body.meters) || 0);
+  return "error" in r ? c.json(r, r.error === "login" ? 401 : 400) : c.json(r);
+});
+// 防捞女剧情游戏 (story.ts): same $BOAT session token as the boat games
+app.get("/api/story/levels", async (c) => c.json(await storyLevels(boatToken(c))));
+app.post("/api/story/:level/start", async (c) => {
+  const r = await storyStart(boatToken(c), Number(c.req.param("level")));
+  return "error" in r ? c.json(r, r.error === "login" ? 401 : 400) : c.json(r);
+});
+app.post("/api/story/run/:id/end", async (c) => {
+  const body = await c.req.json<{ choices?: unknown }>().catch(() => ({}) as { choices?: unknown });
+  const r = await storyEnd(boatToken(c), c.req.param("id").slice(0, 32), body.choices);
   return "error" in r ? c.json(r, r.error === "login" ? 401 : 400) : c.json(r);
 });
 app.post("/api/boat/withdraw", async (c) => {

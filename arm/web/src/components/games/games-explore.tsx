@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowDownUp, Building2, Car, Coins, Crosshair, ExternalLink, Gamepad2, Loader2, Mountain, Ship, Trophy, Wallet } from "lucide-react";
+import { ArrowDownUp, Building2, Car, Coins, Crosshair, ExternalLink, Gamepad2, HeartCrack, Loader2, Mountain, Ship, Trophy, Wallet } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useReadContract } from "wagmi";
 import { formatUnits, maxUint256, parseUnits, type Address } from "viem";
@@ -48,6 +48,8 @@ export function GamesExplore() {
           desc={zh ? "霓虹射击：飞船自动开火，走位躲弹，一枪把 15 种卡通水果切成两半。捡散弹、激光、追踪导弹、全屏炸弹，连击 40 进入狂热，连杀叠倍率最高 ×3。每 10 分得 1 枚，单局最多 300。" : "Neon shooter: auto-fire, dodge, slice 15 kinds of cartoon fruit in half. Grab spread, laser, homing missiles and screen bombs; combo 40 starts a fever, chain kills for up to ×3. 1 BOAT per 10 points up to 300 a run."} />
         <GameCard href="/tower" icon={<Building2 className="size-6" />} title={zh ? "来啊盖楼啊" : "Tower Building"} tag="$BOAT"
           desc={zh ? "一根手指就能玩：吊钩左右摆，点一下放下楼块。叠稳 25 分，正中「完美」加倍，连续完美越加越多；掉 3 块结束。每 10 分得 1 枚，单局最多 300。" : "One-tap stacking: the crane swings, tap to drop the floor. 25 points a floor, more for a dead-centre Perfect and more again in a row; three falls and you're out. 1 BOAT per 10 points, up to 300 a run."} />
+        <GameCard href="/love" icon={<HeartCrack className="size-6" />} title={zh ? "清醒局 · 防捞女" : "Stay Sharp"} tag={zh ? "剧情 · $BOAT" : "Story · $BOAT"}
+          desc={zh ? "根据真实事件改编的聊天剧情（胖猫事件、WePhone 创始人案）：关键时刻做选择，踩中红旗扣心。每关第一次通关得 1000 枚，通关后免费重玩。" : "Chat stories adapted from real cases: choose at each turning point, miss a red flag and lose a heart. 1,000 BOAT for each level's first clear; replays are free after that."} />
         <GameCard href="/game" icon={<Mountain className="size-6" />} title={zh ? "卖在山顶" : "Sell the Top"} tag={zh ? "免费" : "Free"}
           desc={zh ? "每天一个真实 Arc 新币开盘，你是第一个散户，只能按一次卖出。只比成绩，没有奖品。" : "One real Arc launch a day, you're the first retail buyer, one sell. Bragging rights only."} />
       </div>

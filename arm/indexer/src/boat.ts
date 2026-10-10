@@ -132,6 +132,8 @@ async function chainState(): Promise<Chain | null> {
 }
 
 const rateFor = (pool: number) => Math.min(1, Math.max(0.1, pool / FULL_RATE_POOL));
+/** the pool's reward rate right now (other $BOAT games, e.g. story.ts, scale their payouts by it too) */
+export const rateNow = async () => rateFor((await chainState().catch(() => null))?.rewardPool ?? 0);
 
 let depositSyncAt = 0;
 /** Credit Deposited events to cash (whole tokens). Cheap enough to run lazily from /me. */
@@ -183,7 +185,7 @@ async function settleWithdrawals(wallet: string) {
 
 // ---------------------------------------------------------------- sessions
 
-async function walletOf(token: string | undefined) {
+export async function walletOf(token: string | undefined) {
   if (!token || !/^[\w-]{16,40}$/.test(token)) return null;
   await ensure();
   const [s] = await sql<{ wallet: string }[]>`select wallet from boat_sessions where token = ${token} and expires_at > now()`;
@@ -209,7 +211,7 @@ export async function boatLogin(ip: string, body: { wallet?: string; ts?: number
   return { token, welcomed, me: await me(wallet) };
 }
 
-async function me(wallet: string) {
+export async function me(wallet: string) {
   const [p] = await sql<{ bonus: string; cash: string; earned: string; best: number }[]>`
     select bonus, cash, earned, best from boat_players where wallet = ${wallet}`;
   const [{ n }] = await sql<{ n: number }[]>`select count(*)::int as n from boat_runs where day = ${today()} and wallet = ${wallet} and ranked`;
