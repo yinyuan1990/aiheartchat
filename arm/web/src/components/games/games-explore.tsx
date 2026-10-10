@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowDownUp, Building2, Car, Coins, Crosshair, ExternalLink, Gamepad2, HeartCrack, Loader2, Mountain, Ship, Trophy, Wallet } from "lucide-react";
+import { ArrowDownUp, Bird, Building2, Car, Coins, Crosshair, ExternalLink, Gamepad2, HeartCrack, Loader2, Mountain, Ship, Trophy, Wallet } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useReadContract } from "wagmi";
 import { formatUnits, maxUint256, parseUnits, type Address } from "viem";
@@ -48,6 +48,8 @@ export function GamesExplore() {
           desc={zh ? "霓虹射击：飞船自动开火，走位躲弹，一枪把 15 种卡通水果切成两半。捡散弹、激光、追踪导弹、全屏炸弹，连击 40 进入狂热，连杀叠倍率最高 ×3。每 10 分得 1 枚，单局最多 300。" : "Neon shooter: auto-fire, dodge, slice 15 kinds of cartoon fruit in half. Grab spread, laser, homing missiles and screen bombs; combo 40 starts a fever, chain kills for up to ×3. 1 BOAT per 10 points up to 300 a run."} />
         <GameCard href="/tower" icon={<Building2 className="size-6" />} title={zh ? "来啊盖楼啊" : "Tower Building"} tag="$BOAT"
           desc={zh ? "一根手指就能玩：吊钩左右摆，点一下放下楼块。叠稳 25 分，正中「完美」加倍，连续完美越加越多；掉 3 块结束。每 10 分得 1 枚，单局最多 300。" : "One-tap stacking: the crane swings, tap to drop the floor. 25 points a floor, more for a dead-centre Perfect and more again in a row; three falls and you're out. 1 BOAT per 10 points, up to 300 a run."} />
+        <GameCard href="/hop" icon={<Bird className="size-6" />} title={zh ? "小鸡过马路" : "Chicken Cross"} tag="$BOAT"
+          desc={zh ? "点一下跳一格，左右滑躲车：小车、大卡车越来越快越多，树挡路要绕开，停太久老鹰会叼走你。往前过 1 条得 2 枚，单局最多 300。" : "Tap to hop, swipe to dodge: cars and trucks get faster and thicker, trees block the way, and dawdle too long and the eagle takes you. 2 BOAT per lane, up to 300 a run."} />
         <GameCard href="/love" icon={<HeartCrack className="size-6" />} title={zh ? "清醒局 · 防捞女" : "Stay Sharp"} tag={zh ? "剧情 · $BOAT" : "Story · $BOAT"}
           desc={zh ? "根据真实事件改编的聊天剧情（胖猫事件、WePhone 创始人案）：关键时刻做选择，踩中红旗扣心。每关第一次通关得 1000 枚，通关后免费重玩。" : "Chat stories adapted from real cases: choose at each turning point, miss a red flag and lose a heart. 1,000 BOAT for each level's first clear; replays are free after that."} />
         <GameCard href="/game" icon={<Mountain className="size-6" />} title={zh ? "卖在山顶" : "Sell the Top"} tag={zh ? "免费" : "Free"}
@@ -202,14 +204,15 @@ function Board({ zh }: { zh: boolean }) {
   const b = useBoatBoard(game);
   const rows = b.data?.rows ?? [];
   const points = game === "shoot" || game === "tower";
-  const label = { boat: zh ? "快艇" : "Boat", race: zh ? "赛车" : "Race", shoot: zh ? "射击" : "Shoot", tower: zh ? "盖楼" : "Tower" };
+  const label = { boat: zh ? "快艇" : "Boat", race: zh ? "赛车" : "Race", shoot: zh ? "射击" : "Shoot", tower: zh ? "盖楼" : "Tower", hop: zh ? "过马路" : "Hop" };
+  const unit = (n: number) => game === "hop" ? `${n} ${zh ? "条" : "lanes"}` : points ? `${n.toLocaleString()} ${zh ? "分" : "pts"}` : `${n} m`;
   return (
     <Card>
       <CardContent className="p-5">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 font-semibold"><Trophy className="size-4 text-amber-500" />{points ? (zh ? "今日最高分" : "Today's top scores") : (zh ? "今日最远" : "Today's longest")}</div>
           <div className="flex rounded-lg bg-muted p-0.5 text-xs">
-            {(["boat", "race", "shoot", "tower"] as const).map((g) => (
+            {(["boat", "race", "shoot", "tower", "hop"] as const).map((g) => (
               <button key={g} type="button" onClick={() => setGame(g)}
                 className={cn("rounded-md px-2.5 py-1 font-medium", game === g ? "bg-background shadow-sm" : "text-muted-foreground")}>
                 {label[g]}
@@ -220,7 +223,7 @@ function Board({ zh }: { zh: boolean }) {
         {rows.length === 0 ? <p className="text-sm text-muted-foreground">{zh ? "今天还没人跑，去拿第一。" : "No runs yet today."}</p> : (
           <ol className="space-y-1 text-sm">
             {rows.map((r, i) => (
-              <li key={r.wallet} className="flex justify-between font-mono"><span>{i + 1}. {shortAddr(r.wallet)}</span><span>{points ? `${r.meters.toLocaleString()} ${zh ? "分" : "pts"}` : `${r.meters} m`}</span></li>
+              <li key={r.wallet} className="flex justify-between font-mono"><span>{i + 1}. {shortAddr(r.wallet)}</span><span>{unit(r.meters)}</span></li>
             ))}
           </ol>
         )}

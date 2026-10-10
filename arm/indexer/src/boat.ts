@@ -52,7 +52,7 @@ const stateViewAbi = parseAbi(["function getSlot0(bytes32 poolId) view returns (
 /** Games paid from the same $BOAT ledger; the daily ranked-run limits are shared between them. boat and race run at
  *  the same world scale, so MAX_MPS bounds either. shoot (Neon Strike) and tower (Tower Building) score points,
  *  stored in the same `meters` column. */
-const GAMES = ["boat", "race", "shoot", "tower"] as const;
+const GAMES = ["boat", "race", "shoot", "tower", "hop"] as const;
 type Game = (typeof GAMES)[number];
 const gameOf = (g?: string): Game => (GAMES as readonly string[]).includes(g ?? "") ? (g as Game) : "boat";
 
@@ -66,11 +66,14 @@ const SHOOT_POINTS_PER_BOAT = 10;
  *  perfect in a row, capped at 5); same formula as web/src/components/tower/engine.ts `towerBudget`. */
 const towerBudget = (s: number) => 150 * (1 + Math.floor(s / 1.2));
 const TOWER_POINTS_PER_BOAT = 10;
+/** Chicken Cross scores the furthest lane; a hop takes 0.2 s (web/src/components/hop/engine.ts `STEP`) */
+const hopBudget = (s: number) => 1 + Math.floor(s / 0.2);
+const HOP_BOAT_PER_STEP = 2;
 const maxScore = (game: Game, secs: number) =>
-  Math.floor(game === "shoot" ? SHOOT_MAX_MULT * shootBudget(secs) : game === "tower" ? towerBudget(secs) : secs * MAX_MPS);
-/** reward units before the pool rate: metres for boat / race, every 10 points for shoot and tower */
+  Math.floor(game === "shoot" ? SHOOT_MAX_MULT * shootBudget(secs) : game === "tower" ? towerBudget(secs) : game === "hop" ? hopBudget(secs) : secs * MAX_MPS);
+/** reward units before the pool rate: metres for boat / race, every 10 points for shoot and tower, 2 per lane for hop */
 const rewardUnits = (game: Game, score: number) =>
-  game === "shoot" ? Math.floor(score / SHOOT_POINTS_PER_BOAT) : game === "tower" ? Math.floor(score / TOWER_POINTS_PER_BOAT) : score;
+  game === "shoot" ? Math.floor(score / SHOOT_POINTS_PER_BOAT) : game === "tower" ? Math.floor(score / TOWER_POINTS_PER_BOAT) : game === "hop" ? score * HOP_BOAT_PER_STEP : score;
 
 export const loginMessage = (wallet: string, ts: number) => `Arm · Speedboat\nWallet: ${getAddress(wallet)}\nTime: ${ts}`;
 /** Same day boundary as BoatVault.today(): 00:00 UTC+8. */
@@ -278,7 +281,7 @@ export async function boatRunEnd(token: string | undefined, runId: string, meter
     const reward = r.ranked ? Math.floor(Math.min(rewardUnits(game, meters), MAX_REWARD) * rate) : 0;
     await tx`update boat_runs set ended_at = now(), meters = ${meters}, reward = ${reward} where id = ${runId}`;
     // `best` is shown as metres, so points don't go in it
-    const best = game === "shoot" || game === "tower" ? 0 : meters;
+    const best = game === "shoot" || game === "tower" || game === "hop" ? 0 : meters;
     await tx`update boat_players set cash = cash + ${reward}, earned = earned + ${reward}, best = greatest(best, ${best}) where wallet = ${wallet}`;
     return { meters, reward, ranked: r.ranked, capped: meters < Math.floor(Number(metersIn) || 0) };
   });
@@ -345,6 +348,7 @@ export async function boatInfo() {
       towerPointsPerBoat: TOWER_POINTS_PER_BOAT,
       towerMaxFloorScore: 150,
       towerDropGap: 1.2,
+      hopBoatPerStep: HOP_BOAT_PER_STEP,
     },
   };
 }
