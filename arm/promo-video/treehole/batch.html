@@ -1,0 +1,180 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- 树洞流水线的画面模板（batch.py 每条先写 out/tl.js = window.TL，再逐帧 seek）。风格照 kw.mp4：黑底暖光、宋体金字、竖排 + 红印、粒子意象。 -->
+<style>
+@font-face { font-family: "SHS"; src: local("Source Han Serif SC Heavy"), url("file:///C:/Windows/Fonts/Source%20Han%20Serif%20SC%20Heavy%20(TrueType).ttf"); }
+@font-face { font-family: "NSerif"; src: local("Noto Serif SC"), url("file:///C:/Windows/Fonts/NotoSerifSC-VF.ttf"); font-weight: 200 900; }
+* { box-sizing: border-box; margin: 0; padding: 0 }
+html, body { width: 1920px; height: 1080px; overflow: hidden; background: #050403; color: #f3e6cc; font-family: "NSerif", "SimSun", serif }
+canvas { position: absolute; inset: 0 }
+.bar { position: absolute; left: 0; right: 0; height: 96px; background: #000; z-index: 20 }
+.layer { position: absolute; inset: 0; z-index: 5 }
+.gold { background: linear-gradient(180deg, #fff6e2 0%, #f1d9a8 55%, #c9a36a 100%); -webkit-background-clip: text; background-clip: text; color: transparent }
+.big { font-family: "SHS", "NSerif", serif; font-weight: 900 }
+.center { position: absolute; left: 0; right: 0; text-align: center }
+.seal { position: absolute; width: 44px; padding: 6px 0; background: #a3191b; color: #f6e2c8; font-family: "KaiTi", "STKaiti", serif; font-size: 22px; line-height: 1.15; text-align: center; border-radius: 4px }
+.line { position: absolute; left: 260px; right: 520px; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center; text-align: center;
+  font-size: 62px; font-weight: 600; line-height: 1.6; letter-spacing: 6px; color: #f1e2c2; text-shadow: 0 0 30px rgba(255,190,110,.18); text-wrap: balance }
+.mood { position: absolute; right: 250px; top: 300px; width: 210px; height: 210px; border-radius: 50%; border: 2px solid rgba(241,217,168,.5); display: flex; align-items: center; justify-content: center; font-size: 112px }
+</style>
+</head>
+<body>
+<canvas id="cv" width="1920" height="1080"></canvas>
+<div class="bar" style="top:0"></div><div class="bar" style="bottom:0"></div>
+
+<div class="layer" id="intro">
+  <div class="center" style="top:340px">
+    <div class="big gold" id="series" style="font-size:150px;letter-spacing:46px"></div>
+    <div id="no" style="margin-top:36px;font-size:40px;letter-spacing:16px;color:rgba(234,219,189,.75)"></div>
+  </div>
+</div>
+
+<div class="layer" id="body">
+  <div class="line" id="lineA"></div>
+  <div class="line" id="lineB"></div>
+  <div class="mood big gold" id="mood"></div>
+  <div class="seal" style="right:214px;top:560px">树<br>洞</div>
+  <div id="side" style="position:absolute;right:322px;top:560px;writing-mode:vertical-rl;font-size:28px;letter-spacing:10px;color:rgba(234,219,189,.5)"></div>
+</div>
+
+<div class="layer" id="outro">
+  <div class="center" style="top:360px">
+    <div class="big gold" id="o1" style="font-size:100px;letter-spacing:26px">每一份心事</div>
+    <div class="big gold" id="o2" style="margin-top:22px;font-size:100px;letter-spacing:26px">都值得被听见</div>
+    <div id="o3" style="margin-top:56px;font-size:36px;letter-spacing:16px;color:rgba(234,219,189,.7)">心之音 · 树洞</div>
+  </div>
+</div>
+
+<script src="out/tl.js"></script>
+<script>
+const TL = window.TL;
+const $ = (id) => document.getElementById(id);
+const clamp = (x) => Math.max(0, Math.min(1, x));
+const ease = (x) => 1 - Math.pow(1 - clamp(x), 3);
+const easeIO = (x) => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2 };
+let seed = 7 + (TL.id % 97);
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const cv = $("cv"), g = cv.getContext("2d");
+const CX = 780, CY = 540;
+
+$("series").textContent = TL.series;
+$("no").textContent = `树洞 · 第 ${TL.id} 号${TL.date ? " · " + TL.date : ""}`;
+$("mood").textContent = TL.mood;
+$("side").textContent = TL.series;
+
+// ---- dust and particle shapes
+const DUST = Array.from({ length: 140 }, () => ({ x: rnd() * 1920, y: rnd() * 1080, r: 0.6 + rnd() * 1.8, v: 4 + rnd() * 10, ph: rnd() * 6.28 }));
+const N = 900;
+const PH = Array.from({ length: N }, () => rnd() * 6.28);
+const scatter = () => Array.from({ length: N }, () => [rnd() * 1920, 100 + rnd() * 880]);
+const ring = (R) => Array.from({ length: N }, (_, i) => { const a = (i / N) * 6.283; const j = (rnd() - 0.5) * 8; return [CX + Math.cos(a) * (R + j), CY + Math.sin(a) * (R + j)]; });
+function lotus() {
+  const pts = [];
+  for (let layer = 0; layer < 3; layer++) {
+    const R = 240 - layer * 64, rot = layer * 0.2;
+    for (let p = 0; p < 8; p++) for (let k = 0; k < 36; k++) {
+      const t = k / 35, a = rot + (p / 8) * 6.283, wid = Math.sin(Math.PI * t) * 0.32;
+      for (const s of [-1, 1]) pts.push([CX + Math.cos(a + s * wid) * R * t, CY + Math.sin(a + s * wid) * R * t * 0.62]);
+    }
+  }
+  while (pts.length < N) { const a = rnd() * 6.28, r = rnd() * 26; pts.push([CX + Math.cos(a) * r, CY + Math.sin(a) * r * 0.6]); }
+  return pts.slice(0, N);
+}
+function butterfly() {
+  // Temple H. Fay's butterfly curve, filled a little around the line
+  return Array.from({ length: N }, (_, i) => {
+    const th = (i / N) * 12 * Math.PI;
+    const r = Math.exp(Math.sin(th)) - 2 * Math.cos(4 * th) + Math.pow(Math.sin((2 * th - Math.PI) / 24), 5);
+    const k = 0.85 + rnd() * 0.15;
+    return [CX + Math.sin(th) * r * 70 * k, CY - 40 - Math.cos(th) * r * 70 * k];
+  });
+}
+function twoLights() {
+  return Array.from({ length: N }, (_, i) => { const c = i % 2 ? CX - 170 : CX + 170; const a = rnd() * 6.28, r = Math.pow(rnd(), 2) * 90; return [c + Math.cos(a) * r, CY + Math.sin(a) * r]; });
+}
+const SHAPES = [scatter(), ring(200), lotus(), butterfly(), twoLights(), ring(260)];
+const ORDER = [1, 2, 3, 4, 5, 2, 3];
+const COLS = { 1: "235,215,180", 2: "246,200,205", 3: "200,230,255", 4: "255,226,180", 5: "235,215,180" };
+
+function glow(x, y, r, a) {
+  const gr = g.createRadialGradient(x, y, 0, x, y, r);
+  gr.addColorStop(0, `rgba(255,214,150,${a})`);
+  gr.addColorStop(0.35, `rgba(190,130,60,${a * 0.35})`);
+  gr.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = gr; g.fillRect(0, 0, 1920, 1080);
+}
+
+function bodyShape(t, fade) {
+  const ch = TL.body.chunks;
+  if (!ch.length) return;
+  // the shape changes every two lines; particles flow from the last shape to the next
+  let gi = 0;
+  for (let i = 0; i < ch.length; i++) if (t >= ch[i].t - 0.2) gi = Math.floor(i / 2);
+  const gStart = ch[Math.min(gi * 2, ch.length - 1)].t - 0.2;
+  const from = gi === 0 ? SHAPES[0] : SHAPES[ORDER[(gi - 1) % ORDER.length]];
+  const to = SHAPES[ORDER[gi % ORDER.length]];
+  const col = COLS[ORDER[gi % ORDER.length]];
+  const u = easeIO((t - gStart) / 1.8);
+  for (let i = 0; i < N; i++) {
+    const x = from[i][0] + (to[i][0] - from[i][0]) * u + Math.sin(t * 1.4 + PH[i]) * 1.8;
+    const y = from[i][1] + (to[i][1] - from[i][1]) * u + Math.cos(t * 1.2 + PH[i]) * 1.8;
+    const tw = 0.55 + 0.45 * Math.sin(t * 3 + PH[i] * 3);
+    // dimmer than the stand-alone shots: the post's text sits on top
+    g.fillStyle = `rgba(${col},${Math.min(1, 0.5 * tw * fade)})`;
+    g.fillRect(x, y, 2.6, 2.6);
+  }
+  glow(CX, CY, 260, 0.22 * fade);
+}
+
+function blurIn(el, u, out = 0) {
+  const k = ease(u) * (1 - ease(out));
+  el.style.opacity = k;
+  el.style.filter = `blur(${(1 - k) * 14}px)`;
+  el.style.transform = `translateY(${(1 - ease(u)) * 16}px)`;
+}
+
+function seek(t) {
+  g.fillStyle = "#050403"; g.fillRect(0, 0, 1920, 1080);
+  glow(960 + Math.sin(t * 0.13) * 120, 470, 900, 0.16 + 0.05 * Math.sin(t * 0.4));
+  for (const d of DUST) {
+    const y = ((d.y - t * d.v) % 1080 + 1080) % 1080, x = d.x + Math.sin(t * 0.3 + d.ph) * 14;
+    g.fillStyle = `rgba(255,226,180,${0.12 + 0.18 * (0.5 + 0.5 * Math.sin(t * 1.4 + d.ph))})`;
+    g.beginPath(); g.arc(x, y, d.r, 0, 6.283); g.fill();
+  }
+  const I = TL.intro, B = TL.body, O = TL.outro;
+  // intro
+  const iu = (t - I.t) / 1.2, iout = (t - (I.t + I.dur - 0.6)) / 0.6;
+  $("intro").style.display = t < I.t + I.dur ? "block" : "none";
+  blurIn($("series"), iu, iout); blurIn($("no"), iu - 0.4, iout);
+  if (t < I.t + I.dur) { glow(960, 250, 260, 0.45 * ease(iu) * (1 - ease(iout))); g.fillStyle = `rgba(255,240,210,${ease(iu) * (1 - ease(iout))})`; g.beginPath(); g.arc(960, 250, 8, 0, 6.283); g.fill(); }
+  // body: two text slots so one line can blur out while the next blurs in
+  const inBody = t >= B.t0 && t < B.t1;
+  $("body").style.display = inBody ? "block" : "none";
+  if (inBody) {
+    const fade = Math.min(clamp((t - B.t0) / 0.8), clamp((B.t1 - t) / 0.8));
+    bodyShape(t, fade);
+    let k = -1;
+    for (let i = 0; i < B.chunks.length; i++) if (t >= B.chunks[i].t - 0.15) k = i;
+    for (const [slot, idx] of [["lineA", k % 2 === 0 ? k : k - 1], ["lineB", k % 2 === 1 ? k : k - 1]]) {
+      const el = $(slot), c = B.chunks[idx];
+      if (!c || idx < 0) { el.style.opacity = 0; continue; }
+      el.textContent = c.text.replace(/[。，！？…]+$/, "");
+      const next = B.chunks[idx + 1];
+      blurIn(el, (t - c.t + 0.15) / 0.7, next ? (t - next.t + 0.15) / 0.45 : (t - B.t1 + 0.8) / 0.6);
+    }
+    blurIn($("mood"), (t - B.t0) / 1.4, (t - B.t1 + 0.8) / 0.6);
+  }
+  // outro
+  $("outro").style.display = t >= O.t - 0.2 ? "block" : "none";
+  const ou = (t - O.t) / 1.1, oend = (t - (TL.total - 1.8)) / 1.6;
+  blurIn($("o1"), ou, oend); blurIn($("o2"), ou - 0.6, oend); blurIn($("o3"), ou - 1.4, oend);
+  if (t >= O.t - 0.2) glow(960, 470, 520, 0.25 * ease(ou) * (1 - ease(oend)));
+  return new Promise((r) => requestAnimationFrame(() => r(true)));
+}
+window.seek = seek;
+seek(0);
+</script>
+</body>
+</html>
