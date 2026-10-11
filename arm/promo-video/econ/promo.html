@@ -1,0 +1,444 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0 }
+html, body { width: 1080px; height: 1920px; overflow: hidden; background: #0d1424; font-family: "Microsoft YaHei", "Segoe UI", sans-serif; color: #fff }
+.bg { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 0%, #1d2d52 0%, #0f1830 55%, #080d1a 100%) }
+.grid { position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,.035) 2px, transparent 2px), linear-gradient(90deg, rgba(255,255,255,.035) 2px, transparent 2px); background-size: 90px 90px }
+.scene { position: absolute; inset: 0; display: none }
+.center { position: absolute; left: 0; right: 0; text-align: center }
+.y { color: #ffd166 } .g { color: #4ade80 } .r { color: #ff6b6b } .b { color: #7cc4ff }
+.title { position: absolute; left: 0; right: 0; top: 170px; text-align: center; font-size: 64px; font-weight: 900; letter-spacing: 2px }
+.card { position: absolute; border-radius: 34px; background: rgba(255,255,255,.07); border: 2px solid rgba(255,255,255,.12); box-shadow: 0 30px 70px rgba(0,0,0,.35) }
+
+/* people / chain */
+.node { position: absolute; width: 230px; margin-left: -115px; text-align: center }
+.node .face { width: 150px; height: 150px; margin: 0 auto; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 84px;
+  background: rgba(255,255,255,.09); border: 4px solid rgba(255,255,255,.18); transition: none }
+.node .nm { margin-top: 12px; font-size: 34px; font-weight: 800 }
+.node .plus { position: absolute; left: 50%; top: -18px; transform: translateX(-50%); font: 900 36px "Segoe UI"; color: #4ade80; white-space: nowrap; opacity: 0 }
+.node .stamp { position: absolute; left: 50%; top: 40px; font-size: 40px; font-weight: 900; color: #ff6b6b; border: 6px solid #ff6b6b; border-radius: 16px; padding: 0 16px; white-space: nowrap; opacity: 0; background: rgba(13,20,36,.85) }
+.note { position: absolute; width: 150px; height: 80px; margin: -40px 0 0 -75px; border-radius: 12px; background: linear-gradient(135deg, #ff6b6b, #c81e3a); border: 4px solid #ffd7d7;
+  display: flex; align-items: center; justify-content: center; font: 900 40px "Segoe UI"; color: #fff; box-shadow: 0 14px 34px rgba(200,30,58,.5); z-index: 5 }
+.counter { position: absolute; left: 0; right: 0; top: 290px; text-align: center }
+.counter small { display: block; font-size: 34px; color: rgba(255,255,255,.7); letter-spacing: 4px }
+.counter b { font: 900 120px "Segoe UI"; color: #4ade80 }
+
+/* s4 buckets */
+.col { position: absolute; top: 420px; width: 420px; height: 1080px; text-align: center }
+.col .who { font-size: 110px }
+.col .lb { font-size: 40px; font-weight: 800; margin-top: 8px }
+.col .tank { position: relative; margin: 34px auto 0; width: 240px; height: 620px; border-radius: 30px; border: 5px solid rgba(255,255,255,.3); overflow: hidden; background: rgba(255,255,255,.04) }
+.col .spent { position: absolute; left: 0; right: 0; top: 0; background: linear-gradient(180deg, #ffb347, #ff7a1a) }
+.col .saved { position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(180deg, #5b8def, #2f5fc9) }
+.col .pct { margin-top: 22px; font-size: 34px; line-height: 1.5 }
+
+/* s6 loop */
+.box { position: absolute; width: 380px; height: 170px; margin: -85px 0 0 -190px; border-radius: 30px; display: flex; align-items: center; justify-content: center; text-align: center;
+  font-size: 44px; font-weight: 900; background: rgba(255,255,255,.07); border: 4px solid rgba(255,255,255,.15) }
+.arrow { position: absolute; font-size: 80px; color: rgba(255,107,107,.75); margin: -50px 0 0 -40px; font-weight: 900 }
+
+/* s7 vault */
+.vault { position: absolute; left: 290px; top: 760px; width: 500px; height: 620px; border-radius: 40px; background: linear-gradient(180deg, #3a4a6e, #222c45); border: 6px solid #6f84b8; overflow: hidden }
+.vault .lbl { position: absolute; left: 0; right: 0; top: 24px; text-align: center; font-size: 46px; font-weight: 900 }
+.bill { position: absolute; width: 120px; height: 56px; margin-left: -60px; border-radius: 8px; background: linear-gradient(135deg, #ff6b6b, #c81e3a); border: 3px solid #ffd7d7; font: 900 26px "Segoe UI";
+  display: flex; align-items: center; justify-content: center }
+
+/* s8 data */
+.bar { position: absolute; bottom: 0; width: 220px; border-radius: 24px 24px 0 0 }
+.bars { position: absolute; left: 140px; right: 140px; top: 760px; height: 600px; border-bottom: 4px solid rgba(255,255,255,.4) }
+.bars .v { position: absolute; width: 300px; text-align: center; font: 900 72px "Segoe UI" }
+.bars .k { position: absolute; width: 300px; text-align: center; font-size: 34px; font-weight: 800; top: 620px; line-height: 1.35 }
+
+/* s9 pool vs pipe */
+.pool { position: absolute; left: 90px; top: 520px; width: 420px; height: 520px; border-radius: 0 0 60px 60px; border: 6px solid rgba(255,255,255,.4); border-top: none; overflow: hidden }
+.pool .w { position: absolute; left: 0; right: 0; bottom: 0; height: 75%; background: linear-gradient(180deg, #3a7bd5, #1f4e9c) }
+.pipe { position: absolute; left: 600px; top: 520px; width: 390px; height: 520px }
+.seg { position: absolute; left: 150px; width: 90px; border-radius: 45px; background: rgba(255,255,255,.12); overflow: hidden }
+.dash { position: absolute; left: 0; right: 0; height: 2000px; background: repeating-linear-gradient(180deg, #7cc4ff 0 40px, transparent 40px 90px) }
+
+#sub { position: absolute; left: 60px; right: 60px; bottom: 120px; text-align: center }
+#sub span { display: inline-block; background: rgba(0,0,0,.62); border: 1px solid rgba(255,255,255,.1); border-radius: 20px; padding: 12px 32px; font-size: 48px; font-weight: 800; color: #fff; text-shadow: 0 2px 6px #000 }
+#top { position: absolute; left: 0; right: 0; top: 64px; text-align: center; font-size: 30px; font-weight: 700; letter-spacing: 6px; color: #7cc4ff; display: none }
+#progress { position: absolute; left: 0; bottom: 0; height: 8px; background: linear-gradient(90deg, #7cc4ff, #4ade80) }
+#src { position: absolute; left: 0; right: 0; bottom: 40px; text-align: center; font-size: 24px; color: rgba(255,255,255,.5) }
+</style>
+</head>
+<body>
+<div class="bg"></div><div class="grid"></div>
+<div id="top">钱为什么转不动了</div>
+
+<!-- s0 hook -->
+<section class="scene" id="s0">
+  <div class="center" style="top:430px">
+    <div class="ap" data-fx="pop" data-d=".1" style="font-size:180px">🦠</div>
+    <div class="ap" data-fx="rise" data-d=".3" style="margin-top:30px;font-size:120px;font-weight:900;letter-spacing:6px">钱<span class="y">没少</span></div>
+    <div class="ap" data-fx="rise" data-at="经济却变差了" style="margin-top:10px;font-size:96px;font-weight:900">经济却<span class="r">变差了</span></div>
+    <div class="ap" data-fx="pop" data-at="为什么" style="margin-top:80px;display:inline-block;padding:26px 46px;border-radius:30px;background:rgba(255,209,102,.12);border:3px solid rgba(255,209,102,.5);font-size:52px;font-weight:800;line-height:1.5">
+      底层没钱了<br>为什么<span class="y">全社会</span>的钱都转不动？</div>
+  </div>
+</section>
+
+<!-- s1 spending = income -->
+<section class="scene" id="s1">
+  <div class="title">一句话记住</div>
+  <div class="node" style="left:270px;top:620px"><div class="face">🙋</div><div class="nm">你</div></div>
+  <div class="node" style="left:810px;top:620px"><div class="face">👩‍🍳</div><div class="nm">别人</div></div>
+  <div class="note" id="n1">¥1</div>
+  <div class="center ap" data-fx="rise" data-at="花出去" style="top:900px;font-size:44px;color:rgba(255,255,255,.75)">你花出去 ➜ 到了别人手里</div>
+  <div class="card ap" data-fx="pop" data-at="都是别人的收入" style="left:90px;right:90px;top:1080px;padding:60px 30px;text-align:center">
+    <div style="font-size:80px;font-weight:900;line-height:1.3">你的<span class="r">支出</span><br>= 别人的<span class="g">收入</span></div>
+  </div>
+</section>
+
+<!-- s2 the chain -->
+<section class="scene" id="s2">
+  <div class="counter"><small>大家的收入加起来</small><b id="c2">¥0</b></div>
+  <div class="chain" id="ch2"></div>
+</section>
+
+<!-- s3 -->
+<section class="scene" id="s3">
+  <div class="center" style="top:300px">
+    <div class="ap" data-fx="pop" data-d=".1" style="font-size:52px;font-weight:800">一张 <span class="r">¥100</span> × 转了 <span class="y">5</span> 手</div>
+    <div class="ap" data-fx="pop" data-at="五百块" style="margin-top:20px;font:900 230px 'Segoe UI'" ><span class="g">¥500</span></div>
+    <div class="ap" data-fx="rise" data-at="五百块" style="font-size:44px;color:rgba(255,255,255,.75)">的收入</div>
+  </div>
+  <div class="card ap" data-fx="pop" data-at="经济有多大" style="left:70px;right:70px;top:1000px;padding:50px 20px;text-align:center">
+    <div style="font-size:46px;color:rgba(255,255,255,.7)">经济有多大</div>
+    <div style="margin-top:20px;font-size:68px;font-weight:900;line-height:1.35">= 钱的数量 <span class="y">×</span> <span class="y">转手次数</span></div>
+  </div>
+</section>
+
+<!-- s4 who spends -->
+<section class="scene" id="s4">
+  <div class="title">谁转得最快？</div>
+  <div class="col ap" data-fx="left" data-at="底层的人" style="left:80px">
+    <div class="who">👷</div><div class="lb">月薪 3000</div>
+    <div class="tank"><div class="spent" id="sp1"></div><div class="saved" id="sv1"></div></div>
+    <div class="pct"><span class="y">≈95% 花掉</span><br>房租 · 吃饭 · 买菜</div>
+  </div>
+  <div class="col ap" data-fx="right" data-at="有钱人" style="right:80px">
+    <div class="who">🧑‍💼</div><div class="lb">多赚 10000</div>
+    <div class="tank"><div class="spent" id="sp2"></div><div class="saved" id="sv2"></div></div>
+    <div class="pct"><span class="b">大部分存起来</span><br>🏦 银行 · 理财</div>
+  </div>
+</section>
+
+<!-- s5 pandemic cuts the fastest link -->
+<section class="scene" id="s5">
+  <div class="center" style="top:250px;font-size:96px;letter-spacing:40px">
+    <span class="ap" data-fx="pop" data-at="餐馆" style="display:inline-block;position:relative">🍽️<i class="x">✕</i></span><span class="ap" data-fx="pop" data-at="商场" style="display:inline-block;position:relative">🏬<i class="x">✕</i></span><span class="ap" data-fx="pop" data-at="旅游" style="display:inline-block;position:relative">✈️<i class="x">✕</i></span>
+  </div>
+  <div class="chain" id="ch5"></div>
+</section>
+
+<!-- s6 vicious circle -->
+<section class="scene" id="s6">
+  <div class="title">一环断，环环断</div>
+  <div class="box" id="lb0" style="left:540px;top:560px">💸 不敢花</div>
+  <div class="box" id="lb1" style="left:800px;top:900px">🍜 店里没客人</div>
+  <div class="box" id="lb2" style="left:540px;top:1240px">✂️ 裁员</div>
+  <div class="box" id="lb3" style="left:280px;top:900px">📉 收入没了</div>
+  <div class="arrow" style="left:780px;top:690px;transform:rotate(45deg)">➜</div>
+  <div class="arrow" style="left:780px;top:1110px;transform:rotate(135deg)">➜</div>
+  <div class="arrow" style="left:300px;top:1110px;transform:rotate(-135deg)">➜</div>
+  <div class="arrow" style="left:300px;top:690px;transform:rotate(-45deg)">➜</div>
+  <div class="center ap" data-fx="pop" data-at="一环断了" style="top:1420px"><span style="display:inline-block;padding:18px 40px;border-radius:24px;background:rgba(255,107,107,.15);border:3px solid #ff6b6b;font-size:50px;font-weight:900">收入 <b id="c6" class="r">¥500</b> ➜ 一起消失</span></div>
+</section>
+
+<!-- s7 money parked -->
+<section class="scene" id="s7">
+  <div class="center" style="top:300px">
+    <div class="ap" data-fx="rise" data-d=".1" style="font-size:80px;font-weight:900">钱去哪了？</div>
+    <div class="ap" data-fx="pop" data-at="钱没消失" style="margin-top:30px;font-size:60px;font-weight:800">钱<span class="g">没消失</span>，<span class="b">停住了</span></div>
+  </div>
+  <div class="vault ap" data-fx="pop" data-at="躺在存款里"><div class="lbl">🏦 存款</div><div id="bills"></div></div>
+  <div class="center ap" data-fx="rise" data-at="大家都怕" style="top:1440px;font-size:44px;color:rgba(255,255,255,.8)">怕失业 · 怕生病 · 不敢投资</div>
+</section>
+
+<!-- s8 data -->
+<section class="scene" id="s8">
+  <div class="title">看数据 · 2022 年</div>
+  <div class="card ap" data-fx="pop" data-at="住户存款" style="left:90px;right:90px;top:300px;padding:36px 20px;text-align:center">
+    <div style="font-size:40px;color:rgba(255,255,255,.75)">全国住户存款 一年增加</div>
+    <div style="margin-top:6px;font:900 130px 'Segoe UI'" class="b"><span id="dep">0.00</span><span style="font-size:60px"> 万亿元</span></div>
+    <div style="font-size:34px;color:#ffd166">比上一年多存 80%，创纪录</div>
+  </div>
+  <div class="bars">
+    <div class="bar" id="bm" style="left:60px;background:linear-gradient(180deg,#7cc4ff,#2f5fc9)"></div>
+    <div class="bar" id="bg" style="right:60px;background:linear-gradient(180deg,#ffb347,#ff7a1a)"></div>
+    <div class="v b" id="vm" style="left:20px">+11.8%</div>
+    <div class="v y" id="vg" style="right:20px">+3.0%</div>
+    <div class="k" style="left:20px">钱的总量<br><small style="font-size:28px;opacity:.7">广义货币 M2</small></div>
+    <div class="k" style="right:20px">经济增长<br><small style="font-size:28px;opacity:.7">GDP 实际增速</small></div>
+  </div>
+  <div class="center ap" data-fx="pop" data-at="钱多了" style="top:1540px;font-size:54px;font-weight:900">钱<span class="b">多了</span>，转得却<span class="r">慢了</span></div>
+  <div id="src" class="ap" data-fx="rise" data-at="住户存款">来源：中国人民银行 2022 年金融统计 · 国家统计局 2022 年统计公报</div>
+</section>
+
+<!-- s9 pool vs flow -->
+<section class="scene" id="s9">
+  <div class="title">反直觉在这里</div>
+  <div class="ap" data-fx="left" data-at="池子里" style="position:absolute;inset:0">
+    <div class="pool"><div class="w"></div></div>
+    <div style="position:absolute;left:90px;width:420px;top:1070px;text-align:center;font-size:40px;font-weight:800;line-height:1.4">池子里有多少水<br><span style="font-size:32px;opacity:.7">= 钱有多少</span></div>
+  </div>
+  <div class="ap" data-fx="right" data-at="水流得多快" style="position:absolute;inset:0">
+    <div class="pipe">
+      <div class="seg" id="sg0" style="top:0;height:150px"><div class="dash"></div></div>
+      <div class="seg" id="sg1" style="top:185px;height:150px;border:5px solid #4ade80"><div class="dash" style="background:repeating-linear-gradient(180deg,#4ade80 0 40px,transparent 40px 90px)"></div></div>
+      <div class="seg" id="sg2" style="top:370px;height:150px"><div class="dash"></div></div>
+      <div class="ap" data-fx="pop" data-at="底层的人" style="position:absolute;left:250px;top:215px;font-size:34px;font-weight:900;color:#4ade80;white-space:nowrap">← 底层<br>最快</div>
+    </div>
+    <div style="position:absolute;left:600px;width:390px;top:1070px;text-align:center;font-size:40px;font-weight:800;line-height:1.4">水流得多快<br><span style="font-size:32px;opacity:.7">= 转手多少次</span></div>
+  </div>
+  <div class="center ap" data-fx="pop" data-at="经济不是" style="top:1300px"><span style="display:inline-block;padding:20px 40px;border-radius:24px;background:rgba(124,196,255,.12);border:3px solid #7cc4ff;font-size:50px;font-weight:900">经济看的是 <span class="y">流量</span>，不是 <span class="b">存量</span></span></div>
+</section>
+
+<!-- s10 stimulus -->
+<section class="scene" id="s10">
+  <div class="counter"><small>大家的收入加起来</small><b id="c10">¥0</b></div>
+  <div class="chain" id="ch10"></div>
+  <div id="coupons"></div>
+</section>
+
+<!-- s11 -->
+<section class="scene" id="s11">
+  <div class="center" style="top:600px">
+    <div class="ap" data-fx="pop" data-d=".1" style="font-size:150px">💸🔁</div>
+    <div class="ap" data-fx="rise" data-at="钱要流动" style="margin-top:40px;font-size:120px;font-weight:900;letter-spacing:8px">钱要<span class="y">流动</span></div>
+    <div class="ap" data-fx="rise" data-at="才是收入" style="margin-top:10px;font-size:120px;font-weight:900;letter-spacing:8px">才是<span class="g">收入</span></div>
+    <div class="ap" data-fx="rise" data-plus="0.8" data-at="才是收入" style="margin-top:80px;font-size:40px;color:rgba(255,255,255,.7);line-height:1.6">你的支出 = 别人的收入<br>经济 = 钱 × 转手次数</div>
+  </div>
+</section>
+
+<div id="sub"><span></span></div>
+<div id="progress"></div>
+
+<style>.x{position:absolute;right:-10px;bottom:-6px;font-style:normal;font-size:60px;color:#ff6b6b;font-weight:900;text-shadow:0 0 10px #000}</style>
+<script src="out/timeline.js"></script>
+<script>
+const TL = window.TL;
+const $ = (id) => document.getElementById(id);
+const clamp = (x) => Math.max(0, Math.min(1, x));
+const ease = (x) => 1 - Math.pow(1 - clamp(x), 3);
+const easeIO = (x) => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2 };
+const back = (x) => { x = clamp(x); const c = 1.7; return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2) };
+const at = (sc, w) => { const i = sc.text.indexOf(w); if (i < 0) console.warn("cue not in voice", sc.id, w); return i >= 0 ? sc.vo + sc.ct[i] : 0 };
+const scene = (id) => TL.scenes.find((s) => s.id === id);
+const lerp = (a, b, u) => a + (b - a) * u;
+
+// ---- the five people, shared by s2 / s5 / s10
+const PEOPLE = [["🛵", "外卖小哥"], ["🍜", "面馆老板"], ["💇", "理发师"], ["🥬", "菜贩"], ["🚕", "司机"]];
+const POS = [[270, 600], [810, 800], [270, 1000], [810, 1200], [270, 1400]];
+function chain(id) {
+  const box = $(id);
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("width", 1080); svg.setAttribute("height", 1920);
+  svg.style.position = "absolute"; svg.style.inset = "0";
+  for (let i = 0; i < 4; i++) {
+    const l = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    l.setAttribute("x1", POS[i][0]); l.setAttribute("y1", POS[i][1] + 75); l.setAttribute("x2", POS[i + 1][0]); l.setAttribute("y2", POS[i + 1][1] + 75);
+    l.setAttribute("stroke", "rgba(255,255,255,.18)"); l.setAttribute("stroke-width", "8"); l.setAttribute("stroke-dasharray", "18 16");
+    svg.appendChild(l);
+  }
+  box.appendChild(svg);
+  const nodes = PEOPLE.map(([e, n], i) => {
+    const el = document.createElement("div");
+    el.className = "node";
+    el.style.left = POS[i][0] + "px"; el.style.top = POS[i][1] + "px";
+    el.innerHTML = `<div class="face">${e}</div><div class="nm">${n}</div><div class="plus">+¥100 收入</div><div class="stamp"></div>`;
+    box.appendChild(el);
+    return { el, face: el.querySelector(".face"), plus: el.querySelector(".plus"), stamp: el.querySelector(".stamp") };
+  });
+  const note = document.createElement("div");
+  note.className = "note"; note.textContent = "¥100";
+  box.appendChild(note);
+  return { nodes, note };
+}
+const C2 = chain("ch2"), C5 = chain("ch5"), C10 = chain("ch10");
+const notePos = (n, i, j, u) => {
+  const a = POS[i], b = POS[j];
+  n.style.left = lerp(a[0], b[0], u) + "px";
+  n.style.top = lerp(a[1] + 75, b[1] + 75, u) - Math.sin(Math.PI * u) * 60 + "px";
+};
+
+// ---- s7 bills
+const BILLS = Array.from({ length: 28 }, (_, i) => {
+  const el = document.createElement("div");
+  el.className = "bill"; el.textContent = "¥";
+  $("bills").appendChild(el);
+  return { el, x: 90 + (i % 4) * 107, row: Math.floor(i / 4), k: i };
+});
+// ---- s10 coupons
+const COUPONS = PEOPLE.map((_, i) => {
+  const el = document.createElement("div");
+  el.style.cssText = "position:absolute;font-size:70px;margin:-40px 0 0 -40px";
+  el.textContent = i % 2 ? "🎫" : "💴";
+  $("coupons").appendChild(el);
+  return el;
+});
+
+// ---- generic appear: .ap with data-fx, timed by data-at (cue word) [+ data-plus] or data-d (seconds)
+const APS = [];
+for (const sc of TL.scenes) {
+  $(sc.id).querySelectorAll(".ap").forEach((n) => {
+    const t = n.dataset.at ? at(sc, n.dataset.at) - 0.12 + Number(n.dataset.plus || 0) : Number(n.dataset.d || 0);
+    APS.push({ n, sid: sc.id, t, fx: n.dataset.fx || "rise" });
+  });
+}
+function appear(lt, sid) {
+  for (const a of APS) {
+    if (a.sid !== sid) continue;
+    const u = (lt - a.t) / 0.55;
+    a.n.style.opacity = clamp(u * 1.6);
+    const k = a.fx === "pop" ? back(u) : ease(u);
+    a.n.style.transform = a.fx === "pop" ? `scale(${0.4 + 0.6 * k})` : a.fx === "left" ? `translateX(${(1 - k) * -160}px)` : a.fx === "right" ? `translateX(${(1 - k) * 160}px)` : `translateY(${(1 - k) * 70}px)`;
+  }
+}
+const resetChain = (C) => C.nodes.forEach((n) => { n.plus.style.opacity = 0; n.stamp.style.opacity = 0; n.face.style.filter = ""; n.face.style.borderColor = "rgba(255,255,255,.18)"; n.face.style.background = "rgba(255,255,255,.09)"; });
+
+const hooks = {
+  s1(lt, sc) {
+    const t0 = at(sc, "花出去"), u = easeIO((lt - t0) / 1.2);
+    $("n1").style.left = lerp(270, 810, u) + "px";
+    $("n1").style.top = 690 - Math.sin(Math.PI * u) * 120 + "px";
+    $("n1").style.opacity = clamp((lt - t0 + 0.3) / 0.3);
+  },
+  s2(lt, sc) {
+    const C = C2;
+    resetChain(C);
+    const cues = ["外卖小哥", "吃面", "理发", "买菜", "打车"].map((w) => at(sc, w));
+    let got = 0;
+    // the note: shows up at the courier, then hops one person per cue
+    let i = 0;
+    for (let k = 1; k < 5; k++) if (lt >= cues[k]) i = k;
+    const u = i === 0 ? 1 : easeIO((lt - cues[i]) / 0.7);
+    if (i === 0) notePos(C.note, 0, 0, 1); else notePos(C.note, i - 1, i, u);
+    C.note.style.opacity = clamp((lt - cues[0] + 0.2) / 0.3);
+    C.nodes.forEach((n, k) => {
+      const arrive = k === 0 ? cues[0] + 0.3 : cues[k] + 0.7;
+      const v = (lt - arrive) / 0.5;
+      if (v > 0) { got++; n.face.style.borderColor = "#4ade80"; n.face.style.background = "rgba(74,222,128,.16)"; }
+      n.plus.style.opacity = v > 0 ? clamp(v * 2) * (1 - clamp((v - 2.2) / 0.6)) : 0;
+      n.plus.style.transform = `translateX(-50%) translateY(${-ease(v) * 30}px)`;
+    });
+    $("c2").textContent = "¥" + got * 100;
+  },
+  s4(lt, sc) {
+    const a = at(sc, "几乎全花掉"), b = at(sc, "大部分存进银行");
+    const u1 = ease((lt - a + 0.4) / 1.2), u2 = ease((lt - b + 0.4) / 1.2);
+    $("sp1").style.height = 95 * u1 + "%"; $("sv1").style.height = 5 * u1 + "%";
+    $("sp2").style.height = 25 * u2 + "%"; $("sv2").style.height = 75 * u2 + "%";
+  },
+  s5(lt, sc) {
+    const C = C5;
+    resetChain(C);
+    notePos(C.note, 0, 0, 1);
+    C.note.style.opacity = 1;
+    const marks = [["外卖员", 0, "没单了"], ["服务员", 1, "关门"], ["小商贩", 3, "没生意"]];
+    for (const [w, k, txt] of marks) {
+      const v = (lt - at(sc, w)) / 0.4;
+      const n = C.nodes[k];
+      n.stamp.textContent = txt;
+      n.stamp.style.opacity = clamp(v);
+      n.stamp.style.transform = `translateX(-50%) rotate(-10deg) scale(${2 - ease(v)})`;
+      if (v > 0) n.face.style.filter = `grayscale(${clamp(v)}) brightness(${1 - 0.4 * clamp(v)})`;
+    }
+    // the note stops at the courier and greys out
+    const stop = clamp((lt - at(sc, "外卖员")) / 0.6);
+    C.note.style.filter = `grayscale(${stop})`;
+    C.note.style.transform = `rotate(${Math.sin(lt * 18) * 3 * (1 - stop)}deg)`;
+  },
+  s6(lt, sc) {
+    const t0 = at(sc, "不敢花"), cut = at(sc, "一环断了");
+    const k = Math.floor(Math.max(0, lt - t0) / 0.75) % 4;
+    for (let i = 0; i < 4; i++) {
+      const on = lt >= t0 && i === k;
+      $("lb" + i).style.borderColor = on ? "#ff6b6b" : "rgba(255,255,255,.15)";
+      $("lb" + i).style.background = on ? "rgba(255,107,107,.18)" : "rgba(255,255,255,.07)";
+      $("lb" + i).style.transform = on ? "scale(1.06)" : "scale(1)";
+    }
+    $("c6").textContent = "¥" + Math.round(500 * (1 - ease((lt - cut) / 2.2)) / 100) * 100;
+  },
+  s7(lt, sc) {
+    const t0 = at(sc, "躺在存款里");
+    for (const b of BILLS) {
+      const u = clamp((lt - t0 - 0.3 - b.k * 0.09) / 0.45);
+      const yEnd = 560 - 70 - b.row * 62;
+      b.el.style.left = b.x + "px";
+      b.el.style.top = lerp(-80, yEnd, ease(u)) + "px";
+      b.el.style.opacity = u > 0 ? 1 : 0;
+    }
+  },
+  s8(lt, sc) {
+    const d = at(sc, "十七点八万亿元"), m = at(sc, "百分之十一点八"), g = at(sc, "百分之三");
+    $("dep").textContent = (17.84 * ease((lt - d + 0.6) / 1.4)).toFixed(2);
+    const um = ease((lt - m + 0.3) / 0.9), ug = ease((lt - g + 0.3) / 0.9);
+    $("bm").style.height = 520 * um + "px"; $("bg").style.height = (520 * 3.0 / 11.8) * ug + "px";
+    $("vm").style.top = 600 - 520 * um - 100 + "px"; $("vm").style.opacity = clamp(um * 3);
+    $("vg").style.top = 600 - (520 * 3.0 / 11.8) * ug - 100 + "px"; $("vg").style.opacity = clamp(ug * 3);
+    $("bm").style.left = "40px"; $("bg").style.right = "40px";
+    $("vm").style.left = "0px"; $("vg").style.right = "0px";
+  },
+  s9(lt) {
+    const speeds = [120, 420, 120];
+    speeds.forEach((s, i) => { $("sg" + i).firstElementChild.style.top = -((lt * s) % 90) - 90 + "px"; });
+  },
+  s10(lt, sc) {
+    const C = C10;
+    resetChain(C);
+    const t0 = at(sc, "发消费券");
+    COUPONS.forEach((el, i) => {
+      const u = ease((lt - t0 - i * 0.18) / 0.7);
+      el.style.left = lerp(540, POS[i][0] + 70, u) + "px";
+      el.style.top = lerp(120, POS[i][1] + 10, u) + "px";
+      el.style.opacity = u > 0 ? 1 - clamp((u - 0.95) * 20) * 0.0 : 0;
+    });
+    // the note circulates again, faster and faster
+    const go = at(sc, "转起来") - 0.4;
+    let got = 0;
+    if (lt > go) {
+      const p = (lt - go) * 2.2;
+      const hop = Math.floor(p), u = easeIO(p - hop);
+      const i = hop % 4;
+      notePos(C.note, i, i + 1, u);
+      got = Math.min(30, hop + 1);
+    } else notePos(C.note, 0, 0, 1);
+    C.note.style.opacity = 1;
+    C.nodes.forEach((n, k) => {
+      const lit = lt > t0 + 0.7 + k * 0.18;
+      if (lit) { n.face.style.borderColor = "#4ade80"; n.face.style.background = "rgba(74,222,128,.16)"; }
+    });
+    $("c10").textContent = "¥" + (got * 100).toLocaleString("en-US");
+  },
+};
+
+function seek(t) {
+  let cur = null;
+  for (const sc of TL.scenes) {
+    const el = $(sc.id), lt = t - sc.start;
+    const on = lt >= 0 && lt < sc.dur;
+    el.style.display = on ? "block" : "none";
+    if (!on) continue;
+    cur = sc;
+    const fin = clamp(lt / 0.3), fout = sc.last ? 1 : clamp((sc.dur - lt) / 0.3);
+    el.style.opacity = Math.min(fin, fout);
+    appear(lt, sc.id);
+    if (hooks[sc.id]) hooks[sc.id](lt, sc);
+  }
+  $("top").style.display = cur && !["s0", "s11"].includes(cur.id) ? "block" : "none";
+  const sub = TL.subs.find((s) => t >= s.t0 && t < s.t1);
+  $("sub").firstElementChild.textContent = sub ? sub.text : "";
+  $("sub").style.display = sub ? "block" : "none";
+  $("progress").style.width = (t / TL.total) * 100 + "%";
+  return new Promise((r) => requestAnimationFrame(() => r(true)));
+}
+window.seek = seek;
+seek(0);
+</script>
+</body>
+</html>
