@@ -1,0 +1,264 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+@font-face { font-family: "SHS"; src: local("Source Han Serif SC Heavy"), url("file:///C:/Windows/Fonts/Source%20Han%20Serif%20SC%20Heavy%20(TrueType).ttf"); }
+@font-face { font-family: "NSerif"; src: local("Noto Serif SC"), url("file:///C:/Windows/Fonts/NotoSerifSC-VF.ttf"); font-weight: 200 900; }
+* { box-sizing: border-box; margin: 0; padding: 0 }
+html, body { width: 1920px; height: 1080px; overflow: hidden; background: #050403; color: #f3e6cc; font-family: "NSerif", "SimSun", serif }
+canvas { position: absolute; inset: 0 }
+.bar { position: absolute; left: 0; right: 0; height: 96px; background: #000; z-index: 20 }
+.scene { position: absolute; inset: 0; display: none; z-index: 5 }
+.gold { background: linear-gradient(180deg, #fff6e2 0%, #f1d9a8 55%, #c9a36a 100%); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 0 18px rgba(255,200,120,.25)) }
+.big { font-family: "SHS", "NSerif", serif; font-weight: 900 }
+.center { position: absolute; left: 0; right: 0; text-align: center }
+.vert { position: absolute; writing-mode: vertical-rl; font-weight: 600; letter-spacing: 10px; line-height: 1.9; color: #eadbbd }
+.seal { position: absolute; width: 44px; padding: 6px 0; background: #a3191b; color: #f6e2c8; font-family: "KaiTi", "STKaiti", serif; font-size: 22px; line-height: 1.15; text-align: center; border-radius: 4px; box-shadow: 0 0 0 2px rgba(163,25,27,.35) }
+.ring { display: inline-flex; align-items: center; justify-content: center; width: 190px; height: 190px; border-radius: 50%; border: 2px solid rgba(241,217,168,.55); margin: 0 54px; font-size: 92px; box-shadow: 0 0 40px rgba(255,190,110,.12) inset }
+.cap { display: block; margin-top: 22px; font-size: 26px; color: rgba(234,219,189,.6); letter-spacing: 6px }
+.frag { position: absolute; font-size: 44px; color: rgba(234,219,189,.85); letter-spacing: 6px; white-space: nowrap }
+#sub { position: absolute; left: 0; right: 0; bottom: 30px; text-align: center; z-index: 30; font-size: 34px; font-weight: 500; color: #f4ecdf; letter-spacing: 2px; text-shadow: 0 2px 6px #000 }
+</style>
+</head>
+<body>
+<canvas id="cv" width="1920" height="1080"></canvas>
+<div class="bar" style="top:0"></div><div class="bar" style="bottom:0"></div>
+
+<section class="scene" id="k0">
+  <div class="center" style="top:360px">
+    <div class="ap big gold" data-fx="blur" data-at="帮忙是情分" style="font-size:120px;letter-spacing:24px">帮忙是情分</div>
+    <div class="ap big gold" data-fx="blur" data-at="不帮是本分" style="margin-top:30px;font-size:120px;letter-spacing:24px">不帮是本分</div>
+  </div>
+</section>
+
+<section class="scene" id="k1">
+  <div class="ap vert" data-fx="blur" data-at="商场门口" style="right:300px;top:250px;font-size:52px">举手之劳</div>
+  <div class="ap seal" data-fx="blur" data-at="商场门口" style="right:236px;top:262px">树<br>洞</div>
+  <div class="ap" data-fx="blur" data-at="帮忙下载" style="position:absolute;right:420px;top:280px;writing-mode:vertical-rl;font-size:30px;letter-spacing:8px;color:rgba(234,219,189,.55)">一部手机 · 一个应用</div>
+</section>
+
+<section class="scene" id="k2">
+  <div class="ap frag" data-fx="blur" data-at="二十多分钟" style="left:250px;top:300px">二十多分钟</div>
+  <div class="ap frag" data-fx="blur" data-at="手机牌子不行" style="right:240px;top:420px">「你这手机牌子不行」</div>
+  <div class="ap frag" data-fx="blur" data-at="你朋友为什么" style="left:330px;top:700px">「你朋友为什么就不能好好等」</div>
+</section>
+
+<section class="scene" id="k3">
+  <div class="ap vert" data-fx="blur" data-at="让别人帮忙" style="right:340px;top:210px;font-size:56px">让别人帮忙</div>
+  <div class="ap vert" data-fx="blur" data-at="不说一句谢谢" style="right:440px;top:210px;font-size:56px">不说一句谢谢</div>
+  <div class="ap vert" data-fx="blur" data-at="还要阴阳别人" style="right:540px;top:210px;font-size:56px">还要阴阳别人</div>
+  <div class="ap seal" data-fx="blur" data-at="树洞里" style="right:264px;top:222px">心<br>事</div>
+</section>
+
+<section class="scene" id="k4">
+  <div class="ap" data-fx="blur" data-at="开口求人" style="position:absolute;left:520px;top:690px;width:400px;text-align:center;font-size:34px;letter-spacing:8px;color:rgba(234,219,189,.75)">开口求人的人</div>
+  <div class="ap" data-fx="blur" data-at="被为难" style="position:absolute;right:520px;top:690px;width:400px;text-align:center;font-size:34px;letter-spacing:8px;color:rgba(234,219,189,.75)">被为难的人</div>
+</section>
+
+<section class="scene" id="k5">
+  <div class="center" style="top:330px">
+    <div class="ap big gold" data-fx="blur" data-at="己所不欲" style="font-size:150px;letter-spacing:40px">己所不欲</div>
+    <div class="ap big gold" data-fx="blur" data-at="勿施于人" style="margin-top:20px;font-size:150px;letter-spacing:40px">勿施于人</div>
+  </div>
+  <div class="ap seal" data-fx="blur" data-at="孔子" style="right:330px;top:340px">论<br>语</div>
+  <div class="ap" data-fx="blur" data-at="孔子" style="position:absolute;right:300px;top:460px;writing-mode:vertical-rl;font-size:26px;letter-spacing:8px;color:rgba(234,219,189,.55)">孔子 · 颜渊篇</div>
+</section>
+
+<section class="scene" id="k6">
+  <div class="center" style="top:350px">
+    <span class="ap ring big gold" data-fx="blur" data-at="敬而无失">敬</span><span class="ap ring big gold" data-fx="blur" data-at="恭">恭</span><span class="ap ring big gold" data-fx="blur" data-at="有礼">礼</span>
+    <div style="margin-top:6px"><span class="ap cap" data-fx="blur" data-at="君子" style="display:inline-block">君子敬而无失 · 与人恭而有礼</span></div>
+  </div>
+  <div class="ap seal" data-fx="blur" data-at="子夏" style="right:300px;top:300px">子<br>夏</div>
+</section>
+
+<section class="scene" id="k7">
+  <div class="ap vert" data-fx="blur" data-at="求人的时候" style="right:330px;top:230px;font-size:54px">求人时 先言谢</div>
+  <div class="ap vert" data-fx="blur" data-at="被拒绝的时候" style="right:440px;top:230px;font-size:54px">被拒时 不生怨</div>
+  <div class="ap seal" data-fx="blur" data-at="求人的时候" style="right:262px;top:242px">分<br>寸</div>
+</section>
+
+<section class="scene" id="k8">
+  <div class="center" style="top:350px">
+    <div class="ap big gold" data-fx="blur" data-at="分寸感" style="font-size:170px;letter-spacing:50px">分寸感</div>
+    <div class="ap" data-fx="blur" data-at="最好的教养" style="margin-top:40px;font-size:52px;letter-spacing:22px;color:#eadbbd">是一个人最好的教养</div>
+  </div>
+</section>
+
+<section class="scene" id="k9">
+  <div class="center" style="top:380px">
+    <div class="ap big gold" data-fx="blur" data-at="心之音" style="font-size:96px;letter-spacing:30px">心之音 · 树洞</div>
+    <div class="ap" data-fx="blur" data-at="每一份心事" style="margin-top:44px;font-size:42px;letter-spacing:16px;color:#eadbbd">每一份心事，都值得被听见</div>
+  </div>
+</section>
+
+<div id="sub"></div>
+
+<script src="out/timeline.js"></script>
+<script>
+const TL = window.TL;
+const $ = (id) => document.getElementById(id);
+const clamp = (x) => Math.max(0, Math.min(1, x));
+const ease = (x) => 1 - Math.pow(1 - clamp(x), 3);
+const easeIO = (x) => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2 };
+const at = (sc, w) => { const i = sc.text.indexOf(w); if (i < 0) console.warn("cue not in voice", sc.id, w); return i >= 0 ? sc.vo + sc.ct[i] : 0 };
+let seed = 11;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const cv = $("cv"), g = cv.getContext("2d");
+
+// ---- dust
+const DUST = Array.from({ length: 140 }, () => ({ x: rnd() * 1920, y: rnd() * 1080, r: 0.6 + rnd() * 1.8, v: 4 + rnd() * 10, ph: rnd() * 6.28 }));
+
+// ---- particle shapes (target points); every particle also has a scattered start
+const N = 900;
+const START = Array.from({ length: N }, () => ({ x: rnd() * 1920, y: rnd() * 1080, ph: rnd() * 6.28 }));
+function phone(cx, cy) {
+  const w = 300, h = 560, r = 46, pts = [];
+  const per = 2 * (w + h - 4 * r) + 2 * Math.PI * r;
+  for (let i = 0; i < 520; i++) {
+    let s = (i / 520) * per; let x, y;
+    const segs = [w - 2 * r, Math.PI * r / 2, h - 2 * r, Math.PI * r / 2, w - 2 * r, Math.PI * r / 2, h - 2 * r, Math.PI * r / 2];
+    let k = 0; while (s > segs[k]) { s -= segs[k]; k++; }
+    const L = -w / 2, T = -h / 2;
+    if (k === 0) [x, y] = [L + r + s, T];
+    else if (k === 1) { const a = -Math.PI / 2 + s / r; [x, y] = [w / 2 - r + Math.cos(a) * r, T + r + Math.sin(a) * r]; }
+    else if (k === 2) [x, y] = [w / 2, T + r + s];
+    else if (k === 3) { const a = s / r; [x, y] = [w / 2 - r + Math.cos(a) * r, h / 2 - r + Math.sin(a) * r]; }
+    else if (k === 4) [x, y] = [w / 2 - r - s, h / 2];
+    else if (k === 5) { const a = Math.PI / 2 + s / r; [x, y] = [L + r + Math.cos(a) * r, h / 2 - r + Math.sin(a) * r]; }
+    else if (k === 6) [x, y] = [L, h / 2 - r - s];
+    else { const a = Math.PI + s / r; [x, y] = [L + r + Math.cos(a) * r, T + r + Math.sin(a) * r]; }
+    pts.push([cx + x, cy + y]);
+  }
+  // app grid on the screen + the download arrow
+  for (let gy = 0; gy < 4; gy++) for (let gx = 0; gx < 3; gx++) for (let k = 0; k < 18; k++) {
+    const a = (k / 18) * 6.28;
+    pts.push([cx - 80 + gx * 80 + Math.cos(a) * 22, cy - 170 + gy * 90 + Math.sin(a) * 22]);
+  }
+  while (pts.length < N) { const t = rnd(); pts.push([cx + (rnd() - 0.5) * 16, cy + 200 + t * 40]); }
+  return pts.slice(0, N);
+}
+function ring(cx, cy, R) { return Array.from({ length: N }, (_, i) => { const a = (i / N) * 6.283 - Math.PI / 2; const j = (rnd() - 0.5) * 6; return [cx + Math.cos(a) * (R + j), cy + Math.sin(a) * (R + j)]; }); }
+function lotus(cx, cy) {
+  const pts = [];
+  for (let layer = 0; layer < 3; layer++) {
+    const petals = 8, R = 230 - layer * 62, rot = layer * 0.2;
+    for (let p = 0; p < petals; p++) for (let k = 0; k < 36; k++) {
+      const t = k / 35, a = rot + (p / petals) * 6.283;
+      const len = R * Math.sin(Math.PI * t * 0.5 + 0.0) ;
+      const wid = Math.sin(Math.PI * t) * 0.32;
+      for (const side of [-1, 1]) {
+        const ang = a + side * wid;
+        pts.push([cx + Math.cos(ang) * R * t, cy + Math.sin(ang) * R * t * 0.62]);
+      }
+    }
+  }
+  while (pts.length < N) { const a = rnd() * 6.28, r = rnd() * 26; pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r * 0.6]); }
+  return pts.slice(0, N);
+}
+const SHAPES = { k1: phone(760, 540), k2: ring(960, 540, 190), k7: lotus(780, 560) };
+
+function drawGlow(t, x, y, r, a) {
+  const gr = g.createRadialGradient(x, y, 0, x, y, r);
+  gr.addColorStop(0, `rgba(255,214,150,${a})`);
+  gr.addColorStop(0.35, `rgba(190,130,60,${a * 0.35})`);
+  gr.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = gr; g.fillRect(0, 0, 1920, 1080);
+}
+function particles(pts, lt, fade, col, jitter = 1) {
+  const u = easeIO((lt - 0.2) / 2.2);
+  for (let i = 0; i < pts.length; i++) {
+    const s = START[i], p = pts[i];
+    const wob = Math.sin(lt * 1.5 + s.ph) * 1.6 * jitter;
+    const x = s.x + (p[0] - s.x) * u + wob, y = s.y + (p[1] - s.y) * u + Math.cos(lt * 1.3 + s.ph) * 1.6 * jitter;
+    const tw = 0.55 + 0.45 * Math.sin(lt * 3 + s.ph * 3);
+    g.fillStyle = `rgba(${col},${Math.min(1, (0.3 + 0.85 * u) * tw * fade)})`;
+    g.fillRect(x, y, 2.7, 2.7);
+  }
+}
+
+function canvasFrame(t, cur, lt) {
+  g.fillStyle = "#050403"; g.fillRect(0, 0, 1920, 1080);
+  const breathe = 0.5 + 0.5 * Math.sin(t * 0.4);
+  drawGlow(t, 960 + Math.sin(t * 0.13) * 120, 470, 900, 0.16 + 0.05 * breathe);
+  for (const d of DUST) {
+    const y = ((d.y - t * d.v) % 1080 + 1080) % 1080, x = d.x + Math.sin(t * 0.3 + d.ph) * 14;
+    g.fillStyle = `rgba(255,226,180,${0.12 + 0.18 * (0.5 + 0.5 * Math.sin(t * 1.4 + d.ph))})`;
+    g.beginPath(); g.arc(x, y, d.r, 0, 6.283); g.fill();
+  }
+  if (!cur) return;
+  const fade = Math.min(clamp(lt / 0.8), cur.last ? 1 : clamp((cur.dur - lt) / 0.6));
+  const id = cur.id;
+  if (id === "k0") {
+    const r = 6 + ease(lt / 2) * 10;
+    drawGlow(t, 960, 250, 260 + 60 * Math.sin(lt * 1.2), 0.5 * fade);
+    g.fillStyle = `rgba(255,240,210,${fade})`; g.beginPath(); g.arc(960, 250, r, 0, 6.283); g.fill();
+  }
+  if (id === "k1") { drawGlow(t, 760, 540, 420, 0.22 * fade * ease((lt - 1) / 2)); particles(SHAPES.k1, lt, fade, "235,215,180"); }
+  if (id === "k2") {
+    // a clock ring that fills while he waits
+    particles(SHAPES.k2, lt, fade * 0.5, "235,215,180", 0.6);
+    const p = clamp((lt - 0.6) / (cur.dur - 1.6));
+    g.strokeStyle = `rgba(241,217,168,${0.85 * fade})`; g.lineWidth = 6; g.lineCap = "round";
+    g.beginPath(); g.arc(960, 540, 190, -Math.PI / 2, -Math.PI / 2 + p * 6.283); g.stroke();
+    g.fillStyle = `rgba(241,217,168,${0.9 * fade})`; g.font = "600 64px NSerif"; g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillText(`${Math.round(p * 20)}′`, 960, 540);
+  }
+  if (id === "k3") drawGlow(t, 700, 560, 360 + 40 * Math.sin(lt * 2.3), 0.35 * fade);
+  if (id === "k4") {
+    const u = easeIO(lt / cur.dur);
+    const x1 = 720 + 80 * u, x2 = 1200 - 80 * u;
+    for (const [x, a] of [[x1, 0.6], [x2, 0.6]]) {
+      drawGlow(t, x, 520, 220, a * fade);
+      g.fillStyle = `rgba(255,240,210,${fade})`; g.beginPath(); g.arc(x, 520, 9, 0, 6.283); g.fill();
+    }
+  }
+  if (id === "k5" || id === "k8") drawGlow(t, 960, 520, 700, 0.18 * fade);
+  if (id === "k7") {
+    particles(SHAPES.k7, lt, fade, "246,200,205", 0.8);
+    drawGlow(t, 780, 560, 120, 0.55 * fade);
+  }
+  if (id === "k9") drawGlow(t, 960, 470, 520, 0.25 * fade);
+}
+
+// ---- text appear: blur-in (like the reference), timed by data-at (cue word) [+ data-plus] or data-d
+const APS = [];
+for (const sc of TL.scenes) {
+  $(sc.id).querySelectorAll(".ap").forEach((n) => {
+    const t = n.dataset.at ? at(sc, n.dataset.at) - 0.1 + Number(n.dataset.plus || 0) : Number(n.dataset.d || 0);
+    APS.push({ n, sid: sc.id, t });
+  });
+}
+function appear(lt, sid) {
+  for (const a of APS) {
+    if (a.sid !== sid) continue;
+    const u = clamp((lt - a.t) / 1.1);
+    a.n.style.opacity = ease(u);
+    a.n.style.filter = (a.n.classList.contains("gold") ? "drop-shadow(0 0 18px rgba(255,200,120,.25)) " : "") + `blur(${(1 - ease(u)) * 14}px)`;
+    a.n.style.transform = `translateY(${(1 - ease(u)) * 18}px)`;
+  }
+}
+
+function seek(t) {
+  let cur = null, clt = 0;
+  for (const sc of TL.scenes) {
+    const el = $(sc.id), lt = t - sc.start;
+    const on = lt >= 0 && lt < sc.dur;
+    el.style.display = on ? "block" : "none";
+    if (!on) continue;
+    cur = sc; clt = lt;
+    const fin = clamp(lt / 0.8), fout = sc.last ? clamp((sc.dur - lt) / 1.6) : clamp((sc.dur - lt) / 0.6);
+    el.style.opacity = Math.min(fin, fout);
+    appear(lt, sc.id);
+  }
+  canvasFrame(t, cur, clt);
+  const sub = TL.subs.find((s) => t >= s.t0 && t < s.t1);
+  $("sub").textContent = sub ? sub.text : "";
+  return new Promise((r) => requestAnimationFrame(() => r(true)));
+}
+window.seek = seek;
+seek(0);
+</script>
+</body>
+</html>
