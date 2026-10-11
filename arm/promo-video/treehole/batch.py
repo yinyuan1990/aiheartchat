@@ -3,7 +3,7 @@
 拉帖：心之音公开接口 GET https://app.yyheart.com/api/app/treehole/<id>（分享页用的，匿名、不用登录），
      从上次处理到的编号往后逐个取，连续取不到 MISS_STOP 个就停（out/batch-state.json 记住进度）。
 过滤：BLOCK 里的词一律跳过（性 / 死 / 自残 / 暴力等），太短跳过，太长截到 MAX_CHARS；REPLACE 换掉地名、人名缩写等。
-配音：念帖子原文（Yunxi），开头 / 结尾两句固定（只合成一次）。画面：batch.html（kw.mp4 风格模板）。
+默认不配音：帖子一句句显示在画面上，每句按字数停 2.2～5.5 秒；加 --voice 才念原文（Yunxi）。画面：batch.html（kw.mp4 风格模板）。
 音乐：assets/kw-music.wav（从 E:\\soft\\aichat\\kw.mp4 去掉居中人声提出来的背景音乐，循环垫底）。
 
   ..\\..\\..\\publisher\\.venv\\Scripts\\python.exe batch.py                 # 处理新帖
@@ -36,8 +36,6 @@ MUSIC = HERE / "assets" / "kw-music.wav"
 W, H, FPS = 1920, 1080, 30
 VOICE, RATE = "zh-CN-YunxiNeural", "-6%"
 SERIES = "情感密码"
-INTRO = "情感密码。今天的树洞，来自一个陌生人。"
-OUTRO = "每一份心事，都值得被听见。"
 MIN_CHARS, MAX_CHARS, CHUNK = 30, 460, 26
 MISS_STOP = 6
 # 含这些词的帖子不做（平台审核过不了，或者不适合配音念出来）
@@ -126,23 +124,34 @@ def voice(key: str, text: str) -> tuple[float, list[float], Path]:
     raise RuntimeError(f"tts failed: {key}")
 
 
-def timeline(post: dict, text: str) -> dict:
+def line_secs(s: str) -> float:
+    """how long a line stays up when nothing is read aloud"""
+    return min(5.5, max(2.2, 1.4 + 0.17 * len(s)))
+
+
+def timeline(post: dict, text: str, read_aloud: bool) -> dict:
     pid = int(post["id"])
-    di, ci, vi = voice("intro", INTRO)
-    db, cb, vb = voice(f"th{pid}", text)
-    do, co, vo = voice("outro", OUTRO)
-    t_intro, gap = 0.6, 0.8
-    body0 = t_intro + di + gap
-    body = [{"t": round(body0 + cb[a], 3), "text": text[a:b]} for a, b in chunks(text)]
-    outro0 = body0 + db + 1.4
-    total = outro0 + do + 3.2
     date = str(post.get("createdAt") or post.get("created_at") or "")[:10]
+    parts = chunks(text)
+    body0 = 0.9
+    if read_aloud:
+        db, cb, vb = voice(f"th{pid}", text)
+        body = [{"t": round(body0 + cb[a], 3), "text": text[a:b]} for a, b in parts]
+        outro0 = body0 + db + 1.4
+        voices = [[str(vb), body0]]
+    else:
+        body, t = [], body0
+        for a, b in parts:
+            body.append({"t": round(t, 3), "text": text[a:b]})
+            t += line_secs(text[a:b])
+        outro0 = t + 0.4
+        voices = []
+    total = outro0 + 5.2
     return {
         "id": pid, "date": date, "mood": mood(text), "series": SERIES, "total": round(total, 3),
-        "intro": {"t": t_intro, "dur": round(body0 - 0.3, 3)},
-        "body": {"t0": round(body0 - 0.3, 3), "t1": round(outro0 - 0.2, 3), "chunks": body},
+        "body": {"t0": round(body0 - 0.5, 3), "t1": round(outro0 - 0.2, 3), "chunks": body},
         "outro": {"t": round(outro0, 3)},
-        "voices": [[str(vi), t_intro], [str(vb), body0], [str(vo), outro0]],
+        "voices": voices,
     }
 
 
@@ -176,20 +185,24 @@ def render(tl: dict, out: Path, preview: bool) -> None:
         b.close()
     total = tl["total"]
     ins, parts = ["-i", str(silent), "-stream_loop", "-1", "-i", str(MUSIC)], []
-    for k, (path, at) in enumerate(tl["voices"]):
-        ins += ["-i", path]
-        ms = int(at * 1000)
-        parts.append(f"[{k + 2}:a]adelay={ms}|{ms},volume=1.5[v{k}]")
-    vo = "".join(f"[v{k}]" for k in range(len(tl["voices"])))
-    fc = ";".join(parts) + f";{vo}amix=inputs={len(tl['voices'])}:normalize=0:dropout_transition=0[vo];" \
-         f"[1:a]atrim=0:{total:.2f},volume=0.55,afade=t=in:d=1.5,afade=t=out:st={total - 3:.2f}:d=3[bg];" \
-         f"[vo][bg]amix=inputs=2:normalize=0:duration=first,loudnorm=I=-15:TP=-1.5:LRA=11[a]"
+    music = f"[1:a]atrim=0:{total:.2f},afade=t=in:d=1.5,afade=t=out:st={total - 3:.2f}:d=3"
+    if tl["voices"]:
+        for k, (path, at) in enumerate(tl["voices"]):
+            ins += ["-i", path]
+            ms = int(at * 1000)
+            parts.append(f"[{k + 2}:a]adelay={ms}|{ms},volume=1.5[v{k}]")
+        vo = "".join(f"[v{k}]" for k in range(len(tl["voices"])))
+        fc = ";".join(parts) + f";{vo}amix=inputs={len(tl['voices'])}:normalize=0:dropout_transition=0[vo];" \
+             f"{music},volume=0.55[bg];[vo][bg]amix=inputs=2:normalize=0:duration=first,loudnorm=I=-15:TP=-1.5:LRA=11[a]"
+    else:
+        # music only: the post is read on screen
+        fc = f"{music},loudnorm=I=-15:TP=-1.5:LRA=11[a]"
     run_ffmpeg([*ins, "-filter_complex", fc, "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
                 "-t", f"{total:.3f}", "-movflags", "+faststart", str(out)])
     silent.unlink(missing_ok=True)
 
 
-def make(pid: int, preview: bool) -> bool:
+def make(pid: int, preview: bool, read_aloud: bool = False) -> bool:
     post = fetch(pid)
     if not post:
         return False
@@ -203,7 +216,7 @@ def make(pid: int, preview: bool) -> bool:
         log(f"skip #{pid}: too short ({len(text)} chars)")
         return True
     out = OUT / f"th-{pid}.mp4"
-    tl = timeline(post, text)
+    tl = timeline(post, text, read_aloud)
     log(f"make #{pid}: {len(text)} chars, {len(tl['body']['chunks'])} lines, {tl['total']:.0f}s, mood {tl['mood']}")
     render(tl, out, preview)
     if not preview:
@@ -217,20 +230,21 @@ if __name__ == "__main__":
     ap.add_argument("--from", dest="start", type=int)
     ap.add_argument("--limit", type=int, default=20)
     ap.add_argument("--preview", action="store_true")
+    ap.add_argument("--voice", action="store_true", help="read the post aloud (default: music only, text on screen)")
     a = ap.parse_args()
     OUT.mkdir(exist_ok=True)
     if not MUSIC.exists():
         sys.exit("assets/kw-music.wav missing: ffmpeg -i kw.mp4 -vn -af \"pan=stereo|c0=c0-c1|c1=c1-c0,highpass=f=50,loudnorm=I=-20\" assets/kw-music.wav")
     if a.ids:
         for pid in [int(x) for x in a.ids.split(",") if x.strip()][: a.limit]:
-            if not make(pid, a.preview):
+            if not make(pid, a.preview, a.voice):
                 log(f"skip #{pid}: not found / hidden")
         sys.exit(0)
     state = json.loads(STATE.read_text(encoding="utf-8")) if STATE.exists() else {"last": 0}
     pid, miss, done = (a.start - 1 if a.start else state["last"]), 0, 0
     while miss < MISS_STOP and done < a.limit:
         pid += 1
-        if make(pid, a.preview):
+        if make(pid, a.preview, a.voice):
             miss = 0
             done += 1
             if not a.preview:

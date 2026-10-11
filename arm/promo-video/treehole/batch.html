@@ -2,43 +2,37 @@
 <html>
 <head>
 <meta charset="utf-8">
-<!-- 树洞流水线的画面模板（batch.py 每条先写 out/tl.js = window.TL，再逐帧 seek）。风格照 kw.mp4：黑底暖光、宋体金字、竖排 + 红印、粒子意象。 -->
+<!-- 树洞流水线的画面模板（batch.py 每条先写 out/tl.js = window.TL，再逐帧 seek）。风格照 kw.mp4：黑底暖光、宋体金字、竖排 + 红印、粒子意象。
+     特效：粒子变形（圆环 / 莲花 / 蝴蝶 / 双光）、每句出现时迸火花 + 金字扫光、柔焦光斑、流星、情绪字波纹、莲花段落花瓣、蝴蝶段萤火虫、镜头慢推、暗角 + 颗粒。 -->
 <style>
 @font-face { font-family: "SHS"; src: local("Source Han Serif SC Heavy"), url("file:///C:/Windows/Fonts/Source%20Han%20Serif%20SC%20Heavy%20(TrueType).ttf"); }
 @font-face { font-family: "NSerif"; src: local("Noto Serif SC"), url("file:///C:/Windows/Fonts/NotoSerifSC-VF.ttf"); font-weight: 200 900; }
 * { box-sizing: border-box; margin: 0; padding: 0 }
 html, body { width: 1920px; height: 1080px; overflow: hidden; background: #050403; color: #f3e6cc; font-family: "NSerif", "SimSun", serif }
 canvas { position: absolute; inset: 0 }
+#fx { z-index: 8; pointer-events: none }
 .bar { position: absolute; left: 0; right: 0; height: 96px; background: #000; z-index: 20 }
-.layer { position: absolute; inset: 0; z-index: 5 }
+.layer { position: absolute; inset: 0; z-index: 5; transform-origin: 40% 50% }
 .gold { background: linear-gradient(180deg, #fff6e2 0%, #f1d9a8 55%, #c9a36a 100%); -webkit-background-clip: text; background-clip: text; color: transparent }
 .big { font-family: "SHS", "NSerif", serif; font-weight: 900 }
 .center { position: absolute; left: 0; right: 0; text-align: center }
 .seal { position: absolute; width: 44px; padding: 6px 0; background: #a3191b; color: #f6e2c8; font-family: "KaiTi", "STKaiti", serif; font-size: 22px; line-height: 1.15; text-align: center; border-radius: 4px }
-.line { position: absolute; left: 260px; right: 520px; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center; text-align: center;
-  font-size: 62px; font-weight: 600; line-height: 1.6; letter-spacing: 6px; color: #f1e2c2; text-shadow: 0 0 30px rgba(255,190,110,.18); text-wrap: balance }
+.line { position: absolute; left: 240px; right: 540px; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center; text-align: center }
+.line span { font-size: 64px; font-weight: 700; line-height: 1.6; letter-spacing: 6px; text-wrap: balance;
+  background: linear-gradient(105deg, #c9a36a 0%, #f1d9a8 38%, #fffaf0 48%, #ffffff 50%, #fffaf0 52%, #f1d9a8 62%, #c9a36a 100%);
+  background-size: 320% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 0 22px rgba(255,190,110,.28)) }
 .mood { position: absolute; right: 250px; top: 300px; width: 210px; height: 210px; border-radius: 50%; border: 2px solid rgba(241,217,168,.5); display: flex; align-items: center; justify-content: center; font-size: 112px }
 </style>
 </head>
 <body>
 <canvas id="cv" width="1920" height="1080"></canvas>
-<div class="bar" style="top:0"></div><div class="bar" style="bottom:0"></div>
-
-<div class="layer" id="intro">
-  <div class="center" style="top:340px">
-    <div class="big gold" id="series" style="font-size:150px;letter-spacing:46px"></div>
-    <div id="no" style="margin-top:36px;font-size:40px;letter-spacing:16px;color:rgba(234,219,189,.75)"></div>
-  </div>
-</div>
-
 <div class="layer" id="body">
-  <div class="line" id="lineA"></div>
-  <div class="line" id="lineB"></div>
+  <div class="line" id="lineA"><span></span></div>
+  <div class="line" id="lineB"><span></span></div>
   <div class="mood big gold" id="mood"></div>
   <div class="seal" style="right:214px;top:560px">树<br>洞</div>
   <div id="side" style="position:absolute;right:322px;top:560px;writing-mode:vertical-rl;font-size:28px;letter-spacing:10px;color:rgba(234,219,189,.5)"></div>
 </div>
-
 <div class="layer" id="outro">
   <div class="center" style="top:360px">
     <div class="big gold" id="o1" style="font-size:100px;letter-spacing:26px">每一份心事</div>
@@ -46,6 +40,8 @@ canvas { position: absolute; inset: 0 }
     <div id="o3" style="margin-top:56px;font-size:36px;letter-spacing:16px;color:rgba(234,219,189,.7)">心之音 · 树洞</div>
   </div>
 </div>
+<canvas id="fx" width="1920" height="1080"></canvas>
+<div class="bar" style="top:0"></div><div class="bar" style="bottom:0"></div>
 
 <script src="out/tl.js"></script>
 <script>
@@ -56,17 +52,19 @@ const ease = (x) => 1 - Math.pow(1 - clamp(x), 3);
 const easeIO = (x) => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2 };
 let seed = 7 + (TL.id % 97);
 const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const hash = (n) => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
 const cv = $("cv"), g = cv.getContext("2d");
-const CX = 780, CY = 540;
+const fx = $("fx"), f = fx.getContext("2d");
+const CX = 780, CY = 540, MOOD = [1565, 405];
 
-$("series").textContent = TL.series;
-$("no").textContent = `树洞 · 第 ${TL.id} 号${TL.date ? " · " + TL.date : ""}`;
 $("mood").textContent = TL.mood;
 $("side").textContent = TL.series;
+const B = TL.body, O = TL.outro, CH = B.chunks;
 
-// ---- dust and particle shapes
-const DUST = Array.from({ length: 140 }, () => ({ x: rnd() * 1920, y: rnd() * 1080, r: 0.6 + rnd() * 1.8, v: 4 + rnd() * 10, ph: rnd() * 6.28 }));
-const N = 900;
+// ---------------------------------------------------------------- shapes
+const DUST = Array.from({ length: 160 }, () => ({ x: rnd() * 1920, y: rnd() * 1080, r: 0.6 + rnd() * 1.8, v: 4 + rnd() * 10, ph: rnd() * 6.28 }));
+const BOKEH = Array.from({ length: 18 }, () => ({ x: rnd() * 1920, y: 120 + rnd() * 840, r: 40 + rnd() * 110, vx: (rnd() - 0.5) * 14, vy: (rnd() - 0.5) * 8, ph: rnd() * 6.28, warm: rnd() < 0.75 }));
+const N = 1000;
 const PH = Array.from({ length: N }, () => rnd() * 6.28);
 const scatter = () => Array.from({ length: N }, () => [rnd() * 1920, 100 + rnd() * 880]);
 const ring = (R) => Array.from({ length: N }, (_, i) => { const a = (i / N) * 6.283; const j = (rnd() - 0.5) * 8; return [CX + Math.cos(a) * (R + j), CY + Math.sin(a) * (R + j)]; });
@@ -74,8 +72,8 @@ function lotus() {
   const pts = [];
   for (let layer = 0; layer < 3; layer++) {
     const R = 240 - layer * 64, rot = layer * 0.2;
-    for (let p = 0; p < 8; p++) for (let k = 0; k < 36; k++) {
-      const t = k / 35, a = rot + (p / 8) * 6.283, wid = Math.sin(Math.PI * t) * 0.32;
+    for (let p = 0; p < 8; p++) for (let k = 0; k < 40; k++) {
+      const t = k / 39, a = rot + (p / 8) * 6.283, wid = Math.sin(Math.PI * t) * 0.32;
       for (const s of [-1, 1]) pts.push([CX + Math.cos(a + s * wid) * R * t, CY + Math.sin(a + s * wid) * R * t * 0.62]);
     }
   }
@@ -94,39 +92,24 @@ function butterfly() {
 function twoLights() {
   return Array.from({ length: N }, (_, i) => { const c = i % 2 ? CX - 170 : CX + 170; const a = rnd() * 6.28, r = Math.pow(rnd(), 2) * 90; return [c + Math.cos(a) * r, CY + Math.sin(a) * r]; });
 }
-const SHAPES = [scatter(), ring(200), lotus(), butterfly(), twoLights(), ring(260)];
-const ORDER = [1, 2, 3, 4, 5, 2, 3];
-const COLS = { 1: "235,215,180", 2: "246,200,205", 3: "200,230,255", 4: "255,226,180", 5: "235,215,180" };
+function spiral() {
+  return Array.from({ length: N }, (_, i) => { const t = i / N, a = t * 6.283 * 5; const r = 30 + t * 300; return [CX + Math.cos(a) * r, CY + Math.sin(a) * r * 0.7]; });
+}
+const SHAPES = { scatter: scatter(), ring: ring(210), lotus: lotus(), butterfly: butterfly(), lights: twoLights(), spiral: spiral(), wide: ring(270) };
+const ORDER = ["ring", "lotus", "butterfly", "lights", "spiral", "lotus", "wide", "butterfly"];
+const COLS = { ring: "235,215,180", lotus: "246,200,205", butterfly: "200,230,255", lights: "255,226,180", spiral: "240,210,170", wide: "235,215,180" };
 
-function glow(x, y, r, a) {
-  const gr = g.createRadialGradient(x, y, 0, x, y, r);
-  gr.addColorStop(0, `rgba(255,214,150,${a})`);
+// ---------------------------------------------------------------- helpers
+function glow(c, x, y, r, a, col = "255,214,150") {
+  const gr = c.createRadialGradient(x, y, 0, x, y, r);
+  gr.addColorStop(0, `rgba(${col},${a})`);
   gr.addColorStop(0.35, `rgba(190,130,60,${a * 0.35})`);
   gr.addColorStop(1, "rgba(0,0,0,0)");
-  g.fillStyle = gr; g.fillRect(0, 0, 1920, 1080);
+  c.fillStyle = gr; c.fillRect(0, 0, 1920, 1080);
 }
-
-function bodyShape(t, fade) {
-  const ch = TL.body.chunks;
-  if (!ch.length) return;
-  // the shape changes every two lines; particles flow from the last shape to the next
-  let gi = 0;
-  for (let i = 0; i < ch.length; i++) if (t >= ch[i].t - 0.2) gi = Math.floor(i / 2);
-  const gStart = ch[Math.min(gi * 2, ch.length - 1)].t - 0.2;
-  const from = gi === 0 ? SHAPES[0] : SHAPES[ORDER[(gi - 1) % ORDER.length]];
-  const to = SHAPES[ORDER[gi % ORDER.length]];
-  const col = COLS[ORDER[gi % ORDER.length]];
-  const u = easeIO((t - gStart) / 1.8);
-  for (let i = 0; i < N; i++) {
-    const x = from[i][0] + (to[i][0] - from[i][0]) * u + Math.sin(t * 1.4 + PH[i]) * 1.8;
-    const y = from[i][1] + (to[i][1] - from[i][1]) * u + Math.cos(t * 1.2 + PH[i]) * 1.8;
-    const tw = 0.55 + 0.45 * Math.sin(t * 3 + PH[i] * 3);
-    // dimmer than the stand-alone shots: the post's text sits on top
-    g.fillStyle = `rgba(${col},${Math.min(1, 0.5 * tw * fade)})`;
-    g.fillRect(x, y, 2.6, 2.6);
-  }
-  glow(CX, CY, 260, 0.22 * fade);
-}
+const lineAt = (t) => { let k = -1; for (let i = 0; i < CH.length; i++) if (t >= CH[i].t - 0.15) k = i; return k; };
+const groupOf = (k) => Math.max(0, Math.floor(k / 2));
+const shapeOf = (gi) => ORDER[gi % ORDER.length];
 
 function blurIn(el, u, out = 0) {
   const k = ease(u) * (1 - ease(out));
@@ -135,42 +118,148 @@ function blurIn(el, u, out = 0) {
   el.style.transform = `translateY(${(1 - ease(u)) * 16}px)`;
 }
 
-function seek(t) {
+// ---------------------------------------------------------------- background (behind the text)
+function background(t) {
   g.fillStyle = "#050403"; g.fillRect(0, 0, 1920, 1080);
-  glow(960 + Math.sin(t * 0.13) * 120, 470, 900, 0.16 + 0.05 * Math.sin(t * 0.4));
+  glow(g, 960 + Math.sin(t * 0.13) * 140, 470 + Math.cos(t * 0.09) * 60, 950, 0.17 + 0.05 * Math.sin(t * 0.4));
+  // soft bokeh
+  for (const b of BOKEH) {
+    const x = ((b.x + t * b.vx) % 2100 + 2100) % 2100 - 90, y = b.y + Math.sin(t * 0.2 + b.ph) * 40 + t * b.vy * 0.2;
+    const a = 0.035 + 0.03 * (0.5 + 0.5 * Math.sin(t * 0.5 + b.ph));
+    const gr = g.createRadialGradient(x, y, 0, x, y, b.r);
+    gr.addColorStop(0, `rgba(${b.warm ? "255,200,130" : "170,200,255"},${a * 1.6})`);
+    gr.addColorStop(0.7, `rgba(${b.warm ? "255,200,130" : "170,200,255"},${a})`);
+    gr.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = gr; g.beginPath(); g.arc(x, y, b.r, 0, 6.283); g.fill();
+  }
   for (const d of DUST) {
     const y = ((d.y - t * d.v) % 1080 + 1080) % 1080, x = d.x + Math.sin(t * 0.3 + d.ph) * 14;
-    g.fillStyle = `rgba(255,226,180,${0.12 + 0.18 * (0.5 + 0.5 * Math.sin(t * 1.4 + d.ph))})`;
+    g.fillStyle = `rgba(255,226,180,${0.12 + 0.2 * (0.5 + 0.5 * Math.sin(t * 1.4 + d.ph))})`;
     g.beginPath(); g.arc(x, y, d.r, 0, 6.283); g.fill();
   }
-  const I = TL.intro, B = TL.body, O = TL.outro;
-  // intro
-  const iu = (t - I.t) / 1.2, iout = (t - (I.t + I.dur - 0.6)) / 0.6;
-  $("intro").style.display = t < I.t + I.dur ? "block" : "none";
-  blurIn($("series"), iu, iout); blurIn($("no"), iu - 0.4, iout);
-  if (t < I.t + I.dur) { glow(960, 250, 260, 0.45 * ease(iu) * (1 - ease(iout))); g.fillStyle = `rgba(255,240,210,${ease(iu) * (1 - ease(iout))})`; g.beginPath(); g.arc(960, 250, 8, 0, 6.283); g.fill(); }
+  // shooting stars: one every ~3.5 s, each from its own place
+  for (let k = Math.floor(t / 3.5) - 1; k <= Math.floor(t / 3.5); k++) {
+    if (k < 0) continue;
+    const t0 = k * 3.5 + hash(k) * 1.5, u = (t - t0) / 0.9;
+    if (u < 0 || u > 1) continue;
+    const x0 = 300 + hash(k + 9) * 1300, y0 = 130 + hash(k + 3) * 260, len = 260;
+    const x = x0 + u * 520, y = y0 + u * 200;
+    const gr = g.createLinearGradient(x - len, y - len * 0.38, x, y);
+    gr.addColorStop(0, "rgba(255,240,210,0)"); gr.addColorStop(1, `rgba(255,240,210,${0.8 * Math.sin(Math.PI * u)})`);
+    g.strokeStyle = gr; g.lineWidth = 2.2; g.beginPath(); g.moveTo(x - len, y - len * 0.38); g.lineTo(x, y); g.stroke();
+  }
+}
+
+function shapeParticles(t, fade) {
+  const k = lineAt(t);
+  if (k < 0) return;
+  const gi = groupOf(k), gStart = CH[Math.min(gi * 2, CH.length - 1)].t - 0.2;
+  const from = gi === 0 ? SHAPES.scatter : SHAPES[shapeOf(gi - 1)], name = shapeOf(gi), to = SHAPES[name];
+  const col = COLS[name], u = easeIO((t - gStart) / 1.8);
+  const spin = name === "spiral" ? t * 0.15 : 0;
+  for (let i = 0; i < N; i++) {
+    let x = from[i][0] + (to[i][0] - from[i][0]) * u, y = from[i][1] + (to[i][1] - from[i][1]) * u;
+    if (spin) { const dx = x - CX, dy = y - CY; x = CX + dx * Math.cos(spin) - dy * Math.sin(spin); y = CY + dx * Math.sin(spin) + dy * Math.cos(spin); }
+    x += Math.sin(t * 1.4 + PH[i]) * 1.8; y += Math.cos(t * 1.2 + PH[i]) * 1.8;
+    const tw = 0.55 + 0.45 * Math.sin(t * 3 + PH[i] * 3);
+    g.fillStyle = `rgba(${col},${Math.min(1, 0.5 * tw * fade)})`;
+    g.fillRect(x, y, 2.6, 2.6);
+  }
+  glow(g, CX, CY, 280, 0.2 * fade);
+  // lotus section: petals drift down / butterfly section: fireflies
+  if (name === "lotus") for (let i = 0; i < 26; i++) {
+    const s = hash(i + 40), x = 200 + s * 1300 + Math.sin(t * 0.7 + i) * 40, y = ((hash(i + 80) * 1000 + (t - gStart) * (40 + s * 40)) % 900) + 100;
+    const a = Math.sin(t * 0.9 + i) * 0.8;
+    g.save(); g.translate(x, y); g.rotate(a); g.fillStyle = `rgba(246,190,200,${0.5 * fade * u})`;
+    g.beginPath(); g.ellipse(0, 0, 9, 4, 0, 0, 6.283); g.fill(); g.restore();
+  }
+  if (name === "butterfly") for (let i = 0; i < 40; i++) {
+    const x = CX + Math.sin(t * (0.3 + hash(i) * 0.4) + i * 2) * (200 + hash(i + 5) * 380), y = CY + Math.cos(t * (0.25 + hash(i + 7) * 0.4) + i) * (120 + hash(i + 2) * 260);
+    const a = (0.4 + 0.6 * Math.max(0, Math.sin(t * 2.3 + i * 1.7))) * fade * u;
+    glow(g, x, y, 18, 0.5 * a, "190,240,190");
+  }
+}
+
+// ---------------------------------------------------------------- foreground effects (on top of the text)
+function sparks(t) {
+  f.clearRect(0, 0, 1920, 1080);
+  const k = lineAt(t);
+  // a burst of gold sparks from the line each time a new one appears
+  for (const i of [k - 1, k]) {
+    if (i < 0) continue;
+    const t0 = CH[i].t, u = (t - t0) / 1.6;
+    if (u < 0 || u > 1) continue;
+    for (let j = 0; j < 70; j++) {
+      const a = hash(i * 100 + j) * 6.283, sp = 200 + hash(i * 100 + j + 50) * 520;
+      const x = 830 + Math.cos(a) * sp * ease(u) * 1.2 + (hash(j + i) - 0.5) * 500, y = 540 + Math.sin(a) * sp * ease(u) * 0.55 + 120 * u * u;
+      const al = (1 - u) * (0.5 + 0.5 * hash(j * 3 + i));
+      f.fillStyle = `rgba(255,222,160,${al})`;
+      f.beginPath(); f.arc(x, y, 1.2 + 2.2 * hash(j + 7 * i), 0, 6.283); f.fill();
+    }
+    // a short lens flare streak through the line
+    const fl = Math.sin(Math.PI * clamp(u * 2.2));
+    if (fl > 0) {
+      const gr = f.createLinearGradient(240, 540, 1380, 540);
+      gr.addColorStop(0, "rgba(255,220,160,0)"); gr.addColorStop(0.5, `rgba(255,236,200,${0.35 * fl})`); gr.addColorStop(1, "rgba(255,220,160,0)");
+      f.fillStyle = gr; f.fillRect(240, 537, 1140, 6);
+    }
+  }
+  // ripples from the mood character every 3 s
+  const inBody = t >= B.t0 && t < B.t1;
+  if (inBody) for (let r = 0; r < 2; r++) {
+    const u = ((t - B.t0 + r * 1.5) % 3) / 3;
+    f.strokeStyle = `rgba(241,217,168,${0.4 * (1 - u) * clamp((t - B.t0) / 1.5)})`;
+    f.lineWidth = 2; f.beginPath(); f.arc(MOOD[0], MOOD[1], 105 + u * 140, 0, 6.283); f.stroke();
+  }
+  // vignette + film grain
+  const v = f.createRadialGradient(960, 540, 380, 960, 540, 1150);
+  v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(1, "rgba(0,0,0,0.72)");
+  f.fillStyle = v; f.fillRect(0, 0, 1920, 1080);
+  const fr = Math.floor(t * 30);
+  for (let i = 0; i < 900; i++) {
+    const x = hash(fr * 1000 + i) * 1920, y = hash(fr * 1000 + i + 0.5) * 1080;
+    f.fillStyle = `rgba(255,255,255,${0.025 + 0.03 * hash(i + fr)})`;
+    f.fillRect(x, y, 1.5, 1.5);
+  }
+}
+
+function seek(t) {
+  background(t);
   // body: two text slots so one line can blur out while the next blurs in
   const inBody = t >= B.t0 && t < B.t1;
   $("body").style.display = inBody ? "block" : "none";
   if (inBody) {
     const fade = Math.min(clamp((t - B.t0) / 0.8), clamp((B.t1 - t) / 0.8));
-    bodyShape(t, fade);
-    let k = -1;
-    for (let i = 0; i < B.chunks.length; i++) if (t >= B.chunks[i].t - 0.15) k = i;
+    shapeParticles(t, fade);
+    const k = lineAt(t);
     for (const [slot, idx] of [["lineA", k % 2 === 0 ? k : k - 1], ["lineB", k % 2 === 1 ? k : k - 1]]) {
-      const el = $(slot), c = B.chunks[idx];
+      const el = $(slot), sp = el.firstElementChild, c = CH[idx];
       if (!c || idx < 0) { el.style.opacity = 0; continue; }
-      el.textContent = c.text.replace(/[。，！？…]+$/, "");
-      const next = B.chunks[idx + 1];
+      sp.textContent = c.text.replace(/[。，！？…]+$/, "");
+      const next = CH[idx + 1];
       blurIn(el, (t - c.t + 0.15) / 0.7, next ? (t - next.t + 0.15) / 0.45 : (t - B.t1 + 0.8) / 0.6);
+      // the light sweep across the gold text, once per line
+      sp.style.backgroundPosition = `${100 - 100 * easeIO((t - c.t - 0.2) / 1.6)}% 0`;
     }
     blurIn($("mood"), (t - B.t0) / 1.4, (t - B.t1 + 0.8) / 0.6);
+    // slow push-in, restarting gently with each line
+    const lt = k >= 0 ? t - CH[k].t : 0;
+    $("body").style.transform = `scale(${1 + 0.012 * Math.sin(Math.min(lt, 6) / 6 * Math.PI / 2) + 0.004 * Math.max(0, k)})`;
   }
   // outro
   $("outro").style.display = t >= O.t - 0.2 ? "block" : "none";
   const ou = (t - O.t) / 1.1, oend = (t - (TL.total - 1.8)) / 1.6;
   blurIn($("o1"), ou, oend); blurIn($("o2"), ou - 0.6, oend); blurIn($("o3"), ou - 1.4, oend);
-  if (t >= O.t - 0.2) glow(960, 470, 520, 0.25 * ease(ou) * (1 - ease(oend)));
+  if (t >= O.t - 0.2) {
+    glow(g, 960, 470, 520, 0.25 * ease(ou) * (1 - ease(oend)));
+    const N2 = SHAPES.wide;
+    for (let i = 0; i < N; i += 2) {
+      const a = (i / N) * 6.283 + t * 0.08, r = 330 + Math.sin(t + PH[i]) * 10;
+      g.fillStyle = `rgba(235,215,180,${0.35 * ease(ou) * (1 - ease(oend))})`;
+      g.fillRect(960 + Math.cos(a) * r * 1.4, 520 + Math.sin(a) * r * 0.55, 2.2, 2.2);
+    }
+  }
+  sparks(t);
   return new Promise((r) => requestAnimationFrame(() => r(true)));
 }
 window.seek = seek;
