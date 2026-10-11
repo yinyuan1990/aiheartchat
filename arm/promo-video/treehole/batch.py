@@ -4,7 +4,7 @@
      从上次处理到的编号往后逐个取，连续取不到 MISS_STOP 个就停（out/batch-state.json 记住进度）。
 过滤：BLOCK 里的词一律跳过（性 / 死 / 自残 / 暴力等），太短跳过，太长截到 MAX_CHARS；REPLACE 换掉地名、人名缩写等。
 默认不配音：帖子一句句显示在画面上，每句按字数停 2.2～5.5 秒；加 --voice 才念原文（Yunxi）。画面：batch.html（kw.mp4 风格模板）。
-音乐：assets/kw-music.wav（从 E:\\soft\\aichat\\kw.mp4 去掉居中人声提出来的背景音乐，循环垫底）。
+默认没有声音（留一条静音音轨，有的平台不收没音轨的视频）；加 --music 才垫 assets/kw-music.wav（从 E:\\soft\\aichat\\kw.mp4 去掉居中人声提出来的背景音乐）。
 
   ..\\..\\..\\publisher\\.venv\\Scripts\\python.exe batch.py                 # 处理新帖
   ..\\..\\..\\publisher\\.venv\\Scripts\\python.exe batch.py --ids 163,162   # 指定编号（不改进度）
@@ -129,7 +129,7 @@ def line_secs(s: str) -> float:
     return min(5.5, max(2.2, 1.4 + 0.17 * len(s)))
 
 
-def timeline(post: dict, text: str, read_aloud: bool) -> dict:
+def timeline(post: dict, text: str, read_aloud: bool, music: bool) -> dict:
     pid = int(post["id"])
     date = str(post.get("createdAt") or post.get("created_at") or "")[:10]
     parts = chunks(text)
@@ -152,6 +152,7 @@ def timeline(post: dict, text: str, read_aloud: bool) -> dict:
         "body": {"t0": round(body0 - 0.5, 3), "t1": round(outro0 - 0.2, 3), "chunks": body},
         "outro": {"t": round(outro0, 3)},
         "voices": voices,
+        "music": music,
     }
 
 
@@ -184,8 +185,14 @@ def render(tl: dict, out: Path, preview: bool) -> None:
         proc.wait()
         b.close()
     total = tl["total"]
+    if not tl["voices"] and not tl["music"]:
+        # no sound at all, but keep a silent track: some platforms refuse videos without audio
+        run_ffmpeg(["-i", str(silent), "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-map", "0:v", "-map", "1:a", "-c:v", "copy",
+                    "-c:a", "aac", "-b:a", "64k", "-t", f"{total:.3f}", "-movflags", "+faststart", str(out)])
+        silent.unlink(missing_ok=True)
+        return
     ins, parts = ["-i", str(silent), "-stream_loop", "-1", "-i", str(MUSIC)], []
-    music = f"[1:a]atrim=0:{total:.2f},afade=t=in:d=1.5,afade=t=out:st={total - 3:.2f}:d=3"
+    music = f"[1:a]atrim=0:{total:.2f},afade=t=in:d=1.5,afade=t=out:st={total - 3:.2f}:d=3" + ("" if tl["music"] else ",volume=0")
     if tl["voices"]:
         for k, (path, at) in enumerate(tl["voices"]):
             ins += ["-i", path]
@@ -202,7 +209,7 @@ def render(tl: dict, out: Path, preview: bool) -> None:
     silent.unlink(missing_ok=True)
 
 
-def make(pid: int, preview: bool, read_aloud: bool = False) -> bool:
+def make(pid: int, preview: bool, read_aloud: bool = False, music: bool = False) -> bool:
     post = fetch(pid)
     if not post:
         return False
@@ -216,7 +223,7 @@ def make(pid: int, preview: bool, read_aloud: bool = False) -> bool:
         log(f"skip #{pid}: too short ({len(text)} chars)")
         return True
     out = OUT / f"th-{pid}.mp4"
-    tl = timeline(post, text, read_aloud)
+    tl = timeline(post, text, read_aloud, music)
     log(f"make #{pid}: {len(text)} chars, {len(tl['body']['chunks'])} lines, {tl['total']:.0f}s, mood {tl['mood']}")
     render(tl, out, preview)
     if not preview:
@@ -230,21 +237,22 @@ if __name__ == "__main__":
     ap.add_argument("--from", dest="start", type=int)
     ap.add_argument("--limit", type=int, default=20)
     ap.add_argument("--preview", action="store_true")
-    ap.add_argument("--voice", action="store_true", help="read the post aloud (default: music only, text on screen)")
+    ap.add_argument("--voice", action="store_true", help="read the post aloud (default: no voice, text on screen)")
+    ap.add_argument("--music", action="store_true", help="add the kw background music (default: silent)")
     a = ap.parse_args()
     OUT.mkdir(exist_ok=True)
-    if not MUSIC.exists():
+    if a.music and not MUSIC.exists():
         sys.exit("assets/kw-music.wav missing: ffmpeg -i kw.mp4 -vn -af \"pan=stereo|c0=c0-c1|c1=c1-c0,highpass=f=50,loudnorm=I=-20\" assets/kw-music.wav")
     if a.ids:
         for pid in [int(x) for x in a.ids.split(",") if x.strip()][: a.limit]:
-            if not make(pid, a.preview, a.voice):
+            if not make(pid, a.preview, a.voice, a.music):
                 log(f"skip #{pid}: not found / hidden")
         sys.exit(0)
     state = json.loads(STATE.read_text(encoding="utf-8")) if STATE.exists() else {"last": 0}
     pid, miss, done = (a.start - 1 if a.start else state["last"]), 0, 0
     while miss < MISS_STOP and done < a.limit:
         pid += 1
-        if make(pid, a.preview, a.voice):
+        if make(pid, a.preview, a.voice, a.music):
             miss = 0
             done += 1
             if not a.preview:
