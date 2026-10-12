@@ -20,6 +20,7 @@ const WALLET = process.env.AI_PROXY_WALLET_KEY ? privateKeyToAccount(process.env
 const MAX_PER_CALL = Math.round(Number(process.env.AI_PROXY_MAX_PER_CALL ?? 0.5) * 1e6);
 const DAILY_CAP = Math.round(Number(process.env.AI_PROXY_DAILY_CAP ?? 5) * 1e6);
 const MAX_BODY = 4_000_000;
+const MIN_MAX_TOKENS = Math.round(Number(process.env.AI_PROXY_MIN_MAX_TOKENS ?? 16384));
 
 export const aiProxyOn = () => KEY.length >= 32 && !!WALLET;
 export const aiProxyAddress = () => WALLET?.address ?? null;
@@ -117,10 +118,17 @@ export async function aiProxyChat(raw: string): Promise<Response> {
     return err(400, "bad json");
   }
   if (typeof body.model !== "string" || !/^[\w.\-]+\/[\w.\-:+]+$/.test(body.model)) return err(400, "model must be a BlockRun id like deepseek/deepseek-chat");
-  // the quote is driven by the input size (max_tokens barely moves it, measured 10.12), so Cursor's body goes as-is,
-  // except that streams are asked to end with a usage chunk (standard OpenAI option) so the tokens can be logged
+  // the quote is driven by the input size, so Cursor's body goes as-is, except that streams are asked to end with a
+  // usage chunk (standard OpenAI option) so the tokens can be logged, and Claude gets more reply room (below)
   const stream = body.stream === true;
   if (stream) body.stream_options = { ...((body.stream_options as object) ?? {}), include_usage: true };
+  // 10.12: Opus replies were cut at exactly 4096 tokens mid tool-call (writing a big file), and Cursor resent the same
+  // turn over and over ($0.18 each). Raise the reply room; the quote only grows ~$0.008 per extra 4k tokens.
+  const sentMax = Number(body.max_tokens ?? body.max_completion_tokens ?? 0) || null;
+  if (MIN_MAX_TOKENS > 0 && /^anthropic\//.test(body.model) && (sentMax ?? 0) < MIN_MAX_TOKENS) {
+    delete body.max_completion_tokens;
+    body.max_tokens = MIN_MAX_TOKENS;
+  }
   const payload = JSON.stringify(body);
   const t0 = Date.now();
   const post = (payment?: string) => fetch(`${UPSTREAM}/chat/completions`, {
@@ -154,7 +162,7 @@ export async function aiProxyChat(raw: string): Promise<Response> {
   const served = r.headers.get("x-served-model");
   const tx = (decodeB64(r.headers.get("payment-response"))?.transaction as string | undefined) ?? null;
   await ensure();
-  const [row] = await sql<{ id: string }[]>`insert into ai_proxy_calls (model, served, stream, cost, tx, status, req_bytes, shape) values (${body.model as string}, ${served}, ${stream}, ${r.ok ? cost : 0}, ${tx}, ${r.status}, ${payload.length}, ${sql.json(shapeOf(body))}) returning id::text`.catch(() => [] as { id: string }[]);
+  const [row] = await sql<{ id: string }[]>`insert into ai_proxy_calls (model, served, stream, cost, tx, status, req_bytes, shape) values (${body.model as string}, ${served}, ${stream}, ${r.ok ? cost : 0}, ${tx}, ${r.status}, ${payload.length}, ${sql.json({ ...shapeOf(body), sentMax, maxTokens: Number(body.max_tokens ?? 0) || null })}) returning id::text`.catch(() => [] as { id: string }[]);
   const headers = new Headers({ "content-type": r.headers.get("content-type") ?? (stream ? "text/event-stream" : "application/json"), "cache-control": "no-cache" });
   // nginx must not buffer the SSE stream
   headers.set("x-accel-buffering", "no");
