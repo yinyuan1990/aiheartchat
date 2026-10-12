@@ -890,7 +890,7 @@ app.get("/api/x402/job", async (c) => {
 // Cursor "custom model" (ai-proxy.ts): OpenAI-compatible, operator's key only, paid from the server's own small wallet
 app.post("/api/ai/v1/chat/completions", async (c) => (aiProxyAuth(c.req.header("authorization")) ? aiProxyChat(await c.req.text()) : c.json({ error: { message: "invalid api key" } }, 401)));
 app.get("/api/ai/v1/models", async (c) => (aiProxyAuth(c.req.header("authorization")) ? c.json(await aiProxyModels()) : c.json({ error: { message: "invalid api key" } }, 401)));
-app.get("/api/ai/v1/stats", async (c) => (aiProxyAuth(c.req.header("authorization")) ? c.json(await aiProxyStats()) : c.json({ error: { message: "invalid api key" } }, 401)));
+app.get("/api/ai/v1/stats", async (c) => (aiProxyAuth(c.req.header("authorization")) ? c.json(await aiProxyStats(Number(c.req.query("limit")) || 100)) : c.json({ error: { message: "invalid api key" } }, 401)));
 app.get("/api/x402/relay/:id", async (c) => {
   const r = await x402Relay(c.req.param("id"), clientIp(c) || "?");
   return c.json(r.json as object, r.status as 200);

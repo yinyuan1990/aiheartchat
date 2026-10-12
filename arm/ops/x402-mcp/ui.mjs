@@ -7,6 +7,9 @@
 import { createServer } from "node:http";
 import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { account, balance, chat, config, footer, history, ledger, models, saveConfig, usd } from "./lib.mjs";
 
 const NONCE = randomBytes(16).toString("hex");
@@ -37,6 +40,16 @@ async function route(req, res) {
     return send(res, 200, { address: account?.address ?? null, balance: bal, spent: l.spent, calls: l.calls, ...c, history: history(40) });
   }
   if (url.pathname === "/api/models") return send(res, 200, await models());
+  if (url.pathname === "/api/cursor") {
+    // the server-side Cursor custom-model log (needs the key saved in cursor-proxy.json)
+    try {
+      const c = JSON.parse(readFileSync(join(homedir(), ".arm-x402-test", "cursor-proxy.json"), "utf8"));
+      const r = await fetch(`${c.baseUrl}/stats?limit=200`, { headers: { authorization: `Bearer ${c.apiKey}` }, signal: AbortSignal.timeout(20_000) });
+      return send(res, r.status, await r.json());
+    } catch (e) {
+      return send(res, 502, { error: e instanceof Error ? e.message : String(e) });
+    }
+  }
   if (url.pathname === "/api/config" && req.method === "POST") {
     const b = await readJson(req), patch = {};
     if (typeof b.defaultModel === "string") patch.defaultModel = b.defaultModel;
@@ -112,8 +125,16 @@ a{color:#7cb4ff}
     <textarea id="prompt" rows="5" placeholder="问点什么，比如：你是哪家公司的什么模型？知识截止到什么时候？"></textarea>
     <div style="display:flex;gap:8px;margin-top:8px"><button id="ask">发送</button><button class="ghost" id="probe">验货问题</button></div>
     <div id="out"></div>
-    <h2 style="margin-top:16px">调用记录 <span class="muted">（Cursor 和这里的都记在本机）</span></h2>
+    <h2 style="margin-top:16px">调用记录 <span class="muted">（MCP 和这个界面的，记在本机）</span></h2>
     <div style="max-height:30vh;overflow:auto"><table><thead><tr><th>时间</th><th>来源</th><th>选的模型 → 实际服务</th><th>tokens</th><th>花费</th><th>交易</th></tr></thead><tbody id="hist"></tbody></table></div>
+  </section>
+  <section style="grid-column:1/-1">
+    <h2>Cursor 自定义模型明细 <span class="muted">（Cursor 设置里填我们 Base URL 后的每次请求，记在服务器；10.12 13:50 之前的没有 token 数）</span> <button class="ghost" id="cRefresh">刷新</button></h2>
+    <div id="cSum" class="muted"></div>
+    <h2 style="margin-top:12px;font-size:13px">按天 · 按模型</h2>
+    <div style="max-height:24vh;overflow:auto"><table><thead><tr><th>日期</th><th>模型</th><th>次数</th><th>输入 tokens</th><th>输出 tokens</th><th>花费</th><th>平均每次</th></tr></thead><tbody id="cDays"></tbody></table></div>
+    <h2 style="margin-top:12px;font-size:13px">每次请求</h2>
+    <div style="max-height:40vh;overflow:auto"><table><thead><tr><th>时间</th><th>模型 → 实际服务</th><th>状态</th><th>输入 tokens</th><th>其中缓存</th><th>输出 tokens</th><th>请求大小</th><th>用时</th><th>花费</th><th>交易</th></tr></thead><tbody id="cCalls"></tbody></table></div>
   </section>
 </main>
 <script>
@@ -159,5 +180,15 @@ async function refresh(){
   if(document.activeElement!==$("cap1"))$("cap1").value=STATE.maxPerCall;if(document.activeElement!==$("cap2"))$("cap2").value=STATE.dailyCap;
   $("hist").innerHTML=STATE.history.map(h=>{const mism=h.served&&h.served.toLowerCase()!==h.requested.toLowerCase();return '<tr><td>'+new Date(h.at).toLocaleString()+'</td><td>'+(h.via==="ui"?"界面":"Cursor")+'</td><td>'+h.requested+(mism?' → <span class="warn">'+h.served+'</span>':'')+'<div class="muted">'+(h.prompt||"").replace(/</g,"&lt;")+'</div></td><td>'+(h.inTok??"")+" / "+(h.outTok??"")+'</td><td>'+(h.cost?"$"+fmt(h.cost):"免费")+'</td><td>'+(h.tx?'<a target="_blank" href="https://basescan.org/tx/'+h.tx+'">查看</a>':"")+'</td></tr>'}).join("")||'<tr><td colspan="6" class="muted">还没有调用</td></tr>';
 }
+const n=(v)=>v==null?"—":Number(v).toLocaleString();
+async function cursorLog(){
+  try{const j=await api("/api/cursor");
+    const ok=j.calls.filter(c=>c.status===200);
+    $("cSum").innerHTML="今天 <b>$"+fmt(j.spentToday)+"</b>（每天上限 $"+(j.dailyCap/1e6)+"，单条 $"+(j.maxPerCall/1e6)+"）· 付款钱包 "+(j.address||"—")+" · 最近 "+j.calls.length+" 条里成功 "+ok.length+" 条";
+    $("cDays").innerHTML=j.days.map(d=>'<tr><td>'+d.day+'</td><td>'+d.model+'</td><td>'+d.calls+'</td><td>'+n(d.in_tok)+'</td><td>'+n(d.out_tok)+'</td><td>$'+fmt(d.cost)+'</td><td>$'+fmt(d.cost/d.calls)+'</td></tr>').join("")||'<tr><td colspan="7" class="muted">还没有</td></tr>';
+    $("cCalls").innerHTML=j.calls.map(c=>{const mism=c.served&&c.served.toLowerCase()!==c.model.toLowerCase();return '<tr><td>'+new Date(c.at).toLocaleString()+'</td><td>'+c.model+(mism?' → <span class="warn">'+c.served+'</span>':'')+'</td><td'+(c.status===200?'':' class="err"')+'>'+c.status+'</td><td>'+n(c.in_tok)+'</td><td>'+n(c.cached_tok)+'</td><td>'+n(c.out_tok)+'</td><td>'+(c.req_bytes?Math.round(c.req_bytes/1024)+" KB":"—")+'</td><td>'+(c.ms?(c.ms/1000).toFixed(1)+" 秒":"—")+'</td><td>'+(c.cost?"$"+fmt(c.cost):"—")+'</td><td>'+(c.tx?'<a target="_blank" href="https://basescan.org/tx/'+c.tx+'">查看</a>':"")+'</td></tr>'}).join("")||'<tr><td colspan="10" class="muted">还没有</td></tr>';
+  }catch(e){$("cSum").innerHTML='<span class="err">取不到服务器明细：'+e.message+'</span>'}}
+$("cRefresh").onclick=cursorLog;
+cursorLog();setInterval(cursorLog,30000);
 (async()=>{await refresh();MODELS=await api("/api/models");sel=MODELS.find(m=>m.id===STATE.defaultModel)||MODELS[0];filter="featured";showSel();render()})().catch(e=>{$("list").innerHTML='<div class="err">'+e.message+'</div>'});
 </script></body></html>`;

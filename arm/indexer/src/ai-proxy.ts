@@ -35,6 +35,7 @@ const ensure = () => (ready ??= (async () => {
   await sql`create table if not exists ai_proxy_calls (
     id bigserial primary key, at timestamptz not null default now(), model text not null, served text, stream boolean not null,
     cost bigint not null, tx text, status int not null)`;
+  await sql`alter table ai_proxy_calls add column if not exists in_tok int, add column if not exists out_tok int, add column if not exists cached_tok int, add column if not exists body_model text, add column if not exists req_bytes int, add column if not exists ms int`;
 })());
 
 /** spend since 00:00 UTC+8 (micro-USDC) */
@@ -90,9 +91,12 @@ export async function aiProxyChat(raw: string): Promise<Response> {
     return err(400, "bad json");
   }
   if (typeof body.model !== "string" || !/^[\w.\-]+\/[\w.\-:+]+$/.test(body.model)) return err(400, "model must be a BlockRun id like deepseek/deepseek-chat");
-  // the quote is driven by the input size (max_tokens barely moves it, measured 10.12), so Cursor's body goes as-is
-  const payload = JSON.stringify(body);
+  // the quote is driven by the input size (max_tokens barely moves it, measured 10.12), so Cursor's body goes as-is,
+  // except that streams are asked to end with a usage chunk (standard OpenAI option) so the tokens can be logged
   const stream = body.stream === true;
+  if (stream) body.stream_options = { ...((body.stream_options as object) ?? {}), include_usage: true };
+  const payload = JSON.stringify(body);
+  const t0 = Date.now();
   const post = (payment?: string) => fetch(`${UPSTREAM}/chat/completions`, {
     method: "POST",
     headers: { "content-type": "application/json", ...(payment ? { "PAYMENT-SIGNATURE": payment, "X-PAYMENT": payment } : {}) },
@@ -124,12 +128,48 @@ export async function aiProxyChat(raw: string): Promise<Response> {
   const served = r.headers.get("x-served-model");
   const tx = (decodeB64(r.headers.get("payment-response"))?.transaction as string | undefined) ?? null;
   await ensure();
-  await sql`insert into ai_proxy_calls (model, served, stream, cost, tx, status) values (${body.model}, ${served}, ${stream}, ${r.ok ? cost : 0}, ${tx}, ${r.status})`.catch(() => {});
+  const [row] = await sql<{ id: string }[]>`insert into ai_proxy_calls (model, served, stream, cost, tx, status, req_bytes) values (${body.model as string}, ${served}, ${stream}, ${r.ok ? cost : 0}, ${tx}, ${r.status}, ${payload.length}) returning id::text`.catch(() => [] as { id: string }[]);
   const headers = new Headers({ "content-type": r.headers.get("content-type") ?? (stream ? "text/event-stream" : "application/json"), "cache-control": "no-cache" });
   // nginx must not buffer the SSE stream
   headers.set("x-accel-buffering", "no");
   if (served) headers.set("x-served-model", served);
-  return new Response(r.body, { status: r.status === 402 ? 402 : r.status, headers });
+  if (!r.body) return new Response(null, { status: r.status, headers });
+  // pass the body through untouched while reading the usage / model out of a copy
+  const [toClient, toLog] = r.body.tee();
+  if (row) void logUsage(row.id, toLog, t0);
+  else void toLog.cancel();
+  return new Response(toClient, { status: r.status === 402 ? 402 : r.status, headers });
+}
+
+type Usage = { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } };
+async function logUsage(id: string, s: ReadableStream<Uint8Array>, t0: number) {
+  let text = "";
+  try {
+    const dec = new TextDecoder();
+    for await (const c of s as unknown as AsyncIterable<Uint8Array>) {
+      text += dec.decode(c, { stream: true });
+      // keep only the tail: usage and the model name are in the last chunks / the top-level object
+      if (text.length > 400_000) text = text.slice(-200_000);
+    }
+  } catch {
+    // client went away: whatever arrived is still parsed
+  }
+  let usage: Usage | undefined, model: string | undefined;
+  const take = (j: { usage?: Usage | null; model?: string }) => {
+    if (j.usage) usage = j.usage;
+    if (typeof j.model === "string") model = j.model;
+  };
+  try {
+    take(JSON.parse(text));
+  } catch {
+    for (const line of text.split("\n")) {
+      if (!line.startsWith("data:") || line.includes("[DONE]")) continue;
+      try {
+        take(JSON.parse(line.slice(5)));
+      } catch {}
+    }
+  }
+  await sql`update ai_proxy_calls set in_tok = ${usage?.prompt_tokens ?? null}, out_tok = ${usage?.completion_tokens ?? null}, cached_tok = ${usage?.prompt_tokens_details?.cached_tokens ?? null}, body_model = ${model ?? null}, ms = ${Date.now() - t0} where id = ${id}`.catch(() => {});
 }
 
 export async function aiProxyModels() {
@@ -139,8 +179,10 @@ export async function aiProxyModels() {
   return { object: "list", data };
 }
 
-export async function aiProxyStats() {
+export async function aiProxyStats(limit = 100) {
   await ensure();
-  const rows = await sql`select at, model, served, stream, cost::float8 as cost, tx, status from ai_proxy_calls order by id desc limit 30`;
-  return { address: aiProxyAddress(), spentToday: await spentToday(), dailyCap: DAILY_CAP, maxPerCall: MAX_PER_CALL, calls: rows };
+  const rows = await sql`select at, model, coalesce(served, body_model) as served, stream, cost::float8 as cost, tx, status, in_tok, out_tok, cached_tok, req_bytes, ms from ai_proxy_calls order by id desc limit ${Math.min(Math.max(limit, 1), 500)}`;
+  const days = await sql`select to_char(at at time zone 'Asia/Shanghai', 'YYYY-MM-DD') as day, model, count(*)::int as calls, sum(cost)::float8 as cost, sum(in_tok)::int as in_tok, sum(out_tok)::int as out_tok
+    from ai_proxy_calls where status = 200 and at > now() - interval '30 days' group by 1, 2 order by 1 desc, 4 desc`;
+  return { address: aiProxyAddress(), spentToday: await spentToday(), dailyCap: DAILY_CAP, maxPerCall: MAX_PER_CALL, calls: rows, days };
 }
