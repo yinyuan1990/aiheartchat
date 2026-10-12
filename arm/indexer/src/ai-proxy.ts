@@ -19,8 +19,6 @@ const KEY = process.env.AI_PROXY_KEY ?? "";
 const WALLET = process.env.AI_PROXY_WALLET_KEY ? privateKeyToAccount(process.env.AI_PROXY_WALLET_KEY as Hex) : null;
 const MAX_PER_CALL = Math.round(Number(process.env.AI_PROXY_MAX_PER_CALL ?? 0.5) * 1e6);
 const DAILY_CAP = Math.round(Number(process.env.AI_PROXY_DAILY_CAP ?? 5) * 1e6);
-/** quotes assume the whole max_tokens reply, so an absent / huge one would be quoted (and paid) at the model maximum */
-const MAX_TOKENS = 8192;
 const MAX_BODY = 4_000_000;
 
 export const aiProxyOn = () => KEY.length >= 32 && !!WALLET;
@@ -92,10 +90,7 @@ export async function aiProxyChat(raw: string): Promise<Response> {
     return err(400, "bad json");
   }
   if (typeof body.model !== "string" || !/^[\w.\-]+\/[\w.\-:+]+$/.test(body.model)) return err(400, "model must be a BlockRun id like deepseek/deepseek-chat");
-  for (const k of ["max_tokens", "max_completion_tokens"] as const) {
-    if (body[k] != null) body[k] = Math.min(Number(body[k]) || MAX_TOKENS, MAX_TOKENS);
-  }
-  if (body.max_tokens == null && body.max_completion_tokens == null) body.max_tokens = MAX_TOKENS;
+  // the quote is driven by the input size (max_tokens barely moves it, measured 10.12), so Cursor's body goes as-is
   const payload = JSON.stringify(body);
   const stream = body.stream === true;
   const post = (payment?: string) => fetch(`${UPSTREAM}/chat/completions`, {
