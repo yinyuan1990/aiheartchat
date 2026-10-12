@@ -23,6 +23,7 @@ import { perpMarket, perpWhales } from "./perp.js";
 import { gameBoard, gamePlay, gameSell, gameSession, gameStart, gameTick, gameToday } from "./game.js";
 import { boatBoard, boatInfo, boatLogin, boatMe, boatRunEnd, boatRunStart, boatWithdraw } from "./boat.js";
 import { storyEnd, storyLevels, storyStart } from "./story.js";
+import { aiProxyAuth, aiProxyChat, aiProxyModels, aiProxyStats } from "./ai-proxy.js";
 import { addSolComment, jupQuote, jupSwap, solComments, solRelay, solTokens } from "./solana.js";
 import { isAvatarAddress, walletAvatar } from "./avatars.js";
 import { claimOf, verifyTransfer } from "./verify.js";
@@ -886,6 +887,10 @@ app.get("/api/x402/job", async (c) => {
   const r = await x402Job(c.req.query("u"), c.req.header("x-payment-signature"), clientIp(c) || "?");
   return c.json(r.json as object, r.status as 200);
 });
+// Cursor "custom model" (ai-proxy.ts): OpenAI-compatible, operator's key only, paid from the server's own small wallet
+app.post("/api/ai/v1/chat/completions", async (c) => (aiProxyAuth(c.req.header("authorization")) ? aiProxyChat(await c.req.text()) : c.json({ error: { message: "invalid api key" } }, 401)));
+app.get("/api/ai/v1/models", async (c) => (aiProxyAuth(c.req.header("authorization")) ? c.json(await aiProxyModels()) : c.json({ error: { message: "invalid api key" } }, 401)));
+app.get("/api/ai/v1/stats", async (c) => (aiProxyAuth(c.req.header("authorization")) ? c.json(await aiProxyStats()) : c.json({ error: { message: "invalid api key" } }, 401)));
 app.get("/api/x402/relay/:id", async (c) => {
   const r = await x402Relay(c.req.param("id"), clientIp(c) || "?");
   return c.json(r.json as object, r.status as 200);
