@@ -36,7 +36,33 @@ const ensure = () => (ready ??= (async () => {
     id bigserial primary key, at timestamptz not null default now(), model text not null, served text, stream boolean not null,
     cost bigint not null, tx text, status int not null)`;
   await sql`alter table ai_proxy_calls add column if not exists in_tok int, add column if not exists out_tok int, add column if not exists cached_tok int, add column if not exists body_model text, add column if not exists req_bytes int, add column if not exists ms int`;
+  await sql`alter table ai_proxy_calls add column if not exists shape jsonb`;
 })());
+
+/** what a request is made of (sizes only, no content): why a Cursor agent turn is MBs */
+function shapeOf(body: Record<string, unknown>) {
+  const msgs = Array.isArray(body.messages) ? (body.messages as { role?: string; content?: unknown; tool_calls?: unknown }[]) : [];
+  const by: Record<string, { n: number; chars: number }> = {};
+  let images = 0, imageChars = 0, biggest = 0;
+  for (const m of msgs) {
+    let chars = 0;
+    const parts = Array.isArray(m.content) ? (m.content as { type?: string; text?: string; image_url?: { url?: string } }[]) : null;
+    if (typeof m.content === "string") chars += m.content.length;
+    for (const p of parts ?? []) {
+      if (p.type === "image_url") {
+        images++;
+        imageChars += p.image_url?.url?.length ?? 0;
+      } else chars += (p.text ?? JSON.stringify(p)).length;
+    }
+    if (m.tool_calls) chars += JSON.stringify(m.tool_calls).length;
+    const k = m.role ?? "?";
+    by[k] ??= { n: 0, chars: 0 };
+    by[k].n++;
+    by[k].chars += chars;
+    biggest = Math.max(biggest, chars);
+  }
+  return { messages: msgs.length, by, images, imageChars, biggest, tools: Array.isArray(body.tools) ? body.tools.length : 0, toolsChars: body.tools ? JSON.stringify(body.tools).length : 0 };
+}
 
 /** spend since 00:00 UTC+8 (micro-USDC) */
 async function spentToday() {
@@ -128,7 +154,7 @@ export async function aiProxyChat(raw: string): Promise<Response> {
   const served = r.headers.get("x-served-model");
   const tx = (decodeB64(r.headers.get("payment-response"))?.transaction as string | undefined) ?? null;
   await ensure();
-  const [row] = await sql<{ id: string }[]>`insert into ai_proxy_calls (model, served, stream, cost, tx, status, req_bytes) values (${body.model as string}, ${served}, ${stream}, ${r.ok ? cost : 0}, ${tx}, ${r.status}, ${payload.length}) returning id::text`.catch(() => [] as { id: string }[]);
+  const [row] = await sql<{ id: string }[]>`insert into ai_proxy_calls (model, served, stream, cost, tx, status, req_bytes, shape) values (${body.model as string}, ${served}, ${stream}, ${r.ok ? cost : 0}, ${tx}, ${r.status}, ${payload.length}, ${sql.json(shapeOf(body))}) returning id::text`.catch(() => [] as { id: string }[]);
   const headers = new Headers({ "content-type": r.headers.get("content-type") ?? (stream ? "text/event-stream" : "application/json"), "cache-control": "no-cache" });
   // nginx must not buffer the SSE stream
   headers.set("x-accel-buffering", "no");
@@ -181,7 +207,7 @@ export async function aiProxyModels() {
 
 export async function aiProxyStats(limit = 100) {
   await ensure();
-  const rows = await sql`select at, model, coalesce(served, body_model) as served, stream, cost::float8 as cost, tx, status, in_tok, out_tok, cached_tok, req_bytes, ms from ai_proxy_calls order by id desc limit ${Math.min(Math.max(limit, 1), 500)}`;
+  const rows = await sql`select at, model, coalesce(served, body_model) as served, stream, cost::float8 as cost, tx, status, in_tok, out_tok, cached_tok, req_bytes, ms, shape from ai_proxy_calls order by id desc limit ${Math.min(Math.max(limit, 1), 500)}`;
   const days = await sql`select to_char(at at time zone 'Asia/Shanghai', 'YYYY-MM-DD') as day, model, count(*)::int as calls, sum(cost)::float8 as cost, sum(in_tok)::int as in_tok, sum(out_tok)::int as out_tok
     from ai_proxy_calls where status = 200 and at > now() - interval '30 days' group by 1, 2 order by 1 desc, 4 desc`;
   return { address: aiProxyAddress(), spentToday: await spentToday(), dailyCap: DAILY_CAP, maxPerCall: MAX_PER_CALL, calls: rows, days };
