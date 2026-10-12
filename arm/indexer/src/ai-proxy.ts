@@ -146,6 +146,6 @@ export async function aiProxyModels() {
 
 export async function aiProxyStats() {
   await ensure();
-  const rows = await sql`select at, model, served, stream, cost, tx, status from ai_proxy_calls order by id desc limit 30`;
+  const rows = await sql`select at, model, served, stream, cost::float8 as cost, tx, status from ai_proxy_calls order by id desc limit 30`;
   return { address: aiProxyAddress(), spentToday: await spentToday(), dailyCap: DAILY_CAP, maxPerCall: MAX_PER_CALL, calls: rows };
 }
