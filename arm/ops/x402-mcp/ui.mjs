@@ -41,7 +41,7 @@ async function route(req, res) {
     const b = await readJson(req), patch = {};
     if (typeof b.defaultModel === "string") patch.defaultModel = b.defaultModel;
     if (Number(b.maxPerCall) > 0 && Number(b.maxPerCall) <= 5) patch.maxPerCall = Number(b.maxPerCall);
-    if (Number(b.dailyCap) > 0 && Number(b.dailyCap) <= 100) patch.dailyCap = Number(b.dailyCap);
+    if (Number(b.dailyCap) > 0 && Number(b.dailyCap) <= 1000) patch.dailyCap = Number(b.dailyCap);
     return send(res, 200, saveConfig(patch));
   }
   if (url.pathname === "/api/chat" && req.method === "POST") {
