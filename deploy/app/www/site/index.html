@@ -508,19 +508,21 @@ SiteI18n.ready(function () {
   // ---- 下载地址：读后台「App 版本 / 强制更新」配置（同域 /api），失败则用静态默认 ----
   var isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
   var isAndroid = /Android/i.test(navigator.userAgent);
-  function setIos(url, channel, ver) {
-    var tf = (channel || 'testflight').toLowerCase() === 'testflight';
-    var label = url ? (tf ? T('home.js.iosTf', '通过 TestFlight 安装') : T('home.js.iosStore', 'App Store 下载')) : T('home.js.iosSoon', '即将上线');
-    var small = url ? (tf ? T('home.js.iosBeta', 'iOS 测试版') : 'iOS') : 'iOS';
+  // iOS 只认 App Store 链接：TestFlight 还没对外开放，后台填了 TF 链接也按「即将上线」处理
+  function iosLive(ios) { return !!(ios && ios.url && (ios.channel || '').toLowerCase() === 'appstore'); }
+  function setIos(ios) {
+    var url = iosLive(ios) ? ios.url : '';
+    var label = url ? T('home.js.iosStore', 'App Store 下载') : T('home.js.iosSoon', '即将上线');
     ['', '2'].forEach(function (s) {
       var a = document.getElementById('btnIos' + s);
       document.getElementById('iosLabel' + s).textContent = label;
-      document.getElementById('iosSmall' + s).textContent = small;
-      if (url) { a.href = url; a.removeAttribute('onclick'); }
+      document.getElementById('iosSmall' + s).textContent = 'iOS';
+      if (url) { a.href = url; a.onclick = null; }
       else { a.href = 'javascript:void(0)'; a.onclick = function () { alert(T('home.js.iosAlert', 'iOS 版本正在准备中，敬请期待')); }; }
     });
-    document.getElementById('iosChanText').textContent = tf ? 'TestFlight' : 'App Store';
-    return ver;
+    var chan = document.getElementById('iosChanText');
+    if (url) chan.textContent = 'App Store';
+    else chan.parentNode.innerHTML = T('home.js.iosSoonLine', 'iOS 即将上线 · Android 直接下载安装包 · 不用手机号，装好就能用');
   }
   function setAndroid(url, ver) {
     ['', '2'].forEach(function (s) { if (url) document.getElementById('btnAndroid' + s).href = url; });
@@ -530,14 +532,14 @@ SiteI18n.ready(function () {
   fetch('https://api.yyheart.com/api/app/download', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
     var d = j && j.data ? j.data : j;
     if (!d) throw 0;
-    setIos(d.ios && d.ios.url, d.ios && d.ios.channel, d.ios && d.ios.latest);
+    setIos(d.ios);
     setAndroid(d.android && d.android.url, d.android && d.android.latest);
     var parts = [];
     if (d.android && d.android.latest) parts.push('Android <b>v' + d.android.latest + '</b>');
-    if (d.ios && d.ios.url) parts.push('iOS <b>v' + d.ios.latest + '</b>' + T('home.js.iosChan', '（{ch}）', { ch: (d.ios.channel || '') === 'appstore' ? 'App Store' : T('home.js.tfBeta', 'TestFlight 测试版') }));
+    if (iosLive(d.ios)) parts.push('iOS <b>v' + d.ios.latest + '</b>' + T('home.js.iosChan', '（{ch}）', { ch: 'App Store' }));
     document.getElementById('verLine').innerHTML = parts.length ? T('home.js.current', '当前版本：{list}', { list: parts.join(' · ') }) : '';
   }).catch(function () {
-    setIos('', 'testflight', '');
+    setIos(null);
     document.getElementById('verLine').textContent = '';
   });
   // 当前设备是哪个平台就把对应按钮放前面

@@ -624,9 +624,12 @@ SiteI18n.ready(function () {
     enhanceStrip(app.querySelector('.strip'));
     bindLightbox(d);
     var dl = document.getElementById('dl');
+    // iOS 只认 App Store 链接：TestFlight 还没对外开放，没上架前 iPhone 上点下载只提示「即将上线」
+    var iosLive = false;
     fetch(API + '/api/app/download', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
       var x = j && j.data ? j.data : j; if (!x) return;
-      var u = isIOS ? (x.ios && x.ios.url) : isAnd ? (x.android && x.android.url) : '';
+      iosLive = !!(x.ios && x.ios.url && (x.ios.channel || '').toLowerCase() === 'appstore');
+      var u = isIOS ? (iosLive ? x.ios.url : '') : isAnd ? (x.android && x.android.url) : '';
       if (u) dl.href = u;
     }).catch(function () {});
     dl.addEventListener('click', function (e) {
@@ -634,7 +637,8 @@ SiteI18n.ready(function () {
         // 点下载再记一次（更贴近安装时间，归因取最近一条）
         try { fetch(API + '/api/app/invite/click', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: code }), keepalive: true }); } catch (_) {}
       }
-      if (isWx && (isAnd || isIOS)) { e.preventDefault(); document.getElementById('wx').classList.add('on'); }
+      if (isWx && (isAnd || isIOS)) { e.preventDefault(); document.getElementById('wx').classList.add('on'); return; }
+      if (isIOS && !iosLive) { e.preventDefault(); alert(T('t.iosSoon', 'iOS 版本正在准备中，敬请期待')); }
     });
   }
 

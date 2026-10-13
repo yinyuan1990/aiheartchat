@@ -323,7 +323,7 @@ export function GallerySharePage() {
   useEffect(() => {
     if (!id) return;
     api<SharedPost>(`/app/gallery/${id}`).then(setP).catch((e) => setErr(e.message || t('gallery.expired')));
-    api<any>('/app/download').then((d) => setDl({ android: d?.android?.url, ios: d?.ios?.url })).catch(() => {});
+    api<any>('/app/download').then((d) => setDl({ android: d?.android?.url, ios: d?.ios?.channel === 'appstore' ? d.ios.url : undefined })).catch(() => {});
   }, [id]);
 
   const openApp = () => {

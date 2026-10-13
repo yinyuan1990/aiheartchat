@@ -121,7 +121,8 @@ abstract contract Base is Test {
             marketingBps: 0,
             initialBuyUsdc: initialBuy,
             minTokensOut: 0,
-            referralBps: 0
+            referralBps: 0,
+            kol: address(0)
         });
     }
 

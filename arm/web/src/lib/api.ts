@@ -44,6 +44,8 @@ export type TokenView = {
   /** share of the tax to the marketing wallet; the rest goes to the team wallet */
   taxMarketingBps: number;
   taxUsdcTotal: string;
+  /** KOL mode: wallet that received 1% of the supply at launch ('' = standard launch) */
+  kol?: string;
   /** owner moderation flags (indexer-side, display only) */
   hidden?: boolean;
   pinned?: boolean;

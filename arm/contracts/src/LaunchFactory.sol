@@ -33,6 +33,9 @@ import {
 ///
 ///      Arm: every launch gets its own CreatorFeeSplitter (via ReferralHub) registered as the lock's payout, so the
 ///      creator can share fees with promoters (`referralBps`, default 0 = off) without any extra transaction.
+///
+///      KOL mode (`kol` set): exactly `KOL_BPS` (1%, constant) of the supply goes to that wallet at launch, before
+///      liquidity is added; the pool is seeded with the remaining 99%. `kol` = address(0) is the standard launch.
 contract LaunchFactory is Ownable, ReentrancyGuard, IUniswapV3SwapCallback {
     using SafeERC20 for IERC20;
 
@@ -42,6 +45,8 @@ contract LaunchFactory is Ownable, ReentrancyGuard, IUniswapV3SwapCallback {
     int24 public constant MAX_TICK = 887_272;
     /// @dev Creator share of swap fees, snapshotted into each lock. Immutable by design.
     uint16 public constant CREATOR_SHARE_BPS = 7_800;
+    /// @dev KOL-mode share of the supply sent to the KOL wallet at launch. Constant: 100 = 1%.
+    uint16 public constant KOL_BPS = 100;
 
     IUniswapV3Factory public immutable uniFactory;
     INonfungiblePositionManager public immutable positionManager;
@@ -100,10 +105,13 @@ contract LaunchFactory is Ownable, ReentrancyGuard, IUniswapV3SwapCallback {
         uint256 initialBuyUsdc; // optional first buy, pulled from msg.sender
         uint256 minTokensOut; // slippage guard for the first buy
         uint16 referralBps; // share of the creator fees offered to promoters (0 = off, ≤ 5000); changeable later
+        address kol; // KOL mode: receives KOL_BPS of the supply at launch; address(0) = standard launch
     }
 
     mapping(address => Launch) public launches;
     address[] public allTokens;
+    /// @dev KOL-mode launches only.
+    mapping(address token => address) public kolOf;
 
     event TokenLaunched(
         address indexed token,
@@ -121,7 +129,10 @@ contract LaunchFactory is Ownable, ReentrancyGuard, IUniswapV3SwapCallback {
     event TaxConfigured(
         address indexed token, uint16 buyTaxBps, uint16 sellTaxBps, address marketingWallet, address teamWallet, uint16 marketingBps
     );
+    /// @dev Emitted for KOL-mode launches only, after TokenLaunched / TaxConfigured.
+    event KolAllocated(address indexed token, address indexed kol, uint256 amount);
     error TaxOutOfRange();
+    error BadKol();
     error ZeroAddress();
     error NoLiquidity();
     error PoolTampered();
@@ -157,6 +168,9 @@ contract LaunchFactory is Ownable, ReentrancyGuard, IUniswapV3SwapCallback {
 
     function launch(LaunchParams calldata p) external nonReentrant returns (address token, address pool, uint256 positionId) {
         if (p.buyTaxBps > maxTaxBps || p.sellTaxBps > maxTaxBps || p.marketingBps > 10_000) revert TaxOutOfRange();
+        if (p.kol == address(this) || p.kol == address(locker) || p.kol == treasury || p.kol == address(positionManager)) {
+            revert BadKol();
+        }
 
         // 1) no creation fee on Arm
         uint256 fee = creationFee;
@@ -168,6 +182,9 @@ contract LaunchFactory is Ownable, ReentrancyGuard, IUniswapV3SwapCallback {
         // 3) pool at the platform-wide opening market cap (same for every launch)
         pool = _preparePool(token, isToken0);
         LaunchToken(token).setPool(pool);
+
+        // KOL mode: the KOL share leaves first, the pool gets everything that is left
+        if (p.kol != address(0)) _allocateKol(token, pool, p.kol);
 
         // 4) + 5) single-sided range on the token side of the price, minted straight into the locker
         positionId = _mintLocked(token, pool, isToken0);
@@ -198,6 +215,17 @@ contract LaunchFactory is Ownable, ReentrancyGuard, IUniswapV3SwapCallback {
         if (p.buyTaxBps > 0 || p.sellTaxBps > 0) {
             emit TaxConfigured(token, p.buyTaxBps, p.sellTaxBps, _orSender(p.marketingWallet), _orSender(p.teamWallet), p.marketingBps);
         }
+        if (p.kol != address(0)) emit KolAllocated(token, p.kol, _kolAmount(token));
+    }
+
+    function _kolAmount(address token) internal view returns (uint256) {
+        return (LaunchToken(token).SUPPLY() * KOL_BPS) / 10_000;
+    }
+
+    function _allocateKol(address token, address pool, address kol) internal {
+        if (kol == pool) revert BadKol();
+        IERC20(token).safeTransfer(kol, _kolAmount(token));
+        kolOf[token] = kol;
     }
 
     function _orSender(address a) internal view returns (address) {
@@ -287,9 +315,10 @@ contract LaunchFactory is Ownable, ReentrancyGuard, IUniswapV3SwapCallback {
         }
     }
 
+    /// @dev Seeds everything the factory holds of the token: the full supply, or 99% in KOL mode.
     function _mintLocked(address token, address pool, bool isToken0) internal returns (uint256 positionId) {
         (int24 tickLower, int24 tickUpper) = _range(pool, isToken0);
-        uint256 supply = LaunchToken(token).SUPPLY();
+        uint256 supply = IERC20(token).balanceOf(address(this));
         IERC20(token).forceApprove(address(positionManager), supply);
         uint128 liquidity;
         (positionId, liquidity,,) = positionManager.mint(

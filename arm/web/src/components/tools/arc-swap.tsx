@@ -8,7 +8,7 @@ import { encodePacked, formatUnits, isAddress, maxUint256, parseUnits, type Addr
 import { useTokens } from "@/lib/api";
 import { fmtNum } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { ADDR, FEE_TIERS, NET, erc20Abi, isLegacyFactory, quoterAbi, routerAbi } from "@/lib/web3";
+import { ADDR, FEE_TIERS, NET, addrsFor, erc20Abi, quoterAbi, routerAbi } from "@/lib/web3";
 import { useTx } from "@/lib/tx";
 import { logDebug } from "@/lib/debuglog";
 import { useApp } from "@/components/providers";
@@ -273,7 +273,7 @@ function TokenPicker({ open, onClose, onPick }: { open: boolean; onClose: () => 
   const [q, setQ] = useState("");
   const ours = useTokens("volume24h", "all", "24h", 60);
   const list = useMemo<SwapToken[]>(() => {
-    const mine = (ours.data ?? []).filter((x) => !x.hidden && !isLegacyFactory(x.factory)).map<SwapToken>((x) => ({ address: x.address as Address, symbol: x.symbol, decimals: 18, logo: x.logo, tag: "ark" }));
+    const mine = (ours.data ?? []).filter((x) => !x.hidden && addrsFor(x.factory).router.toLowerCase() === ADDR.router.toLowerCase()).map<SwapToken>((x) => ({ address: x.address as Address, symbol: x.symbol, decimals: 18, logo: x.logo, tag: "ark" }));
     return [USDC_TOKEN, ...HOT_TOKENS, ...mine];
   }, [ours.data]);
   const needle = q.trim().toLowerCase();

@@ -109,6 +109,8 @@ function shapeToken(r: Record<string, unknown>, extra: Record<string, unknown> =
     taxTeamWallet: (r.tax_team_wallet as string) ?? "",
     taxMarketingBps: Number(r.tax_marketing_bps ?? 0),
     taxUsdcTotal: (r.tax_usdc_total as string) ?? "0",
+    // KOL mode: wallet that received 1% of the supply at launch ('' = standard launch)
+    kol: (r.kol as string) ?? "",
     hidden: Boolean(r.hidden),
     pinned: r.pinned_at != null,
     // factory generation that launched the token (its locker / router / quoter follow from it — see /api/config)

@@ -103,6 +103,7 @@ SiteI18n.add({
   'home.js.iosSoon': '即将上线',
   'home.js.iosBeta': 'iOS 测试版',
   'home.js.iosAlert': 'iOS 版本正在准备中，敬请期待',
+  'home.js.iosSoonLine': 'iOS 即将上线 · Android 直接下载安装包 · 不用手机号，装好就能用',
   'home.js.iosChan': '（{ch}）',
   'home.js.tfBeta': 'TestFlight 测试版',
   'home.js.current': '当前版本：{list}',

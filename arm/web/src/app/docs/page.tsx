@@ -118,6 +118,12 @@ export default function DocsPage() {
                 "Every token trades against USDC in its own pool. There is no bonding curve and no migration later. Buys and sells happen in that same pool from the moment it launches.",
               )}
             </P>
+            <P>
+              {L(
+                "KOL 模式（可选）：发射时填一个 KOL 钱包地址，合约在注入流动性之前把 1% 供应（1000 万枚）直接转给这个地址，其余 99% 进池子。1% 是合约常量 KOL_BPS = 100，任何人都改不了；KOL 地址记在工厂合约 kolOf(token) 里、代币页公开显示。其他规则（开盘市值、防狙击、手续费分成、税币）完全不变。",
+                "KOL mode (optional): the creator names a KOL wallet at launch and the contract sends exactly 1% of the supply (10M tokens) to it before liquidity is added; the other 99% seeds the pool. The 1% is the contract constant KOL_BPS = 100 and nobody can change it; the KOL wallet is recorded on the factory as kolOf(token) and shown on the token page. Everything else (opening market cap, anti-snipe, fee split, tax mode) is unchanged.",
+              )}
+            </P>
             <Steps
               steps={[
                 [L("创建", "Create"), L("铸出固定 10 亿供应，USDC 池在同一笔交易内上线，开盘市值由平台统一设定。", "The token is minted with a fixed 1B supply and its USDC pool goes live in the same transaction, at the platform-wide opening market cap.")],

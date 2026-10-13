@@ -279,7 +279,7 @@ export function MusicSharePage() {
   useEffect(() => {
     if (!id) return;
     api<SharedTrack>(`/app/music/${id}`).then(setTrack).catch((e) => setErr(e.message || t('music.removed')));
-    api<any>('/app/download').then((d) => setDl({ android: d?.android?.url, ios: d?.ios?.url })).catch(() => {});
+    api<any>('/app/download').then((d) => setDl({ android: d?.android?.url, ios: d?.ios?.channel === 'appstore' ? d.ios.url : undefined })).catch(() => {});
   }, [id]);
 
   const openApp = () => {

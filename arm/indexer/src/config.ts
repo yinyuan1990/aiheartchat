@@ -17,6 +17,8 @@ export type ContractSet = {
   positionManager: Address;
   deployBlock: number;
   label?: string;
+  /** Arm: the hub that created this generation's CreatorFeeSplitters (each factory is wired to its own hub). */
+  referralHub?: Address;
   /** "stock": pools are quoted in a whitelisted tokenized stock instead of USDC (StockLaunchFactory / StockFeeLocker). */
   kind?: "usdc" | "stock";
 };
@@ -30,8 +32,6 @@ type Deployments = ContractSet & {
   chainId: number;
   usdc: Address;
   treasury: Address;
-  /** Arm: creates the per-launch CreatorFeeSplitter (the lock's payout) and holds the settling keeper. */
-  referralHub?: Address;
   /** Earlier factory generations still holding live tokens (LP is locked forever, so they never go away). Indexed and
    *  tradable alongside the current set; new launches only go through the top-level factory. */
   legacy?: ContractSet[];

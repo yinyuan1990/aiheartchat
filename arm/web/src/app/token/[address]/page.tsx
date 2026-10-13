@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { CandlestickChart, Copy, ExternalLink, Globe, Hash, LineChart, Lock, MessageCircle, Network, Percent, Send, Share2, Star, X } from "lucide-react";
+import { CandlestickChart, Copy, ExternalLink, Globe, Hash, LineChart, Lock, Megaphone, MessageCircle, Network, Percent, Send, Share2, Star, X } from "lucide-react";
 import { toast } from "sonner";
 import { isTaxToken, progressOf, usd, useCandles, useHolders, useSite, useToken, useTrades, type TokenView } from "@/lib/api";
 import { useWatchlist } from "@/lib/watchlist";
@@ -268,6 +268,7 @@ export default function TokenPage() {
                         <InfoRow k={t("tax.earned")} v={fmtUsd(usd(token.taxUsdcTotal))} />
                       </>
                     )}
+                    {token.kol && <InfoRow k={`${t("kol.mode")} 1%`} v={<span className="inline-flex items-center gap-1 text-primary" title={t("kol.tokenLine")}><Megaphone size={12} /> <Addr value={token.kol} head={10} tail={6} className="text-inherit" /></span>} />}
                     {burned > 0 && <InfoRow k={t("token.burned")} v={`${fmtNum(burned)} ${token.symbol} (${((burned / SUPPLY_TOKENS) * 100).toFixed(2)}%)`} />}
                     <InfoRow k="Launch tx" v={<a href={txUrl(token.launchTx)} target="_blank" rel="noreferrer" className="hover:underline">{shortAddr(token.launchTx, 8, 6)}</a>} />
                   </div>

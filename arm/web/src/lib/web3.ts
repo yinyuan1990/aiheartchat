@@ -107,8 +107,10 @@ export const erc20Abi = parseAbi([
 
 export const factoryAbi = parseAbi([
   "struct Socials { string website; string twitter; string telegram; string discord; string farcaster; }",
-  "struct LaunchParams { string name; string symbol; string logo; string description; Socials socials; address payout; uint16 buyTaxBps; uint16 sellTaxBps; address marketingWallet; address teamWallet; uint16 marketingBps; uint256 initialBuyUsdc; uint256 minTokensOut; uint16 referralBps; }",
+  "struct LaunchParams { string name; string symbol; string logo; string description; Socials socials; address payout; uint16 buyTaxBps; uint16 sellTaxBps; address marketingWallet; address teamWallet; uint16 marketingBps; uint256 initialBuyUsdc; uint256 minTokensOut; uint16 referralBps; address kol; }",
   "function maxTaxBps() view returns (uint16)",
+  "function KOL_BPS() view returns (uint16)",
+  "function kolOf(address token) view returns (address)",
   "function launch(LaunchParams p) returns (address token, address pool, uint256 positionId)",
   "function creationFee() view returns (uint256)",
   "function startMcapUsdc() view returns (uint256)",

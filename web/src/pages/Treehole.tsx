@@ -394,7 +394,7 @@ export function TreeholeSharePage() {
   useEffect(() => {
     if (!id) return;
     api<SharedTreehole>(`/app/treehole/${id}`).then(setP).catch((e) => setErr(e.message || t('treehole.deleted')));
-    api<any>('/app/download').then((d) => setDl({ android: d?.android?.url, ios: d?.ios?.url })).catch(() => {});
+    api<any>('/app/download').then((d) => setDl({ android: d?.android?.url, ios: d?.ios?.channel === 'appstore' ? d.ios.url : undefined })).catch(() => {});
   }, [id]);
 
   const openApp = () => {

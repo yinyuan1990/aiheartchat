@@ -107,6 +107,7 @@ SiteI18n.add({
   't.lb.tip': 'Double-tap to zoom · Swipe to switch · Tap outside to close',
   't.docTitle': '{name} invites you · HeartChat',
   't.fail.btn': 'Download HeartChat from the official site',
+  't.iosSoon': 'The iOS version is on its way. Stay tuned!',
   't.fail.gone': 'This card does not exist or has expired',
   't.fail.net': 'Network hiccup, please try again later',
   't.demo.label': 'Design preview (sample data):',

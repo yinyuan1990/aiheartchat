@@ -70,6 +70,8 @@ export async function migrate() {
   await sql`alter table tokens add column if not exists tax_team_wallet text not null default ''`;
   await sql`alter table tokens add column if not exists tax_marketing_bps int not null default 0`;
   await sql`alter table tokens add column if not exists tax_usdc_total numeric(78,0) not null default 0`;
+  // KOL mode (10.13 factory): wallet that got 1% of the supply at launch; '' = standard launch
+  await sql`alter table tokens add column if not exists kol text not null default ''`;
   await sql`alter table tokens drop column if exists tax_burn_bps`;
   await sql`alter table tokens drop column if exists tax_creator_usdc_total`;
   // stock generation (9.18): the pool is quoted in a tokenized stock. quote = '' → USDC (every earlier token).

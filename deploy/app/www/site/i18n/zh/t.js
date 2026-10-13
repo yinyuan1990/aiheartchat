@@ -107,6 +107,7 @@ SiteI18n.add({
   't.lb.tip': '双击放大 · 左右滑动切换 · 点空白关闭',
   't.docTitle': '{name} 邀请你 · 心之音',
   't.fail.btn': '去官网下载心之音',
+  't.iosSoon': 'iOS 版本正在准备中，敬请期待',
   't.mock.fName': '小柔',
   't.mock.city': '成都',
   't.mock.fSay': '下班后想找个人聊聊天，也可以陪你逛逛成都。周末一般在太古里附近，火锅要微辣的那种。',

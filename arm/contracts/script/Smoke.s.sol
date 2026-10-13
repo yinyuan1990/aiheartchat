@@ -57,7 +57,8 @@ contract Smoke is Script {
             marketingBps: 0,
             initialBuyUsdc: firstBuy,
             minTokensOut: 0,
-            referralBps: uint16(vm.envOr("REFERRAL_BPS", uint256(0)))
+            referralBps: uint16(vm.envOr("REFERRAL_BPS", uint256(0))),
+            kol: vm.envOr("KOL", address(0))
         });
     }
 

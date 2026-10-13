@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ImagePlus, LineChart, Lock, Percent, RefreshCw, Rocket, Scale, ShieldCheck, Sparkles, Zap } from "lucide-react";
+import { ChevronDown, ImagePlus, LineChart, Lock, Megaphone, Percent, RefreshCw, Rocket, Scale, ShieldCheck, Sparkles, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { useGasPrice, useReadContract } from "wagmi";
@@ -61,6 +61,8 @@ export default function CreatePage() {
   const [marketingPct, setMarketingPct] = useState(50);
   const [marketingWallet, setMarketingWallet] = useState("");
   const [teamWallet, setTeamWallet] = useState("");
+  const [kolOn, setKolOn] = useState(false);
+  const [kolWallet, setKolWallet] = useState("");
   const [busy, setBusy] = useState<null | "launch">(null);
   const [uploading, setUploading] = useState(false);
   const [ai, setAi] = useState<null | "all" | "logo">(null);
@@ -151,6 +153,10 @@ export default function CreatePage() {
   const mkValid = mkTrim === "" || isAddress(mkTrim);
   const tmValid = tmTrim === "" || isAddress(tmTrim);
   const taxWalletsValid = !taxed || (mkValid && tmValid);
+  // KOL mode only exists on the USDC factory (the stock factory has no `kol` param)
+  const kolActive = kolOn && !quoteSym;
+  const kolTrim = kolWallet.trim();
+  const kolValid = !kolActive || isAddress(kolTrim);
   const addrOrZero = (s: string) => (s && isAddress(s) ? getAddress(s) : zeroAddress) as Address;
   const ready = name.trim().length > 1 && symbol.trim().length > 0;
   // AI assistant gate: wallet connected, holds ≥ creation fee, and has generations left today
@@ -179,6 +185,7 @@ export default function CreatePage() {
           initialBuyUsdc: buy6,
           quote: quoteAsset?.address,
           referralBps: Math.round(Math.min(50, Math.max(0, parseFloat(referralPct) || 0)) * 100),
+          kol: kolActive ? getAddress(kolTrim) : undefined,
         },
         fee6,
       );
@@ -300,6 +307,25 @@ export default function CreatePage() {
               )}
             </Field>
 
+            {/* 3a · KOL mode (add-on to either token mode) */}
+            {!quoteSym && (
+              <Field label={t("kol.mode")}>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <ModeCard active={!kolOn} onClick={() => setKolOn(false)} title={t("kol.off")} desc={t("kol.offDesc")} icon={<Scale size={14} />} />
+                  <ModeCard active={kolOn} onClick={() => setKolOn(true)} title={t("kol.on")} desc={t("kol.onDesc")} icon={<Megaphone size={14} />} />
+                </div>
+                {kolOn && (
+                  <div className="mt-3 space-y-2 rounded-lg border border-primary/40 bg-primary/5 p-3">
+                    <Label htmlFor="kol" className="label">{t("kol.wallet")} <span className="font-mono text-primary">1%</span></Label>
+                    <Input id="kol" value={kolWallet} onChange={(e) => setKolWallet(e.target.value)} placeholder="0x…" className={cn("font-mono", kolTrim !== "" && !kolValid && "border-down")} />
+                    {kolTrim === "" ? <p className="text-[11px] text-down">{t("kol.walletRequired")}</p> : !kolValid && <p className="text-[11px] text-down">{t("tax.walletInvalid")}</p>}
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">{t("kol.hint")}</p>
+                    <div className="flex items-center gap-2 rounded-md bg-primary/15 px-2 py-1.5 text-xs font-medium text-primary"><Lock size={12} /> {t("kol.fixed")}</div>
+                  </div>
+                )}
+              </Field>
+            )}
+
             {/* 3b · pool quote asset (stock generation) */}
             {stockOn && (
               <Field label={t("create.quote")} hint={t("create.quoteHint")}>
@@ -390,6 +416,7 @@ export default function CreatePage() {
                     <span className="truncate font-semibold">{name || "Token name"}</span>
                     <span className="font-mono text-xs text-muted-foreground">${symbol || "TKN"}</span>
                     {taxed && <Badge variant="gold"><Percent /> {t("tax.badge").replace("{b}", String(buyTaxBps / 100)).replace("{s}", String(sellTaxBps / 100))}</Badge>}
+                    {kolActive && <Badge variant="secondary"><Megaphone /> {t("kol.badge")}</Badge>}
                   </div>
                   <p className="mt-0.5 line-clamp-3 text-xs text-secondary-foreground">{desc || "…"}</p>
                 </div>
@@ -411,6 +438,12 @@ export default function CreatePage() {
               {quoteSym && (
                 <div className="flex items-center justify-between"><span className="text-muted-foreground">{t("create.quote")}</span><Badge variant="secondary"><LineChart /> {quoteSym}</Badge></div>
               )}
+              {kolActive && (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">{t("kol.summary")}</span>
+                  <span className="truncate font-mono text-xs tabular" title={kolTrim}>1% · {fmtNum(SUPPLY_TOKENS / 100, 0)} → {kolValid ? `${kolTrim.slice(0, 6)}…${kolTrim.slice(-4)}` : "?"}</span>
+                </div>
+              )}
               <div className="flex items-center justify-between"><span className="text-muted-foreground">{t("create.initialBuy")}</span><span className="font-mono tabular">{fmtUsd(buy)}</span></div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Gas (USDC)</span>
@@ -425,7 +458,7 @@ export default function CreatePage() {
                 </div>
               )}
               {/* launch CTA lives in the (sticky) summary column: under the total on desktop, at the very end on phones (boss 9.16) */}
-              <Button size="xl" variant="glow" className="mt-2 w-full" onClick={!connected || wrongChain ? toggleConnect : launch} disabled={connected && !wrongChain && (insufficient || !!busy || !ready || !payoutValid || !taxWalletsValid)}>
+              <Button size="xl" variant="glow" className="mt-2 w-full" onClick={!connected || wrongChain ? toggleConnect : launch} disabled={connected && !wrongChain && (insufficient || !!busy || !ready || !payoutValid || !taxWalletsValid || !kolValid)}>
                 <Rocket />
                 {!connected ? t("common.connect") : wrongChain ? t(`wallet.switch.${NET}`) : insufficient ? t("tx.insufficient") : busy === "launch" ? t("create.step.launch") : t("create.launchBtn")}
               </Button>

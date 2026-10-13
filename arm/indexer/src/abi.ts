@@ -14,6 +14,9 @@ export const factoryAbi = parseAbi([
   "function maxTaxBps() view returns (uint16)",
   "function totalLaunches() view returns (uint256)",
   "function owner() view returns (address)",
+  // KOL mode (10.13 factory only; earlier factories revert)
+  "function kolOf(address token) view returns (address)",
+  "function KOL_BPS() view returns (uint16)",
 ]);
 
 /** Arm: one CreatorFeeSplitter per launch, created by the hub and registered as the lock's payout. */

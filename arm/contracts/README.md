@@ -1,8 +1,8 @@
 # Arm · 合约
 
 [![Live on Arc mainnet](https://img.shields.io/badge/Arc%20mainnet-live-2ea44f)](https://arm.yyheart.com)
-[![Verified on Sourcify](https://img.shields.io/badge/Sourcify-verified-2ea44f)](https://repo.sourcify.dev/5042/0x152deD476599f87A600Eb8A3D59a3F3b96d369BB)
-[![Tests](https://img.shields.io/badge/forge%20test-69%20passing-2ea44f)](test)
+[![Verified on Sourcify](https://img.shields.io/badge/Sourcify-verified-2ea44f)](https://repo.sourcify.dev/5042/0x71367B6e1d2a5a83F0c711D600064599A8a43c43)
+[![Tests](https://img.shields.io/badge/forge%20test-73%20passing-2ea44f)](test)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](src)
 
 **Free meme-token launches on Circle's Arc. LP locked forever, 78% of trading fees to the creator, all settled in USDC.**
@@ -15,17 +15,20 @@ Contracts of **Arm**, a free meme-token launchpad live on Arc mainnet — https:
 
 - **One-transaction launch**: `LaunchFactory` deploys the token (fixed 1B supply), creates a 1% Uniswap V3 pool against USDC, adds the whole supply as single-sided liquidity and locks the LP NFT in `FeeLocker` forever. Launching is free.
 - **Fee split**: the 1% pool fee is collected by `FeeLocker.distribute`, the token side is swapped to USDC, then **78% goes to the creator** (via the token's `CreatorFeeSplitter`) and 22% to `Treasury`, which settles weekly into reserve 16 / buyback 5 / dev 1.
+- **KOL mode (optional)**: the creator names a KOL wallet at launch and exactly 1% of the supply (`KOL_BPS = 100`, a constant) is sent to it before liquidity is added; the pool gets the other 99%. Recorded on-chain as `kolOf(token)` / `KolAllocated`.
 - **Pay-for-results referrals**: the creator can reserve 0–50% of their share for promoters. Only volume a promoter actually brought in is charged; a Keeper settles promoters daily onchain, and unsettled funds fall back to the creator after 7 days.
 - **Why Arc**: USDC is Arc's native gas and the quote asset of every pool, so launches, trades and fee payouts all settle in USDC with sub-second finality.
 
 | Contract | Mainnet address (chain 5042) | Source |
 |---|---|---|
-| LaunchFactory | [`0x152deD476599f87A600Eb8A3D59a3F3b96d369BB`](https://arc-scan.org/address/0x152deD476599f87A600Eb8A3D59a3F3b96d369BB) | [Sourcify](https://repo.sourcify.dev/5042/0x152deD476599f87A600Eb8A3D59a3F3b96d369BB) |
-| FeeLocker | [`0x78079BEDee24Af63D2B0c05EB91aFa33425B091f`](https://arc-scan.org/address/0x78079BEDee24Af63D2B0c05EB91aFa33425B091f) | [Sourcify](https://repo.sourcify.dev/5042/0x78079BEDee24Af63D2B0c05EB91aFa33425B091f) |
+| LaunchFactory | [`0x71367B6e1d2a5a83F0c711D600064599A8a43c43`](https://arc-scan.org/address/0x71367B6e1d2a5a83F0c711D600064599A8a43c43) | [Sourcify](https://repo.sourcify.dev/5042/0x71367B6e1d2a5a83F0c711D600064599A8a43c43) |
+| FeeLocker | [`0x12ef25DA4e656E1f3B799403C9177845E3bD62C6`](https://arc-scan.org/address/0x12ef25DA4e656E1f3B799403C9177845E3bD62C6) | [Sourcify](https://repo.sourcify.dev/5042/0x12ef25DA4e656E1f3B799403C9177845E3bD62C6) |
 | Treasury | [`0x142f499969fB7DE357BB84C5aa17D8653CE43F9e`](https://arc-scan.org/address/0x142f499969fB7DE357BB84C5aa17D8653CE43F9e) | [Sourcify](https://repo.sourcify.dev/5042/0x142f499969fB7DE357BB84C5aa17D8653CE43F9e) |
-| ReferralHub | [`0xC8F3005C3E33a0350a4077A526e453B1BE712Ae8`](https://arc-scan.org/address/0xC8F3005C3E33a0350a4077A526e453B1BE712Ae8) | [Sourcify](https://repo.sourcify.dev/5042/0xC8F3005C3E33a0350a4077A526e453B1BE712Ae8) |
+| ReferralHub | [`0x5746C68343e810284742C5Dc2e9bd650042BcbbD`](https://arc-scan.org/address/0x5746C68343e810284742C5Dc2e9bd650042BcbbD) | [Sourcify](https://repo.sourcify.dev/5042/0x5746C68343e810284742C5Dc2e9bd650042BcbbD) |
 
-Every launched token is also verified on Sourcify. Build & test with Foundry: `forge test` (69 tests). Pools sit on the official Uniswap V3 factory on Arc (`0xf0db7b58379503491d857dB50AC9ece64c653918`), so they show up on GeckoTerminal / DexScreener automatically.
+Since 2026-10-13 (KOL mode) new launches go through the factory above. Tokens launched before that live on the first generation — LaunchFactory `0x152deD476599f87A600Eb8A3D59a3F3b96d369BB`, FeeLocker `0x78079BEDee24Af63D2B0c05EB91aFa33425B091f`, ReferralHub `0xC8F3005C3E33a0350a4077A526e453B1BE712Ae8` (same Treasury, LP still locked there forever).
+
+Every launched token is also verified on Sourcify. Build & test with Foundry: `forge test` (73 tests). Pools sit on the official Uniswap V3 factory on Arc (`0xf0db7b58379503491d857dB50AC9ece64c653918`), so they show up on GeckoTerminal / DexScreener automatically.
 
 ### Trust model: what the team can and cannot do
 

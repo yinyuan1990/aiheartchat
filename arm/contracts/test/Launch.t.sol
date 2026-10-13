@@ -84,6 +84,65 @@ contract LaunchTest is Base {
         factory.launch(p);
     }
 
+    // ------------------------------------------------------------ KOL mode
+
+    function test_kol_getsExactlyOnePercent_restInPool() public {
+        address kol = makeAddr("kol");
+        assertEq(factory.KOL_BPS(), 100);
+        LaunchFactory.LaunchParams memory p = launchParams("KOL", 0);
+        p.kol = kol;
+        vm.expectEmit(false, true, false, true);
+        emit LaunchFactory.KolAllocated(address(0), kol, SUPPLY / 100);
+        vm.prank(creator);
+        (address token, address pool,) = factory.launch(p);
+
+        LaunchToken t = LaunchToken(token);
+        assertEq(t.totalSupply(), SUPPLY);
+        assertEq(t.balanceOf(kol), SUPPLY / 100, "KOL holds 1%");
+        assertEq(factory.kolOf(token), kol);
+        assertEq(t.balanceOf(address(factory)), 0);
+        uint256 inPool = t.balanceOf(pool);
+        uint256 dust = t.balanceOf(address(treasury));
+        assertEq(inPool + dust, SUPPLY - SUPPLY / 100, "other 99% seeded");
+        assertLt(dust, 1e18);
+        assertEq(t.balanceOf(creator), 0, "creator gets nothing for free");
+        assertApproxEqRel(spotMcap(token, pool), factory.startMcapUsdc(), 0.03e18);
+
+        // once there is USDC in the pool the KOL can sell (sells are never restricted, even in the window)
+        vm.roll(block.number + 1);
+        buy(buyer, token, 100e6);
+        uint256 out = sell(kol, token, SUPPLY / 1000);
+        assertGt(out, 0);
+    }
+
+    function test_kol_standardLaunchHasNone() public {
+        (address token,) = doLaunch(creator, "STD", 0);
+        assertEq(factory.kolOf(token), address(0));
+    }
+
+    function test_kol_withInitialBuyAndTax() public {
+        address kol = makeAddr("kol2");
+        LaunchFactory.LaunchParams memory p = launchParams("KOLT", 100e6);
+        p.kol = kol;
+        p.buyTaxBps = 300;
+        p.sellTaxBps = 300;
+        vm.prank(creator);
+        (address token,,) = factory.launch(p);
+        assertEq(LaunchToken(token).balanceOf(kol), SUPPLY / 100);
+        assertGt(LaunchToken(token).balanceOf(creator), 0, "first buy still lands");
+    }
+
+    function test_kol_rejectsProtocolAddresses() public {
+        address[4] memory bad = [address(factory), address(locker), address(treasury), address(nfpm)];
+        for (uint256 i; i < bad.length; ++i) {
+            LaunchFactory.LaunchParams memory p = launchParams("BAD", 0);
+            p.kol = bad[i];
+            vm.prank(creator);
+            vm.expectRevert(LaunchFactory.BadKol.selector);
+            factory.launch(p);
+        }
+    }
+
     function test_hub_onlyFactoryCreates_onlyOwnerSetsKeeper() public {
         vm.expectRevert(ReferralHub.OnlyFactory.selector);
         hub.create(makeAddr("t"), creator, 0);

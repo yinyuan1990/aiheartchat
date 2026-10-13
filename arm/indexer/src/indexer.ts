@@ -1,6 +1,6 @@
 import { getAddress, parseEventLogs, type Address, type Log } from "viem";
 import { client, ADDR, ALL_FACTORIES, ALL_LOCKERS, addrsFor, isFactory, isLocker } from "./chain.js";
-import { config, isStockFactory, quoteByAddress } from "./config.js";
+import { config, isStockFactory, quoteByAddress, setFor } from "./config.js";
 import { sql, getSync, setSync } from "./db.js";
 import { factoryAbi, hubAbi, lockerAbi, poolAbi, splitterAbi, stockFactoryAbi, stockLockerAbi, tokenAbi, treasuryAbi } from "./abi.js";
 import { mcapFromSqrtPriceX96, priceUsdFromMcap6 } from "./price.js";
@@ -84,7 +84,9 @@ async function onTokenLaunched(log: Log, args: {
   const [buyTax, sellTax, taxMarketing, taxTeam, taxMarketingBps] = tax;
   const ts = await tsOf(log.blockNumber!);
   // Arm: the lock pays the token's CreatorFeeSplitter; the creator wallet (what dashboards key on) lives in the splitter
-  const splitter = await splitterFor(token, payoutRaw);
+  const splitter = await splitterFor(token, payoutRaw, factory);
+  const kolRaw = await client.readContract({ address: factory, abi: factoryAbi, functionName: "kolOf", args: [token] }).catch(() => null);
+  const kol = kolRaw && !/^0x0+$/.test(kolRaw) ? getAddress(kolRaw) : "";
   const payout = splitter
     ? await splitterCreator(splitter)
     : payoutRaw !== "0x0000000000000000000000000000000000000000" ? getAddress(payoutRaw) : getAddress(args.deployer);
@@ -92,12 +94,12 @@ async function onTokenLaunched(log: Log, args: {
   await sql`insert into tokens (address, name, symbol, logo, description, website, twitter, telegram, discord, farcaster, deployer, payout, pool, position_id,
       is_token0, launch_block, launch_ts, launch_tx, restrictions_end_block, graduation_threshold, initial_buy_usdc, creation_fee_paid,
       buy_tax_bps, sell_tax_bps, tax_marketing_wallet, tax_team_wallet, tax_marketing_bps, factory,
-      quote, quote_symbol, quote_decimals, quote_usdc_fee, quote_pool, quote_price_usdc_launch)
+      quote, quote_symbol, quote_decimals, quote_usdc_fee, quote_pool, quote_price_usdc_launch, kol)
     values (${token}, ${name}, ${symbol}, ${String(logo).replace(/^https?:\/\/[^/]+\/(api\/uploads|brand)\//, "/$1/")}, ${description}, ${socials[0]}, ${socials[1]}, ${socials[2]}, ${socials[3]}, ${socials[4]}, ${row.deployer}, ${row.payout},
       ${row.pool}, ${args.positionId.toString()}, ${args.isToken0}, ${Number(log.blockNumber)}, ${ts}, ${log.transactionHash!},
       ${Number(args.restrictionsEndBlock)}, ${args.graduationThreshold.toString()}, ${args.initialBuyUsdc.toString()}, ${args.creationFeePaid.toString()},
       ${Number(buyTax)}, ${Number(sellTax)}, ${buyTax > 0 || sellTax > 0 ? getAddress(taxMarketing) : ""}, ${buyTax > 0 || sellTax > 0 ? getAddress(taxTeam) : ""}, ${Number(taxMarketingBps)}, ${factory},
-      ${quote}, ${quoteSymbol}, ${quoteDecimals}, ${quoteFee}, ${quotePool}, ${quotePriceLaunch.toString()})
+      ${quote}, ${quoteSymbol}, ${quoteDecimals}, ${quoteFee}, ${quotePool}, ${quotePriceLaunch.toString()}, ${kol})
     on conflict (address) do nothing`;
   if (splitter) {
     const bps = await client.readContract({ address: splitter as Address, abi: splitterAbi, functionName: "referralBps" }).catch(() => 0);
@@ -108,7 +110,7 @@ async function onTokenLaunched(log: Log, args: {
   // hotspot launches: link the token to the wallet's open claim for this symbol
   attachLaunch(row.deployer, symbol, token, log.transactionHash!).catch((e) => console.warn("[hotspots] attach failed", (e as Error).message));
   bus.emit("ws", { type: "launch", data: { token, symbol, name, deployer: row.deployer, ts, quote: quoteSymbol } });
-  console.log(`[launch] ${symbol} ${token} pool=${row.pool}${stock ? ` quote=${quoteSymbol}` : ""}`);
+  console.log(`[launch] ${symbol} ${token} pool=${row.pool}${stock ? ` quote=${quoteSymbol}` : ""}${kol ? ` kol=${kol}` : ""}`);
 }
 
 async function onSwap(log: Log, args: { sender: Address; recipient: Address; amount0: bigint; amount1: bigint; sqrtPriceX96: bigint; liquidity: bigint; tick: number }) {
@@ -252,9 +254,10 @@ async function onPayoutChanged(args: { token: Address; newPayout: Address }) {
 }
 
 /** The splitter the hub created for this token, if the lock pays it (Arm launches); null for plain wallets. */
-async function splitterFor(token: Address, payoutRaw: string): Promise<string | null> {
-  if (/^0x0+$/.test(ADDR.hub)) return null;
-  const s = await client.readContract({ address: ADDR.hub, abi: hubAbi, functionName: "splitterOf", args: [token] }).catch(() => null);
+async function splitterFor(token: Address, payoutRaw: string, factory: string): Promise<string | null> {
+  const hub = (setFor(factory).referralHub ?? ADDR.hub) as Address;
+  if (/^0x0+$/.test(hub)) return null;
+  const s = await client.readContract({ address: hub, abi: hubAbi, functionName: "splitterOf", args: [token] }).catch(() => null);
   return s && !/^0x0+$/.test(s) && s.toLowerCase() === payoutRaw.toLowerCase() ? getAddress(s) : null;
 }
 
@@ -282,6 +285,7 @@ async function onClaimed(log: Log, args: { account: Address; asset: Address; amo
 // ------------------------------------------------------------------ range processing
 
 type Typed = { log: Log; kind: string; args: unknown };
+const LOG_ADDRS = 20;
 
 async function processRange(from: bigint, to: bigint) {
   chunkEndBlock = to;
@@ -304,12 +308,13 @@ async function processRange(from: bigint, to: bigint) {
 
   const pools = [...poolToToken.keys()] as Address[];
   const toks = [...tokens.keys()] as Address[];
-  if (pools.length) {
-    const swapLogs = await client.getLogs({ address: pools, event: poolAbi[0], fromBlock: from, toBlock: to });
+  // rpc.mainnet.arc.io rejects eth_getLogs with more than 20 addresses ("requested range too large")
+  for (let i = 0; i < pools.length; i += LOG_ADDRS) {
+    const swapLogs = await client.getLogs({ address: pools.slice(i, i + LOG_ADDRS), event: poolAbi[0], fromBlock: from, toBlock: to });
     for (const l of swapLogs) all.push({ log: l, kind: "swap", args: l.args });
   }
-  if (toks.length) {
-    const xfer = await client.getLogs({ address: toks, event: TRANSFER_EVENT, fromBlock: from, toBlock: to });
+  for (let i = 0; i < toks.length; i += LOG_ADDRS) {
+    const xfer = await client.getLogs({ address: toks.slice(i, i + LOG_ADDRS), event: TRANSFER_EVENT, fromBlock: from, toBlock: to });
     for (const l of xfer) all.push({ log: l, kind: "transfer", args: l.args });
   }
   all.sort((a, b) => (a.log.blockNumber === b.log.blockNumber ? Number(a.log.logIndex! - b.log.logIndex!) : Number(a.log.blockNumber! - b.log.blockNumber!)));

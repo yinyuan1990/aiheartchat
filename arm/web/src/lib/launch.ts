@@ -25,6 +25,8 @@ export type LaunchInput = {
   quote?: Address;
   /** Arm: share of the creator fees offered to promoters (bps, 0 = off, ≤ 5000) */
   referralBps?: number;
+  /** KOL mode: this wallet receives 1% of the supply at launch (fixed in the contract); undefined = standard launch */
+  kol?: Address;
 };
 
 /**
@@ -86,7 +88,7 @@ export function useLaunch() {
             return run(t("create.step.launch"), await withGas(call, () => client.estimateContractGas({ ...call, account: me })));
           })()
         : await (async () => {
-            const call = { address: factory, abi: factoryAbi, functionName: "launch" as const, args: [{ ...params, initialBuyUsdc: input.initialBuyUsdc, minTokensOut: 0n, referralBps: input.referralBps ?? 0 }] as const };
+            const call = { address: factory, abi: factoryAbi, functionName: "launch" as const, args: [{ ...params, initialBuyUsdc: input.initialBuyUsdc, minTokensOut: 0n, referralBps: input.referralBps ?? 0, kol: input.kol ?? zeroAddress }] as const };
             return run(t("create.step.launch"), await withGas(call, () => client.estimateContractGas({ ...call, account: me })));
           })();
       if (!rc) return null;

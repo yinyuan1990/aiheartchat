@@ -103,6 +103,7 @@ SiteI18n.add({
   'home.js.iosSoon': 'Coming soon',
   'home.js.iosBeta': 'iOS beta',
   'home.js.iosAlert': 'The iOS version is on its way. Stay tuned!',
+  'home.js.iosSoonLine': 'iOS coming soon · Android downloads the APK directly · No phone number, ready once installed',
   'home.js.iosChan': ' ({ch})',
   'home.js.tfBeta': 'TestFlight beta',
   'home.js.current': 'Current version: {list}',
