@@ -6,7 +6,9 @@
  */
 import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:http";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { createPublicClient, erc20Abi, http } from "viem";
 import { base } from "viem/chains";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
@@ -220,12 +222,20 @@ async function runApp() {
   writeJson("ui.json", { port, url });
   console.log(`Arm AI ${VERSION}  ${account.address}`);
   console.log(`界面 / UI: ${url}`);
-  console.log("使用 Cursor 时请保持这个窗口打开；关掉窗口就停止签名。 / Keep this window open while you use Cursor; closing it stops signing.");
+  console.log("使用 Cursor 时请保持这个黑色窗口打开，关掉它才会停止签名；界面窗口关了不影响，双击 ArmAI.exe 可重新打开。");
+  console.log("Keep this black window open while you use Cursor (closing it stops signing). Closing the UI window is fine; double-click ArmAI.exe to reopen it.");
   console.log(`数据目录 / Data: ${DIR}`);
   if (!process.argv.includes("--no-open")) open(url);
 }
 
+/** the UI as its own app window (Edge / Chrome app mode, own profile so it is a separate window); browser tab as fallback */
 function open(url) {
-  if (process.platform === "win32") execFile("cmd", ["/c", "start", "", url], { windowsHide: true });
-  else execFile(process.platform === "darwin" ? "open" : "xdg-open", [url]);
+  if (process.platform !== "win32") return execFile(process.platform === "darwin" ? "open" : "xdg-open", [url]);
+  const pf = [process.env["ProgramFiles(x86)"], process.env.ProgramFiles, process.env.LOCALAPPDATA].filter(Boolean);
+  const browser = [
+    ...pf.map((p) => join(p, "Microsoft", "Edge", "Application", "msedge.exe")),
+    ...pf.map((p) => join(p, "Google", "Chrome", "Application", "chrome.exe")),
+  ].find((p) => existsSync(p));
+  if (!browser) return execFile("cmd", ["/c", "start", "", url], { windowsHide: true });
+  spawn(browser, [`--app=${url}`, `--user-data-dir=${file("window")}`, "--window-size=1200,900", "--no-first-run", "--no-default-browser-check"], { detached: true, stdio: "ignore" }).unref();
 }
