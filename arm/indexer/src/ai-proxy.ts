@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { toHex, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { sql } from "./db.js";
+import { fromMessagesStream, oaiError, toMessages } from "./ai-claude.js";
 
 /**
  * OpenAI-compatible endpoint for Cursor's "custom model" (10.12, operator only): Cursor's servers call
@@ -24,8 +25,9 @@ const MIN_MAX_TOKENS = Math.round(Number(process.env.AI_PROXY_MIN_MAX_TOKENS ?? 
 const KEEPALIVE_MS = Math.round(Number(process.env.AI_PROXY_KEEPALIVE_S ?? 10) * 1000);
 const FAIL_TTL_MS = Math.round(Number(process.env.AI_PROXY_FAIL_TTL_S ?? 180) * 1000);
 const CLAUDE_HINT = process.env.AI_PROXY_CLAUDE_HINT !== "0";
+const CLAUDE_NATIVE = process.env.AI_PROXY_CLAUDE_NATIVE !== "0";
 const HINT =
-  "Note from the API proxy: this model's replies are not streamed token by token, and a single reply that takes more than about 100 seconds to generate fails. Keep every tool call small: write or edit at most about 250 lines (about 10 KB) per tool call, and split bigger files into several calls (create the file, then append or edit the rest).";
+  "Note from the API proxy: a single reply is limited to about 16k output tokens and 500 seconds, and a reply that hits the limit is cut off mid tool call. Keep every tool call moderate: write or edit at most about 400 lines (about 15 KB) per tool call, and split bigger files into several calls (create the file, then append or edit the rest).";
 
 export const aiProxyOn = () => KEY.length >= 32 && !!WALLET;
 export const aiProxyAddress = () => WALLET?.address ?? null;
@@ -140,8 +142,10 @@ export async function aiProxyChat(raw: string): Promise<Response> {
   const t0 = Date.now();
   const hash = sha(payload);
   const msgs = Array.isArray(body.messages) ? (body.messages as unknown[]) : [];
+  // Claude streams go to /v1/messages so tool-call arguments stream as they are written (ai-claude.ts)
+  const native = CLAUDE_NATIVE && stream && /^anthropic\//.test(model) ? JSON.stringify(toMessages(body)) : null;
   // per-message hashes: which part of a near-identical resend Cursor changed
-  const shape = { ...shapeOf(body), sentMax, maxTokens: Number(body.max_tokens ?? 0) || null, hash: hash.slice(0, 16), h: msgs.map((m) => sha(JSON.stringify(m)).slice(0, 8)) };
+  const shape = { ...shapeOf(body), sentMax, maxTokens: Number(body.max_tokens ?? 0) || null, hash: hash.slice(0, 16), h: msgs.map((m) => sha(JSON.stringify(m)).slice(0, 8)), ...(native ? { native: native.length } : {}) };
   const log = (served: string | null, cost: number, tx: string | null, status: number, extra = {}) => logRow(model, served, stream, cost, tx, status, payload.length, { ...shape, ...extra });
 
   const fail = failures.get(hash);
@@ -161,7 +165,7 @@ export async function aiProxyChat(raw: string): Promise<Response> {
   flights.set(hash, flight);
   let up: { r: Response; cost: number };
   try {
-    up = await upstream(model, payload, stream);
+    up = await upstream(model, native ?? payload, stream, !!native);
   } catch (e) {
     up = { r: err(502, `ai proxy: ${(e as Error).message}`), cost: 0 };
   }
@@ -209,12 +213,31 @@ async function logRow(model: string, served: string | null, stream: boolean, cos
 }
 
 /** quote → check → pay; `aiproxy/silent-<s>` is a free stand-in that stays silent for s seconds (keepalive tests) */
-async function upstream(model: string, payload: string, stream: boolean): Promise<{ r: Response; cost: number }> {
+async function upstream(model: string, payload: string, stream: boolean, native: boolean): Promise<{ r: Response; cost: number }> {
   const silent = /^aiproxy\/silent-(\d{1,3})$/.exec(model);
   if (silent) return { r: silentReply(Math.min(Number(silent[1]), 300), stream), cost: 0 };
-  const post = (payment?: string) => fetch(`${UPSTREAM}/chat/completions`, {
+  const res = await paid(native ? "messages" : "chat/completions", payload, native);
+  return native ? { ...res, r: await openaiFromMessages(res.r) } : res;
+}
+
+/** the /v1/messages answer as Cursor expects it: OpenAI chunks, OpenAI-style errors */
+async function openaiFromMessages(r: Response) {
+  if (r.status === 402 && !r.headers.get("payment-response")) return r;
+  const headers = new Headers(r.headers);
+  headers.delete("content-length");
+  headers.delete("content-encoding");
+  if (!r.ok) {
+    headers.set("content-type", "application/json");
+    return new Response(oaiError(await r.text()), { status: r.status, headers });
+  }
+  headers.set("content-type", "text/event-stream");
+  return new Response(r.body ? r.body.pipeThrough(fromMessagesStream()) : null, { status: r.status, headers });
+}
+
+async function paid(path: string, payload: string, native: boolean): Promise<{ r: Response; cost: number }> {
+  const post = (payment?: string) => fetch(`${UPSTREAM}/${path}`, {
     method: "POST",
-    headers: { "content-type": "application/json", ...(payment ? { "PAYMENT-SIGNATURE": payment, "X-PAYMENT": payment } : {}) },
+    headers: { "content-type": "application/json", ...(native ? { "anthropic-version": "2023-06-01" } : {}), ...(payment ? { "PAYMENT-SIGNATURE": payment, "X-PAYMENT": payment } : {}) },
     body: payload,
     signal: AbortSignal.timeout(600_000),
   });
@@ -240,7 +263,7 @@ async function upstream(model: string, payload: string, stream: boolean): Promis
   }
 }
 
-/** Claude through BlockRun can't stream (below): ask the agent up front to keep each tool call small */
+/** ask the agent up front to keep each tool call under the reply limits (a cut tool call makes Cursor resend the turn) */
 function addHint(body: Record<string, unknown>) {
   const msgs = body.messages as { role?: string; content?: unknown }[] | undefined;
   if (!Array.isArray(msgs)) return;
@@ -335,9 +358,10 @@ const FAILED = /"model":\s*"error"/;
 const CUT = /"finish_reason":\s*"length"/;
 
 /**
- * 10.12: BlockRun doesn't really stream Claude: one role chunk, then silence until the whole reply is done, then all
- * of it at once. Cursor may give up on a silent connection and resend the turn, so SSE comments keep it open. After 120 s with no token BlockRun gives up ("stream stalled … (bedrock)", or an empty "stop"; still paid):
- * say why in the reply instead of leaving the agent hanging on nothing.
+ * Long silences happen (Claude on /chat/completions holds each tool-call argument back until it is complete; see
+ * ai-claude.ts), and Cursor may give up on a silent connection and resend the turn, so SSE comments keep it open.
+ * After 120 s with no token BlockRun gives up ("stream stalled … (bedrock)", or an empty "stop"; still paid): say why
+ * in the reply instead of leaving the agent hanging on nothing.
  */
 function watchStream(src: ReadableStream<Uint8Array>, t0: number, served: string | null, cost: number, joined: boolean) {
   const dec = new TextDecoder();
@@ -348,7 +372,7 @@ function watchStream(src: ReadableStream<Uint8Array>, t0: number, served: string
     noticed = true;
     const s = Math.round((Date.now() - t0) / 1000);
     const paid = joined ? "这次是同一轮的重发，接在上一次请求上，没有再付钱" : `本次已付 $${(cost / 1e6).toFixed(4)}`;
-    const content = `\n\n[心之音代理] BlockRun 等了 ${s} 秒后没有给出有效回复就结束了（served=${served ?? "?"}，${paid}）。BlockRun 走 Bedrock 时工具调用要整段生成完才吐出来，连续 120 秒没有输出就会被掐断：这一步要写的内容太长了，请让 Agent 把大文件拆成几次写（每次几百行以内），或换更快的模型。`;
+    const content = `\n\n[心之音代理] BlockRun 等了 ${s} 秒后没有给出有效回复就结束了（served=${served ?? "?"}，${paid}）。BlockRun 连续 120 秒没有输出、或整段超过 500 秒会掐断；如果这一步在写大文件，请让 Agent 拆成几次写（每次几百行以内），或换更快的模型。`;
     return enc.encode(chunk({ content }));
   };
   return new ReadableStream<Uint8Array>({
