@@ -23,7 +23,8 @@ import { perpMarket, perpWhales } from "./perp.js";
 import { gameBoard, gamePlay, gameSell, gameSession, gameStart, gameTick, gameToday } from "./game.js";
 import { boatBoard, boatInfo, boatLogin, boatMe, boatRunEnd, boatRunStart, boatWithdraw } from "./boat.js";
 import { storyEnd, storyLevels, storyStart } from "./story.js";
-import { aiProxyAuth, aiProxyChat, aiProxyModels, aiProxyStats } from "./ai-proxy.js";
+import { aiProxyChat, aiProxyModels, aiProxyStats, aiProxyWho } from "./ai-proxy.js";
+import { aiRegister } from "./ai-users.js";
 import { addSolComment, jupQuote, jupSwap, solComments, solRelay, solTokens } from "./solana.js";
 import { isAvatarAddress, walletAvatar } from "./avatars.js";
 import { claimOf, verifyTransfer } from "./verify.js";
@@ -889,10 +890,22 @@ app.get("/api/x402/job", async (c) => {
   const r = await x402Job(c.req.query("u"), c.req.header("x-payment-signature"), clientIp(c) || "?");
   return c.json(r.json as object, r.status as 200);
 });
-// Cursor "custom model" (ai-proxy.ts): OpenAI-compatible, operator's key only, paid from the server's own small wallet
-app.post("/api/ai/v1/chat/completions", async (c) => (aiProxyAuth(c.req.header("authorization")) ? aiProxyChat(await c.req.text()) : c.json({ error: { message: "invalid api key" } }, 401)));
-app.get("/api/ai/v1/models", async (c) => (aiProxyAuth(c.req.header("authorization")) ? c.json(await aiProxyModels()) : c.json({ error: { message: "invalid api key" } }, 401)));
-app.get("/api/ai/v1/stats", async (c) => (aiProxyAuth(c.req.header("authorization")) ? c.json(await aiProxyStats(Number(c.req.query("limit")) || 100)) : c.json({ error: { message: "invalid api key" } }, 401)));
+// Cursor "custom model" (ai-proxy.ts): OpenAI-compatible. The operator's key is paid from the server's small wallet;
+// Arm AI users' keys (ai-users.ts) are paid by their own app over /api/ai/signer
+const noKey = { error: { message: "invalid api key" } };
+app.post("/api/ai/v1/chat/completions", async (c) => {
+  const who = await aiProxyWho(c.req.header("authorization"));
+  return who ? aiProxyChat(await c.req.text(), who) : c.json(noKey, 401);
+});
+app.get("/api/ai/v1/models", async (c) => ((await aiProxyWho(c.req.header("authorization"))) ? c.json(await aiProxyModels()) : c.json(noKey, 401)));
+app.get("/api/ai/v1/stats", async (c) => {
+  const who = await aiProxyWho(c.req.header("authorization"));
+  return who ? c.json(await aiProxyStats(Number(c.req.query("limit")) || 100, who)) : c.json(noKey, 401);
+});
+app.post("/api/ai/register", async (c) => {
+  const r = await aiRegister(await c.req.json().catch(() => ({})));
+  return c.json(r.json, r.status as 200);
+});
 app.get("/api/x402/relay/:id", async (c) => {
   const r = await x402Relay(c.req.param("id"), clientIp(c) || "?");
   return c.json(r.json as object, r.status as 200);

@@ -17,6 +17,7 @@ import { config } from "./config.js";
 import { loadQuotePrices, refreshQuotePrices } from "./quotes.js";
 import { ensureAiBotTables, startAiBots } from "./aibot/bots.js";
 import { ensureShopTables } from "./shop.js";
+import { attachSigner, signerAuth } from "./ai-users.js";
 
 await migrate();
 await ensureCalloutTables();
@@ -29,8 +30,23 @@ const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
   console.log(`[api] listening on :${info.port}`);
 });
 
-// WebSocket fan-out of indexer events at /ws
-const wss = new WebSocketServer({ server: server as never, path: "/ws" });
+// WebSocket fan-out of indexer events at /ws; Arm AI apps sign their users' x402 payments at /api/ai/signer.
+// One upgrade dispatcher: two `ws` servers on the same HTTP server would each reject the other's path.
+const wss = new WebSocketServer({ noServer: true });
+const signerWss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
+(server as unknown as import("node:http").Server).on("upgrade", (req, socket, head) => {
+  const path = new URL(req.url ?? "/", "http://x").pathname;
+  if (path === "/ws") return wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
+  if (path === "/api/ai/signer")
+    return void signerAuth(req).then((user) => {
+      if (!user) {
+        socket.end("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
+        return;
+      }
+      signerWss.handleUpgrade(req, socket, head, (ws) => attachSigner(ws, user, new URL(req.url ?? "/", "http://x").searchParams.get("lang")));
+    }, () => socket.destroy());
+  socket.destroy();
+});
 wss.on("connection", (ws) => ws.send(JSON.stringify({ type: "hello", data: { chainId: config.startBlock.toString() } })));
 bus.on("ws", (msg) => {
   const s = JSON.stringify(msg, (_, v) => (typeof v === "bigint" ? v.toString() : v));

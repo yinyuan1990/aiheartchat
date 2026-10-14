@@ -19,7 +19,8 @@ const BASE_USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 /** BlockRun's x402 payee on Base (same constant as arm/web/src/lib/wallet/x402.ts). Quotes to anyone else are refused. */
 const BLOCKRUN_PAY_TO = "0xe9030014F5DAe217d0A152f02A043567b16c1aBf";
 const NETWORK = "eip155:8453";
-const DIR = join(homedir(), ".arm-x402-test");
+// Arm AI (arm/desktop/arm-ai) runs this MCP with its own data dir and wallet
+const DIR = process.env.X402_DIR ?? join(homedir(), ".arm-x402-test");
 const KEY_FILE = process.env.X402_KEY_FILE ?? join(DIR, "key.json");
 const CONFIG = join(DIR, "mcp-config.json");
 const LEDGER = join(DIR, "mcp-spend.json");
