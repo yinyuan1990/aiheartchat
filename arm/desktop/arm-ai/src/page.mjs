@@ -86,10 +86,11 @@ footer{max-width:1240px;margin:0 auto 26px;padding:0 22px;font-size:11.5px}
 <div class="shell">
 <nav class="hud" data-n="NAV" id="nav">
   <button data-view="wallet"><span class="n">01</span><span data-t="nav.wallet"></span></button>
-  <button data-view="cursor"><span class="n">02</span><span data-t="nav.cursor"></span></button>
-  <button data-view="history"><span class="n">03</span><span data-t="nav.history"></span></button>
-  <button data-view="models"><span class="n">04</span><span data-t="nav.models"></span></button>
-  <button data-view="settings"><span class="n">05</span><span data-t="nav.settings"></span></button>
+  <button data-view="topup"><span class="n">02</span><span data-t="nav.topup"></span></button>
+  <button data-view="cursor"><span class="n">03</span><span data-t="nav.cursor"></span></button>
+  <button data-view="history"><span class="n">04</span><span data-t="nav.history"></span></button>
+  <button data-view="models"><span class="n">05</span><span data-t="nav.models"></span></button>
+  <button data-view="settings"><span class="n">06</span><span data-t="nav.settings"></span></button>
 </nav>
 <div>
 <!-- 01 wallet -->
@@ -103,13 +104,28 @@ footer{max-width:1240px;margin:0 auto 26px;padding:0 22px;font-size:11.5px}
   <div class="row"><button id="export" data-t="wallet.export"></button></div><div class="val" id="pk" style="display:none"></div>
 </section>
 <section class="hud" data-n="01.2"><h2>QR // BASE</h2><div class="qr" id="qr"></div><p class="dim" style="text-align:center;margin:0" data-t="wallet.address"></p>
-  <h2 style="margin-top:18px" data-t="binance.title"></h2>
-  <ol><li data-t="binance.s1" data-md></li><li data-t="binance.s2" data-md></li><li data-t="binance.s3" data-md></li><li data-t="binance.s4" data-md></li></ol>
+  <p style="margin-top:14px" data-t="wallet.toTopup" data-md></p><div class="row" style="justify-content:center"><button data-go="topup" data-t="nav.topup"></button></div>
 </section>
 </div>
-<!-- 02 cursor -->
+<!-- 02 top-up -->
+<div class="view two" id="v-topup">
+<section class="hud" data-n="02.1"><h2>BINANCE <span class="tag chip" data-t="x.recommend"></span></h2>
+  <p class="dim" data-t="x.binance.facts" data-md></p>
+  <div class="row"><button class="pri" data-dl="binance" data-t="x.download"></button><button data-page="binance" data-t="x.page"></button></div><p id="dl-binance" style="min-height:1.6em;margin:4px 0"></p>
+  <ol><li data-t="x.binance.s1" data-md></li><li data-t="x.binance.s2" data-md></li><li data-t="x.binance.s3" data-md></li><li data-t="x.binance.s4" data-md></li></ol>
+  <p class="hot" data-t="x.binance.hold"></p>
+</section>
+<section class="hud" data-n="02.2"><h2>OKX</h2>
+  <p class="dim" data-t="x.okx.facts" data-md></p>
+  <div class="row"><button class="pri" data-dl="okx" data-t="x.download"></button><button data-page="okx" data-t="x.page"></button></div><p id="dl-okx" style="min-height:1.6em;margin:4px 0"></p>
+  <ol><li data-t="x.okx.s1" data-md></li><li data-t="x.okx.s2" data-md></li><li data-t="x.okx.s3" data-md></li><li data-t="x.okx.s4" data-md></li></ol>
+  <p class="hot" data-t="x.okx.hold"></p>
+</section>
+<p class="faint" style="grid-column:1/-1;margin:0" data-t="x.safety"></p>
+</div>
+<!-- 03 cursor -->
 <div class="view" id="v-cursor">
-<section class="hud" data-n="02.1"><h2 data-t="cursor.title"></h2>
+<section class="hud" data-n="03.1"><h2 data-t="cursor.title"></h2>
   <div class="row"><span class="lbl dim" data-t="cursor.found"></span><span id="installs"></span><button id="rescan" data-t="cursor.rescan"></button></div>
   <p data-t="cursor.steps" style="margin:10px 0 0"></p>
   <ol><li data-t="cursor.step1"></li><li data-t="cursor.step2"></li><li id="step3"></li><li data-t="cursor.step4"></li></ol>
@@ -118,22 +134,22 @@ footer{max-width:1240px;margin:0 auto 26px;padding:0 22px;font-size:11.5px}
   <p class="hot" data-t="cursor.note"></p>
   <div class="row"><button class="pri" id="test" data-t="cursor.test"></button><span id="testMsg"></span></div>
 </section>
-<section class="hud" data-n="02.2"><h2 data-t="mcp.title"></h2><p class="dim" data-t="mcp.desc"></p>
+<section class="hud" data-n="03.2"><h2 data-t="mcp.title"></h2><p class="dim" data-t="mcp.desc"></p>
   <div class="row"><button id="mcp"></button><span id="mcpMsg"></span></div></section>
 </div>
-<!-- 03 history -->
+<!-- 04 history -->
 <div class="view" id="v-history">
-<section class="hud" data-n="03.1"><h2><span data-t="log.title"></span><span class="tag"><button id="tabServer" data-t="log.server"></button> <button id="tabLocal" data-t="log.local"></button></span></h2>
+<section class="hud" data-n="04.1"><h2><span data-t="log.title"></span><span class="tag"><button id="tabServer" data-t="log.server"></button> <button id="tabLocal" data-t="log.local"></button></span></h2>
   <div class="list" id="log"></div></section>
 </div>
-<!-- 04 models -->
+<!-- 05 models -->
 <div class="view" id="v-models">
-<section class="hud" data-n="04.1"><h2 data-t="models.title"></h2>
+<section class="hud" data-n="05.1"><h2 data-t="models.title"></h2>
   <input id="q" data-tp="models.search"><div class="list" id="models" style="margin-top:10px"></div></section>
 </div>
-<!-- 05 settings -->
+<!-- 06 settings -->
 <div class="view two" id="v-settings">
-<section class="hud" data-n="05.1"><h2 data-t="caps.title"></h2>
+<section class="hud" data-n="06.1"><h2 data-t="caps.title"></h2>
   <div class="row"><span class="lbl dim" style="width:150px" data-t="caps.perCall"></span><input id="perCall" type="number" min="0.01" step="0.01"></div>
   <div class="row"><span class="lbl dim" style="width:150px" data-t="caps.daily"></span><input id="daily" type="number" min="0.1" step="0.1"><button id="saveCaps" data-t="common.save"></button><span id="capsMsg"></span></div>
   <p class="big" style="font-size:22px;margin:14px 0 4px" id="todayNum">$0.0000</p><p class="dim" id="today" style="margin:0"></p>
@@ -142,7 +158,7 @@ footer{max-width:1240px;margin:0 auto 26px;padding:0 22px;font-size:11.5px}
   <p style="margin:0" id="feeLine"></p><p class="dim" style="margin:2px 0" id="feeServer"></p>
   <p class="faint" data-t="fee.why"></p>
 </section>
-<section class="hud" data-n="05.2"><h2 data-t="settings.title"></h2>
+<section class="hud" data-n="06.2"><h2 data-t="settings.title"></h2>
   <div class="row"><span class="lbl dim" style="width:130px" data-t="settings.lang"></span><select id="lang"></select></div>
   <div class="kv"><span class="lbl dim" data-t="settings.version"></span><span id="ver"></span><span class="lbl dim" data-t="settings.data"></span><span class="val" id="dataDir"></span><span class="lbl dim" data-t="settings.log"></span><span class="val" id="logFile"></span></div>
   <p class="dim" data-t="settings.background"></p>
@@ -221,7 +237,7 @@ function lock(target,label){
 }
 
 /* ---------- views: one function per page; switching draws that page's frames */
-const VIEWS=["wallet","cursor","history","models","settings"];
+const VIEWS=["wallet","topup","cursor","history","models","settings"];
 let view=VIEWS.includes(location.hash.slice(1))?location.hash.slice(1):(localStorage.getItem("armai-view")||"wallet");
 function show(v,draw=true){
   view=v;localStorage.setItem("armai-view",v);history.replaceState(null,"","#"+v);
@@ -231,13 +247,26 @@ function show(v,draw=true){
   if(draw)requestAnimationFrame(()=>{const ps=[...$("v-"+v).querySelectorAll(".hud")];frames(true,ps);setTimeout(()=>lock(ps[0],v.toUpperCase()),700);});
 }
 document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{if(b.dataset.view!==view)show(b.dataset.view);});
+document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>show(b.dataset.go));
+let DL={},dlTimer=null;
+async function pollDl(){DL=await api("/api/download");drawDl();clearTimeout(dlTimer);
+  if(Object.values(DL).some(j=>j.phase==="downloading"||j.phase==="verifying"))dlTimer=setTimeout(pollDl,700);}
+function drawDl(){const mb=n=>(n/1048576).toFixed(1);
+  for(const id of ["binance","okx"]){const j=DL[id],el=$("dl-"+id),btn=document.querySelector('[data-dl="'+id+'"]');
+    btn.textContent=t(j&&j.phase==="ready"?"x.again":"x.download");btn.disabled=!!j&&(j.phase==="downloading"||j.phase==="verifying");
+    if(!j){el.textContent="";continue;}
+    const bad=s=>'<span class="hot">'+esc(s)+"</span>";
+    el.innerHTML=j.phase==="downloading"?esc(t("x.progress",{got:mb(j.got),total:j.total?mb(j.total):"?"})):j.phase==="verifying"?esc(t("x.verifying")):j.phase==="ready"?esc(t("x.ready",{signer:j.signer||""})):j.phase==="badsig"?bad(t("x.badsig",{signer:j.signer||"?"})):bad(t("x.failed",{error:j.error||""}));}}
+document.querySelectorAll("[data-dl]").forEach(b=>b.onclick=async()=>{const id=b.dataset.dl;
+  if(DL[id]&&DL[id].phase==="ready")await api("/api/download/run",{id});else await api("/api/download",{id});pollDl();});
+document.querySelectorAll("[data-page]").forEach(b=>b.onclick=()=>api("/api/download/page",{id:b.dataset.page}));
 
 let S=null,showKey=false,tab="server",lastStatus=null;
 function paint(){document.documentElement.lang=lang==="zh"?"zh-CN":lang;
   document.querySelectorAll("[data-t]").forEach(e=>{e.innerHTML=e.hasAttribute("data-md")?md(t(e.dataset.t)):esc(t(e.dataset.t))});
   document.querySelectorAll("[data-tp]").forEach(e=>e.placeholder=t(e.dataset.tp));
   $("lang").innerHTML=Object.keys(L).map(k=>'<option value="'+k+'"'+(k===lang?" selected":"")+">"+esc(L[k]["lang.name"])+"</option>").join("");
-  $("status").dataset.v="";if(S)render();}
+  $("status").dataset.v="";if(S)render();drawDl();}
 const KEYS={online:"status.online",offline:"status.offline",unregistered:"status.unregistered",registering:"status.registering"};
 function render(){const s=S;
   // healthy link = cold; anything else turns the whole HUD warm
@@ -292,6 +321,6 @@ $("tabServer").onclick=()=>{tab="server";loadLog();};$("tabLocal").onclick=()=>{
 $("q").oninput=drawModels;
 api("/api/lang",{lang});paint();show(view,false);
 // draw once the panels have their real size: top bar and nav first, then the open view
-Promise.allSettled([load(),loadQr(),loadLog(),loadModels()]).then(()=>requestAnimationFrame(()=>{frames(true);drawnOnce=true;setTimeout(()=>lock($("v-"+view).querySelector(".hud"),view.toUpperCase()),1300);}));
+Promise.allSettled([load(),loadQr(),loadLog(),loadModels(),pollDl()]).then(()=>requestAnimationFrame(()=>{frames(true);drawnOnce=true;setTimeout(()=>lock($("v-"+view).querySelector(".hud"),view.toUpperCase()),1300);}));
 const poll=setInterval(load,5000);setInterval(()=>view==="history"&&loadLog(),15000);
 </script></body></html>`;

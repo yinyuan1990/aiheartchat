@@ -18,6 +18,7 @@ import en from "../i18n/en.json" with { type: "json" };
 import { DIR, caps, fees, file, history, ledger, loadSecret, readJson, saveCaps, saveSecret, writeJson } from "./store.mjs";
 import { BASE_USDC, FEE_BPS, FEE_TO, connect, feeRoom, reconcileFees } from "./signer.mjs";
 import { editors, installMcp, mcpStatus } from "./editors.mjs";
+import { download, downloadState, openPage, run } from "./exchanges.mjs";
 import { page } from "./page.mjs";
 
 const VERSION = "0.1.0";
@@ -157,6 +158,10 @@ async function runApp() {
       link.reconnect();
       return { status };
     },
+    "GET /api/download": () => downloadState(),
+    "POST /api/download": (b) => download(b.id, log),
+    "POST /api/download/run": (b) => run(b.id),
+    "POST /api/download/page": (b) => openPage(b.id),
     "POST /api/export": (b) => (b.confirm === true ? { privateKey: pk } : { error: "confirm" }),
     // there is no console window to close any more: this is how the user stops signing
     "POST /api/quit": () => {
