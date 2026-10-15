@@ -2,7 +2,8 @@
  * The local UI (served only on 127.0.0.1, every API call carries the per-run nonce). Sci-fi HUD: near-black teal
  * ground, one cold line colour (one warm colour once the link is not healthy), 1–2 px frames with ticks / corner marks /
  * numbers, drawn outer-first; numbers scramble before they settle, status text types out, a lock-on box lands on what
- * changed. Lines glow a little, text never does. Everything animated is skipped under prefers-reduced-motion.
+ * changed. Lines glow a little, text never does. One view per function (nav rail on the left); switching a view draws
+ * its frames again. Everything animated is skipped under prefers-reduced-motion.
  */
 export const page = ({ nonce, locales }) => `<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -18,22 +19,30 @@ body::before{content:"";position:fixed;left:0;right:0;height:120px;top:-120px;po
 @keyframes sweep{to{top:100%}}
 .dim{color:color-mix(in srgb,var(--c) 55%,var(--bg))}.faint{color:color-mix(in srgb,var(--c) 38%,var(--bg))}
 .hot{color:var(--warm)}b{color:var(--c);font-weight:600}
-a{color:var(--c)}
 /* frames: drawn in SVG over each panel */
 .hud{position:relative;padding:22px 22px 18px}
 .hud>svg.f{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;filter:var(--glow)}
-.hud>svg.f path,.hud>svg.f line,.hud>svg.f rect{fill:none;stroke:var(--c);vector-effect:non-scaling-stroke;transition:stroke .5s}
-.drawn path,.drawn line{stroke-dasharray:1;stroke-dashoffset:1;animation:draw var(--t,.7s) cubic-bezier(.6,.1,.3,1) forwards;animation-delay:var(--d,0s)}
+.hud>svg.f path{fill:none;stroke:var(--c);vector-effect:non-scaling-stroke;transition:stroke .5s}
+.drawn path{stroke-dasharray:1;stroke-dashoffset:1;animation:draw var(--t,.7s) cubic-bezier(.6,.1,.3,1) forwards;animation-delay:var(--d,0s)}
 @keyframes draw{to{stroke-dashoffset:0}}
 .hud .no{position:absolute;top:-9px;left:26px;padding:0 6px;background:var(--bg);font-size:11px;letter-spacing:.2em}
 .hud h2{margin:0 0 12px;font-size:13px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--c)}
 .hud h2 .tag{float:right;font-weight:400;letter-spacing:.1em}
-header.hud{display:flex;align-items:center;gap:16px;margin:18px 24px 6px;padding:14px 22px}
+/* layout: top bar, nav rail, one view */
+header.hud{display:flex;align-items:center;gap:18px;margin:16px 22px 0;padding:12px 22px}
 header h1{margin:0;font-size:18px;letter-spacing:.35em;color:var(--c)}header .sp{flex:1}
-#status{min-width:200px;text-align:right;letter-spacing:.06em}
+.mini{display:flex;flex-direction:column;align-items:flex-end;line-height:1.25}.mini .lbl{font-size:10px}.mini b{font-size:16px;font-variant-numeric:tabular-nums}
+#status{min-width:210px;text-align:right;letter-spacing:.06em}
 .cur{display:inline-block;width:.6em;height:1.05em;margin-left:2px;vertical-align:-2px;background:var(--c);animation:blink 1s steps(1) infinite}
 @keyframes blink{50%{opacity:0}}
-main{max-width:1120px;margin:0 auto;padding:16px 24px;display:grid;grid-template-columns:1.25fr 1fr;gap:26px 22px}
+.shell{display:grid;grid-template-columns:210px 1fr;gap:22px;max-width:1240px;margin:0 auto;padding:22px}
+nav.hud{align-self:start;position:sticky;top:16px;padding:26px 12px 14px}
+nav button{display:flex;width:100%;gap:10px;align-items:baseline;text-align:left;margin:0 0 8px;padding:9px 12px;border-color:color-mix(in srgb,var(--c) 30%,transparent)}
+nav button .n{font-size:11px;letter-spacing:.15em;color:color-mix(in srgb,var(--c) 55%,var(--bg))}
+nav button[aria-current=page]{border-color:var(--c);background:color-mix(in srgb,var(--c) 15%,transparent);box-shadow:inset 3px 0 0 var(--c)}
+nav button[aria-current=page] .n{color:var(--c)}
+.view{display:none;gap:24px 20px}.view.on{display:grid}
+.view.two{grid-template-columns:1.2fr 1fr}
 .wide{grid-column:1/-1}
 /* controls: hairline, chamfered, no fill */
 button,select,input{font:inherit;color:var(--c);background:transparent;border:1px solid color-mix(in srgb,var(--c) 70%,transparent);padding:5px 12px;clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);letter-spacing:.06em;transition:color .5s,border-color .5s,background .15s}
@@ -47,17 +56,18 @@ input{width:96px;text-align:right}input:focus,select:focus,button:focus-visible{
 .field{display:flex;gap:8px;align-items:stretch;margin:6px 0}
 .val{flex:1;border:1px solid color-mix(in srgb,var(--c) 35%,transparent);padding:5px 10px;word-break:break-all;min-height:32px}
 .big{font-size:34px;font-weight:600;letter-spacing:.04em;color:var(--c);font-variant-numeric:tabular-nums}
-.qr{float:right;width:150px;height:150px;margin:0 0 10px 16px;padding:7px;background:var(--c);transition:background .5s}
+.qr{width:190px;height:190px;padding:8px;background:var(--c);transition:background .5s;margin:4px auto 10px}
 .qr svg{display:block;width:100%;height:100%}.qr svg path:first-child{fill:var(--c)}.qr svg path:last-child{stroke:var(--bg)}
-ol{margin:6px 0 10px;padding-left:22px}li{margin:3px 0}li::marker{color:color-mix(in srgb,var(--c) 55%,var(--bg))}
+ol{margin:6px 0 10px;padding-left:22px}li{margin:4px 0}li::marker{color:color-mix(in srgb,var(--c) 55%,var(--bg))}
 .chip{display:inline-block;border:1px solid color-mix(in srgb,var(--c) 45%,transparent);padding:0 7px;margin:2px 4px 2px 0;font-size:12px}
 table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
 th{font-weight:400;text-align:left;letter-spacing:.14em;text-transform:uppercase;font-size:10.5px;color:color-mix(in srgb,var(--c) 55%,var(--bg));border-bottom:1px solid color-mix(in srgb,var(--c) 45%,transparent);padding:5px 6px}
 td{padding:5px 6px;border-bottom:1px dashed color-mix(in srgb,var(--c) 18%,transparent);vertical-align:top}
 tr.mis td{color:var(--warm)}
-.list{max-height:330px;overflow:auto;scrollbar-color:color-mix(in srgb,var(--c) 40%,transparent) transparent}
+.list{max-height:calc(100vh - 290px);min-height:200px;overflow:auto;scrollbar-color:color-mix(in srgb,var(--c) 40%,transparent) transparent}
 #q{width:100%;text-align:left}
-footer{max-width:1120px;margin:0 auto 34px;padding:0 24px;font-size:11.5px}
+.kv{display:grid;grid-template-columns:130px 1fr;gap:6px 14px;margin:8px 0}.kv .val{min-height:0}
+footer{max-width:1240px;margin:0 auto 26px;padding:0 22px;font-size:11.5px}
 /* lock-on box */
 .lock{position:fixed;z-index:40;pointer-events:none;transition:left .42s cubic-bezier(.2,.8,.2,1),top .42s cubic-bezier(.2,.8,.2,1),width .42s cubic-bezier(.2,.8,.2,1),height .42s cubic-bezier(.2,.8,.2,1);filter:var(--glow)}
 .lock i{position:absolute;width:14px;height:14px;border:2px solid var(--c)}
@@ -66,28 +76,37 @@ footer{max-width:1120px;margin:0 auto 34px;padding:0 24px;font-size:11.5px}
 .lock em{position:absolute;left:0;top:-17px;font-style:normal;font-size:10px;letter-spacing:.2em;background:var(--bg);padding:0 4px}
 .lock.land{animation:land .36s steps(1) 2}
 @keyframes land{0%{opacity:1}50%{opacity:0}}
-@media (max-width:900px){main{grid-template-columns:1fr}}
-@media (prefers-reduced-motion:reduce){.drawn path,.drawn line{animation:none;stroke-dashoffset:0}body::before{display:none}.cur{animation:none}.lock{display:none}}
+@media (max-width:980px){.view.two{grid-template-columns:1fr}.shell{grid-template-columns:170px 1fr}}
+@media (prefers-reduced-motion:reduce){.drawn path{animation:none;stroke-dashoffset:0}body::before{display:none}.cur{animation:none}.lock{display:none}}
 </style></head><body data-mode="cold">
-<header class="hud" id="top"><span class="no">ARM-AI · v<span id="ver"></span></span><h1>ARM AI</h1><span class="dim" data-t="app.tagline"></span><span class="sp"></span>
-<span id="status"></span><select id="lang"></select></header>
-<main>
-<section class="hud" data-n="01"><h2 data-t="wallet.title"></h2>
-  <div class="qr" id="qr"></div>
+<header class="hud" data-n="ARM-AI"><h1>ARM AI</h1><span class="dim" data-t="app.tagline"></span><span class="sp"></span>
+  <span class="mini"><span class="lbl dim" data-t="top.balance"></span><b id="topBal">––––</b></span>
+  <span class="mini"><span class="lbl dim" data-t="top.today"></span><b id="topToday">––––</b></span>
+  <span id="status"></span></header>
+<div class="shell">
+<nav class="hud" data-n="NAV" id="nav">
+  <button data-view="wallet"><span class="n">01</span><span data-t="nav.wallet"></span></button>
+  <button data-view="cursor"><span class="n">02</span><span data-t="nav.cursor"></span></button>
+  <button data-view="history"><span class="n">03</span><span data-t="nav.history"></span></button>
+  <button data-view="models"><span class="n">04</span><span data-t="nav.models"></span></button>
+  <button data-view="settings"><span class="n">05</span><span data-t="nav.settings"></span></button>
+</nav>
+<div>
+<!-- 01 wallet -->
+<div class="view two" id="v-wallet">
+<section class="hud" data-n="01.1"><h2 data-t="wallet.title"></h2>
   <div class="lbl dim" data-t="wallet.address"></div>
   <div class="field"><span class="val" id="addr">…</span><button data-copy="addr" data-t="common.copy"></button></div>
-  <div class="lbl dim" style="margin-top:12px" data-t="wallet.balance"></div><div class="big" id="usdc">––––</div>
+  <div class="lbl dim" style="margin-top:14px" data-t="wallet.balance"></div><div class="big" id="usdc">––––</div>
   <p data-t="wallet.topup" data-md></p>
   <p class="dim" data-t="wallet.backup"></p>
-  <div class="row"><button id="export" data-t="wallet.export"></button><span class="val" id="pk" style="display:none"></span></div>
+  <div class="row"><button id="export" data-t="wallet.export"></button></div><div class="val" id="pk" style="display:none"></div>
 </section>
-<section class="hud" data-n="02"><h2 data-t="caps.title"></h2>
-  <div class="row"><span class="lbl dim" style="width:150px" data-t="caps.perCall"></span><input id="perCall" type="number" min="0.01" step="0.01"></div>
-  <div class="row"><span class="lbl dim" style="width:150px" data-t="caps.daily"></span><input id="daily" type="number" min="0.1" step="0.1"><button id="saveCaps" data-t="common.save"></button><span id="capsMsg"></span></div>
-  <p class="big" style="font-size:22px;margin:14px 0 4px" id="todayNum">$0.0000</p><p class="dim" id="today" style="margin:0"></p>
-  <p class="faint" data-t="caps.why"></p>
-</section>
-<section class="hud wide" data-n="03"><h2 data-t="cursor.title"></h2>
+<section class="hud" data-n="01.2"><h2>QR // BASE</h2><div class="qr" id="qr"></div><p class="dim" style="text-align:center;margin:0" data-t="wallet.address"></p></section>
+</div>
+<!-- 02 cursor -->
+<div class="view" id="v-cursor">
+<section class="hud" data-n="02.1"><h2 data-t="cursor.title"></h2>
   <div class="row"><span class="lbl dim" data-t="cursor.found"></span><span id="installs"></span><button id="rescan" data-t="cursor.rescan"></button></div>
   <p data-t="cursor.steps" style="margin:10px 0 0"></p>
   <ol><li data-t="cursor.step1"></li><li data-t="cursor.step2"></li><li id="step3"></li><li data-t="cursor.step4"></li></ol>
@@ -96,13 +115,35 @@ footer{max-width:1120px;margin:0 auto 34px;padding:0 24px;font-size:11.5px}
   <p class="hot" data-t="cursor.note"></p>
   <div class="row"><button class="pri" id="test" data-t="cursor.test"></button><span id="testMsg"></span></div>
 </section>
-<section class="hud wide" data-n="04"><h2 data-t="mcp.title"></h2><p class="dim" data-t="mcp.desc"></p>
+<section class="hud" data-n="02.2"><h2 data-t="mcp.title"></h2><p class="dim" data-t="mcp.desc"></p>
   <div class="row"><button id="mcp"></button><span id="mcpMsg"></span></div></section>
-<section class="hud wide" data-n="05"><h2><span data-t="log.title"></span><span class="tag"><button id="tabServer" data-t="log.server"></button> <button id="tabLocal" data-t="log.local"></button></span></h2>
+</div>
+<!-- 03 history -->
+<div class="view" id="v-history">
+<section class="hud" data-n="03.1"><h2><span data-t="log.title"></span><span class="tag"><button id="tabServer" data-t="log.server"></button> <button id="tabLocal" data-t="log.local"></button></span></h2>
   <div class="list" id="log"></div></section>
-<section class="hud wide" data-n="06"><h2 data-t="models.title"></h2>
+</div>
+<!-- 04 models -->
+<div class="view" id="v-models">
+<section class="hud" data-n="04.1"><h2 data-t="models.title"></h2>
   <input id="q" data-tp="models.search"><div class="list" id="models" style="margin-top:10px"></div></section>
-</main>
+</div>
+<!-- 05 settings -->
+<div class="view two" id="v-settings">
+<section class="hud" data-n="05.1"><h2 data-t="caps.title"></h2>
+  <div class="row"><span class="lbl dim" style="width:150px" data-t="caps.perCall"></span><input id="perCall" type="number" min="0.01" step="0.01"></div>
+  <div class="row"><span class="lbl dim" style="width:150px" data-t="caps.daily"></span><input id="daily" type="number" min="0.1" step="0.1"><button id="saveCaps" data-t="common.save"></button><span id="capsMsg"></span></div>
+  <p class="big" style="font-size:22px;margin:14px 0 4px" id="todayNum">$0.0000</p><p class="dim" id="today" style="margin:0"></p>
+  <p class="faint" data-t="caps.why"></p>
+</section>
+<section class="hud" data-n="05.2"><h2 data-t="settings.title"></h2>
+  <div class="row"><span class="lbl dim" style="width:130px" data-t="settings.lang"></span><select id="lang"></select></div>
+  <div class="kv"><span class="lbl dim" data-t="settings.version"></span><span id="ver"></span><span class="lbl dim" data-t="settings.data"></span><span class="val" id="dataDir"></span><span class="lbl dim" data-t="settings.log"></span><span class="val" id="logFile"></span></div>
+  <p class="dim" data-t="settings.background"></p>
+  <div class="row"><button class="pri" id="quit" data-t="settings.quit"></button><span id="quitMsg"></span></div>
+</section>
+</div>
+</div></div>
 <footer class="faint" data-t="footer.fee"></footer>
 <script>
 const NONCE=${JSON.stringify(nonce)}, L=${JSON.stringify(locales)};
@@ -120,32 +161,27 @@ const NS="http://www.w3.org/2000/svg";
 /* ---------- frames: outer contour first, then corner marks / ticks / divider, panel by panel */
 function frame(el,i,animate){
   const w=el.offsetWidth,h=el.offsetHeight,c=12,size=w+"x"+h;
-  if(!animate&&el.dataset.size===size)return;
+  if(!w||!h||(!animate&&el.dataset.size===size))return;
   el.dataset.size=size;
   el.querySelector(":scope>svg.f")?.remove();
   const svg=document.createElementNS(NS,"svg");
   svg.setAttribute("class","f"+(animate&&!CALM?" drawn":""));svg.setAttribute("viewBox","0 0 "+w+" "+h);
   const add=(d,delay,dur,width=1)=>{const p=document.createElementNS(NS,"path");p.setAttribute("d",d);p.setAttribute("pathLength","1");p.setAttribute("stroke-width",width);p.style.setProperty("--d",delay+"s");p.style.setProperty("--t",dur+"s");svg.appendChild(p);};
   const o=i*0.12, inner=0.55+i*0.12;
-  // outer contour, chamfered top-left and bottom-right
   add("M"+(c+.5)+",.5 H"+(w-.5)+" V"+(h-c-.5)+" L"+(w-c-.5)+","+(h-.5)+" H.5 V"+(c+.5)+" Z",o,0.8);
-  // corner marks (2 px) just inside
   const k=16,m=5;
   add("M"+m+","+(m+k)+" V"+m+" H"+(m+k),inner,0.25,2);
   add("M"+(w-m-k)+","+m+" H"+(w-m)+" V"+(m+k),inner+0.05,0.25,2);
   add("M"+m+","+(h-m-k)+" V"+(h-m)+" H"+(m+k),inner+0.1,0.25,2);
   add("M"+(w-m-k)+","+(h-m)+" H"+(w-m)+" V"+(h-m-k),inner+0.15,0.25,2);
-  // ticks along the top edge (every 8 px, every 4th longer) and down the right edge
-  let d="";for(let x=w-150,n=0;x<w-24;x+=8,n++)d+="M"+x+",1 V"+(n%4?5:9)+" ";add(d,inner+0.2,0.5);
+  let d="";for(let x=Math.max(30,w-150),n=0;x<w-24;x+=8,n++)d+="M"+x+",1 V"+(n%4?5:9)+" ";add(d,inner+0.2,0.5);
   d="";for(let y=28,n=0;y<Math.min(h-24,150);y+=8,n++)d+="M"+(w-1)+","+y+" H"+(w-(n%4?5:9))+" ";add(d,inner+0.25,0.5);
-  // divider under the heading
   const hd=el.querySelector(":scope>h2");if(hd){const y=hd.offsetTop+hd.offsetHeight+4;add("M22,"+y+" H"+Math.min(w*0.42,320),inner+0.3,0.4);}
   el.prepend(svg);
   if(el.dataset.n&&!el.querySelector(":scope>.no")){const s=document.createElement("span");s.className="no";s.textContent=el.dataset.n+" //";el.prepend(s);}
 }
-const panels=()=>[...document.querySelectorAll(".hud")];
-function frames(animate){panels().forEach((el,i)=>frame(el,i,animate));}
-// after the first draw, only panels whose size changed are redrawn, instantly
+const visible=()=>[...document.querySelectorAll(".hud")].filter(el=>el.offsetWidth);
+function frames(animate,only){(only||visible()).forEach((el,i)=>frame(el,i,animate));}
 let rt,drawnOnce=false;new ResizeObserver(()=>{if(!drawnOnce)return;clearTimeout(rt);rt=setTimeout(()=>frames(false),120)}).observe(document.body);
 
 /* ---------- numbers scramble a few frames, then settle */
@@ -178,7 +214,19 @@ function lock(target,label){
   setTimeout(()=>b.classList.add("land"),430);setTimeout(()=>b.remove(),1700);
 }
 
-let S=null,showKey=false,tab="server",lastStatus=null,first=true;
+/* ---------- views: one function per page; switching draws that page's frames */
+const VIEWS=["wallet","cursor","history","models","settings"];
+let view=VIEWS.includes(location.hash.slice(1))?location.hash.slice(1):(localStorage.getItem("armai-view")||"wallet");
+function show(v,draw=true){
+  view=v;localStorage.setItem("armai-view",v);history.replaceState(null,"","#"+v);
+  VIEWS.forEach(x=>$("v-"+x).classList.toggle("on",x===v));
+  document.querySelectorAll("nav button").forEach(b=>b.dataset.view===v?b.setAttribute("aria-current","page"):b.removeAttribute("aria-current"));
+  if(v==="history")loadLog();
+  if(draw)requestAnimationFrame(()=>{const ps=[...$("v-"+v).querySelectorAll(".hud")];frames(true,ps);setTimeout(()=>lock(ps[0],v.toUpperCase()),700);});
+}
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{if(b.dataset.view!==view)show(b.dataset.view);});
+
+let S=null,showKey=false,tab="server",lastStatus=null;
 function paint(){document.documentElement.lang=lang==="zh"?"zh-CN":lang;
   document.querySelectorAll("[data-t]").forEach(e=>{e.innerHTML=e.hasAttribute("data-md")?md(t(e.dataset.t)):esc(t(e.dataset.t))});
   document.querySelectorAll("[data-tp]").forEach(e=>e.placeholder=t(e.dataset.tp));
@@ -192,9 +240,9 @@ function render(){const s=S;
   type($("status"),"[ "+t(KEYS[s.status]||"status.offline")+" ]");
   if(lastStatus!==null&&lastStatus!==s.status)lock($("status"),s.status.toUpperCase());
   lastStatus=s.status;
-  $("ver").textContent=s.version;
-  $("addr").textContent=s.address;
-  scramble($("usdc"),s.usdc==null?"––––":"$"+(s.usdc/1e6).toFixed(4));
+  const bal=s.usdc==null?"––––":"$"+(s.usdc/1e6).toFixed(4);
+  scramble($("usdc"),bal);scramble($("topBal"),bal);scramble($("topToday"),usd(s.today.signed));
+  $("addr").textContent=s.address;$("ver").textContent=s.version;$("dataDir").textContent=s.dataDir;$("logFile").textContent=s.logFile;
   $("base").textContent=s.baseUrl;$("key").textContent=showKey?s.key:s.key.slice(0,10)+"················"+s.key.slice(-4);$("showKey").textContent=t(showKey?"common.hide":"common.show");
   $("step3").innerHTML=esc(t("cursor.step3",{examples:"§"})).replace("§",s.examples.map(x=>'<span class="chip">'+esc(x)+"</span>").join(""));
   if(document.activeElement!==$("perCall"))$("perCall").value=s.caps.maxPerCall;if(document.activeElement!==$("daily"))$("daily").value=s.caps.dailyCap;
@@ -202,8 +250,7 @@ function render(){const s=S;
   const ed=s.editors[0];
   $("installs").innerHTML=ed.installs.length?ed.installs.map((i,n)=>'<span class="chip">'+String(n+1).padStart(2,"0")+" · "+esc(i.exe)+(i.version?" · v"+esc(i.version):"")+(i.running?" · ▲ "+esc(t("cursor.running")):"")+"</span>").join(""):'<span class="hot">'+esc(t("cursor.none"))+"</span>";
   $("mcp").textContent=t(ed.mcp.installed&&!ed.mcp.current?"mcp.update":"mcp.install");
-  if(!$("mcpMsg").dataset.keep)$("mcpMsg").innerHTML=ed.mcp.current?esc(t("mcp.installed",{file:ed.mcp.file})):ed.mcp.installed?'<span class="hot">'+esc(t("mcp.outdated"))+"</span>":"";
-  if(first){first=false;setTimeout(()=>lock($("addr"),"TARGET"),1300);}}
+  if(!$("mcpMsg").dataset.keep)$("mcpMsg").innerHTML=ed.mcp.current?esc(t("mcp.installed",{file:ed.mcp.file})):ed.mcp.installed?'<span class="hot">'+esc(t("mcp.outdated"))+"</span>":"";}
 async function load(){S=await api("/api/state");render();}
 async function loadQr(){$("qr").innerHTML=await fetch("/api/qr",{headers:{"x-arm-nonce":NONCE}}).then(r=>r.text());}
 const norm=m=>String(m||"").toLowerCase().replace(/^[^/]+\\//,"").replace(/[^a-z0-9]/g,"");
@@ -232,10 +279,11 @@ $("rescan").onclick=()=>api("/api/rescan",{}).then(load).then(()=>lock($("instal
 $("export").onclick=async()=>{const pk=$("pk");if(pk.style.display!=="none"){pk.style.display="none";pk.textContent="";return;}if(!confirm(t("wallet.exportWarn")))return;pk.textContent=(await api("/api/export",{confirm:true})).privateKey;pk.style.display="";};
 $("test").onclick=async()=>{const m=$("testMsg");m.className="dim";m.dataset.v="";type(m,t("cursor.testing"));const r=await api("/api/test",{});m.className=r.ok?"":"hot";m.dataset.v="";type(m,r.ok?t("cursor.testOk",{answer:r.answer}):t("cursor.testFail",{error:r.error}));lock(m,r.ok?"LINK OK":"LINK FAIL");};
 $("mcp").onclick=async()=>{const r=await api("/api/mcp",{editor:"cursor"});$("mcpMsg").dataset.keep="1";$("mcpMsg").innerHTML=r.error?'<span class="hot">'+esc(r.error)+"</span>":esc(t("mcp.installed",{file:r.file}))+(r.backup?'<br><span class="dim">'+esc(t("mcp.backup",{file:r.backup}))+"</span>":"");lock($("mcpMsg"),"MCP");load();};
+$("quit").onclick=async()=>{if(!confirm(t("settings.quitConfirm")))return;await api("/api/quit",{}).catch(()=>{});document.body.dataset.mode="warm";const m=$("quitMsg");m.dataset.v="";type(m,t("settings.quitDone"));clearInterval(poll);};
 $("tabServer").onclick=()=>{tab="server";loadLog();};$("tabLocal").onclick=()=>{tab="local";loadLog();};
 $("q").oninput=drawModels;
-api("/api/lang",{lang});paint();
-// draw the frames once the panels have their real size (outer contours first, panel by panel, then the inner marks)
-Promise.allSettled([load(),loadQr(),loadLog(),loadModels()]).then(()=>requestAnimationFrame(()=>{frames(true);drawnOnce=true;}));
-setInterval(load,5000);setInterval(loadLog,15000);
+api("/api/lang",{lang});paint();show(view,false);
+// draw once the panels have their real size: top bar and nav first, then the open view
+Promise.allSettled([load(),loadQr(),loadLog(),loadModels()]).then(()=>requestAnimationFrame(()=>{frames(true);drawnOnce=true;setTimeout(()=>lock($("v-"+view).querySelector(".hud"),view.toUpperCase()),1300);}));
+const poll=setInterval(load,5000);setInterval(()=>view==="history"&&loadLog(),15000);
 </script></body></html>`;

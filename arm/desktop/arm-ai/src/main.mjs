@@ -7,7 +7,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import { execFile, spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { appendFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { createPublicClient, erc20Abi, http } from "viem";
 import { base } from "viem/chains";
@@ -50,6 +50,15 @@ if (process.argv.includes("--mcp")) {
 }
 
 async function runApp() {
+  // already running with this wallet: only show its window. Checked first, so the running copy keeps its signer link.
+  const ui = readJson("ui.json", {});
+  if (ui.port && ui.url) {
+    const other = await fetch(`http://127.0.0.1:${ui.port}/ping`, { signal: AbortSignal.timeout(1500) }).then((r) => r.text(), () => "");
+    if (other === `arm-ai ${account.address}`) {
+      if (!process.argv.includes("--no-open")) open(ui.url);
+      process.exit(0);
+    }
+  }
   let key = loadSecret("apikey.json");
   if (!key) {
     key = `armai_${randomBytes(24).toString("hex")}`;
@@ -74,7 +83,7 @@ async function runApp() {
     const r = readJson("registered.json", null);
     return r?.address === account.address && r.keyHash === createHash("sha256").update(key).digest("hex");
   };
-  if (!registered()) await register().catch((e) => console.log(`register failed / 登记失败: ${e.message}`));
+  if (!registered()) await register().catch((e) => log(`register failed / 登记失败: ${e.message}`));
 
   const link = connect({
     url: SIGNER_URL,
@@ -90,7 +99,7 @@ async function runApp() {
       }
       status = s;
     },
-    onSigned: (m, out) => console.log(`${new Date().toLocaleTimeString()} ${out.t === "signed" ? "signed / 已签" : "refused / 拒绝"} ${m.model} $${(Number(m.accepted?.amount ?? 0) / 1e6).toFixed(4)}${out.reason ? ` (${out.reason})` : ""}`),
+    onSigned: (m, out) => log(`${out.t === "signed" ? "signed / 已签" : "refused / 拒绝"} ${m.model} $${(Number(m.accepted?.amount ?? 0) / 1e6).toFixed(4)}${out.reason ? ` (${out.reason})` : ""}`),
   });
 
   // ---------------------------------------------------------------- chain + server reads for the UI
@@ -104,11 +113,10 @@ async function runApp() {
   const authed = (path, init = {}) => fetch(`${SERVER}${path}`, { ...init, headers: { authorization: `Bearer ${key}`, "content-type": "application/json", ...(init.headers ?? {}) }, signal: AbortSignal.timeout(60_000) });
 
   // ---------------------------------------------------------------- local UI server
-  const ui = readJson("ui.json", {});
   const nonce = randomBytes(16).toString("hex");
   const routes = {
     "GET /api/state": () => ({
-      version: VERSION, address: account.address, usdc, status, lang: lang(), caps: caps(), today: ledger(), baseUrl: BASE_URL, key, examples: EXAMPLES,
+      version: VERSION, address: account.address, usdc, status, lang: lang(), caps: caps(), today: ledger(), baseUrl: BASE_URL, key, examples: EXAMPLES, dataDir: DIR, logFile: file("armai.log"),
       editors: found.map(({ e, installs }) => ({ id: e.id, name: e.name, installs, mcp: mcpStatus(e) })),
     }),
     "POST /api/caps": (b) => {
@@ -136,11 +144,17 @@ async function runApp() {
       }
     },
     "POST /api/register": async () => {
-      await register().catch((e) => console.log(`register failed / 登记失败: ${e.message}`));
+      await register().catch((e) => log(`register failed / 登记失败: ${e.message}`));
       link.reconnect();
       return { status };
     },
     "POST /api/export": (b) => (b.confirm === true ? { privateKey: pk } : { error: "confirm" }),
+    // there is no console window to close any more: this is how the user stops signing
+    "POST /api/quit": () => {
+      log("quit from the UI / 从界面退出");
+      setTimeout(() => process.exit(0), 300);
+      return { ok: true };
+    },
     "POST /api/test": async () => {
       try {
         const r = await authed("/api/ai/v1/chat/completions", { method: "POST", body: JSON.stringify({ model: "nvidia/llama-3.3-nemotron-super-49b-v1.5", max_tokens: 60, messages: [{ role: "user", content: "Reply with exactly: OK, Arm AI works." }] }) });
@@ -208,24 +222,23 @@ async function runApp() {
       await listen(port);
       break;
     } catch (e) {
-      // another Arm AI already running: just show its window
-      const other = await fetch(`http://127.0.0.1:${port}/ping`, { signal: AbortSignal.timeout(1500) }).then((r) => r.text(), () => "");
-      if (other.startsWith("arm-ai ") && ui.url) {
-        open(ui.url);
-        process.exit(0);
-      }
       if (i >= 20) throw e;
       port++;
     }
   }
   const url = `http://127.0.0.1:${port}/?n=${nonce}`;
   writeJson("ui.json", { port, url });
-  console.log(`Arm AI ${VERSION}  ${account.address}`);
-  console.log(`界面 / UI: ${url}`);
-  console.log("使用 Cursor 时请保持这个黑色窗口打开，关掉它才会停止签名；界面窗口关了不影响，双击 ArmAI.exe 可重新打开。");
-  console.log("Keep this black window open while you use Cursor (closing it stops signing). Closing the UI window is fine; double-click ArmAI.exe to reopen it.");
-  console.log(`数据目录 / Data: ${DIR}`);
+  log(`Arm AI ${VERSION}  ${account.address}  data ${DIR}`);
+  log(`UI ${url}`);
   if (!process.argv.includes("--no-open")) open(url);
+}
+
+/** the packaged app has no console window: everything worth knowing goes to %APPDATA%\ArmAI\armai.log (and stdout) */
+function log(msg) {
+  try {
+    appendFileSync(file("armai.log"), `${new Date().toISOString()} ${msg}\n`);
+  } catch {}
+  console.log(msg);
 }
 
 /** the UI as its own app window (Edge / Chrome app mode, own profile so it is a separate window); browser tab as fallback */
