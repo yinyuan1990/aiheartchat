@@ -104,5 +104,5 @@
   "fee.line": "Settled {paid} · settling {pending} · still payable by this app's count {room}",
   "fee.server": "Unpaid by the server's count: {owed} (settled automatically at {settle})",
   "fee.entry": "Service fee 5%",
-  "footer.fee": "Arm AI adds a 5% service fee to BlockRun's price (see Settings). Your key is never uploaded; the server only relays requests and quotes, and Arm AI on your PC signs each payment."
+  "footer.note": "Your key is never uploaded; the server only relays requests and quotes, and Arm AI on your PC signs each payment."
 }

@@ -104,5 +104,5 @@
   "fee.line": "已结 {paid} · 结算中 {pending} · 按本机记账还可结 {room}",
   "fee.server": "服务器记的待结：{owed}（满 {settle} 自动结算）",
   "fee.entry": "服务费 5%",
-  "footer.fee": "Arm AI 在 BlockRun 的报价之外收 5% 服务费（详见「设置」）。私钥不上传；服务器只转发请求和报价，由你电脑上的 Arm AI 签名付款。"
+  "footer.note": "私钥不上传；服务器只转发请求和报价，由你电脑上的 Arm AI 签名付款。"
 }

@@ -164,7 +164,7 @@ footer{max-width:1240px;margin:0 auto 26px;padding:0 22px;font-size:11.5px}
 </section>
 </div>
 </div></div>
-<footer class="faint" data-t="footer.fee"></footer>
+<footer class="faint" data-t="footer.note"></footer>
 <script>
 const NONCE=${JSON.stringify(nonce)}, L=${JSON.stringify(locales)};
 const CALM=matchMedia("(prefers-reduced-motion: reduce)").matches;
