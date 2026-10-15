@@ -1,10 +1,10 @@
 /**
- * Editors Arm AI knows how to find and set up. Each entry: detect() → installs found on this PC, and (optional) the
- * MCP config file it reads. Only Cursor for now; another editor = another entry here.
+ * Editors Arm AI knows how to find. Each entry: detect() → installs found on this PC.
+ * Only Cursor for now; another editor = another entry here.
  */
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { homedir, platform } from "node:os";
+import { platform } from "node:os";
 import { dirname, join } from "node:path";
 
 const ps = (cmd) => {
@@ -65,49 +65,6 @@ export const editors = [
     id: "cursor",
     name: "Cursor",
     detect: detectCursor,
-    mcpFile: () => join(homedir(), ".cursor", "mcp.json"),
     settingsDir: () => join(process.env.APPDATA ?? "", "Cursor", "User"),
   },
 ];
-
-export const MCP_NAME = "arm-ai";
-
-/** the command line that starts this app as an MCP server (the compiled exe, or node + main.mjs while developing) */
-export function mcpCommand() {
-  const exe = process.execPath;
-  const compiled = !/[\\/](node|bun)(\.exe)?$/i.test(exe);
-  return compiled ? { command: exe, args: ["--mcp"] } : { command: exe, args: [join(import.meta.dirname, "main.mjs"), "--mcp"] };
-}
-
-export function mcpStatus(editor) {
-  const f = editor.mcpFile();
-  try {
-    const j = JSON.parse(readFileSync(f, "utf8"));
-    const e = j.mcpServers?.[MCP_NAME];
-    const want = mcpCommand();
-    return { file: f, installed: !!e, current: !!e && e.command === want.command && JSON.stringify(e.args) === JSON.stringify(want.args) };
-  } catch {
-    return { file: f, installed: false, current: false };
-  }
-}
-
-/** add / update our entry; the old file is copied next to it first */
-export function installMcp(editor) {
-  const f = editor.mcpFile();
-  let j = { mcpServers: {} };
-  let backup = null;
-  if (existsSync(f)) {
-    const raw = readFileSync(f, "utf8");
-    try {
-      j = JSON.parse(raw || "{}");
-    } catch {
-      throw new Error(`${f} is not valid JSON; fix or remove it first`);
-    }
-    backup = `${f}.bak-armai-${new Date().toISOString().replace(/[:.]/g, "-")}`;
-    copyFileSync(f, backup);
-  } else mkdirSync(dirname(f), { recursive: true });
-  j.mcpServers ??= {};
-  j.mcpServers[MCP_NAME] = mcpCommand();
-  writeFileSync(f, JSON.stringify(j, null, 2));
-  return { file: f, backup };
-}

@@ -1,7 +1,6 @@
 /**
  * Arm AI: a wallet on this PC that pays BlockRun (x402, USDC on Base) for the AI models you use in Cursor.
- *   ArmAI.exe          local UI on 127.0.0.1 + keeps the signer connection to the server open
- *   ArmAI.exe --mcp    MCP server for Cursor (stdio), paid from the same wallet
+ * Local UI on 127.0.0.1 + keeps the signer connection to the server open.
  * The server (arm.yyheart.com/api/ai) never gets the private key: it forwards BlockRun's quote and this app signs it.
  */
 import { createHash, randomBytes } from "node:crypto";
@@ -17,7 +16,7 @@ import zh from "../i18n/zh.json" with { type: "json" };
 import en from "../i18n/en.json" with { type: "json" };
 import { DIR, caps, fees, file, history, ledger, loadSecret, readJson, saveCaps, saveSecret, writeJson } from "./store.mjs";
 import { BASE_USDC, FEE_BPS, FEE_TO, connect, feeRoom, reconcileFees } from "./signer.mjs";
-import { editors, installMcp, mcpStatus } from "./editors.mjs";
+import { editors } from "./editors.mjs";
 import { download, downloadState, openPage, run } from "./exchanges.mjs";
 import { page } from "./page.mjs";
 
@@ -36,19 +35,7 @@ if (!pk) {
 }
 const account = privateKeyToAccount(pk);
 
-if (process.argv.includes("--mcp")) {
-  // the MCP server from arm/ops/x402-mcp, pointed at this wallet and this app's data dir; stdout is the MCP channel
-  process.env.X402_PRIVATE_KEY = pk;
-  process.env.X402_DIR = file("mcp");
-  process.env.X402_API ??= `${SERVER}/api`;
-  const { mkdirSync } = await import("node:fs");
-  mkdirSync(file("mcp"), { recursive: true });
-  const c = caps();
-  writeJson("mcp/mcp-config.json", { ...readJson("mcp/mcp-config.json", {}), maxPerCall: c.maxPerCall, dailyCap: c.dailyCap });
-  await import("../../../ops/x402-mcp/server.mjs");
-} else {
-  await runApp();
-}
+await runApp();
 
 async function runApp() {
   // already running with this wallet: only show its window. Checked first, so the running copy keeps its signer link.
@@ -107,6 +94,11 @@ async function runApp() {
       const amount = m.t === "fee" ? (out.amount ?? 0) : Number(m.accepted?.amount ?? 0);
       log(`${out.t === "refuse" ? "refused / 拒绝" : "signed / 已签"} ${what} $${(amount / 1e6).toFixed(4)}${out.reason ? ` (${out.reason})` : ""}`);
     },
+    // the operator decides per user whether the Binance / OKX top-up page is shown; kept for when the server is unreachable
+    onConfig: (m) => {
+      const exchanges = m.exchanges === true;
+      if (settings().exchanges !== exchanges) writeJson("settings.json", { ...settings(), exchanges });
+    },
   });
   const reconcile = () => void reconcileFees(chain, account.address).catch(() => {});
   reconcile();
@@ -125,9 +117,9 @@ async function runApp() {
   const nonce = randomBytes(16).toString("hex");
   const routes = {
     "GET /api/state": () => ({
-      version: VERSION, address: account.address, usdc, status, lang: lang(), caps: caps(), today: ledger(), baseUrl: BASE_URL, key, examples: EXAMPLES, dataDir: DIR, logFile: file("armai.log"),
+      version: VERSION, address: account.address, usdc, status, lang: lang(), caps: caps(), today: ledger(), baseUrl: BASE_URL, key, examples: EXAMPLES, dataDir: DIR, logFile: file("armai.log"), exchanges: settings().exchanges === true,
       fee: (({ signed, paid, pending }) => ({ bps: FEE_BPS, to: FEE_TO, signed, paid, pending: pending.reduce((s, p) => s + p.amount, 0), room: feeRoom() }))(fees()),
-      editors: found.map(({ e, installs }) => ({ id: e.id, name: e.name, installs, mcp: mcpStatus(e) })),
+      editors: found.map(({ e, installs }) => ({ id: e.id, name: e.name, installs })),
     }),
     "POST /api/caps": (b) => {
       const per = Number(b.maxPerCall), day = Number(b.dailyCap);
@@ -143,15 +135,6 @@ async function runApp() {
     "POST /api/rescan": () => {
       found = editors.map((e) => ({ e, installs: e.detect() }));
       return { ok: true };
-    },
-    "POST /api/mcp": (b) => {
-      const e = editors.find((x) => x.id === b.editor);
-      if (!e) return { error: "unknown editor" };
-      try {
-        return installMcp(e);
-      } catch (err) {
-        return { error: err.message };
-      }
     },
     "POST /api/register": async () => {
       await register().catch((e) => log(`register failed / 登记失败: ${e.message}`));

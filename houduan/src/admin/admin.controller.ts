@@ -806,6 +806,21 @@ export class AdminController {
     return this.admin.userShop(BigInt(id), address);
   }
 
+  // ---------- AI（Arm AI 桌面程序的用户，数据在 Arm indexer） ----------
+
+  @Get('ai/users')
+  @UseGuards(AdminGuard)
+  aiUsers(@Query('q') q?: string, @Query('page') page?: string, @Query('size') size?: string) {
+    return this.admin.aiUsers(q ?? '', Number(page) || 1, Number(size) || 20);
+  }
+
+  /** 这个用户的 Arm AI 显不显示币安 / OKX 充值页（默认不显示） */
+  @Post('ai/users/:id/exchanges')
+  @UseGuards(AdminGuard)
+  aiUserExchanges(@Param('id') id: string, @Body() body: { show?: boolean }) {
+    return this.admin.aiUserExchanges(id, body.show === true);
+  }
+
   // ---------- 通话日志 ----------
 
   @Get('call-logs')

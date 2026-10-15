@@ -123,6 +123,32 @@ export class AdminService {
     return { published, address: addr, shop: await r.json() };
   }
 
+  /** Arm indexer 的 /api/ai/admin/*，用两边环境变量里同一个 AI_ADMIN_TOKEN（不经过浏览器） */
+  private async armAi(path: string, body?: unknown) {
+    const token = process.env.AI_ADMIN_TOKEN;
+    if (!token) throw new BadRequestException('没配置 AI_ADMIN_TOKEN（心之音后端和 Arm indexer 要配同一个）');
+    const base = (process.env.ARM_API_BASE ?? 'https://arm.yyheart.com/api').replace(/\/$/, '');
+    const r = await fetch(`${base}/ai/admin${path}`, {
+      method: body ? 'POST' : 'GET',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(10_000),
+    }).catch(() => null);
+    if (!r) throw new BadRequestException('Arm 接口不通');
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new BadRequestException(`Arm 接口返回 ${r.status}：${j.error ?? ''}`);
+    return j;
+  }
+
+  aiUsers(q: string, page: number, size: number) {
+    return this.armAi(`/users?q=${encodeURIComponent(q)}&page=${page}&size=${size}`);
+  }
+
+  aiUserExchanges(id: string, show: boolean) {
+    if (!/^\d+$/.test(id)) throw new BadRequestException('用户 id 不对');
+    return this.armAi(`/users/${id}/exchanges`, { show });
+  }
+
   // ---------- 通话日志（排查视频/语音概率性问题） ----------
 
   /** 通话记录列表（游标分页），附双方昵称与日志条数 */

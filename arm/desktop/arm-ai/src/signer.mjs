@@ -8,7 +8,7 @@ import { toHex } from "viem";
 import WebSocket from "ws";
 import { caps, fees, ledger, record, recordFee, saveFees } from "./store.mjs";
 
-/** BlockRun's x402 payee on Base (same constant as the server, the web wallet and the MCP). */
+/** BlockRun's x402 payee on Base (same constant as the server and the web wallet). */
 export const BLOCKRUN_PAY_TO = "0xe9030014F5DAe217d0A152f02A043567b16c1aBf";
 export const BASE_USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 /** Arm AI's service fee: only ever paid to this address, never more than FEE_BPS of what this app signed to BlockRun */
@@ -99,7 +99,7 @@ export async function handle(m, account, chain) {
 }
 
 /** keep a WebSocket to the server open (reconnects with backoff); status changes go to onStatus */
-export function connect({ url, key, lang, account, chain, onStatus, onSigned }) {
+export function connect({ url, key, lang, account, chain, onStatus, onSigned, onConfig }) {
   let ws, delay = 1000, stopped = false, timer, misses = 0;
   const open = () => {
     if (stopped) return;
@@ -122,6 +122,7 @@ export function connect({ url, key, lang, account, chain, onStatus, onSigned }) 
       } catch {
         return;
       }
+      if (m?.t === "config") return onConfig?.(m);
       const out = await handle(m, account, chain).catch((e) => ({ t: "refuse", id: m.id, reason: e.message }));
       if (out) {
         ws.send(JSON.stringify(out));

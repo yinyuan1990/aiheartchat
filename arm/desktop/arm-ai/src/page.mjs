@@ -86,7 +86,7 @@ footer{max-width:1240px;margin:0 auto 26px;padding:0 22px;font-size:11.5px}
 <div class="shell">
 <nav class="hud" data-n="NAV" id="nav">
   <button data-view="wallet"><span class="n">01</span><span data-t="nav.wallet"></span></button>
-  <button data-view="topup"><span class="n">02</span><span data-t="nav.topup"></span></button>
+  <button data-view="topup" style="display:none"><span class="n">02</span><span data-t="nav.topup"></span></button>
   <button data-view="cursor"><span class="n">03</span><span data-t="nav.cursor"></span></button>
   <button data-view="history"><span class="n">04</span><span data-t="nav.history"></span></button>
   <button data-view="models"><span class="n">05</span><span data-t="nav.models"></span></button>
@@ -104,7 +104,7 @@ footer{max-width:1240px;margin:0 auto 26px;padding:0 22px;font-size:11.5px}
   <div class="row"><button id="export" data-t="wallet.export"></button></div><div class="val" id="pk" style="display:none"></div>
 </section>
 <section class="hud" data-n="01.2"><h2>QR // BASE</h2><div class="qr" id="qr"></div><p class="dim" style="text-align:center;margin:0" data-t="wallet.address"></p>
-  <p style="margin-top:14px" data-t="wallet.toTopup" data-md></p><div class="row" style="justify-content:center"><button data-go="topup" data-t="nav.topup"></button></div>
+  <div id="toTopup" style="display:none"><p style="margin-top:14px" data-t="wallet.toTopup" data-md></p><div class="row" style="justify-content:center"><button data-go="topup" data-t="nav.topup"></button></div></div>
 </section>
 </div>
 <!-- 02 top-up -->
@@ -134,8 +134,6 @@ footer{max-width:1240px;margin:0 auto 26px;padding:0 22px;font-size:11.5px}
   <p class="hot" data-t="cursor.note"></p>
   <div class="row"><button class="pri" id="test" data-t="cursor.test"></button><span id="testMsg"></span></div>
 </section>
-<section class="hud" data-n="03.2"><h2 data-t="mcp.title"></h2><p class="dim" data-t="mcp.desc"></p>
-  <div class="row"><button id="mcp"></button><span id="mcpMsg"></span></div></section>
 </div>
 <!-- 04 history -->
 <div class="view" id="v-history">
@@ -248,6 +246,13 @@ function show(v,draw=true){
 }
 document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{if(b.dataset.view!==view)show(b.dataset.view);});
 document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>show(b.dataset.go));
+/* the top-up page is shown only when the operator turned it on for this user (server pushes it); numbers follow what is shown */
+function exchanges(on){const nb=document.querySelector('nav button[data-view="topup"]');
+  nb.style.display=on?"":"none";$("toTopup").style.display=on?"":"none";
+  if(!on&&view==="topup")show("wallet",drawnOnce);
+  let i=0;VIEWS.forEach(v=>{if(document.querySelector('nav button[data-view="'+v+'"]').style.display==="none")return;const n=String(++i).padStart(2,"0");
+    document.querySelector('nav button[data-view="'+v+'"] .n').textContent=n;
+    $("v-"+v).querySelectorAll(".hud[data-n]").forEach(p=>{p.dataset.n=n+p.dataset.n.slice(2);const no=p.querySelector(":scope>.no");if(no)no.textContent=p.dataset.n+" //";});});}
 let DL={},dlTimer=null;
 async function pollDl(){DL=await api("/api/download");drawDl();clearTimeout(dlTimer);
   if(Object.values(DL).some(j=>j.phase==="downloading"||j.phase==="verifying"))dlTimer=setTimeout(pollDl,700);}
@@ -275,6 +280,7 @@ function render(){const s=S;
   type($("status"),"[ "+t(KEYS[s.status]||"status.offline")+" ]");
   if(lastStatus!==null&&lastStatus!==s.status)lock($("status"),s.status.toUpperCase());
   lastStatus=s.status;
+  exchanges(!!s.exchanges);
   const bal=s.usdc==null?"––––":"$"+(s.usdc/1e6).toFixed(4);
   scramble($("usdc"),bal);scramble($("topBal"),bal);scramble($("topToday"),usd(s.today.signed));
   $("addr").textContent=s.address;$("ver").textContent=s.version;$("dataDir").textContent=s.dataDir;$("logFile").textContent=s.logFile;
@@ -284,9 +290,7 @@ function render(){const s=S;
   scramble($("todayNum"),usd(s.today.signed));$("today").textContent=t("caps.today",{amount:usd(s.today.signed),n:s.today.calls});
   $("feeLine").textContent=t("fee.line",{paid:usd(s.fee.paid),pending:usd(s.fee.pending),room:usd(s.fee.room)});
   const ed=s.editors[0];
-  $("installs").innerHTML=ed.installs.length?ed.installs.map((i,n)=>'<span class="chip">'+String(n+1).padStart(2,"0")+" · "+esc(i.exe)+(i.version?" · v"+esc(i.version):"")+(i.running?" · ▲ "+esc(t("cursor.running")):"")+"</span>").join(""):'<span class="hot">'+esc(t("cursor.none"))+"</span>";
-  $("mcp").textContent=t(ed.mcp.installed&&!ed.mcp.current?"mcp.update":"mcp.install");
-  if(!$("mcpMsg").dataset.keep)$("mcpMsg").innerHTML=ed.mcp.current?esc(t("mcp.installed",{file:ed.mcp.file})):ed.mcp.installed?'<span class="hot">'+esc(t("mcp.outdated"))+"</span>":"";}
+  $("installs").innerHTML=ed.installs.length?ed.installs.map((i,n)=>'<span class="chip">'+String(n+1).padStart(2,"0")+" · "+esc(i.exe)+(i.version?" · v"+esc(i.version):"")+(i.running?" · ▲ "+esc(t("cursor.running")):"")+"</span>").join(""):'<span class="hot">'+esc(t("cursor.none"))+"</span>";}
 async function load(){S=await api("/api/state");render();}
 async function loadQr(){$("qr").innerHTML=await fetch("/api/qr",{headers:{"x-arm-nonce":NONCE}}).then(r=>r.text());}
 const norm=m=>String(m||"").toLowerCase().replace(/^[^/]+\\//,"").replace(/[^a-z0-9]/g,"");
@@ -315,11 +319,10 @@ $("saveCaps").onclick=async()=>{await api("/api/caps",{maxPerCall:Number($("perC
 $("rescan").onclick=()=>api("/api/rescan",{}).then(load).then(()=>lock($("installs"),"SCAN"));
 $("export").onclick=async()=>{const pk=$("pk");if(pk.style.display!=="none"){pk.style.display="none";pk.textContent="";return;}if(!confirm(t("wallet.exportWarn")))return;pk.textContent=(await api("/api/export",{confirm:true})).privateKey;pk.style.display="";};
 $("test").onclick=async()=>{const m=$("testMsg");m.className="dim";m.dataset.v="";type(m,t("cursor.testing"));const r=await api("/api/test",{});m.className=r.ok?"":"hot";m.dataset.v="";type(m,r.ok?t("cursor.testOk",{answer:r.answer}):t("cursor.testFail",{error:r.error}));lock(m,r.ok?"LINK OK":"LINK FAIL");};
-$("mcp").onclick=async()=>{const r=await api("/api/mcp",{editor:"cursor"});$("mcpMsg").dataset.keep="1";$("mcpMsg").innerHTML=r.error?'<span class="hot">'+esc(r.error)+"</span>":esc(t("mcp.installed",{file:r.file}))+(r.backup?'<br><span class="dim">'+esc(t("mcp.backup",{file:r.backup}))+"</span>":"");lock($("mcpMsg"),"MCP");load();};
 $("quit").onclick=async()=>{if(!confirm(t("settings.quitConfirm")))return;await api("/api/quit",{}).catch(()=>{});document.body.dataset.mode="warm";const m=$("quitMsg");m.dataset.v="";type(m,t("settings.quitDone"));clearInterval(poll);};
 $("tabServer").onclick=()=>{tab="server";loadLog();};$("tabLocal").onclick=()=>{tab="local";loadLog();};
 $("q").oninput=drawModels;
-api("/api/lang",{lang});paint();show(view,false);
+api("/api/lang",{lang});paint();exchanges(false);show(view,false);
 // draw once the panels have their real size: top bar and nav first, then the open view
 Promise.allSettled([load(),loadQr(),loadLog(),loadModels(),pollDl()]).then(()=>requestAnimationFrame(()=>{frames(true);drawnOnce=true;setTimeout(()=>lock($("v-"+view).querySelector(".hud"),view.toUpperCase()),1300);}));
 const poll=setInterval(load,5000);setInterval(()=>view==="history"&&loadLog(),15000);

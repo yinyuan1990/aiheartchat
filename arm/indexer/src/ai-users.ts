@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import { getAddress, isAddress, verifyMessage, type Hex } from "viem";
 import { WebSocket } from "ws";
@@ -36,6 +36,8 @@ export const ensureAiUsers = () => (ready ??= (async () => {
   await sql`create table if not exists ai_fees (
     id bigserial primary key, user_id bigint not null, amount bigint not null, status text not null, tx text, nonce text, reason text,
     at timestamptz not null default now())`;
+  // 心之音后台 → AI: whether the app shows its Binance / OKX top-up page (off until the operator turns it on)
+  await sql`alter table ai_users add column if not exists show_exchanges boolean not null default false`;
 })());
 
 export const keyHash = (key: string) => createHash("sha256").update(key).digest("hex");
@@ -89,6 +91,9 @@ export function attachSigner(ws: WebSocket, user: AiUser, lang?: string | null) 
   if (lang && AI_LANGS.includes(lang)) user.lang = lang;
   void sql`update ai_users set seen_at = now(), lang = ${user.lang} where id = ${user.id}`.catch(() => {});
   ws.send(JSON.stringify({ t: "hello", address: user.address }));
+  void sql<{ show_exchanges: boolean }[]>`select show_exchanges from ai_users where id = ${user.id}`
+    .then(([r]) => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify({ t: "config", exchanges: !!r?.show_exchanges })))
+    .catch(() => {});
   const ping = setInterval(() => ws.readyState === WebSocket.OPEN && ws.ping(), 25_000);
   ws.on("message", (raw) => {
     let m: Reply;
@@ -139,6 +144,49 @@ export async function remoteFee(user: AiUser, fee: { to: string; amount: number;
   const m = await ask(user, "feeSigned", { t: "fee", ...fee });
   if (!m.authorization || typeof m.signature !== "string") throw new Error("bad fee reply");
   return { authorization: m.authorization, signature: m.signature };
+}
+
+// ---------------------------------------------------------------- 心之音后台 → AI (houduan calls these with AI_ADMIN_TOKEN)
+
+const ADMIN_TOKEN = process.env.AI_ADMIN_TOKEN ?? "";
+/** off (always false) unless AI_ADMIN_TOKEN is set to at least 32 characters */
+export const aiAdminOk = (h: string | undefined) => {
+  const got = Buffer.from(h?.replace(/^Bearer /, "") ?? "");
+  const want = Buffer.from(ADMIN_TOKEN);
+  return ADMIN_TOKEN.length >= 32 && got.length === want.length && timingSafeEqual(got, want);
+};
+
+/** GET /api/ai/admin/users?q=&page=&size= : newest first; q matches part of the address */
+export async function aiAdminUsers(q: string, page: number, size: number) {
+  await ensureAiUsers();
+  size = Math.min(100, Math.max(1, Math.floor(size) || 20));
+  page = Math.max(1, Math.floor(page) || 1);
+  const term = q.trim().toLowerCase();
+  const where = term ? sql`where address like ${`%${term.replace(/[%_\\]/g, "")}%`}` : sql``;
+  const [{ n }] = await sql<{ n: number }[]>`select count(*)::int as n from ai_users ${where}`;
+  const rows = await sql<{ id: string; address: string; created_at: Date; seen_at: Date | null; show_exchanges: boolean }[]>`
+    select id::text, address, created_at, seen_at, show_exchanges from ai_users ${where} order by id desc limit ${size} offset ${(page - 1) * size}`;
+  const list = rows.map((r) => ({
+    id: r.id,
+    address: getAddress(r.address),
+    createdAt: r.created_at,
+    seenAt: r.seen_at,
+    online: signers.get(r.id)?.ws.readyState === WebSocket.OPEN,
+    exchanges: r.show_exchanges,
+  }));
+  return { list, total: n, page, size };
+}
+
+/** POST /api/ai/admin/users/:id/exchanges {show}: saved, and pushed at once to the user's app if it is open */
+export async function aiAdminSetExchanges(id: string, show: boolean) {
+  if (!/^\d+$/.test(id)) return null;
+  await ensureAiUsers();
+  const [r] = await sql<{ id: string }[]>`update ai_users set show_exchanges = ${show} where id = ${id} returning id::text`;
+  if (!r) return null;
+  const s = signers.get(r.id);
+  const pushed = s?.ws.readyState === WebSocket.OPEN;
+  if (pushed) s!.ws.send(JSON.stringify({ t: "config", exchanges: show }));
+  return { id: r.id, exchanges: show, pushed };
 }
 
 /** send one request over the user's signer link; resolves with the app's reply of type `want` */

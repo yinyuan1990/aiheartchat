@@ -24,7 +24,7 @@ import { gameBoard, gamePlay, gameSell, gameSession, gameStart, gameTick, gameTo
 import { boatBoard, boatInfo, boatLogin, boatMe, boatRunEnd, boatRunStart, boatWithdraw } from "./boat.js";
 import { storyEnd, storyLevels, storyStart } from "./story.js";
 import { aiProxyChat, aiProxyModels, aiProxyStats, aiProxyWho } from "./ai-proxy.js";
-import { aiRegister } from "./ai-users.js";
+import { aiAdminOk, aiAdminSetExchanges, aiAdminUsers, aiRegister } from "./ai-users.js";
 import { addSolComment, jupQuote, jupSwap, solComments, solRelay, solTokens } from "./solana.js";
 import { isAvatarAddress, walletAvatar } from "./avatars.js";
 import { claimOf, verifyTransfer } from "./verify.js";
@@ -905,6 +905,17 @@ app.get("/api/ai/v1/stats", async (c) => {
 app.post("/api/ai/register", async (c) => {
   const r = await aiRegister(await c.req.json().catch(() => ({})));
   return c.json(r.json, r.status as 200);
+});
+app.get("/api/ai/admin/users", async (c) => {
+  if (!aiAdminOk(c.req.header("authorization"))) return c.json({ error: "not found" }, 404);
+  return c.json(await aiAdminUsers(c.req.query("q") ?? "", Number(c.req.query("page")), Number(c.req.query("size"))));
+});
+app.post("/api/ai/admin/users/:id/exchanges", async (c) => {
+  if (!aiAdminOk(c.req.header("authorization"))) return c.json({ error: "not found" }, 404);
+  const b = await c.req.json().catch(() => ({}));
+  if (typeof b.show !== "boolean") return c.json({ error: "show must be true or false" }, 400);
+  const r = await aiAdminSetExchanges(c.req.param("id"), b.show);
+  return r ? c.json(r) : c.json({ error: "no such user" }, 404);
 });
 app.get("/api/x402/relay/:id", async (c) => {
   const r = await x402Relay(c.req.param("id"), clientIp(c) || "?");
