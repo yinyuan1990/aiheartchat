@@ -15,7 +15,8 @@ export type AiUser = { id: string; address: string; lang: string };
 /** languages of the messages the proxy writes into Cursor for Arm AI users (the app's own UI has its own files) */
 export const AI_LANGS = ["zh", "en"];
 const langOf = (v: unknown) => (AI_LANGS.includes(String(v)) ? String(v) : "zh");
-type Pending = { resolve: (payment: string) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> };
+type Reply = { t?: string; id?: string; payment?: string; reason?: string; lang?: string; authorization?: Record<string, string>; signature?: string };
+type Pending = { want: string; resolve: (m: Reply) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> };
 type Signer = { ws: WebSocket; pending: Map<string, Pending>; since: number };
 
 const SIGN_TIMEOUT_MS = 30_000;
@@ -30,6 +31,11 @@ export const ensureAiUsers = () => (ready ??= (async () => {
     created_at timestamptz not null default now(), seen_at timestamptz)`;
   await sql`alter table ai_users add column if not exists lang text not null default 'zh'`;
   await sql`alter table if exists ai_proxy_calls add column if not exists user_id bigint`;
+  // the service fee (ai-fees.ts) counts calls from here on: users who joined before it started owe nothing for those
+  await sql`alter table ai_users add column if not exists fee_since timestamptz not null default now()`;
+  await sql`create table if not exists ai_fees (
+    id bigserial primary key, user_id bigint not null, amount bigint not null, status text not null, tx text, nonce text, reason text,
+    at timestamptz not null default now())`;
 })());
 
 export const keyHash = (key: string) => createHash("sha256").update(key).digest("hex");
@@ -85,7 +91,7 @@ export function attachSigner(ws: WebSocket, user: AiUser, lang?: string | null) 
   ws.send(JSON.stringify({ t: "hello", address: user.address }));
   const ping = setInterval(() => ws.readyState === WebSocket.OPEN && ws.ping(), 25_000);
   ws.on("message", (raw) => {
-    let m: { t?: string; id?: string; payment?: string; reason?: string; lang?: string };
+    let m: Reply;
     try {
       m = JSON.parse(String(raw));
     } catch {
@@ -103,7 +109,7 @@ export function attachSigner(ws: WebSocket, user: AiUser, lang?: string | null) 
     if (!p) return;
     s.pending.delete(m.id!);
     clearTimeout(p.timer);
-    if (m.t === "signed" && typeof m.payment === "string") p.resolve(m.payment);
+    if (m.t === p.want) p.resolve(m);
     else p.reject(new Error(m.reason || "Arm AI refused to sign"));
   });
   ws.on("close", () => {
@@ -120,29 +126,32 @@ export function attachSigner(ws: WebSocket, user: AiUser, lang?: string | null) 
  * ask the user's Arm AI to pay this quote; resolves to the base64 x402 payment. The app rebuilds and checks
  * everything itself (payee, asset, network, amount vs its caps); the server only re-checks who signed what.
  */
-export function remoteSign(user: AiUser, accepted: Record<string, unknown>, resource: unknown, info: { model: string; bytes: number }): Promise<string> {
+export async function remoteSign(user: AiUser, accepted: Record<string, unknown>, resource: unknown, info: { model: string; bytes: number }): Promise<string> {
+  const m = await ask(user, "signed", { t: "sign", accepted, resource, model: info.model, bytes: info.bytes });
+  const p = JSON.parse(Buffer.from(String(m.payment), "base64").toString("utf8")) as { payload?: { authorization?: { from?: string; to?: string; value?: string } } };
+  const a = p.payload?.authorization;
+  if (a?.from?.toLowerCase() !== user.address || a?.to?.toLowerCase() !== String(accepted.payTo).toLowerCase() || a?.value !== String(accepted.amount)) throw new Error("payment does not match the quote");
+  return String(m.payment);
+}
+
+/** ask the user's Arm AI to sign the service fee it owes (ai-fees.ts checks and submits what comes back) */
+export async function remoteFee(user: AiUser, fee: { to: string; amount: number; bps: number; owed: number }) {
+  const m = await ask(user, "feeSigned", { t: "fee", ...fee });
+  if (!m.authorization || typeof m.signature !== "string") throw new Error("bad fee reply");
+  return { authorization: m.authorization, signature: m.signature };
+}
+
+/** send one request over the user's signer link; resolves with the app's reply of type `want` */
+function ask(user: AiUser, want: string, msg: Record<string, unknown>): Promise<Reply> {
   const s = signers.get(user.id);
   if (!s || s.ws.readyState !== WebSocket.OPEN) return Promise.reject(new Error("offline"));
   const id = randomBytes(8).toString("hex");
-  return new Promise<string>((resolve, reject) => {
+  return new Promise<Reply>((resolve, reject) => {
     const timer = setTimeout(() => {
       s.pending.delete(id);
       reject(new Error("Arm AI did not answer in time"));
     }, SIGN_TIMEOUT_MS);
-    s.pending.set(id, {
-      timer,
-      reject,
-      resolve: (payment) => {
-        try {
-          const p = JSON.parse(Buffer.from(payment, "base64").toString("utf8")) as { payload?: { authorization?: { from?: string; to?: string; value?: string } } };
-          const a = p.payload?.authorization;
-          if (a?.from?.toLowerCase() !== user.address || a?.to?.toLowerCase() !== String(accepted.payTo).toLowerCase() || a?.value !== String(accepted.amount)) throw new Error("payment does not match the quote");
-          resolve(payment);
-        } catch (e) {
-          reject(e as Error);
-        }
-      },
-    });
-    s.ws.send(JSON.stringify({ t: "sign", id, accepted, resource, model: info.model, bytes: info.bytes }));
+    s.pending.set(id, { want, timer, reject, resolve });
+    s.ws.send(JSON.stringify({ ...msg, id }));
   });
 }

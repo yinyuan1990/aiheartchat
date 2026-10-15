@@ -18,6 +18,7 @@ import { loadQuotePrices, refreshQuotePrices } from "./quotes.js";
 import { ensureAiBotTables, startAiBots } from "./aibot/bots.js";
 import { ensureShopTables } from "./shop.js";
 import { attachSigner, signerAuth } from "./ai-users.js";
+import { settleFee } from "./ai-fees.js";
 
 await migrate();
 await ensureCalloutTables();
@@ -43,7 +44,11 @@ const signerWss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 })
         socket.end("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
         return;
       }
-      signerWss.handleUpgrade(req, socket, head, (ws) => attachSigner(ws, user, new URL(req.url ?? "/", "http://x").searchParams.get("lang")));
+      signerWss.handleUpgrade(req, socket, head, (ws) => {
+        attachSigner(ws, user, new URL(req.url ?? "/", "http://x").searchParams.get("lang"));
+        // a fee that reached the threshold while the app was closed
+        void settleFee(user);
+      });
     }, () => socket.destroy());
   socket.destroy();
 });

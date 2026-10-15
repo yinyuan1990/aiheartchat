@@ -15,8 +15,8 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import QRCode from "qrcode";
 import zh from "../i18n/zh.json" with { type: "json" };
 import en from "../i18n/en.json" with { type: "json" };
-import { DIR, caps, file, history, ledger, loadSecret, readJson, saveCaps, saveSecret, writeJson } from "./store.mjs";
-import { BASE_USDC, connect } from "./signer.mjs";
+import { DIR, caps, fees, file, history, ledger, loadSecret, readJson, saveCaps, saveSecret, writeJson } from "./store.mjs";
+import { BASE_USDC, FEE_BPS, FEE_TO, connect, feeRoom, reconcileFees } from "./signer.mjs";
 import { editors, installMcp, mcpStatus } from "./editors.mjs";
 import { page } from "./page.mjs";
 
@@ -85,11 +85,13 @@ async function runApp() {
   };
   if (!registered()) await register().catch((e) => log(`register failed / 登记失败: ${e.message}`));
 
+  const chain = createPublicClient({ chain: base, transport: http("https://mainnet.base.org") });
   const link = connect({
     url: SIGNER_URL,
     key,
     lang,
     account,
+    chain,
     onStatus: async (s) => {
       // the server forgot us (or never knew): register again, then the reconnect loop picks it up
       if (s === "unregistered") {
@@ -99,11 +101,17 @@ async function runApp() {
       }
       status = s;
     },
-    onSigned: (m, out) => log(`${out.t === "signed" ? "signed / 已签" : "refused / 拒绝"} ${m.model} $${(Number(m.accepted?.amount ?? 0) / 1e6).toFixed(4)}${out.reason ? ` (${out.reason})` : ""}`),
+    onSigned: (m, out) => {
+      const what = m.t === "fee" ? `fee ${FEE_BPS / 100}% to ${FEE_TO}` : m.model;
+      const amount = m.t === "fee" ? (out.amount ?? 0) : Number(m.accepted?.amount ?? 0);
+      log(`${out.t === "refuse" ? "refused / 拒绝" : "signed / 已签"} ${what} $${(amount / 1e6).toFixed(4)}${out.reason ? ` (${out.reason})` : ""}`);
+    },
   });
+  const reconcile = () => void reconcileFees(chain, account.address).catch(() => {});
+  reconcile();
+  setInterval(reconcile, 120_000);
 
   // ---------------------------------------------------------------- chain + server reads for the UI
-  const chain = createPublicClient({ chain: base, transport: http("https://mainnet.base.org") });
   let usdc = null;
   const refreshBalance = () => chain.readContract({ address: BASE_USDC, abi: erc20Abi, functionName: "balanceOf", args: [account.address] }).then((b) => (usdc = Number(b)), () => {});
   void refreshBalance();
@@ -117,6 +125,7 @@ async function runApp() {
   const routes = {
     "GET /api/state": () => ({
       version: VERSION, address: account.address, usdc, status, lang: lang(), caps: caps(), today: ledger(), baseUrl: BASE_URL, key, examples: EXAMPLES, dataDir: DIR, logFile: file("armai.log"),
+      fee: (({ signed, paid, pending }) => ({ bps: FEE_BPS, to: FEE_TO, signed, paid, pending: pending.reduce((s, p) => s + p.amount, 0), room: feeRoom() }))(fees()),
       editors: found.map(({ e, installs }) => ({ id: e.id, name: e.name, installs, mcp: mcpStatus(e) })),
     }),
     "POST /api/caps": (b) => {
@@ -167,11 +176,13 @@ async function runApp() {
       }
     },
     "GET /api/log": async () => {
-      let server = [];
+      let server = [], fee = null;
       try {
-        server = (await (await authed("/api/ai/v1/stats?limit=60")).json()).calls ?? [];
+        const j = await (await authed("/api/ai/v1/stats?limit=60")).json();
+        server = j.calls ?? [];
+        fee = j.fee ?? null;
       } catch {}
-      return { local: history(60), server: server.map(({ shape, ...c }) => c) };
+      return { local: history(60), server: server.map(({ shape, ...c }) => c), fee };
     },
     "GET /api/models": async () => {
       if (modelsCache && Date.now() - modelsCache.at < 10 * 60_000) return modelsCache.v;

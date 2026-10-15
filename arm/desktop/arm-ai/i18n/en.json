@@ -82,5 +82,10 @@
   "settings.data": "Data folder",
   "settings.log": "Log file",
   "settings.version": "Version",
-  "footer.fee": "Arm AI adds no fee: you pay BlockRun's quote. Your key is never uploaded; the server only relays requests and quotes, and Arm AI on your PC signs each payment."
+  "fee.title": "Service fee",
+  "fee.why": "Arm AI charges a 5% service fee on top of BlockRun's price: the server adds up what BlockRun actually charged and settles it from your wallet once it reaches $1 (we pay the on-chain gas). Arm AI keeps its own count and never signs more than 5% of what it signed to BlockRun on this PC; the fee address is fixed in the app.",
+  "fee.line": "Settled {paid} · settling {pending} · still payable by this app's count {room}",
+  "fee.server": "Unpaid by the server's count: {owed} (settled automatically at {settle})",
+  "fee.entry": "Service fee 5%",
+  "footer.fee": "Arm AI adds a 5% service fee to BlockRun's price (see Settings). Your key is never uploaded; the server only relays requests and quotes, and Arm AI on your PC signs each payment."
 }

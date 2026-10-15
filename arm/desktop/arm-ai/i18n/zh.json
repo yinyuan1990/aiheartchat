@@ -82,5 +82,10 @@
   "settings.data": "数据目录",
   "settings.log": "日志文件",
   "settings.version": "版本",
-  "footer.fee": "Arm AI 不收手续费，付的就是 BlockRun 的报价。私钥不上传；服务器只转发请求和报价，由你电脑上的 Arm AI 签名付款。"
+  "fee.title": "服务费",
+  "fee.why": "Arm AI 在 BlockRun 的报价之外收 5% 服务费：服务器按 BlockRun 实际收的钱累计，攒到 $1 时从你的钱包结算一次（链上 gas 由我们出）。Arm AI 自己也记账，签的服务费不会超过本机签给 BlockRun 金额的 5%，收款地址写死在程序里。",
+  "fee.line": "已结 {paid} · 结算中 {pending} · 按本机记账还可结 {room}",
+  "fee.server": "服务器记的待结：{owed}（满 {settle} 自动结算）",
+  "fee.entry": "服务费 5%",
+  "footer.fee": "Arm AI 在 BlockRun 的报价之外收 5% 服务费（详见「设置」）。私钥不上传；服务器只转发请求和报价，由你电脑上的 Arm AI 签名付款。"
 }

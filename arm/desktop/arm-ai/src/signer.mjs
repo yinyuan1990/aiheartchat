@@ -6,11 +6,16 @@
 import { randomBytes } from "node:crypto";
 import { toHex } from "viem";
 import WebSocket from "ws";
-import { caps, ledger, record } from "./store.mjs";
+import { caps, fees, ledger, record, recordFee, saveFees } from "./store.mjs";
 
 /** BlockRun's x402 payee on Base (same constant as the server, the web wallet and the MCP). */
 export const BLOCKRUN_PAY_TO = "0xe9030014F5DAe217d0A152f02A043567b16c1aBf";
 export const BASE_USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+/** Arm AI's service fee: only ever paid to this address, never more than FEE_BPS of what this app signed to BlockRun */
+export const FEE_TO = "0xa47c8dC4886411Bfd45F81Fd81e76aec7bF36Db0";
+export const FEE_BPS = 500;
+const FEE_MAX = 5e6;
+const AUTH_TYPES = { TransferWithAuthorization: [{ name: "from", type: "address" }, { name: "to", type: "address" }, { name: "value", type: "uint256" }, { name: "validAfter", type: "uint256" }, { name: "validBefore", type: "uint256" }, { name: "nonce", type: "bytes32" }] };
 const same = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
 const usd = (micro) => `$${(micro / 1e6).toFixed(4)}`;
 
@@ -32,7 +37,7 @@ export async function signQuote(account, a, resource) {
   const auth = { from: account.address, to: BLOCKRUN_PAY_TO, value: BigInt(a.amount), validAfter: BigInt(now - 600), validBefore: BigInt(now + Math.min(Number(a.maxTimeoutSeconds ?? 300), 900)), nonce: toHex(randomBytes(32)) };
   const signature = await account.signTypedData({
     domain: { name: a.extra?.name ?? "USD Coin", version: a.extra?.version ?? "2", chainId: 8453, verifyingContract: BASE_USDC },
-    types: { TransferWithAuthorization: [{ name: "from", type: "address" }, { name: "to", type: "address" }, { name: "value", type: "uint256" }, { name: "validAfter", type: "uint256" }, { name: "validBefore", type: "uint256" }, { name: "nonce", type: "bytes32" }] },
+    types: AUTH_TYPES,
     primaryType: "TransferWithAuthorization",
     message: auth,
   });
@@ -40,8 +45,47 @@ export async function signQuote(account, a, resource) {
   return Buffer.from(JSON.stringify(payload)).toString("base64");
 }
 
-/** handle one server message; returns the reply to send (or null) */
-export async function handle(m, account) {
+/** fee this app still agrees to pay: its own FEE_BPS of what it signed, minus fee paid or still in flight */
+export function feeRoom(f = fees()) {
+  return Math.max(0, Math.floor((f.signed * FEE_BPS) / 10_000) - f.paid - f.pending.reduce((s, p) => s + p.amount, 0));
+}
+
+/** move signed fees that the USDC contract has used into paid; drop ones that expired unused */
+export async function reconcileFees(chain, address) {
+  const f = fees();
+  if (!f.pending.length) return f;
+  const now = Math.floor(Date.now() / 1000);
+  const keep = [];
+  for (const p of f.pending) {
+    const used = await chain.readContract({ address: BASE_USDC, abi: [{ type: "function", name: "authorizationState", stateMutability: "view", inputs: [{ type: "address" }, { type: "bytes32" }], outputs: [{ type: "bool" }] }], functionName: "authorizationState", args: [address, p.nonce] }).catch(() => null);
+    if (used === true) f.paid += p.amount;
+    else if (used === false && now > p.validBefore + 120) continue;
+    else keep.push(p);
+  }
+  f.pending = keep;
+  saveFees(f);
+  return f;
+}
+
+async function signFee(m, account, chain) {
+  if (!same(m.to, FEE_TO)) return { t: "refuse", id: m.id, reason: `fee payee ${m.to} is not Arm AI's` };
+  if (!Number.isSafeInteger(m.amount) || m.amount <= 0) return { t: "refuse", id: m.id, reason: "bad fee amount" };
+  if (chain) await reconcileFees(chain, account.address).catch(() => {});
+  const amount = Math.min(m.amount, feeRoom(), FEE_MAX);
+  if (amount <= 0) return { t: "refuse", id: m.id, reason: "no fee owed by this app's own count" };
+  const now = Math.floor(Date.now() / 1000);
+  const auth = { from: account.address, to: FEE_TO, value: BigInt(amount), validAfter: BigInt(now - 60), validBefore: BigInt(now + 600), nonce: toHex(randomBytes(32)) };
+  const signature = await account.signTypedData({ domain: { name: "USD Coin", version: "2", chainId: 8453, verifyingContract: BASE_USDC }, types: AUTH_TYPES, primaryType: "TransferWithAuthorization", message: auth });
+  const f = fees();
+  f.pending.push({ nonce: auth.nonce, amount, validBefore: Number(auth.validBefore), at: new Date().toISOString() });
+  saveFees(f);
+  recordFee({ at: new Date().toISOString(), model: `Arm AI fee ${FEE_BPS / 100}%`, amount, fee: true });
+  return { t: "feeSigned", id: m.id, amount, authorization: { ...auth, value: String(auth.value), validAfter: String(auth.validAfter), validBefore: String(auth.validBefore) }, signature };
+}
+
+/** handle one server message; returns the reply to send (or null). `chain` (optional) checks earlier fees on-chain */
+export async function handle(m, account, chain) {
+  if (m?.t === "fee" && m.id) return signFee(m, account, chain);
   if (m?.t !== "sign" || !m.id) return null;
   const why = refusal(m);
   const entry = { at: new Date().toISOString(), model: m.model, amount: Number(m.accepted?.amount ?? 0), bytes: m.bytes };
@@ -55,7 +99,7 @@ export async function handle(m, account) {
 }
 
 /** keep a WebSocket to the server open (reconnects with backoff); status changes go to onStatus */
-export function connect({ url, key, lang, account, onStatus, onSigned }) {
+export function connect({ url, key, lang, account, chain, onStatus, onSigned }) {
   let ws, delay = 1000, stopped = false, timer, misses = 0;
   const open = () => {
     if (stopped) return;
@@ -78,7 +122,7 @@ export function connect({ url, key, lang, account, onStatus, onSigned }) {
       } catch {
         return;
       }
-      const out = await handle(m, account).catch((e) => ({ t: "refuse", id: m.id, reason: e.message }));
+      const out = await handle(m, account, chain).catch((e) => ({ t: "refuse", id: m.id, reason: e.message }));
       if (out) {
         ws.send(JSON.stringify(out));
         onSigned?.(m, out);

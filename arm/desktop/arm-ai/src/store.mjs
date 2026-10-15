@@ -60,8 +60,20 @@ export function record(entry) {
   l.signed += entry.amount;
   l.calls += 1;
   writeJson("ledger.json", l);
+  if (entry.amount > 0) {
+    const f = fees();
+    f.signed += entry.amount;
+    saveFees(f);
+  }
   appendFileSync(file("history.jsonl"), JSON.stringify(entry) + "\n");
 }
+/** service fee bookkeeping: signed = all signed to BlockRun since this version, paid = fee seen on-chain, pending = signed fee not yet seen */
+export function fees() {
+  const f = readJson("fees.json", null);
+  return { signed: f?.signed ?? 0, paid: f?.paid ?? 0, pending: f?.pending ?? [] };
+}
+export const saveFees = (f) => writeJson("fees.json", f);
+export const recordFee = (entry) => appendFileSync(file("history.jsonl"), JSON.stringify(entry) + "\n");
 export function history(limit = 100) {
   try {
     return readFileSync(file("history.jsonl"), "utf8").trim().split("\n").filter(Boolean).slice(-limit).reverse().map((l) => JSON.parse(l));

@@ -135,6 +135,9 @@ footer{max-width:1240px;margin:0 auto 26px;padding:0 22px;font-size:11.5px}
   <div class="row"><span class="lbl dim" style="width:150px" data-t="caps.daily"></span><input id="daily" type="number" min="0.1" step="0.1"><button id="saveCaps" data-t="common.save"></button><span id="capsMsg"></span></div>
   <p class="big" style="font-size:22px;margin:14px 0 4px" id="todayNum">$0.0000</p><p class="dim" id="today" style="margin:0"></p>
   <p class="faint" data-t="caps.why"></p>
+  <h2 style="margin-top:18px" data-t="fee.title"></h2>
+  <p style="margin:0" id="feeLine"></p><p class="dim" style="margin:2px 0" id="feeServer"></p>
+  <p class="faint" data-t="fee.why"></p>
 </section>
 <section class="hud" data-n="05.2"><h2 data-t="settings.title"></h2>
   <div class="row"><span class="lbl dim" style="width:130px" data-t="settings.lang"></span><select id="lang"></select></div>
@@ -247,6 +250,7 @@ function render(){const s=S;
   $("step3").innerHTML=esc(t("cursor.step3",{examples:"§"})).replace("§",s.examples.map(x=>'<span class="chip">'+esc(x)+"</span>").join(""));
   if(document.activeElement!==$("perCall"))$("perCall").value=s.caps.maxPerCall;if(document.activeElement!==$("daily"))$("daily").value=s.caps.dailyCap;
   scramble($("todayNum"),usd(s.today.signed));$("today").textContent=t("caps.today",{amount:usd(s.today.signed),n:s.today.calls});
+  $("feeLine").textContent=t("fee.line",{paid:usd(s.fee.paid),pending:usd(s.fee.pending),room:usd(s.fee.room)});
   const ed=s.editors[0];
   $("installs").innerHTML=ed.installs.length?ed.installs.map((i,n)=>'<span class="chip">'+String(n+1).padStart(2,"0")+" · "+esc(i.exe)+(i.version?" · v"+esc(i.version):"")+(i.running?" · ▲ "+esc(t("cursor.running")):"")+"</span>").join(""):'<span class="hot">'+esc(t("cursor.none"))+"</span>";
   $("mcp").textContent=t(ed.mcp.installed&&!ed.mcp.current?"mcp.update":"mcp.install");
@@ -256,10 +260,11 @@ async function loadQr(){$("qr").innerHTML=await fetch("/api/qr",{headers:{"x-arm
 const norm=m=>String(m||"").toLowerCase().replace(/^[^/]+\\//,"").replace(/[^a-z0-9]/g,"");
 const sameModel=(a,b)=>{const x=norm(a),y=norm(b);return x===y||y.startsWith(x)||x.startsWith(y)};
 async function loadLog(){const j=await api("/api/log");let rows;
+  $("feeServer").textContent=j.fee?t("fee.server",{owed:usd(j.fee.owed),settle:usd(j.fee.settleAt)}):"";
   if(tab==="server"){rows=(j.server||[]).map((c,n)=>{const proxy=/^ai-proxy/.test(c.served||"");const mis=!proxy&&c.served&&!sameModel(c.model,c.served);
       return '<tr class="'+(mis?"mis":"")+'" title="'+(mis?esc(t("log.mismatch")):"")+'"><td class="faint">'+String(n+1).padStart(3,"0")+"</td><td>"+esc(new Date(c.at).toLocaleString())+"</td><td>"+esc(c.model)+"</td><td"+(proxy?' class="dim"':"")+">"+(proxy?esc(t("log.proxy")):esc(c.served||""))+(mis?" ⚠":"")+"</td><td>"+(c.in_tok??"–")+" / "+(c.out_tok??"–")+"</td><td>"+usd(c.cost)+"</td><td>"+(c.ms?(c.ms/1000).toFixed(1)+"s":"")+"</td></tr>"});
     rows.unshift("<tr><th>#</th><th>"+[t("log.time"),t("log.model"),t("log.served"),t("log.tokens"),t("log.cost"),t("log.seconds")].map(esc).join("</th><th>")+"</th></tr>");}
-  else{rows=(j.local||[]).map((e,n)=>'<tr><td class="faint">'+String(n+1).padStart(3,"0")+"</td><td>"+esc(new Date(e.at).toLocaleString())+"</td><td>"+esc(e.model)+"</td><td>"+(e.refused?'<span class="hot">'+esc(t("log.refused",{reason:e.refused}))+"</span>":usd(e.amount))+"</td></tr>");
+  else{rows=(j.local||[]).map((e,n)=>'<tr><td class="faint">'+String(n+1).padStart(3,"0")+"</td><td>"+esc(new Date(e.at).toLocaleString())+"</td><td>"+esc(e.fee?t("fee.entry"):e.model)+"</td><td>"+(e.refused?'<span class="hot">'+esc(t("log.refused",{reason:e.refused}))+"</span>":usd(e.amount))+"</td></tr>");
     rows.unshift("<tr><th>#</th><th>"+[t("log.time"),t("log.model"),t("log.cost")].map(esc).join("</th><th>")+"</th></tr>");}
   $("log").innerHTML=rows.length>1?"<table>"+rows.join("")+"</table>":'<p class="dim">'+esc(t("log.empty"))+"</p>";
   $("tabServer").style.background=tab==="server"?"color-mix(in srgb,var(--c) 18%,transparent)":"";$("tabLocal").style.background=tab==="local"?"color-mix(in srgb,var(--c) 18%,transparent)":"";}

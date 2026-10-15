@@ -4,6 +4,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { sql } from "./db.js";
 import { fromMessagesStream, oaiError, toMessages } from "./ai-claude.js";
 import { ensureAiUsers, remoteSign, signerOnline, userByKey, type AiUser } from "./ai-users.js";
+import { FEE_BLOCK, feeOf, feeRows, settleFee } from "./ai-fees.js";
 
 /**
  * OpenAI-compatible endpoint for Cursor's "custom model" (10.12, operator only): Cursor's servers call
@@ -12,6 +13,7 @@ import { ensureAiUsers, remoteSign, signerOnline, userByKey, type AiUser } from 
  * Quotes are only paid to BlockRun's known payee, in USDC on Base, within AI_PROXY_MAX_PER_CALL / AI_PROXY_DAILY_CAP.
  * The operator key is off unless both env vars are set. No markup: it costs what BlockRun quotes.
  * 10.14: Arm AI users (ai-users.ts) use their own keys; their quotes are signed by their own app, never by this server.
+ * 10.15: Arm AI users also owe a service fee on top of BlockRun's charges, settled in batches (ai-fees.ts).
  */
 
 const UPSTREAM = "https://blockrun.ai/api/v1";
@@ -52,6 +54,7 @@ const TEXT = {
     overCap: "这一条 BlockRun 报价 {quote}，超过服务器单条上限 {cap}。请开一个新对话（历史太长报价就高）再试。（这次没有付钱）",
     offline: "没有连上你电脑上的 Arm AI：请先打开 Arm AI 程序（付款由它用你自己的钱包签名），然后在 Cursor 里重试。（这次没有付钱）",
     refused: "Arm AI 没有签这笔付款：{reason}。可以在 Arm AI 里调高上限或给钱包充值。（这次没有付钱）",
+    feeDue: "Arm AI 的 {pct}% 服务费还有 {owed} 没结清（平时攒到 {settle} 会自动从你的钱包结一次）。请保持 Arm AI 打开、钱包里留够 USDC，结清后在 Cursor 里重试。（这次没有付钱）",
   },
   en: {
     repeat: "This turn is identical to a request {ago} s ago, which {why}. To avoid paying twice, the same request is not sent to BlockRun again for {min} minutes (nothing was paid this time). Ask the agent to take another route, e.g. write big files in several smaller steps (a few hundred lines each), or switch to a faster model.",
@@ -63,6 +66,7 @@ const TEXT = {
     overCap: "BlockRun quotes {quote} for this call, over the server's per-call ceiling {cap}. Start a new chat (long histories cost more) and try again. (Nothing was paid.)",
     offline: "Arm AI on your PC is not connected. Open the Arm AI app (it signs every payment with your own wallet), then retry in Cursor. (Nothing was paid.)",
     refused: "Arm AI did not sign this payment: {reason}. You can raise the caps or top up the wallet in Arm AI. (Nothing was paid.)",
+    feeDue: "{owed} of the Arm AI {pct}% service fee is still unpaid (it is normally settled from your wallet each time it reaches {settle}). Keep Arm AI open with enough USDC in the wallet, then retry in Cursor once it is settled. (Nothing was paid.)",
   },
 };
 type Say = (k: keyof typeof TEXT.zh, p?: Record<string, string | number>) => string;
@@ -224,6 +228,7 @@ export async function aiProxyChat(raw: string, who: Who = { kind: "op" }): Promi
   const served = r.headers.get("x-served-model");
   const tx = (decodeB64(r.headers.get("payment-response"))?.transaction as string | undefined) ?? null;
   const id = await log(served, cost, tx, r.status);
+  if (cost && who.kind === "user") void settleFee(who.user);
   const head: Head = { id, status: r.status, type: r.headers.get("content-type") ?? (stream ? "text/event-stream" : "application/json"), served, cost };
   open(head);
   void pump(flight, r.body, () => {
@@ -310,6 +315,11 @@ async function paid(path: string, payload: string, native: boolean, who: Who, st
     const local = (text: string) => ({ r: canned(stream, `[Arm AI] ${text}`), cost: 0, local: true });
     if (cost > USER_MAX_PER_CALL) return local(say("overCap", { quote: money(cost), cap: money(USER_MAX_PER_CALL) }));
     if (!signerOnline(who.user)) return local(say("offline"));
+    const fee = await feeOf(who.user);
+    if (fee.owed >= FEE_BLOCK) {
+      void settleFee(who.user);
+      return local(say("feeDue", { pct: fee.bps / 100, owed: money(fee.owed), settle: money(fee.settleAt) }));
+    }
     let payment: string;
     try {
       payment = await remoteSign(who.user, a, quote.resource, { model, bytes: payload.length });
@@ -526,6 +536,6 @@ export async function aiProxyStats(limit = 100, who: Who = { kind: "op" }) {
   const rows = await sql`select at, model, coalesce(served, body_model) as served, stream, cost::float8 as cost, tx, status, in_tok, out_tok, cached_tok, req_bytes, ms, shape, user_id::text from ai_proxy_calls where ${mine} order by id desc limit ${n}`;
   const days = await sql`select to_char(at at time zone 'Asia/Shanghai', 'YYYY-MM-DD') as day, model, count(*)::int as calls, sum(cost)::float8 as cost, sum(in_tok)::int as in_tok, sum(out_tok)::int as out_tok
     from ai_proxy_calls where status = 200 and at > now() - interval '30 days' and ${mine} group by 1, 2 order by 1 desc, 4 desc`;
-  if (who.kind === "user") return { address: who.user.address, online: signerOnline(who.user), spentToday: await spentToday(uid), maxPerCall: USER_MAX_PER_CALL, calls: rows, days };
-  return { address: aiProxyAddress(), spentToday: await spentToday(), dailyCap: DAILY_CAP, maxPerCall: MAX_PER_CALL, calls: rows, days };
+  if (who.kind === "user") return { address: who.user.address, online: signerOnline(who.user), spentToday: await spentToday(uid), maxPerCall: USER_MAX_PER_CALL, calls: rows, days, fee: { ...(await feeOf(who.user)), settlements: await feeRows(uid) } };
+  return { address: aiProxyAddress(), spentToday: await spentToday(), dailyCap: DAILY_CAP, maxPerCall: MAX_PER_CALL, calls: rows, days, fees: await feeRows(null, 50) };
 }
