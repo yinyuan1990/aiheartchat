@@ -88,9 +88,10 @@ footer{max-width:1240px;margin:0 auto 26px;padding:0 22px;font-size:11.5px}
   <button data-view="wallet"><span class="n">01</span><span data-t="nav.wallet"></span></button>
   <button data-view="topup" style="display:none"><span class="n">02</span><span data-t="nav.topup"></span></button>
   <button data-view="cursor"><span class="n">03</span><span data-t="nav.cursor"></span></button>
-  <button data-view="history"><span class="n">04</span><span data-t="nav.history"></span></button>
-  <button data-view="models"><span class="n">05</span><span data-t="nav.models"></span></button>
-  <button data-view="settings"><span class="n">06</span><span data-t="nav.settings"></span></button>
+  <button data-view="cline"><span class="n">04</span><span data-t="nav.cline"></span></button>
+  <button data-view="history"><span class="n">05</span><span data-t="nav.history"></span></button>
+  <button data-view="models"><span class="n">06</span><span data-t="nav.models"></span></button>
+  <button data-view="settings"><span class="n">07</span><span data-t="nav.settings"></span></button>
 </nav>
 <div>
 <!-- 01 wallet -->
@@ -135,19 +136,35 @@ footer{max-width:1240px;margin:0 auto 26px;padding:0 22px;font-size:11.5px}
   <div class="row"><button class="pri" id="test" data-t="cursor.test"></button><span id="testMsg"></span></div>
 </section>
 </div>
-<!-- 04 history -->
+<!-- 04 cline -->
+<div class="view two" id="v-cline">
+<section class="hud" data-n="04.1"><h2 data-t="cline.title"></h2>
+  <p data-t="cline.why" style="margin:0 0 10px"></p>
+  <div class="row"><span class="lbl dim" data-t="cline.found"></span><button id="clineRescan" data-t="cursor.rescan"></button><button id="getVscode" style="display:none" data-t="cline.getVscode"></button></div>
+  <div class="list" id="clineHosts"></div>
+</section>
+<section class="hud" data-n="04.2"><h2 data-t="cline.configTitle"></h2>
+  <p id="clineState" style="margin:0 0 10px"></p>
+  <div class="row"><span class="lbl dim" style="width:60px" data-t="cline.model"></span><input id="clineModel" list="clineModels" spellcheck="false" style="flex:1;width:auto;min-width:240px"><datalist id="clineModels"></datalist></div>
+  <p class="hot" data-t="cline.closeFirst"></p>
+  <div class="row"><button class="pri" id="clineWrite" data-t="cline.write"></button><span id="clineMsg"></span></div>
+  <ol><li data-t="cline.step1"></li><li data-t="cline.step2"></li><li data-t="cline.step3"></li></ol>
+  <p class="faint" data-t="cline.cost"></p>
+</section>
+</div>
+<!-- 05 history -->
 <div class="view" id="v-history">
-<section class="hud" data-n="04.1"><h2><span data-t="log.title"></span><span class="tag"><button id="tabServer" data-t="log.server"></button> <button id="tabLocal" data-t="log.local"></button></span></h2>
+<section class="hud" data-n="05.1"><h2><span data-t="log.title"></span><span class="tag"><button id="tabServer" data-t="log.server"></button> <button id="tabLocal" data-t="log.local"></button></span></h2>
   <div class="list" id="log"></div></section>
 </div>
-<!-- 05 models -->
+<!-- 06 models -->
 <div class="view" id="v-models">
-<section class="hud" data-n="05.1"><h2 data-t="models.title"></h2>
+<section class="hud" data-n="06.1"><h2 data-t="models.title"></h2>
   <input id="q" data-tp="models.search"><div class="list" id="models" style="margin-top:10px"></div></section>
 </div>
-<!-- 06 settings -->
+<!-- 07 settings -->
 <div class="view two" id="v-settings">
-<section class="hud" data-n="06.1"><h2 data-t="caps.title"></h2>
+<section class="hud" data-n="07.1"><h2 data-t="caps.title"></h2>
   <div class="row"><span class="lbl dim" style="width:150px" data-t="caps.perCall"></span><input id="perCall" type="number" min="0.01" step="0.01"></div>
   <div class="row"><span class="lbl dim" style="width:150px" data-t="caps.daily"></span><input id="daily" type="number" min="0.1" step="0.1"><button id="saveCaps" data-t="common.save"></button><span id="capsMsg"></span></div>
   <p class="big" style="font-size:22px;margin:14px 0 4px" id="todayNum">$0.0000</p><p class="dim" id="today" style="margin:0"></p>
@@ -156,7 +173,7 @@ footer{max-width:1240px;margin:0 auto 26px;padding:0 22px;font-size:11.5px}
   <p style="margin:0" id="feeLine"></p><p class="dim" style="margin:2px 0" id="feeServer"></p>
   <p class="faint" data-t="fee.why"></p>
 </section>
-<section class="hud" data-n="06.2"><h2 data-t="settings.title"></h2>
+<section class="hud" data-n="07.2"><h2 data-t="settings.title"></h2>
   <div class="row"><span class="lbl dim" style="width:130px" data-t="settings.lang"></span><select id="lang"></select></div>
   <div class="kv"><span class="lbl dim" data-t="settings.version"></span><span id="ver"></span><span class="lbl dim" data-t="settings.data"></span><span class="val" id="dataDir"></span><span class="lbl dim" data-t="settings.log"></span><span class="val" id="logFile"></span></div>
   <p class="dim" data-t="settings.background"></p>
@@ -235,13 +252,14 @@ function lock(target,label){
 }
 
 /* ---------- views: one function per page; switching draws that page's frames */
-const VIEWS=["wallet","topup","cursor","history","models","settings"];
+const VIEWS=["wallet","topup","cursor","cline","history","models","settings"];
 let view=VIEWS.includes(location.hash.slice(1))?location.hash.slice(1):(localStorage.getItem("armai-view")||"wallet");
 function show(v,draw=true){
   view=v;localStorage.setItem("armai-view",v);history.replaceState(null,"","#"+v);
   VIEWS.forEach(x=>$("v-"+x).classList.toggle("on",x===v));
   document.querySelectorAll("nav button").forEach(b=>b.dataset.view===v?b.setAttribute("aria-current","page"):b.removeAttribute("aria-current"));
   if(v==="history")loadLog();
+  if(v==="cline")loadCline();
   if(draw)requestAnimationFrame(()=>{const ps=[...$("v-"+v).querySelectorAll(".hud")];frames(true,ps);setTimeout(()=>lock(ps[0],v.toUpperCase()),700);});
 }
 document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{if(b.dataset.view!==view)show(b.dataset.view);});
@@ -271,7 +289,7 @@ function paint(){document.documentElement.lang=lang==="zh"?"zh-CN":lang;
   document.querySelectorAll("[data-t]").forEach(e=>{e.innerHTML=e.hasAttribute("data-md")?md(t(e.dataset.t)):esc(t(e.dataset.t))});
   document.querySelectorAll("[data-tp]").forEach(e=>e.placeholder=t(e.dataset.tp));
   $("lang").innerHTML=Object.keys(L).map(k=>'<option value="'+k+'"'+(k===lang?" selected":"")+">"+esc(L[k]["lang.name"])+"</option>").join("");
-  $("status").dataset.v="";if(S)render();drawDl();}
+  $("status").dataset.v="";if(S)render();drawDl();drawCline();}
 const KEYS={online:"status.online",offline:"status.offline",unregistered:"status.unregistered",registering:"status.registering"};
 function render(){const s=S;
   // healthy link = cold; anything else turns the whole HUD warm
@@ -305,7 +323,28 @@ async function loadLog(){const j=await api("/api/log");let rows;
   $("log").innerHTML=rows.length>1?"<table>"+rows.join("")+"</table>":'<p class="dim">'+esc(t("log.empty"))+"</p>";
   $("tabServer").style.background=tab==="server"?"color-mix(in srgb,var(--c) 18%,transparent)":"";$("tabLocal").style.background=tab==="local"?"color-mix(in srgb,var(--c) 18%,transparent)":"";}
 let models=[];
-async function loadModels(){models=await api("/api/models");drawModels();}
+async function loadModels(){models=await api("/api/models");drawModels();drawClineModels();}
+/* ---------- Cline: editors it can go into, install jobs, its settings */
+let CL=null,clTimer=null;
+async function loadCline(){CL=await api("/api/cline");drawCline();clearTimeout(clTimer);
+  if(Object.values(CL.jobs).some(j=>j.phase==="downloading"||j.phase==="installing"))clTimer=setTimeout(loadCline,1000);}
+function drawCline(){if(!CL)return;const mb=n=>(n/1048576).toFixed(1);
+  $("clineHosts").innerHTML=CL.hosts.length?"<table>"+CL.hosts.map(h=>{const j=CL.jobs[h.exe],busy=!!j&&(j.phase==="downloading"||j.phase==="installing");
+    const st=!j?"":j.phase==="downloading"?t("cline.downloading",{got:mb(j.got),total:j.total?mb(j.total):"?"}):j.phase==="installing"?t("cline.installing"):j.phase==="done"?t("cline.done"):t("cline.failed",{error:j.error||""});
+    return "<tr><td>"+esc(h.name)+(h.version?' <span class="faint">v'+esc(h.version)+"</span>":"")+(h.running?' <span class="dim">▲ '+esc(t("cursor.running"))+"</span>":"")+'<br><span class="faint">'+esc(h.exe)+"</span>"+(st?'<br><span class="'+(j.phase==="failed"?"hot":"dim")+'">'+esc(st)+"</span>":"")+'</td><td style="white-space:nowrap">'+(h.cline?esc(t("cline.installed",{version:h.cline})):'<span class="hot">'+esc(t("cline.notInstalled"))+"</span>")+'</td><td style="white-space:nowrap"><button data-cline-install="'+esc(h.exe)+'"'+(busy?" disabled":"")+">"+esc(h.cline?t("cline.reinstall"):t("cline.install"))+"</button></td></tr>";}).join("")+"</table>":'<p class="hot">'+esc(t("cline.none"))+"</p>";
+  $("getVscode").style.display=CL.hosts.some(h=>h.id==="vscode")?"none":"";
+  const s=CL.status;$("clineState").innerHTML=s.ours?esc(t("cline.stateOurs",{model:s.model||"?"})):s.otherKey?'<span class="hot">'+esc(t("cline.stateOtherKey"))+"</span>":'<span class="dim">'+esc(t("cline.stateNone"))+"</span>";
+  drawClineModels();}
+function drawClineModels(){const inp=$("clineModel");
+  $("clineModels").innerHTML=models.map(m=>'<option value="'+esc(m.id)+'">'+esc(m.free?t("models.free"):m.name||"")+"</option>").join("");
+  if(!inp.value&&document.activeElement!==inp&&CL)inp.value=CL.status.model||"anthropic/claude-sonnet-5.5";}
+document.addEventListener("click",async e=>{const b=e.target.closest("[data-cline-install]");if(!b)return;b.disabled=true;await api("/api/cline/install",{exe:b.dataset.clineInstall});loadCline();});
+$("clineRescan").onclick=()=>loadCline().then(()=>lock($("clineHosts"),"SCAN"));
+$("getVscode").onclick=()=>api("/api/cline/vscode",{});
+$("clineWrite").onclick=async()=>{const m=$("clineMsg");m.className="dim";m.dataset.v="";
+  const r=await api("/api/cline/config",{model:$("clineModel").value.trim()});
+  m.className=r.ok?"":"hot";m.dataset.v="";type(m,r.ok?t("cline.written"):r.running?t("cline.running",{names:r.running.join(lang==="zh"?"、":", ")}):t("cline.failed",{error:r.error||""}));
+  lock(m,r.ok?"WRITE OK":"WRITE FAIL");loadCline();};
 function drawModels(){const q=$("q").value.trim().toLowerCase();
   const list=models.filter(m=>!q||(q==="free"||q==="免费"?m.free:(m.id+" "+(m.name||"")+" "+(m.owner||"")).toLowerCase().includes(q)));
   $("models").innerHTML="<table>"+list.map((m,n)=>'<tr><td class="faint">'+String(n+1).padStart(3,"0")+"</td><td>"+esc(m.id)+'</td><td class="dim">'+esc(m.name||"")+"</td><td>"+(m.free?esc(t("models.free")):esc(t("models.price",{in:m.input,out:m.output})))+'</td><td class="faint">'+(m.context?esc(t("models.ctx",{n:m.context})):"")+'</td><td><button data-copytext="'+esc(m.id)+'">'+esc(t("common.copy"))+"</button></td></tr>").join("")+"</table>";}

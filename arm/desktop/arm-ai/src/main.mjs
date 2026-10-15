@@ -18,6 +18,7 @@ import { DIR, caps, fees, file, history, ledger, loadSecret, readJson, saveCaps,
 import { BASE_USDC, FEE_BPS, FEE_TO, connect, feeRoom, reconcileFees } from "./signer.mjs";
 import { editors } from "./editors.mjs";
 import { download, downloadState, openPage, run } from "./exchanges.mjs";
+import { clineConfigure, clineHosts, clineInstall, clineJobs, clineStatus, openVscodePage } from "./cline.mjs";
 import { page } from "./page.mjs";
 
 const VERSION = "0.1.0";
@@ -145,6 +146,14 @@ async function runApp() {
     "POST /api/download": (b) => download(b.id, log),
     "POST /api/download/run": (b) => run(b.id),
     "POST /api/download/page": (b) => openPage(b.id),
+    "GET /api/cline": () => ({ hosts: clineHosts().map(({ cli, extDir, ...h }) => h), status: clineStatus(BASE_URL, key), jobs: clineJobs() }),
+    "POST /api/cline/install": (b) => clineInstall(b.exe, log),
+    // any id is allowed: BlockRun's free models work but are listed as unavailable, so they are not in the list
+    "POST /api/cline/config": async (b) => {
+      const list = await routes["GET /api/models"]().catch(() => []);
+      return clineConfigure({ baseUrl: BASE_URL, key, model: b.model, info: list.find((m) => m.id === b.model) }, log);
+    },
+    "POST /api/cline/vscode": () => openVscodePage(),
     "POST /api/export": (b) => (b.confirm === true ? { privateKey: pk } : { error: "confirm" }),
     // there is no console window to close any more: this is how the user stops signing
     "POST /api/quit": () => {
