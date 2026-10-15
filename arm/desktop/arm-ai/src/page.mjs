@@ -102,7 +102,10 @@ footer{max-width:1240px;margin:0 auto 26px;padding:0 22px;font-size:11.5px}
   <p class="dim" data-t="wallet.backup"></p>
   <div class="row"><button id="export" data-t="wallet.export"></button></div><div class="val" id="pk" style="display:none"></div>
 </section>
-<section class="hud" data-n="01.2"><h2>QR // BASE</h2><div class="qr" id="qr"></div><p class="dim" style="text-align:center;margin:0" data-t="wallet.address"></p></section>
+<section class="hud" data-n="01.2"><h2>QR // BASE</h2><div class="qr" id="qr"></div><p class="dim" style="text-align:center;margin:0" data-t="wallet.address"></p>
+  <h2 style="margin-top:18px" data-t="binance.title"></h2>
+  <ol><li data-t="binance.s1" data-md></li><li data-t="binance.s2" data-md></li><li data-t="binance.s3" data-md></li><li data-t="binance.s4" data-md></li></ol>
+</section>
 </div>
 <!-- 02 cursor -->
 <div class="view" id="v-cursor">
